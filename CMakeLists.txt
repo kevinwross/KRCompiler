@@ -23,6 +23,7 @@ add_library(krc_core STATIC
     src/asm/kro_writer.cpp
     src/asm/kr32_assembler.cpp
     src/asm/kr32_encoder.cpp
+    src/asm/kr16_encoder.cpp
     src/backend/kr32_backend.cpp
     src/backend/kr32_descriptor.cpp
     src/backend/peephole.cpp
