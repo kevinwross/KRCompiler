@@ -16,7 +16,8 @@ place to run initialization before user code.
 - One internal `__krc_global_ctor_N` function per such object calls the selected
   constructor with its arguments.
 - One internal `__krc_init_globals` function calls every constructor function
-  in declaration order.
+  in declaration order, then evaluates any non-constant scalar/pointer global
+  initializer and stores it into its global.
 - The user's `main` is renamed `__krc_user_main`; a new external `main` wrapper
   calls `__krc_init_globals`, then `__krc_user_main`, then
   `__krc_destroy_globals`, and returns the user result.
@@ -26,8 +27,8 @@ place to run initialization before user code.
   constructors or destructors, so ordinary C and C++ programs keep their
   existing entry path.
 - Global destruction happens after the user `main` result is computed but before
-  the wrapper returns. Cross-translation-unit initialization order and
-  non-constant global initializers remain deferred.
+  the wrapper returns. Cross-translation-unit initialization order remains
+  deferred.
 
 ## Consequences
 

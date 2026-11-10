@@ -100,7 +100,7 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
 }
 
 void CIRGen::generate_global_constructors() {
-    if (global_ctors_.empty()) {
+    if (global_ctors_.empty() && global_initializers_.empty()) {
         return;
     }
     const auto void_type = module_->types().void_type();
@@ -215,9 +215,6 @@ void CIRGen::generate_global_constructors() {
         builder_.set_insert_point(previous_block);
         destructors.push_back(function);
     }
-    if (constructors.empty()) {
-        return;
-    }
 
     auto* init_function = module_->add_function(
         "__krc_init_globals", void_function, ir::Linkage::Internal, false);
@@ -234,6 +231,18 @@ void CIRGen::generate_global_constructors() {
     push_scope();
     for (auto* constructor : constructors) {
         builder_.create_call(constructor, {}, nullptr, "init.global");
+    }
+    for (const auto& info : global_initializers_) {
+        if (!info.global || !info.expression) {
+            continue;
+        }
+        auto value = emit_expression(*info.expression);
+        if (!value.value) {
+            continue;
+        }
+        builder_.create_store(
+            promote(value.value, value.type, info.global->element_type),
+            info.global);
     }
     builder_.create_ret(nullptr);
     scopes_ = std::move(previous_scopes);
@@ -988,6 +997,12 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         if (ir::is_integer(global->element_type) &&
             sema_.evaluate_constant_expression(*initializer, value)) {
             global->initializer = module_->constant_int(global->element_type, value);
+            break;
+        }
+        if (ir::is_integer(global->element_type) ||
+            ir::is_pointer(global->element_type) ||
+            ir::is_float(global->element_type)) {
+            global_initializers_.push_back({global, initializer});
             break;
         }
         error(initializer->location, "global initializer is not supported yet");

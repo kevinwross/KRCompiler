@@ -155,6 +155,11 @@ private:
         std::vector<const frontend::AstNode*> arguments;
     };
     std::vector<GlobalCtorInfo> global_ctors_;
+    struct GlobalInitInfo {
+        ir::GlobalVariable* global = nullptr;
+        const frontend::AstNode* expression = nullptr;
+    };
+    std::vector<GlobalInitInfo> global_initializers_;
     void generate_global_constructors();
     std::unordered_map<const frontend::RecordInfo*, ir::TypePtr> record_types_;
     std::unordered_map<const ir::Type*, const frontend::RecordInfo*> ir_records_;

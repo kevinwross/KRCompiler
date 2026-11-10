@@ -229,6 +229,15 @@ if(TARGET krc)
     set_tests_properties(krc_global_destructor_ir PROPERTIES
         PASS_REGULAR_EXPRESSION "__krc_destroy_globals")
 
+    add_test(NAME krc_link_global_init
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_init.c
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_init_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_link_varargs
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
