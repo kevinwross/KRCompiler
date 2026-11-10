@@ -178,12 +178,12 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
 - Local `static` variables are emitted as internal globals with zero or constant initialization, so state persists across calls; non-constant scalar initializers and object constructors (including argument-taking ones) run once behind a guard flag. The fixtures return 3, 6, 3, and 5.
 - Namespace-scope objects with constructors run through `__krc_init_globals` from a generated `main` wrapper (ADR 0018); `global.get()` observes `Counter(5)` and returns 5. Destructors run through `__krc_destroy_globals` after user `main` in reverse order. Non-constant scalar global initializers run in `__krc_init_globals`; `int global = square(3)` returns 9.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 130/130 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 131/131 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
 - [x] Structs, pointers, arrays, function pointers, bit-fields, varargs, preprocessor edge cases. Pointers, arrays, recursive named structs, byte-offset member access, struct layout/GEP/load/store, by-value aggregate parameters split across integer registers and copied through aggregate loads/stores, aggregate returns of up to 8 bytes in `R0`/`R1`, bit-field load/store and signed extraction, positional and nested designated aggregate initializers, function pointers/indirect calls, integer and floating-point varargs, `offsetof`, integer/string/float `printf`, and a free-list allocator/string library are implemented.
-- [x] KR32 `printf` integer/string/float paths and allocator. Integer/string/`%c`/`%x`/`%p`, `l`/`z` length modifiers, `%f`/`%e`/`%g`, `puts`, and a reusable free-list allocator work; the G3 formatting fixtures pass.
+- [x] KR32 `printf` integer/string/float paths and allocator. Integer/string/`%c`/`%x`/`%o`/`%p`, `l`/`z` length modifiers, width/zero/left alignment, `%f`/`%e`/`%g`, `puts`, and a reusable free-list allocator work; the G3 formatting fixtures pass.
 - [x] `KDBG` writer/reader: sources, lines, functions, symbols, types, variables, and build records are implemented in `src/debug/kdbg.*`, emitted by `krld`, and checksum-validated.
 - [x] Freeze `docs/symbols.md` before the KDBG writer. [ADR 0009](docs/decisions/0009-kdbg-v1-freeze.md) freezes the `.kdbg` v1 payload.
 - [x] `krc --dump-symbols` text/JSON dumper and shared reader/writer. `krld` builds `.kdbg` from `.debug_info`; text and JSON dumps are available.
@@ -192,7 +192,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 130/130 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 131/131 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -247,7 +247,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 ### M9 — v1.1 runtime/libc/host services (8–10 weeks)
 
 - [ ] Port KR32 `libc.c` (allocator, stdio, string, `strto*`, `qsort`, file I/O).
-- [ ] Standard `printf` with length modifiers and `%p`; float formatting on KR32. `%p`, `%ld`/`%lu`/`%zu`, and unsigned values work; the broader format and width set remains.
+- [ ] Standard `printf` with length modifiers and `%p`; float formatting on KR32. `%p`, `%ld`/`%lu`/`%zu`, unsigned values, `%o`, and width/zero/left alignment work; the broader format and precision set remains.
 - [ ] Common host-service ABI and per-VM shims; kernel profile.
 - [ ] Integrate KR16 `libc.s`/`resources/fileio.c`.
 - [ ] Gate G9 partial: Tier 3 runtime baseline.
@@ -401,3 +401,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T12:51:56-08:00** — Added global destruction: per-object destructor functions run through `__krc_destroy_globals` in reverse order after user `main`, before the wrapper returns. A destructor printing `destroyed` was confirmed on the KR32 VM; CTest is 128/128.
 - **2026-11-10T13:01:06-08:00** — Added non-constant scalar and pointer global initializers: `__krc_init_globals` evaluates them and stores the result before user `main`. `int global = square(3)` returns 9; CTest is 129/129.
 - **2026-11-10T13:09:48-08:00** — Added `%p`, `l`/`z` length modifiers, and unsigned formatting to the KR32 `printf`. The fixture prints `0x800ffd0 123456 4 4000000000`; CTest is 130/130.
+- **2026-11-10T13:14:51-08:00** — Added integer field width, zero/left padding, and `%o` to the KR32 `printf`. `%05d %-5d %8x %o` prints `00042 7           ff 10`; CTest is 131/131.
