@@ -177,8 +177,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
 - Local `static` variables are emitted as internal globals with zero or constant initialization, so state persists across calls; non-constant scalar initializers and object constructors (including argument-taking ones) run once behind a guard flag. The fixtures return 3, 6, 3, and 5.
-- Namespace-scope objects with constructors run through `__krc_init_globals` from a generated `main` wrapper (ADR 0018); `global.get()` observes `Counter(5)` and returns 5.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 126/126 CTest.
+- Namespace-scope objects with constructors run through `__krc_init_globals` from a generated `main` wrapper (ADR 0018); `global.get()` observes `Counter(5)` and returns 5. Destructors run through `__krc_destroy_globals` after user `main` in reverse order.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 128/128 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -192,7 +192,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 126/126 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 128/128 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -398,3 +398,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T12:21:05-08:00** — Added guarded construction for zero-argument static class objects: the constructor runs once and later calls observe the initialized state. The `Counter` fixture returns 3; CTest is 124/124.
 - **2026-11-10T12:30:13-08:00** — Added constructor arguments for static class objects: `static Counter counter(5)` selects the matching constructor and promotes its argument. The fixture returns 5; CTest is 125/125.
 - **2026-11-10T12:40:52-08:00** — Added global object construction: namespace-scope objects with constructors run through `__krc_init_globals`, called by a generated `main` wrapper. `Counter global(5)` returns 5; CTest is 126/126.
+- **2026-11-10T12:51:56-08:00** — Added global destruction: per-object destructor functions run through `__krc_destroy_globals` in reverse order after user `main`, before the wrapper returns. A destructor printing `destroyed` was confirmed on the KR32 VM; CTest is 128/128.

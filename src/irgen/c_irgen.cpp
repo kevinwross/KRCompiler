@@ -163,6 +163,58 @@ void CIRGen::generate_global_constructors() {
         builder_.set_insert_point(previous_block);
         constructors.push_back(function);
     }
+    std::vector<ir::Function*> destructors;
+    std::size_t destructor_index = 0;
+    for (const auto& info : global_ctors_) {
+        if (!info.global || !info.record) {
+            continue;
+        }
+        ir::Function* destructor = nullptr;
+        for (auto* current = info.record; current != nullptr;
+             current = current->base && current->base->record
+                           ? current->base->record.get()
+                           : nullptr) {
+            const auto methods = class_methods_.find(current->tag);
+            if (methods == class_methods_.end()) {
+                continue;
+            }
+            const auto found = methods->second.find("~" + current->tag);
+            if (found != methods->second.end()) {
+                destructor = found->second;
+                break;
+            }
+        }
+        if (!destructor) {
+            continue;
+        }
+        auto* function = module_->add_function(
+            "__krc_global_dtor_" + std::to_string(destructor_index++),
+            void_function, ir::Linkage::Internal, false);
+        const auto previous_function = current_function_;
+        const auto previous_class = current_class_;
+        auto* previous_block = builder_.insert_block();
+        const auto previous_scopes = std::move(scopes_);
+        scopes_.clear();
+        current_function_ = function;
+        current_class_ = nullptr;
+        auto* entry = function->add_block("entry");
+        builder_.reset_value_names();
+        builder_.set_insert_point(entry);
+        push_scope();
+        auto* self = static_cast<ir::Value*>(info.global);
+        if (self->type != destructor->type->parameters[0]) {
+            self = builder_.create(ir::Opcode::BitCast,
+                                   destructor->type->parameters[0], {self},
+                                   "global.dtor.this");
+        }
+        builder_.create_call(destructor, {self}, nullptr, "global.dtor");
+        builder_.create_ret(nullptr);
+        scopes_ = std::move(previous_scopes);
+        current_function_ = previous_function;
+        current_class_ = previous_class;
+        builder_.set_insert_point(previous_block);
+        destructors.push_back(function);
+    }
     if (constructors.empty()) {
         return;
     }
@@ -188,6 +240,33 @@ void CIRGen::generate_global_constructors() {
     current_function_ = previous_function;
     current_class_ = previous_class;
     builder_.set_insert_point(previous_block);
+
+    ir::Function* destroy_function = nullptr;
+    if (!destructors.empty()) {
+        destroy_function = module_->add_function(
+            "__krc_destroy_globals", void_function, ir::Linkage::Internal,
+            false);
+        const auto previous_destroy_function = current_function_;
+        const auto previous_destroy_class = current_class_;
+        auto* previous_destroy_block = builder_.insert_block();
+        const auto previous_destroy_scopes = std::move(scopes_);
+        scopes_.clear();
+        current_function_ = destroy_function;
+        current_class_ = nullptr;
+        auto* destroy_entry = destroy_function->add_block("entry");
+        builder_.reset_value_names();
+        builder_.set_insert_point(destroy_entry);
+        push_scope();
+        for (auto destructor = destructors.rbegin();
+             destructor != destructors.rend(); ++destructor) {
+            builder_.create_call(*destructor, {}, nullptr, "destroy.global");
+        }
+        builder_.create_ret(nullptr);
+        scopes_ = std::move(previous_destroy_scopes);
+        current_function_ = previous_destroy_function;
+        current_class_ = previous_destroy_class;
+        builder_.set_insert_point(previous_destroy_block);
+    }
 
     const auto main_entry = functions_.find("main");
     if (main_entry == functions_.end()) {
@@ -222,7 +301,15 @@ void CIRGen::generate_global_constructors() {
     auto* call = builder_.create_call(user_main, std::move(arguments),
                                       user_main->type->return_type,
                                       "user.main");
-    builder_.create_ret(call);
+    if (destroy_function) {
+        builder_.create_call(destroy_function, {}, nullptr,
+                             "destroy.globals");
+    }
+    if (ir::is_void(user_main->type->return_type)) {
+        builder_.create_ret(nullptr);
+    } else {
+        builder_.create_ret(call);
+    }
     scopes_ = std::move(previous_scopes2);
     current_function_ = previous_function2;
     current_class_ = previous_class2;
@@ -837,6 +924,33 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
     const auto alignment = alignment_of(specifiers, frontend_type);
     auto* global = module_->add_global(name, type, has_label(specifiers, "const"), alignment);
     globals_.emplace(name, global);
+    if (type->kind == ir::TypeKind::Struct && frontend_type->record) {
+        bool has_destructor = false;
+        for (auto* current = frontend_type->record.get(); current != nullptr;
+             current = current->base && current->base->record
+                           ? current->base->record.get()
+                           : nullptr) {
+            const auto methods = class_methods_.find(current->tag);
+            if (methods == class_methods_.end()) {
+                continue;
+            }
+            has_destructor =
+                methods->second.find("~" + current->tag) !=
+                methods->second.end();
+            if (has_destructor) {
+                break;
+            }
+        }
+        const bool has_constructor =
+            select_constructor(frontend_type->record->tag, 0) != nullptr;
+        if (has_constructor || has_destructor) {
+            GlobalCtorInfo info;
+            info.global = global;
+            info.record = frontend_type->record.get();
+            global_ctors_.push_back(std::move(info));
+            return;
+        }
+    }
     if (type->kind == ir::TypeKind::Struct && frontend_type->record &&
         initializer &&
         initializer->kind == frontend::AstKind::ExpressionStatement) {
