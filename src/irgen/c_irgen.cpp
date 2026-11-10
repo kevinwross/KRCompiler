@@ -1470,8 +1470,21 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             if (type->kind == ir::TypeKind::Struct) {
                 const auto record = ir_records_.find(type);
                 if (record != ir_records_.end() && record->second) {
-                    auto* constructor =
-                        select_constructor(record->second->tag, 0);
+                    std::vector<const frontend::AstNode*> argument_nodes;
+                    if (init->children.size() > 1 && init->children[1] &&
+                        init->children[1]->kind ==
+                            frontend::AstKind::ExpressionStatement) {
+                        for (const auto& argument :
+                             init->children[1]->children) {
+                            argument_nodes.push_back(argument.get());
+                        }
+                    }
+                    auto* constructor = select_constructor(
+                        record->second->tag, argument_nodes.size());
+                    if (!constructor) {
+                        constructor =
+                            select_constructor(record->second->tag, 0);
+                    }
                     if (constructor) {
                         auto* guard = module_->add_global(
                             "__static_guard_" + std::to_string(id),
@@ -1504,9 +1517,31 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                 constructor->type->parameters[0], {self},
                                 "static.this");
                         }
-                        builder_.create_call(constructor, {self}, nullptr,
-                                             "static.ctor");
-                        emit_branch(end_block);
+                        std::vector<ir::Value*> arguments{self};
+                        for (std::size_t argument_index = 0;
+                             argument_index < argument_nodes.size();
+                             ++argument_index) {
+                            if (!argument_nodes[argument_index]) {
+                                continue;
+                            }
+                            auto argument = emit_expression(
+                                *argument_nodes[argument_index]);
+                            if (!argument.value) {
+                                continue;
+                            }
+                            const auto parameter_index = argument_index + 1;
+                            if (parameter_index <
+                                constructor->type->parameters.size()) {
+                                argument.value = promote(
+                                    argument.value, argument.type,
+                                    constructor->type
+                                        ->parameters[parameter_index]);
+                            }
+                            arguments.push_back(argument.value);
+                        }
+                        builder_.create_call(constructor,
+                                             std::move(arguments), nullptr,
+                                             "static.ctor");                        emit_branch(end_block);
                         builder_.set_insert_point(end_block);
                     }
                 }
