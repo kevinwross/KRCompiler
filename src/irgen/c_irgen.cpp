@@ -3643,8 +3643,44 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                         }
                         arguments.push_back(argument.value);
                     }
+                    ir::Value* callee = method->second;
+                    if (current_class_ && current_class_->polymorphic &&
+                        method_is_virtual(*current_class_,
+                                          expression.children[0]->text)) {
+                        const int slot = virtual_slot(
+                            *current_class_, expression.children[0]->text);
+                        if (slot >= 0 && self_value->type &&
+                            self_value->type->element) {
+                            const auto byte_type = module_->types().int_type(8);
+                            auto* zero = module_->constant_int(int_type(), 0);
+                            auto* vptr_slot = builder_.create_gep(
+                                self_value->type->element, self_value, {zero, zero},
+                                false, "this.vptr");
+                            vptr_slot->type = module_->types().pointer_type(
+                                module_->types().pointer_type(byte_type));
+                            auto* table = builder_.create_load(
+                                module_->types().pointer_type(byte_type),
+                                vptr_slot, false, 0, "this.vtable");
+                            auto* function_slot = builder_.create_gep(
+                                byte_type, table,
+                                {module_->constant_int(
+                                    size_type(),
+                                    static_cast<std::int64_t>(slot) * 4)},
+                                false, "this.slot");
+                            function_slot->type =
+                                module_->types().pointer_type(
+                                    module_->types().pointer_type(byte_type));
+                            auto* function = builder_.create_load(
+                                module_->types().pointer_type(byte_type),
+                                function_slot, false, 0, "this.vfn");
+                            callee = builder_.create(
+                                ir::Opcode::BitCast,
+                                module_->types().pointer_type(method->second->type),
+                                {function}, "this.vfn.ptr");
+                        }
+                    }
                     auto* call = builder_.create_call(
-                        method->second, std::move(arguments),
+                        callee, std::move(arguments),
                         method->second->type->return_type, "this.method");
                     return {call, method->second->type->return_type};
                 }

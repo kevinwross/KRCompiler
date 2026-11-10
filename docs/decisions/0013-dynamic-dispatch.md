@@ -26,8 +26,9 @@ time.
   array is allocated with the runtime `malloc`; the implementation does not
   emit a relocation-bearing read-only vtable yet.
 - A pure virtual slot with no implementation holds a null pointer. A dynamic
-  call through `p->method()` loads the vptr, indexes the slot, bitcasts the
-  function pointer to the static method type, and calls it with the same
+  call through `p->method()`, a base reference, or an unqualified virtual call
+  on `this` inside a base method loads the vptr, indexes the slot, bitcasts
+  the function pointer to the static method type, and calls it with the same
   argument list.
 - Direct calls on a concrete object, and inherited calls inside ADR 0011
   clones, continue to use static dispatch.
