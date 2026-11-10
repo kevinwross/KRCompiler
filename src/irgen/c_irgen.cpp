@@ -964,6 +964,29 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                 emit_zero_initializer(address.value, address.type);
                 continue;
             }
+            const frontend::RecordMember* member_info = nullptr;
+            if (current_class_) {
+                for (const auto& member : current_class_->members) {
+                    if (member.name == initializer->text) {
+                        member_info = &member;
+                        break;
+                    }
+                }
+            }
+            if (member_info && member_info->type &&
+                member_info->type->is_reference) {
+                auto reference = emit_lvalue(*argument_nodes.front());
+                if (!reference.value) {
+                    continue;
+                }
+                auto* stored = reference.value;
+                if (stored->type != address.type) {
+                    stored = builder_.create(ir::Opcode::BitCast, address.type,
+                                             {stored}, "member.reference");
+                }
+                builder_.create_store(stored, address.value);
+                continue;
+            }
             auto value = emit_expression(*argument_nodes.front());
             if (!value.value) {
                 continue;
@@ -4040,6 +4063,7 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
                                             "member");
         address->type = module_->types().pointer_type(field_type);
         Expression result{address, field_type};
+        result.reference_member = member.type->is_reference;
         if (member.bit_field && member.bit_width > 0) {
             std::uint32_t bit_offset = 0;
             for (std::size_t index = 0; index < field_index; ++index) {
@@ -4118,7 +4142,9 @@ CIRGen::Expression CIRGen::emit_implicit_member_lvalue(std::string_view name) {
     auto* address =
         builder_.create_gep(byte_type, byte_pointer, {offset}, false, "this.member");
     address->type = module_->types().pointer_type(field_type);
-    return {address, field_type};
+    Expression result{address, field_type};
+    result.reference_member = owner->members[index].type->is_reference;
+    return result;
 }
 
 bool CIRGen::method_is_virtual(const frontend::RecordInfo& record,
@@ -4273,6 +4299,14 @@ CIRGen::Expression CIRGen::emit_implicit_member(std::string_view name) {
         decay->type = module_->types().pointer_type(address.type->element);
         return {decay, decay->type};
     }
+    if (address.reference_member && address.type &&
+        address.type->kind == ir::TypeKind::Pointer && address.type->element) {
+        auto* pointer = builder_.create_load(address.type, address.value, false, 0,
+                                             std::string(name) + ".ref");
+        return {builder_.create_load(address.type->element, pointer, false, 0,
+                                     std::string(name) + ".ref.load"),
+                address.type->element};
+    }
     return {builder_.create_load(address.type, address.value, false, 0,
                                  std::string(name) + ".load"),
             address.type};
@@ -4310,6 +4344,14 @@ CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {   
                                           "member.decay");
         decay->type = module_->types().pointer_type(address.type->element);
         return {decay, decay->type};
+    }
+    if (address.reference_member && address.type &&
+        address.type->kind == ir::TypeKind::Pointer && address.type->element) {
+        auto* pointer = builder_.create_load(address.type, address.value, false, 0,
+                                             "member.reference");
+        return {builder_.create_load(address.type->element, pointer, false, 0,
+                                     "member.reference.load"),
+                address.type->element};
     }
     if (!address.type || address.type->kind == ir::TypeKind::Struct) {
         error(expression.location, "aggregate member load is not implemented yet");

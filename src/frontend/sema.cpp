@@ -16,6 +16,7 @@ namespace {
 
 bool is_declarator_kind(AstKind kind) {
     return kind == AstKind::Declarator || kind == AstKind::PointerDeclarator ||
+           kind == AstKind::ReferenceDeclarator ||
            kind == AstKind::ArrayDeclarator || kind == AstKind::FunctionDeclarator;
 }
 

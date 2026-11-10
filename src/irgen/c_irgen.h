@@ -36,6 +36,7 @@ private:
         ir::Value* value = nullptr;
         ir::TypePtr type = nullptr;
         bool bit_field = false;
+        bool reference_member = false;
         std::uint32_t bit_offset = 0;
         std::uint32_t bit_width = 0;
     };
