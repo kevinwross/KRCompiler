@@ -30,26 +30,6 @@ static void print_unsigned(unsigned int value) {
     }
 }
 
-static void print_signed(int value) {
-    if (value < 0) {
-        putchar('-');
-        print_unsigned((unsigned int)(-value));
-    } else {
-        print_unsigned((unsigned int)value);
-    }
-}
-
-static void print_string(const char *text) {
-    if (text == 0) {
-        print_string("(null)");
-        return;
-    }
-    while (*text) {
-        putchar(*text);
-        text++;
-    }
-}
-
 static void print_hex(unsigned int value) {
     char digits[16];
     int count = 0;
@@ -119,6 +99,34 @@ static void print_integer(unsigned int value, int base, int width,
         putchar(digits[--count]);
     }
     if ((flags & PRINT_LEFT) != 0) {
+        for (int index = 0; index < padding; index++) {
+            putchar(' ');
+        }
+    }
+}
+
+static void print_text(const char *text, int width, int precision,
+                       int flags) {
+    if (text == 0) {
+        text = "(null)";
+    }
+    int precision_set = (flags & 2) != 0;
+    int left_align = (flags & 1) != 0;
+    int length = 0;
+    while (text[length] != 0 &&
+           (!precision_set || length < precision)) {
+        length++;
+    }
+    int padding = width > length ? width - length : 0;
+    if (!left_align) {
+        for (int index = 0; index < padding; index++) {
+            putchar(' ');
+        }
+    }
+    for (int index = 0; index < length; index++) {
+        putchar(text[index]);
+    }
+    if (left_align) {
         for (int index = 0; index < padding; index++) {
             putchar(' ');
         }
@@ -261,7 +269,9 @@ int printf(const char *format, ...) {
             format++;
         }
         int precision = 6;
+        int precision_set = 0;
         if (*format == '.') {
+            precision_set = 1;
             format++;
             precision = 0;
             while (*format >= '0' && *format <= '9') {
@@ -306,7 +316,9 @@ int printf(const char *format, ...) {
             print_hex((unsigned int)va_arg(arguments, void *));
             written += 2;
         } else if (*format == 's') {
-            print_string(va_arg(arguments, char *));
+            int flags = (precision_set ? 2 : 0) |
+                        (left_align ? 1 : 0);
+            print_text(va_arg(arguments, char *), width, precision, flags);
         } else if (*format == 'c') {
             putchar(va_arg(arguments, int));
             written++;
