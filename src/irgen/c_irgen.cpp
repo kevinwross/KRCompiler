@@ -100,7 +100,8 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
 }
 
 void CIRGen::generate_global_constructors() {
-    if (global_ctors_.empty() && global_initializers_.empty()) {
+    if (global_ctors_.empty() && global_initializers_.empty() &&
+        local_static_dtors_.empty()) {
         return;
     }
     const auto void_type = module_->types().void_type();
@@ -208,6 +209,56 @@ void CIRGen::generate_global_constructors() {
                                    "global.dtor.this");
         }
         builder_.create_call(destructor, {self}, nullptr, "global.dtor");
+        builder_.create_ret(nullptr);
+        scopes_ = std::move(previous_scopes);
+        current_function_ = previous_function;
+        current_class_ = previous_class;
+        builder_.set_insert_point(previous_block);
+        destructors.push_back(function);
+    }
+    for (const auto& [global, record] : local_static_dtors_) {
+        if (!global || !record) {
+            continue;
+        }
+        ir::Function* destructor = nullptr;
+        for (auto* current = record; current != nullptr;
+             current = current->base && current->base->record
+                           ? current->base->record.get()
+                           : nullptr) {
+            const auto methods = class_methods_.find(current->tag);
+            if (methods == class_methods_.end()) {
+                continue;
+            }
+            const auto found = methods->second.find("~" + current->tag);
+            if (found != methods->second.end()) {
+                destructor = found->second;
+                break;
+            }
+        }
+        if (!destructor) {
+            continue;
+        }
+        auto* function = module_->add_function(
+            "__krc_static_dtor_" + std::to_string(destructor_index++),
+            void_function, ir::Linkage::Internal, false);
+        const auto previous_function = current_function_;
+        const auto previous_class = current_class_;
+        auto* previous_block = builder_.insert_block();
+        const auto previous_scopes = std::move(scopes_);
+        scopes_.clear();
+        current_function_ = function;
+        current_class_ = nullptr;
+        auto* entry = function->add_block("entry");
+        builder_.reset_value_names();
+        builder_.set_insert_point(entry);
+        push_scope();
+        auto* self = static_cast<ir::Value*>(global);
+        if (self->type != destructor->type->parameters[0]) {
+            self = builder_.create(ir::Opcode::BitCast,
+                                   destructor->type->parameters[0], {self},
+                                   "static.dtor.this");
+        }
+        builder_.create_call(destructor, {self}, nullptr, "static.dtor");
         builder_.create_ret(nullptr);
         scopes_ = std::move(previous_scopes);
         current_function_ = previous_function;
@@ -1817,6 +1868,25 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                              std::move(arguments), nullptr,
                                              "static.ctor");                        emit_branch(end_block);
                         builder_.set_insert_point(end_block);
+                    }
+                }
+            }
+            if (type->kind == ir::TypeKind::Struct) {
+                const auto record = ir_records_.find(type);
+                if (record != ir_records_.end() && record->second) {
+                    for (auto* current = record->second; current != nullptr;
+                         current = current->base && current->base->record
+                                       ? current->base->record.get()
+                                       : nullptr) {
+                        const auto methods =
+                            class_methods_.find(current->tag);
+                        if (methods != class_methods_.end() &&
+                            methods->second.find("~" + current->tag) !=
+                                methods->second.end()) {
+                            local_static_dtors_.push_back(
+                                {global, record->second});
+                            break;
+                        }
                     }
                 }
             }

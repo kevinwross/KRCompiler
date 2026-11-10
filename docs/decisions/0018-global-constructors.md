@@ -23,6 +23,8 @@ place to run initialization before user code.
   `__krc_destroy_globals`, and returns the user result.
 - One internal `__krc_global_dtor_N` function per destructible object calls its
   destructor; `__krc_destroy_globals` calls them in reverse construction order.
+  Destructible function-local statics are registered here too and run after the
+  user `main` result is computed.
 - The wrapper is emitted only when the translation unit has global
   constructors or destructors, so ordinary C and C++ programs keep their
   existing entry path.
