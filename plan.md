@@ -79,7 +79,7 @@ KRCompiler is one compiler for C and C++ that emits a typed, target-independent 
 - Variadic templates.
 - Dynamic `thread_local` initialization.
 - `std` core utilities and memory (`unique_ptr`, `shared_ptr`, `move`, `forward`, `pair`, tuple basics).
-- Full `libc.c` and `kr32os` build (Tier 3).
+- Full KR32 `libc.c` and `kr32os` build, plus KR16 `libc.s`/`resources/fileio.c` integration (Tier 3).
 - Matrix and TLS examples become regular regression tests.
 
 ### 1.4 Non-goals
@@ -98,7 +98,7 @@ KRCompiler is one compiler for C and C++ that emits a typed, target-independent 
 
 1. **No target sysroot exists.** Both existing front ends synthesise standard headers inside compiler code. A real, target-aware sysroot is a new v1 deliverable and a prerequisite for a retargetable compiler.
 2. **The C++ front end is the largest subsystem.** The selected C++11/14/17 surface is practical but still substantial; templates, overload resolution, and cleanup semantics are the critical path.
-3. **The corpus is not a conformance suite.** Feature coverage lives inside host doctest strings and must be extracted; the C++ target corpus is only three main example files plus one TLS example.
+3. **The corpus is not a conformance suite.** Feature coverage lives inside host doctest strings and must be extracted; the C++ target corpus is six example files, only three substantial.
 4. **`libc.c` and `kr32os` are large, freestanding, and non-conforming in places.** They are both test material and runtime source; migrating them is real work.
 5. **The KR16 16-bit profile is deliberately non-conforming.** It is acceptable only as a documented embedded profile, not as “C++11 on 16 bits.”
 
@@ -144,7 +144,7 @@ KRCompiler is one compiler for C and C++ that emits a typed, target-independent 
 1. Exceptions and RTTI work across translation units.
 2. Variadic templates and dynamic `thread_local` work.
 3. `std` utilities/memory are usable.
-4. `libc.c` and `kr32os` build and run (Tier 3).
+4. KR32 `libc.c`/`kr32os` build and run, and the KR16 `libc.s`/`fileio.c` runtime is integrated (Tier 3).
 5. Matrix and TLS examples are regular tests, not opt-in experiments.
 
 ---
@@ -184,7 +184,7 @@ The full decision log is in Appendix A. The architecture-defining decisions are:
 | D-027 | Attributes | Basic standard attributes plus OS attributes (`interrupt`, `naked`, `noreturn`, custom calling conventions). |
 | D-028 | Corpus | Tier 0–2 on KR32 and Tier 0–1 on KR16 for v1.0; Tier 3 for v1.1; Tier 4 is stretch. |
 | D-029 | Sysroot | Real headers, generated target `bits/` headers, no host system headers. |
-| D-030 | v1 boundary | v1.0 is a usable toolchain plus debugger; v1.1 adds EH/RTTI, variadic templates, dynamic TLS, utilities/memory, full `libc.c`/`kr32os`. |
+| D-030 | v1 boundary | v1.0 is a usable toolchain plus debugger; v1.1 adds EH/RTTI, variadic templates, dynamic TLS, utilities/memory, full KR32 `libc.c`/`kr32os` and KR16 runtime integration. |
 | D-031 | Migration | Coexist, then cut over when the corpus is green; clean object-format break. |
 | D-032 | Testing | Differential against host compilers, curated conformance, extracted fixtures, golden IR/assembly/symbol tests. |
 | D-033 | Self-hosting | Not a goal; the compiler runs on the host only. |
@@ -265,11 +265,11 @@ Stack machines (SR16/NemoCPU) and 8-bit accumulator machines (A6502) are out of 
 
 The 2026-11-09 inventory found:
 
-- **Target-facing code is small:** approximately **24.6k LOC** in KR32 (examples, `libc.c`, `kr32os`, tests) and **9.4k LOC** in KR16 (examples, C tests, `fileio.c`, experimental C++ tests). The rest of both repositories is host toolchain, SDL2, or font data.
-- **The single most valuable C file** is `../kr32/src/cc/libc.c` (3,037 LOC): allocator, buffered stdio, `printf`/`scanf`, `str*`/`mem*`, `strto*`, `qsort`, POSIX-ish file I/O, and the C++ allocation hooks.
+- **Target-facing code is small:** approximately **24.6k LOC** in KR32 (examples, `libc.c`, `kr32os`, tests) and **9.4k LOC** in KR16 (examples, C tests, `fileio.c`, experimental C++ tests). These aggregates sum those target-facing directories and exclude the host toolchain, third-party trees, and font data.
+- **The single most valuable C file** is `../kr32/src/cc/libc.c` (3,058 non-blank lines; 3,239 total): allocator, buffered stdio, `printf`/`scanf`, `str*`/`mem*`, `strto*`, `qsort`, POSIX-ish file I/O, and the C++ allocation hooks.
 - **The best C stress test** is `../kr16/tests/kevin/C-for-U.c` (1,473 LOC), a struct-free C compiler with deep recursion and roughly 60 functions.
-- **The C++ target corpus is only three main example files:** `../kr32/examples/hello.cpp`, `balanced-tree.cpp`, and `matrix.cpp`, plus `cxx_tls.cpp`; the experimental KR16 C++ tests are only 85 LOC.
-- **There is no standalone target conformance corpus.** C11/C++ feature coverage lives as escaped string literals inside host doctest files (`../kr32/tests/cc`, `../kr32/tests/cxx`, about 5,906 LOC of embedded C++ programs).
+- **The C++ target corpus is six example files, only three substantial:** `../kr32/examples/hello.cpp`, `balanced-tree.cpp`, and `matrix.cpp` carry most of the C++ surface; `cxx_tls.cpp`, `cxx_libc.cpp`, and `FileOpen.cpp` are small. The experimental KR16 C++ tests total 97 lines.
+- **There is no standalone target conformance corpus.** C11/C++ feature coverage lives as escaped string literals inside host doctest files (`../kr32/tests/unit`, `../kr32/tests/cxx`). The `test_cc_*` and `test_cxx_codegen_*` files total 8,216 lines; the embedded C++ source subset is smaller.
 - **There are no target headers.** Both front ends synthesise `<stdio.h>`, `<stdlib.h>`, `<string.h>`, `<string>`, `<iostream>`, `<thread>`, `<atomic>`, and others inside compiler source (`../kr32/src/cc/cc.cpp:590`, `../kr32/src/cxx/preprocessor.cpp:3125+`). A real sysroot is a new v1 deliverable (D-029).
 - **No inline assembly** exists in the corpus; privileged code is in `.S` files. C only declares externs.
 - **KR32 is ILP32 with 32-bit `long` and signed `char`; KR16 uses a 16-bit `long` and unsigned `char`.** The “16-bit long” assumption is KR16-only.
@@ -283,8 +283,8 @@ The 2026-11-09 inventory found:
 | **0 — Smoke** | hello/arithmetic/functions | KR32, KR16 | v1.0 |
 | **1 — C core** | structs, pointers, arrays, control flow, preprocessor, varargs, `printf` | KR32, KR16 | v1.0 |
 | **2 — C++ core** | classes, single inheritance, virtual, `new`/`delete`, templates, lambdas, `constexpr`; RTTI/EH fixtures in v1.1 | KR32 | v1.0 (EH/RTTI fixtures v1.1) |
-| **3 — Runtime/OS** | `libc.c`, `kr32os`, `fileio.c` | KR32, KR16 | v1.1 (partial in v1.0) |
-| **4 — Stress** | `C-for-U.c`, extracted 5,906-LOC C++ fixtures, cc11/17/23 compiler sources | KR32, KR16 | stretch |
+| **3 — Runtime/OS** | KR32: `libc.c`, `kr32os`; KR16: `libc.s`, `resources/fileio.c` | KR32, KR16 | v1.1 (partial in v1.0) |
+| **4 — Stress** | `C-for-U.c`, extracted C++ doctest fixtures, cc11/17/23 compiler sources | KR32, KR16 | stretch |
 
 The compile-first list is in Appendix B.
 
@@ -303,7 +303,7 @@ The compile-first list is in Appendix B.
 
 Because the conformance material is embedded in host doctest files, M0/M1 MUST deliver `tools/extract_fixtures`:
 
-- Scan `../kr32/tests/cc` and `../kr32/tests/cxx` for escaped C/C++ source strings.
+- Scan `../kr32/tests/unit` and `../kr32/tests/cxx` for escaped C/C++ source strings.
 - Extract each into `tests/corpus/extracted/<feature>/<name>.c` or `.cpp`.
 - Record the original file:line and the feature tag.
 - Provide expected output or a run/exit expectation where the original test has one.
@@ -346,15 +346,18 @@ Differential testing uses a host shim:
 | Gate | Requirement |
 |---|---|
 | **G0** | Repository builds, CI is green, docs skeleton and fixture extractor exist. |
-| **G1** | `krc -fsyntax-only` accepts Tier 1 C on both targets and rejects unsupported features with the specified diagnostics. |
-| **G2** | `hello.c` and `mainentry.c` assemble, link, and run on KR32 with correct exit codes; `hello.c` and `sum.c` do the same on KR16. |
+| **G1** | `krc -fsyntax-only` accepts Tier 1 C on **KR32** and rejects unsupported features with the specified diagnostics. KR16 syntax is gated at G7. |
+| **G2a** | `hello.c` and `mainentry.c` compile to KR32 assembly with correct call/return sequences; no object, link, or run yet. |
+| **G2b** | `hello.c` and `mainentry.c` assemble, link, and run on KR32 with correct exit codes. |
 | **G3** | Tier 1 C runs on KR32 with expected output, including `binarytree.c`, `libc-test.c`, and `varargs.c`. |
 | **G4** | A KR32 debugger session on `binarytree.c` supports breakpoints, stack, locals/globals, aggregate expansion, and memory view. |
 | **G5** | `hello.cpp` and `balanced-tree.cpp` run on KR32; classes, single inheritance, virtual dispatch, and `new`/`delete` work. |
 | **G6** | Extracted C++11/14/17 core fixtures pass: templates, lambdas, move, `auto`/`decltype`, range-for, `constexpr`, `initializer_list`, `noexcept`/`alignas`, `if constexpr`, structured bindings, inline variables. Fold expressions follow with variadic templates in v1.1. |
-| **G7** | Tier 0–1 C runs on KR16 with the IP16 profile and the KR16 ABI. |
+| **G7** | Tier 0–1 C is accepted, assembled, linked, and run on KR16 with the IP16 profile and the KR16 ABI, including `hello.c` and `sum.c`. |
 | **G8** | v1.0 corpus is green, outputs deterministic, and the debugger works for C and C++. |
-| **G9** | v1.1: EH/RTTI, variadic templates, dynamic TLS, utilities/memory, full `libc.c`, and `kr32os` are green. |
+| **G9** | v1.1: EH/RTTI, variadic templates, dynamic TLS, utilities/memory, full KR32 `libc.c`/`kr32os`, and KR16 `libc.s`/`resources/fileio.c` integration are green. |
+
+A gate is claimed only by the milestone that can produce its evidence. M2 emits KR32 assembly (G2a), M3 links and runs it (G2b), and M7 owns KR16 syntax, link, and run (G7).
 
 ---
 
@@ -364,10 +367,11 @@ Differential testing uses a host shim:
 
 **Supported in v1.0**
 
-- C89/C99 base: declarations, `//` comments, mixed declarations, `for`-scope declarations, `long long` where the target profile supports it, `_Bool`, `restrict` (parsed and semantically ignored), `inline` (C99 semantics), `sizeof`, `offsetof`, bit-fields, unions, enums, typedefs, function pointers.
+- C89/C99 base: declarations, `//` comments, mixed declarations, `for`-scope declarations, `long long` where the target profile supports it, `_Bool`, `inline` (C99 semantics), `sizeof`, `offsetof`, bit-fields, unions, enums, typedefs, function pointers.
 - C99/C11 initializers: designated initializers, compound literals, aggregate/string initializers.
 - C11 conveniences: `_Generic`, `_Static_assert`, `_Alignas`/`_Alignof`, `_Noreturn`, anonymous structs/unions.
-- `#pragma once`, include guards, `__has_include`, `__COUNTER__`, `#line`, `#pragma` pass-through where harmless.
+- Standard preprocessor: include guards, `#line`, and implementation-defined `#pragma` pass-through where harmless.
+- Extensions accepted in C mode, not claimed as C11: `restrict` (accepted and treated as a no-op, so C11 restrict semantics are not provided), `#pragma once`, `__has_include`, `__COUNTER__`.
 - `volatile` with exact-width, non-folded access semantics.
 - Target builtins and attributes (see §6.4).
 
@@ -1324,15 +1328,15 @@ Durations assume one to two full-time-equivalent engineers/agents. They overlap 
 |---|---:|---|---|
 | **M0 Foundation** | 2–3 weeks | Repo, CMake, CI, docs skeleton, source manager/diagnostics, target descriptor skeleton, fixture extractor, decision log. | G0 |
 | **M1 C front end + sysroot** | 6–8 weeks | Preprocessor, lexer, C11 parser, Sema core, real sysroot headers, AST dump. | G1 |
-| **M2 IR + KR32 backend + assembler** | 8–10 weeks | Typed SSA, C IRGen, KR32 descriptor, instruction selection, regalloc, frames, asm printer, assembler. | G2 |
-| **M3 Object + linker + startup** | 6–8 weeks | Object format, `krld`, crt0, minimal libc, KR32 image writer. | G2 |
+| **M2 IR + KR32 backend + assembler** | 8–10 weeks | Typed SSA, C IRGen, KR32 descriptor, instruction selection, regalloc, frames, asm printer, assembler. | G2a |
+| **M3 Object + linker + startup** | 6–8 weeks | Object format, `krld`, crt0, minimal libc, KR32 image writer. | G2b |
 | **M4 C core + debug format** | 8–10 weeks | Structs/pointers/arrays/varargs/preprocessor, KDBG format, dumper/reader, DAP/GUI debug session. | G3, G4 |
 | **M5 C++ core** | 8–10 weeks | Classes, single inheritance, virtual, references, overloading, ctors/dtors, `new`/`delete`, namespaces. | G5 |
 | **M6 C++11/14/17** | 8–10 weeks | Templates, lambdas, move, `auto`/`decltype`, range-for, `constexpr`, `initializer_list`, `noexcept`/`alignas`, `thread_local` static, `if constexpr`, structured bindings, inline variables; fixtures. | G6 |
 | **M7 KR16 backend + C** | 6–8 weeks | KR16 descriptor, IP16 data model/ABI, codegen, image writer; Tier 0–1 C. | G7 |
 | **M8 v1.0 hardening** | 6–8 weeks | Full Tier 0–2, debugger parity, determinism, docs, tag `v1.0`. | G8 |
-| **M9 v1.1 runtime/libc/host services** | 8–10 weeks | Port `libc.c`, stdio/`printf`, malloc, file I/O, host ABI, kernel profile; Tier 3. | G9 partial |
-| **M10 v1.1 language/runtime completion** | 8–10 weeks | EH/RTTI, variadic templates + fold expressions, dynamic TLS, utilities/memory, full `libc.c`/`kr32os`; tag `v1.1`. | G9 |
+| **M9 v1.1 runtime/libc/host services** | 8–10 weeks | Port KR32 `libc.c`, stdio/`printf`, malloc, file I/O, host ABI, kernel profile; integrate KR16 `libc.s`/`fileio.c`; Tier 3. | G9 partial |
+| **M10 v1.1 language/runtime completion** | 8–10 weeks | EH/RTTI, variadic templates + fold expressions, dynamic TLS, utilities/memory, full KR32 `libc.c`/`kr32os`, KR16 runtime; tag `v1.1`. | G9 |
 
 Sequential execution of these durations is roughly 14–17 months to v1.0. The 12-month target assumes parallel workstreams (front end/IR, linker/debug, runtime/sysroot) and agent assistance. The 6–9 month usable milestone is M5/M6.
 
@@ -1341,7 +1345,7 @@ Sequential execution of these durations is roughly 14–17 months to v1.0. The 1
 - **v0.1 (month 3–4):** C on KR32, hello/mainentry, object/link, minimal runtime.
 - **v0.5 (month 6–8):** C core + debugger on KR32; C++ core begins.
 - **v1.0 (month 12 target; 12–14 realistic with sequential work):** KR32 C++ core + selected C++14/17 + debugger; KR16 C; Tier 0–2; minimal Tier 3.
-- **v1.1 (month 12–18):** EH/RTTI, variadic templates, dynamic TLS, utilities/memory, full `libc.c`/`kr32os`.
+- **v1.1 (month 12–18):** EH/RTTI, variadic templates, dynamic TLS, utilities/memory, full KR32 `libc.c`/`kr32os`, KR16 runtime.
 - **v1.2:** `string`/`vector`/`algorithm`, multiple/virtual inheritance, C++20 language essentials.
 - **v1.3:** `iostream` + `map`/`unordered_map`.
 - **Later:** C++20 library, C++23, 64-bit target, stack/8-bit targets, SFINAE/two-phase/concepts.
@@ -1355,7 +1359,7 @@ Sequential execution of these durations is roughly 14–17 months to v1.0. The 1
 5. KR16 backend.
 6. Runtime/libc/kr32os.
 
-The C++ front end and the runtime/libc port are the two largest work packages. The v1.0 boundary deliberately keeps EH/RTTI, variadic templates, dynamic TLS, and full `libc.c`/`kr32os` in v1.1 to protect the 12-month target.
+The C++ front end and the runtime/libc port are the two largest work packages. The v1.0 boundary deliberately keeps EH/RTTI, variadic templates, dynamic TLS, and full KR32 `libc.c`/`kr32os` (plus KR16 runtime integration) in v1.1 to protect the 12-month target.
 
 ---
 
@@ -1368,7 +1372,7 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 | No sysroot; synthesised headers | High: every real program fails | Make the sysroot an M1 deliverable; generated `bits/`; no host headers. |
 | C++ front end scope | High: schedule | Stage features; reject unsupported constructs with diagnostics; fixture-driven. |
 | No standalone conformance corpus | High: silent regressions | Build the extractor in M0/M1; curated suite; golden tests. |
-| C++ target corpus is three files | High: weak coverage | Extract fixtures; add new tests per feature. |
+| C++ target corpus is six example files, three substantial | High: weak coverage | Extract fixtures; add new tests per feature. |
 | `libc.c`/`kr32os` port | High: v1.1 slip | Port incrementally; keep v1.0 boundary at Tier 2; use `libc.c` as reference. |
 | KR16 16-bit profile | Medium: non-conforming code surprises | Document profile; audit `long`; lo/hi structs; diagnostics. |
 | MMIO without `volatile` | High: kr32os breaks under optimisation | Corpus migration; compiler honours `volatile`; tests. |
@@ -1437,6 +1441,8 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 
 ## Appendix A — Decision log
 
+### A.1 Survey decisions
+
 | ID | Decision | Answer |
 |---|---|---|
 | R1 | Primary deliverable | All four goals, phased. |
@@ -1484,16 +1490,59 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 | A9 | Tool/repo | One `krc` + `krld` + shared parser library; monorepo. |
 | A9b | Build/CI | CMake + C++20 + doctest; Windows + Linux; deterministic. |
 | A9c | Test strategy | Differential + curated conformance + golden dumps. |
-| L0 | C++11 floor | Classes/inheritance/virtual, templates, variadic templates, lambdas, move, auto/decltype/range-for/nullptr/enum class, constexpr, initializer_list, noexcept/alignas/thread_local, multiple/virtual inheritance. |
+| L0 | C++11 floor | Classes/inheritance/virtual, templates, lambdas, move, auto/decltype/range-for/nullptr/enum class, constexpr, initializer_list, noexcept/alignas/thread_local. Variadic templates are staged v1.1; multiple/virtual inheritance is staged v1.2. |
 | L1 | C++14/17 | C++14 included; C++17 core (`if constexpr`, structured bindings, fold expressions, inline variables). Fold expressions are staged with variadic templates in v1.1. |
 | L2 | C++20/23 | C++20 language essentials; C++23 later. |
-| L3 | C11 | C11 conveniences; C99 designated/compound added by G3. |
+| L3 | C11 | C11 conveniences; C99 designated/compound added by S-G3. |
 | L4 | Target extensions | Matrix/transform, atomics/LL-SC/fence, syscalls, volatile/MMIO. |
-| G1 | C++14 baseline | Yes, part of the C++17 baseline. |
-| G2 | Concepts/templates | Concepts later; SFINAE/two-phase first. |
-| G3 | C initializers | Designated initializers + compound literals. |
-| G5 | OS attributes | Interrupt, naked, noreturn, custom conventions. |
-| D-001…D-035 | Architecture decisions | See §3. |
+| S-G1 | C++14 baseline | Yes, part of the C++17 baseline. |
+| S-G2 | Concepts/templates | Concepts later; SFINAE/two-phase first. |
+| S-G3 | C initializers | Designated initializers + compound literals. |
+| S-G5 | OS attributes | Interrupt, naked, noreturn, custom conventions. |
+
+Survey decision IDs use the `S-G` prefix to avoid collision with acceptance gates G0, G1, G2a, G2b, and G3–G9. `S-G4` was not asked.
+
+### A.2 Architecture decisions
+
+| ID | Decision | Answer | Rationale |
+|---|---|---|---|
+| D-001 | Dialects | One driver, two dialects; shared source manager, preprocessor, lexer, AST, and IR; dialect-aware Sema; separate C and C++ parse paths. | C11 is not a subset of C++11; the dialects need distinct semantics. |
+| D-002 | Targets | KR32 is the v1 reference; KR16 is the v1 C target; the 64-bit target is a placeholder; stack/8-bit targets are out. | KR32 is the most complete target; KR16 forces width independence; stack/8-bit need a separate backend family. |
+| D-003 | Tool shape | `krc` + `krld` + shared parser/reader libraries; monorepo; `--target` selects the backend. | One toolchain and one linker; per-target binaries duplicate work. |
+| D-004 | ISA policy | ISAs are frozen by default; small, versioned additions are allowed with a feature flag, docs, VM change, and golden vectors. | Protects VM stability while allowing unwinder/atomic needs. |
+| D-005 | IR | Typed SSA in memory plus a textual dump; no stable serialised IR. | Enough for optimisation and retargeting without a second compatibility product. |
+| D-006 | IR contents | Explicit EH/cleanup, volatile/MMIO, atomics, debug locations, vtable/RTTI, and source types; no address spaces/banking or inline metadata. | Needed for C++ and these VMs; out-of-scope features are deferred. |
+| D-007 | Backend | Hybrid shared framework plus C++ `constexpr` target descriptions and hooks. | Scales across targets without a generator or external dependency. |
+| D-008 | Output | Assembly text by default; objects through a shared writer; `-S`/`-c` share encoding tables. | Inspectable and teachable, with an efficient object path. |
+| D-009 | Assembler | One framework plus per-target syntax/encoding modules. | Shared diagnostics/object writer; preserves target syntax. |
+| D-010 | ABI | One versioned C/C++ ABI, KR32 base; redesigned `.cpp_except`; pointer-width/endianness parameters. | Common runtime/debug; KR32 proven; custom EH is not final. |
+| D-011 | ABI stability | ABI tied to compiler version; runtime rebuilt each release. | Avoids premature ABI freeze and simplifies evolution. |
+| D-012 | Data models | Strict 32/64-bit; IP16 profile on KR16; LP64 future; per-target `char` with `__CHAR_UNSIGNED__`. | Conformance where practical; honest 16-bit profile; existing VM behaviour. |
+| D-013 | Object format | New target-tagged container with 64-bit canonical fields. | Existing containers cannot represent 64-bit targets; one format for all. |
+| D-014 | Linker | Static objects/archives, weak/COMDAT, GC, overflow checks, relaxation, map/size, layout scripts, debug merge/strip; no PIC/dynamic/LTO. | Covers the corpus without dynamic-linking complexity. |
+| D-015 | Images | One linker core plus per-target image writers initially. | Avoids rewriting every VM loader. |
+| D-016 | Symbols/debug | One binary versioned target-tagged format plus canonical dumper and shared reader. | Debugger-grade C++ info and one parser for all tools. |
+| D-017 | Debug features | Breakpoints, stack, variables, aggregates, inheritance/virtual/dynamic type, expressions/watches, threads, memory/disassembly. | Matches the requested debugger surface; templates/inline frames later. |
+| D-018 | Optimised debug | `-O0` full; `-O1` line/function. | Variable locations and inline frames are expensive; the format is reserved. |
+| D-019 | Debug storage | In-image default; optional sidecar by build ID. | Auto-discovery plus small shipping images. |
+| D-020 | Runtime | Common source + HAL + per-target crt/syscall/soft-float/unwinder stubs. | One runtime tree across targets. |
+| D-021 | Library ladder | v1 freestanding; v1.1 utilities/memory; v1.2 string/vector/algorithm; v1.3 iostream + map/unordered. | Dependency order; each stage is usable. |
+| D-022 | Threading | Guest threads/atomics/guards; no `std::thread` in v1. | Runtime needs threads/atomics; the `std` threading surface was not selected. |
+| D-023 | C mode | C11 conveniences plus C99 designated/compound; no VLAs/complex/atomics/threads/K&R. | Corpus needs; optional/obscure features deferred. |
+| D-024 | C++ ladder | C++11 core + C++14 + selected C++17 in v1.0; C++20 language essentials v1.2; concepts after SFINAE/two-phase; no C++20 library or C++23. | Practical modern C++ with a credible conformance path. |
+| D-025 | Template machinery | SFINAE/two-phase post-v1; concepts after them. | Largest front-end cost; no corpus dependency. |
+| D-026 | Inheritance | Single inheritance v1.0; multiple/virtual v1.2. | No corpus use; layout and dynamic-cast cost. |
+| D-027 | Attributes | Basic standard attributes plus OS attributes. | Diagnostics and OS code at low cost. |
+| D-028 | Corpus | Tier 0–2 KR32, Tier 0–1 KR16 in v1.0; Tier 3 v1.1; Tier 4 stretch. | Matches corpus size/dependencies and protects the schedule. |
+| D-029 | Sysroot | Real headers, generated target `bits/`, no host headers. | A retargetable compiler needs target headers; synthesis is a structural gap. |
+| D-030 | v1 boundary | v1.0 is a usable toolchain plus debugger; v1.1 adds EH/RTTI, variadic templates, dynamic TLS, utilities/memory, full KR32 `libc.c`/`kr32os` and KR16 runtime integration. | The 12-month target; those features are large. |
+| D-031 | Migration | Coexist, then cut over; clean object break. | Old compilers remain usable; the new format needs no compatibility. |
+| D-032 | Testing | Differential + curated conformance + golden dumps. | The corpus lacks a standalone conformance suite; multiple evidence layers. |
+| D-033 | Self-hosting | Not a goal; host-only compiler. | Avoids hosted C++/runtime requirements. |
+| D-034 | Process | MIT; KR32/KR16 conventions; ADRs. | Consistent with the existing projects. |
+| D-035 | Determinism | Byte-identical outputs, sorted symbols, path remapping, build IDs and source hashes. | Reproducible tests/releases and debugger matching. |
+
+Changing a `D-xxx` decision requires editing its row here and adding an ADR under `docs/decisions/` when the change touches ABI, object format, symbol format, target description, or IR.
 
 ---
 
@@ -1516,7 +1565,7 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 | 11 | `../kr32/examples/binarytree.c` | Recursion, pointers, `malloc`/`free`, `strdup`; real program. |
 | 12 | `../kr16/tests/integration/heap.c` | Allocator contract on 16-bit. |
 | 13 | `../kr32/examples/balanced-tree.cpp` | Abstract base, virtual + dtor, inheritance, `new`/`delete`; C++ flagship. |
-| 14 | `../kr32/src/cc/libc.c` | 3,037-LOC C self-test. |
+| 14 | `../kr32/src/cc/libc.c` | 3,058 non-blank lines (3,239 total); C self-test. |
 | 15 | `../kr32/kr32os/kernel/*.c` | Freestanding C, MMIO, pointer/int casts, page tables. |
 | 16 | `../kr32/examples/matrix.cpp` | Matrix/transform builtins (v1.1). |
 | 17 | `../kr16/tests/kevin/C-for-U.c` | 1,473-LOC stress test. |
@@ -1526,7 +1575,7 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 
 Extract from:
 
-- `../kr32/tests/cc/test_cc_*.cpp` — C11 features, bit-fields, `_Generic`, `typeof`, `_Alignas`, `_Atomic`, attributes.
+- `../kr32/tests/unit/test_cc_*.cpp` — C11 features, bit-fields, `_Generic`, `typeof`, `_Alignas`, `_Atomic`, attributes.
 - `../kr32/tests/cxx/test_cxx_codegen_*.cpp` — classes, inheritance, virtual, RTTI, exceptions, templates, partial specialization, lambdas, `constexpr`, `initializer_list`, range-for.
 - `../kr16/src/cc/exp/tests/` — C++11/17/23 smoke tests.
 
@@ -1619,6 +1668,18 @@ Each fixture gets a feature tag, source file:line provenance, and expected outpu
 | `map`/`unordered_map`/`deque`/`list` | | | | v1.3 |
 | C++20 library/C++23 | | | | later |
 | Modules/coroutines/ranges | | | | later |
+
+### D.3 Target extensions
+
+Appendix D.1 and D.2 track language features; target-specific surfaces are listed here and specified in §6.4.
+
+| Feature | KR32 | KR16 | Notes |
+|---|---|---|---|
+| Matrix/transform builtins | yes (v1.1) | no | §6.4; `kr32/matrix.hpp` wrappers |
+| Atomics/LL-SC/fence builtins | yes | no | Runtime and guest threads |
+| Host-service/syscall builtins | yes | yes | Common host-service ABI; KR16 `SYS` |
+| Volatile/MMIO access helpers | yes | yes | Exact-width, non-folded access |
+| Interrupt/naked/noreturn/custom conventions | yes | yes | §6.4; `docs/attributes.md` |
 
 ---
 
