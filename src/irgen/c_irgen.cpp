@@ -425,6 +425,34 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             function_classes_[function] = record;
             method_bodies_.push_back({function, member.get()});
         }
+        for (const auto& method : record->methods) {
+            if (!method.is_pure || method.name.starts_with("~") ||
+                methods.contains(method.name)) {
+                continue;
+            }
+            std::vector<ir::TypePtr> parameters{
+                module_->types().pointer_type(class_type)};
+            for (const auto& parameter : method.type->parameters) {
+                parameters.push_back(map_type(parameter));
+            }
+            const auto ir_type = module_->types().function_type(
+                map_type(method.type->return_type), std::move(parameters),
+                method.type->variadic);
+            auto* function = module_->add_function(
+                mangle_method(record->tag, method.name), ir_type,
+                ir::Linkage::Weak, false);
+            function->declaration = true;
+            function->add_parameter(module_->types().pointer_type(class_type),
+                                    "this");
+            for (std::size_t index = 0;
+                 index < method.type->parameters.size(); ++index) {
+                function->add_parameter(
+                    map_type(method.type->parameters[index]),
+                    "parameter" + std::to_string(index));
+            }
+            function_ast_types_[function] = method.type;
+            methods.emplace(method.name, function);
+        }
     }
 }
 
@@ -4307,7 +4335,8 @@ void CIRGen::emit_vtable_init(ir::Value* object, ir::TypePtr type) {
             }
             const auto found = methods->second.find(slots[index]);
             if (found != methods->second.end()) {
-                implementation = found->second;
+                implementation =
+                    found->second->declaration ? nullptr : found->second;
                 break;
             }
             if (slots[index].starts_with("~")) {
