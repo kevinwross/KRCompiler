@@ -14,10 +14,13 @@ int puts(const char *text) {
 
 static char *format_buffer;
 static int format_count;
+static int format_limit = -1;
 
 static void emit_char(int character) {
     if (format_buffer) {
-        format_buffer[format_count] = (char)character;
+        if (format_limit < 0 || format_count < format_limit - 1) {
+            format_buffer[format_count] = (char)character;
+        }
         format_count++;
     } else {
         putchar(character);
@@ -407,13 +410,38 @@ int sprintf(char *destination, const char *format, ...) {
     va_start(arguments, format);
     char *saved_buffer = format_buffer;
     int saved_count = format_count;
+    int saved_limit = format_limit;
     format_buffer = destination;
     format_count = 0;
-    int written = format_output(format, arguments);
+    format_limit = -1;
+    format_output(format, arguments);
     destination[format_count] = 0;
     int result = format_count;
     format_buffer = saved_buffer;
     format_count = saved_count;
+    format_limit = saved_limit;
+    va_end(arguments);
+    return result;
+}
+
+int snprintf(char *destination, unsigned int size, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    char *saved_buffer = format_buffer;
+    int saved_count = format_count;
+    int saved_limit = format_limit;
+    format_buffer = destination;
+    format_count = 0;
+    format_limit = (int)size;
+    format_output(format, arguments);
+    int result = format_count;
+    if (size > 0) {
+        int stored = format_count < (int)size ? format_count : (int)size - 1;
+        destination[stored] = 0;
+    }
+    format_buffer = saved_buffer;
+    format_count = saved_count;
+    format_limit = saved_limit;
     va_end(arguments);
     return result;
 }
