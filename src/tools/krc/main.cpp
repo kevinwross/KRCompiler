@@ -200,9 +200,6 @@ int main(int argc, char** argv) {
         return fail("unknown target '" + target_name + "' (expected kr32, kr16, or kr64)");
     }
     const auto& profile = krc::target::get_target(*target_id);
-    if (!profile.backend_available) {
-        return fail("target '" + target_name + "' is not implemented yet");
-    }
 
     if (inputs.empty()) {
         print_usage(std::cout);
@@ -293,7 +290,12 @@ int main(int argc, char** argv) {
                         krc::ir::print_module(*module, std::cout);
                     }
                     if ((emit_assembly || emit_object) &&
-                        profile.id == krc::target::TargetId::Kr32) {
+                        !profile.backend_available) {
+                        diagnostics.report(krc::frontend::Severity::Error,
+                                           "target '" + target_name +
+                                               "' has no code generator yet");
+                    } else if ((emit_assembly || emit_object) &&
+                               profile.id == krc::target::TargetId::Kr32) {
                         krc::backend::Kr32Backend backend(*module, profile);
                         std::string backend_error;
                         auto assembly = backend.emit(backend_error);

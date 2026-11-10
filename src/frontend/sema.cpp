@@ -2279,8 +2279,25 @@ bool Sema::evaluate_constant(const AstNode& expression, long long& value) {
         return evaluate_constant(*expression.children[condition != 0 ? 1 : 2], value);
     }
     case AstKind::CastExpression:
-        return expression.children.size() >= 2 && expression.children[1] &&
-               evaluate_constant(*expression.children[1], value);
+        if (expression.children.size() >= 2 && expression.children[0] &&
+            expression.children[1] &&
+            evaluate_constant(*expression.children[1], value)) {
+            const auto cast_type = analyze_type_name(*expression.children[0]);
+            if (cast_type && is_integer(*cast_type)) {
+                const auto bits = static_cast<unsigned>(size_of(*cast_type) * 8);
+                if (bits > 0 && bits < 64) {
+                    const auto mask = (1ull << bits) - 1;
+                    auto narrowed = static_cast<unsigned long long>(value) & mask;
+                    if (!cast_type->is_unsigned &&
+                        (narrowed & (1ull << (bits - 1))) != 0) {
+                        narrowed |= ~mask;
+                    }
+                    value = static_cast<long long>(narrowed);
+                }
+            }
+            return true;
+        }
+        return false;
     case AstKind::SizeofExpression:
     case AstKind::AlignofExpression: {
         if (expression.children.empty() || !expression.children.front()) {

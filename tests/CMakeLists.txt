@@ -38,6 +38,15 @@ if(TARGET krc)
     add_test(NAME krc_unknown_target COMMAND $<TARGET_FILE:krc> --target=unknown)
     set_tests_properties(krc_unknown_target PROPERTIES WILL_FAIL TRUE)
 
+    add_test(NAME krc_kr16_syntax
+        COMMAND $<TARGET_FILE:krc> --target=kr16 -std=c11 -fsyntax-only
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sizes.c")
+
+    add_test(NAME krc_kr16_ir
+        COMMAND $<TARGET_FILE:krc> --target=kr16 --dump-ir
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sizes.c")
+    set_tests_properties(krc_kr16_ir PROPERTIES PASS_REGULAR_EXPRESSION "; target: kr16")
+
     add_test(NAME krc_unknown_option COMMAND $<TARGET_FILE:krc> --no-such-option)
     set_tests_properties(krc_unknown_option PROPERTIES WILL_FAIL TRUE)
 

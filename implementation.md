@@ -37,7 +37,7 @@ A change is done when:
 | M4 C core + debug format | G3/G4 passed locally | complete locally | C core, bit-fields, debugger session, frozen KDBG v1, and dump tooling are in place; M5 C++ is next |
 | M5 C++ core | G5 passed locally | in progress | G5 runs; classes, methods, constructors, destructors, `new`/`delete`, default copy, inheritance, and static devirtualization work; general vtables, move semantics, and dynamic dispatch remain |
 | M6 C++11/14/17 | G6 | in progress | `nullptr`, `auto`/`decltype`, range-for, `constexpr`, `enum class`, and `::` qualification work; templates, lambdas, move semantics, and structured bindings remain |
-| M7 KR16 backend + C | G7 | pending | — |
+| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, and IR generation work; backend codegen, assembler, linker, and runtime remain |
 | M8 v1.0 hardening | G8 | pending | — |
 | M9 v1.1 runtime/libc/host services | G9 partial | pending | — |
 | M10 v1.1 language/runtime completion | G9 | pending | — |
@@ -92,7 +92,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] AST dump (`--dump-ast`) and `-fsyntax-only`.
 - [x] Freeze the C ABI and target-descriptor schema before M2. The KR32 C ABI is frozen by [ADR 0001](docs/decisions/0001-kr32-c-abi-freeze.md); target descriptor schema v1 is frozen by [ADR 0002](docs/decisions/0002-target-descriptor-schema-freeze.md).
 - [x] Negative diagnostics for unsupported features (VLAs, `_Complex`, `_Atomic`, `<threads.h>`, K&R, implicit declarations).
-- [x] Gate G1: `krc -fsyntax-only` accepts Tier 1 C on KR32. KR16 syntax is gated at G7. Local evidence: all nine KR32 examples, the five stored C fixtures, and 112/132 extracted `test_cc_*` C fixtures pass; the remainder are expected negatives, unsupported extensions, or extractor artifacts. Remote CI remains pending.
+- [x] Gate G1: `krc -fsyntax-only` accepts Tier 1 C on KR32. KR16 syntax and IR generation now run on the IP16 profile; KR16 codegen remains gated at G7. Local evidence: all nine KR32 examples, the five stored C fixtures, and 112/132 extracted `test_cc_*` C fixtures pass; the remainder are expected negatives, unsupported extensions, or extractor artifacts. Remote CI remains pending.
 
 **M1 evidence (2026-11-09 20:36:18 -08:00):**
 
@@ -175,7 +175,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 114/114 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 116/116 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -189,7 +189,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 114/114 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 116/116 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -213,11 +213,19 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 ### M7 — KR16 backend + C (6–8 weeks)
 
-- [ ] KR16 target descriptor: IP16 data model, registers, encodings, relaxation, capabilities.
+- [ ] KR16 target descriptor: IP16 data model, registers, encodings, relaxation, capabilities. The IP16 profile (16-bit `int`/`long`, 16-bit pointers, unsigned `char`, no `long long`/FP) drives `-fsyntax-only` and `--dump-ir`; register mapping, encoding, and relaxation remain.
 - [ ] KR16 ABI appendix and calling-convention suite.
 - [ ] Codegen, frame layout, image writer.
 - [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`.
 - [ ] Gate G7: KR16 C is accepted, assembled, linked, and run.
+
+**M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
+
+- `krc --target=kr16 -std=c11 -fsyntax-only` accepts a fixture asserting 16-bit `int`/`long`/pointers and unsigned `char`.
+- `krc --target=kr16 --dump-ir` emits `; target: kr16` with `i16` function signatures.
+- Requesting `-S`/`-c` for KR16 reports that no code generator exists yet rather than silently producing KR32 output.
+- Constant folding now applies integer cast width and signedness, so `(char)-1 > 0` is true on the unsigned-char KR16 profile.
+- CTest is 116/116 across all six configurations; `krc_tests` remains 92 cases / 509 assertions.
 
 ### M8 — v1.0 hardening (6–8 weeks)
 
@@ -369,3 +377,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T10:05:06-08:00** — Added chained namespace qualification: the parser accumulates `outer::inner::name` segments and Sema resolves the final segment. The nested-namespace fixture returns 5; CTest is 112/112.
 - **2026-11-10T10:15:01-08:00** — Added by-value aggregate parameters on KR32: aggregate loads/stores copy every 4-byte word, call sites place words in consecutive integer registers, and the callee prologue stores them into its frame slot. Passing an 8-byte `Point` by value returns 7; CTest is 113/113.
 - **2026-11-10T10:26:13-08:00** — Added small aggregate returns: `ret` loads up to two words into `R0`/`R1`, call sites store them into the result slot, and a local record can be initialized directly from a factory call. `make_point()` returns 3/4 and the fixture returns 7; CTest is 114/114.
+- **2026-11-10T10:36:06-08:00** — Started M7: `--target=kr16` now parses and lowers to IR on the IP16 data model, and codegen requests fail explicitly instead of producing KR32 output. Integer cast folding honors width and signedness so `(char)-1 > 0` holds for unsigned KR16 `char`. CTest is 116/116.
