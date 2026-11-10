@@ -141,6 +141,7 @@ private:
     std::unordered_map<ir::Function*, std::vector<const frontend::AstNode*>> function_defaults_;
     std::unordered_map<ir::Function*, frontend::TypePtr> function_ast_types_;
     std::size_t lambda_counter_ = 0;
+    std::size_t static_local_counter_ = 0;
     struct LambdaInfo {
         ir::TypePtr closure;
         ir::TypePtr function;

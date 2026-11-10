@@ -1403,8 +1403,48 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
     if (has_label(specifiers, "typedef")) {
         return;
     }
-    if (has_label(specifiers, "static") || has_label(specifiers, "extern")) {
-        error(declaration.location, "local static/extern variables are not implemented yet");
+    if (has_label(specifiers, "static")) {
+        for (std::size_t index = 1; index < declaration.children.size();
+             ++index) {
+            const auto* init = declaration.children[index].get();
+            if (!init || init->kind != frontend::AstKind::InitDeclarator ||
+                init->children.empty() || !init->children.front()) {
+                continue;
+            }
+            const auto* declarator = init->children.front().get();
+            const auto name = declarator_name(*declarator);
+            if (name.empty()) {
+                continue;
+            }
+            const auto frontend_type =
+                sema_.declaration_type(specifiers, declarator);
+            if (!frontend_type) {
+                continue;
+            }
+            const auto type = map_type(frontend_type);
+            if (!type) {
+                continue;
+            }
+            auto* global = module_->add_global(
+                "__static_" + std::to_string(static_local_counter_++) + "_" +
+                    name,
+                type, false, 0);
+            if (init->children.size() > 1 && init->children[1]) {
+                long long constant = 0;
+                if ((ir::is_integer(type) || ir::is_pointer(type)) &&
+                    sema_.evaluate_constant_expression(*init->children[1],
+                                                       constant)) {
+                    global->initializer =
+                        module_->constant_int(type, constant);
+                }
+            }
+            declare_local(name, LocalBinding{global, type, frontend_type});
+        }
+        return;
+    }
+    if (has_label(specifiers, "extern")) {
+        error(declaration.location,
+              "local extern variables are not implemented yet");
         return;
     }
     if (declaration.children.size() > 1 && declaration.children[1] &&

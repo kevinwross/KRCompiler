@@ -176,7 +176,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 121/121 CTest.
+- Local `static` variables are emitted as internal globals with zero or constant initialization, so state persists across calls; the fixture returns 3.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 122/122 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -190,7 +191,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 121/121 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 122/122 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -391,3 +392,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T11:30:14-08:00** — Added the minimal KR16 EXEC image: `krc -c --target=kr16` emits a 64-byte-header `.kex` with `.text`, `.debug_str`, CRC32, and a generated `_start` calling `main`. The in-tree assembler now accepts `SP`/`FP`, negative displacements, and keeps offsets across repeated `.text`. `sum.c` runs to exit 55; CTest is 118/118.
 - **2026-11-10T11:44:36-08:00** — Added string globals, label-resolving `LEA`, `.byte` emission, and an MMIO `puts` shim to the KR16 image path. `hello.c` prints `Hello, KR16!` and exits 0; CTest is 119/119.
 - **2026-11-10T11:53:09-08:00** — Added byte-exact determinism tests for a KR32 object and a KR16 `.kex`; both compile the same input twice and compare SHA-256. CTest is 121/121.
+- **2026-11-10T12:02:34-08:00** — Added local `static` variables: each becomes an internal global with zero or constant initialization and persists across calls. `counter()` returns 1 then 2, so the fixture exits 3; CTest is 122/122.
