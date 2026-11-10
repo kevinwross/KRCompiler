@@ -199,6 +199,9 @@ int printf(const char *format, ...) {
                 format++;
             }
         }
+        while (*format == 'l' || *format == 'z') {
+            format++;
+        }
         if (*format == '%') {
             putchar('%');
             written++;
@@ -213,6 +216,11 @@ int printf(const char *format, ...) {
                 written += 2;
             }
             print_hex(va_arg(arguments, unsigned int));
+        } else if (*format == 'p') {
+            putchar('0');
+            putchar('x');
+            print_hex((unsigned int)va_arg(arguments, void *));
+            written += 2;
         } else if (*format == 'h') {
             putchar('0');
             putchar('x');
