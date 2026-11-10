@@ -3413,6 +3413,13 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
                             auto index = emit_expression(*expression.children[1]);
                             if (self.value && index.value) {
                                 auto* function = method->second;
+                                if (self.value->type !=
+                                    function->type->parameters[0]) {
+                                    self.value = builder_.create(
+                                        ir::Opcode::BitCast,
+                                        function->type->parameters[0],
+                                        {self.value}, "subscript.this");
+                                }
                                 std::vector<ir::Value*> arguments{self.value};
                                 if (index.value->type !=
                                     function->type->parameters[1]) {
@@ -4439,6 +4446,13 @@ CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
                         auto index = emit_expression(*expression.children[1]);
                         if (self.value && index.value) {
                             auto* function = method->second;
+                            if (self.value->type !=
+                                function->type->parameters[0]) {
+                                self.value = builder_.create(
+                                    ir::Opcode::BitCast,
+                                    function->type->parameters[0], {self.value},
+                                    "subscript.this");
+                            }
                             std::vector<ir::Value*> arguments{self.value};
                             if (index.value->type !=
                                     function->type->parameters[1]) {

@@ -682,6 +682,15 @@ if(TARGET krc)
                 -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/subscript_ref_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_inherited_subscript
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/inherited_subscript.cpp
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/inherited_subscript_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_link_named_cast
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

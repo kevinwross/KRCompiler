@@ -490,7 +490,9 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
     if (!info) {
         return type;
     }
-    if (specifier.children.empty()) {
+    if (specifier.children.empty() &&
+        std::find(specifier.labels.begin(), specifier.labels.end(),
+                  "definition") == specifier.labels.end()) {
         return type;
     }
     if (info->complete) {

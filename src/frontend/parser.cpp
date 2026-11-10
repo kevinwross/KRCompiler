@@ -736,6 +736,7 @@ std::unique_ptr<AstNode> Parser::parse_struct_specifier(bool is_union) {
         }
     }
     if (match("{")) {
+        node->labels.push_back("definition");
         const auto previous_class = current_class_name_;
         current_class_name_ = node->text;
         while (!check("}") && !at_end()) {
