@@ -1425,10 +1425,10 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             if (!type) {
                 continue;
             }
+            const auto id = static_local_counter_++;
             auto* global = module_->add_global(
-                "__static_" + std::to_string(static_local_counter_++) + "_" +
-                    name,
-                type, false, 0);
+                "__static_" + std::to_string(id) + "_" + name, type, false, 0);
+            bool initialized_at_runtime = false;
             if (init->children.size() > 1 && init->children[1]) {
                 long long constant = 0;
                 if ((ir::is_integer(type) || ir::is_pointer(type)) &&
@@ -1436,8 +1436,37 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                                        constant)) {
                     global->initializer =
                         module_->constant_int(type, constant);
+                } else if (ir::is_integer(type) || ir::is_pointer(type)) {
+                    initialized_at_runtime = true;
+                    auto* guard = module_->add_global(
+                        "__static_guard_" + std::to_string(id), module_->types().int_type(8),
+                        false, 0);
+                    guard->initializer =
+                        module_->constant_int(module_->types().int_type(8), 0);
+                    auto* guard_value = builder_.create_load(
+                        module_->types().int_type(8), guard, false, 0, "static.guard");
+                    auto* zero = module_->constant_int(module_->types().int_type(8), 0);
+                    auto* condition = builder_.create_icmp(
+                        ir::ICmpPredicate::Eq, guard_value, zero,
+                        "static.cmp");
+                    auto* init_block = current_function_->add_block(
+                        "static.init." + std::to_string(id));
+                    auto* end_block = current_function_->add_block(
+                        "static.end." + std::to_string(id));
+                    builder_.create_cond_br(condition, init_block, end_block);
+                    builder_.set_insert_point(init_block);
+                    builder_.create_store(
+                        module_->constant_int(module_->types().int_type(8), 1), guard);
+                    auto value = emit_expression(*init->children[1]);
+                    if (value.value) {
+                        builder_.create_store(
+                            promote(value.value, value.type, type), global);
+                    }
+                    emit_branch(end_block);
+                    builder_.set_insert_point(end_block);
                 }
             }
+            static_cast<void>(initialized_at_runtime);
             declare_local(name, LocalBinding{global, type, frontend_type});
         }
         return;

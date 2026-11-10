@@ -178,6 +178,15 @@ if(TARGET krc)
                 -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_local_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_static_init
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_init.c
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_init_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_link_varargs
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
