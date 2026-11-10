@@ -175,7 +175,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 105/105 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 106/106 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -189,7 +189,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 105/105 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 106/106 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -205,7 +205,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 ### M6 — C++11/14/17 (8–10 weeks)
 
 - [ ] Function/class templates, partial specialization, implicit instantiation, weak/COMDAT. `template <typename T>` function syntax is accepted by binding template parameters to `int`; `inline`/`constexpr` functions and in-class methods emit weak symbols through [ADR 0012](docs/decisions/0012-weak-linkage.md), so translation units may share definitions. Real deduction, substitution, specialization, class templates, COMDAT groups, and section GC remain.
-- [ ] Lambda captures, move/rvalue references, `auto`/`decltype`, range-for, `nullptr`, `enum class`. `auto` locals and return types, `decltype` locals, `nullptr`, range-for over bounded arrays and braced initializer lists, scoped `enum class`, `Enum::Value` qualification, no-capture lambdas with parameters and deduced return types, lambda by-value, by-reference, init, and default `[=]`/`[&]` captures with closure objects, C++ `static_assert`, braced class initialization, and braced aggregate initialization work; general rvalue references remain.
+- [ ] Lambda captures, move/rvalue references, `auto`/`decltype`, range-for, `nullptr`, `enum class`. `auto` locals and return types, `decltype` locals, `nullptr`, range-for over bounded arrays and braced initializer lists, scoped `enum class`, `Enum::Value` qualification, no-capture lambdas with parameters and deduced return types, lambda by-value, by-reference, init, and default `[=]`/`[&]` captures with closure objects, C++ `static_assert`, `static_cast`/`reinterpret_cast`/`const_cast`, braced class initialization, and braced aggregate initialization work; general rvalue references remain.
 - [ ] C++11 `constexpr` plus C++14 relaxed `constexpr`, `initializer_list`, `noexcept`, `alignas`, static `thread_local`. `constexpr` variables and multi-statement functions with `if` branches, local declarations, assignment, bounded `for`/`while`/`do` loops, and recursive calls are evaluated at compile time; `initializer_list` and `thread_local` remain.
 - [ ] `if constexpr`, structured bindings, inline variables; fold expressions with variadic templates in v1.1. `if constexpr` discards the unselected branch during analysis and lowering, structured bindings over struct fields and arrays and inline variables work; fold expressions and variadic templates remain. `true`/`false` lower as 1/0.
 - [ ] Extracted C++ fixture suite and negative diagnostics.
@@ -359,3 +359,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T08:23:02-08:00** — Added default lambda captures: `[=]` copies every visible local into the closure and `[&]` stores their addresses. The copy fixture returns 7 after an outer mutation; the reference fixture returns 7 after mutating through the lambda; CTest is 103/103.
 - **2026-11-10T08:32:43-08:00** — Added dynamic dispatch for unqualified virtual calls on `this`: a base method's `value()` now loads the derived vtable slot. `Base::twice()` called through a base pointer returns 4 for a derived override; CTest is 104/104.
 - **2026-11-10T08:43:16-08:00** — Added reference-returning `operator[]` and reference-return lowering: `int& operator[](int)` returns the element address, and `values[0] = 3` stores through it. The fixture returns 5; CTest is 105/105.
+- **2026-11-10T08:52:05-08:00** — Added named casts: `static_cast`, `reinterpret_cast`, and `const_cast` parse into the existing cast expression. `static_cast<int>(3.9)` returns 3; CTest is 106/106.

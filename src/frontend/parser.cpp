@@ -1425,6 +1425,25 @@ std::unique_ptr<AstNode> Parser::parse_binary_expression(int minimum_precedence)
 
 std::unique_ptr<AstNode> Parser::parse_unary_expression() {
     const auto location = peek().location;
+    if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
+        (peek().text == "static_cast" || peek().text == "reinterpret_cast" ||
+         peek().text == "const_cast")) {
+        ++position_;
+        expect("<", "after cast keyword");
+        auto type = parse_type_name();
+        expect(">", "after cast type");
+        expect("(", "after cast type");
+        auto operand = parse_expression();
+        expect(")", "after cast operand");
+        auto node = make_ast(AstKind::CastExpression, location);
+        if (type) {
+            node->children.push_back(std::move(type));
+        }
+        if (operand) {
+            node->children.push_back(std::move(operand));
+        }
+        return node;
+    }
     if (cxx_mode_ && check("[")) {
         return parse_lambda_expression();
     }
