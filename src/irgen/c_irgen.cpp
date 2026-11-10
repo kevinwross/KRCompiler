@@ -1897,6 +1897,24 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
             return;
         }
     }
+    const auto ast_type = function_ast_types_.find(current_function_);
+    if (ast_type != function_ast_types_.end() && ast_type->second &&
+        ast_type->second->return_type &&
+        ast_type->second->return_type->is_reference) {
+        auto address = emit_lvalue(*statement.children.front());
+        if (address.value && current_function_->type &&
+            current_function_->type->return_type) {
+            auto* value = address.value;
+            if (value->type != current_function_->type->return_type) {
+                value = builder_.create(ir::Opcode::BitCast,
+                                        current_function_->type->return_type,
+                                        {value}, "reference.return");
+            }
+            emit_cleanups();
+            builder_.create_ret(value);
+            return;
+        }
+    }
     auto value = emit_expression(*statement.children.front());
     auto* converted = promote(value.value, value.type,
                               current_function_->type ? current_function_->type->return_type
@@ -3310,6 +3328,48 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
         if (expression.children.size() < 2) {
             return {};
         }
+        if (expression.children[0] &&
+            expression.children[0]->kind == frontend::AstKind::Identifier) {
+            if (auto* local = lookup_local(expression.children[0]->text)) {
+                if (local->frontend_type &&
+                    local->frontend_type->kind == frontend::TypeKind::Record &&
+                    local->frontend_type->record) {
+                    const auto methods = class_methods_.find(
+                        local->frontend_type->record->tag);
+                    if (methods != class_methods_.end()) {
+                        const auto method = methods->second.find("operator[]");
+                        if (method != methods->second.end()) {
+                            auto self = emit_lvalue(*expression.children[0]);
+                            auto index = emit_expression(*expression.children[1]);
+                            if (self.value && index.value) {
+                                auto* function = method->second;
+                                std::vector<ir::Value*> arguments{self.value};
+                                if (index.value->type !=
+                                    function->type->parameters[1]) {
+                                    index.value = promote(
+                                        index.value, index.type,
+                                        function->type->parameters[1]);
+                                }
+                                arguments.push_back(index.value);
+                                auto* call = builder_.create_call(
+                                    function, std::move(arguments),
+                                    function->type->return_type,
+                                    "subscript.lvalue");
+                                if (function->type->return_type &&
+                                    function->type->return_type->kind ==
+                                        ir::TypeKind::Pointer) {
+                                    return {call,
+                                            function->type->return_type->element};
+                                }
+                                error(expression.location,
+                                      "operator[] does not return a reference");
+                                return {};
+                            }
+                        }
+                    }
+                }
+            }
+        }
         auto base = emit_expression(*expression.children[0]);
         auto index = emit_expression(*expression.children[1]);
         if (!base.value || !base.type || base.type->kind != ir::TypeKind::Pointer) {
@@ -4289,6 +4349,20 @@ CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
                             auto* call = builder_.create_call(
                                 function, std::move(arguments),
                                 function->type->return_type, "subscript.call");
+                            const auto ast_type =
+                                function_ast_types_.find(function);
+                            if (ast_type != function_ast_types_.end() &&
+                                ast_type->second &&
+                                ast_type->second->return_type &&
+                                ast_type->second->return_type->is_reference &&
+                                function->type->return_type->kind ==
+                                    ir::TypeKind::Pointer) {
+                                return {builder_.create_load(
+                                            function->type->return_type->element,
+                                            call, false, 0,
+                                            "subscript.load"),
+                                        function->type->return_type->element};
+                            }
                             return {call, function->type->return_type};
                         }
                     }
