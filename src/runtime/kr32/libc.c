@@ -600,6 +600,54 @@ int abs(int value) {
     return value < 0 ? -value : value;
 }
 
+char *strrchr(const char *text, int character) {
+    char target = (char)character;
+    const char *last = 0;
+    while (*text) {
+        if (*text == target) {
+            last = text;
+        }
+        text++;
+    }
+    if (target == 0) {
+        return (char *)text;
+    }
+    return (char *)last;
+}
+
+char *strncat(char *destination, const char *source, unsigned int count) {
+    char *cursor = destination;
+    while (*cursor) {
+        cursor++;
+    }
+    unsigned int index = 0;
+    while (index < count && source[index]) {
+        cursor[index] = source[index];
+        index++;
+    }
+    cursor[index] = 0;
+    return destination;
+}
+
+void qsort(void *base, unsigned int count, unsigned int size,
+           int (*compare)(const void *, const void *)) {
+    unsigned char *bytes = (unsigned char *)base;
+    for (unsigned int index = 1; index < count; index++) {
+        unsigned int position = index;
+        while (position > 0 &&
+               compare(bytes + (position - 1) * size,
+                       bytes + position * size) > 0) {
+            for (unsigned int byte = 0; byte < size; byte++) {
+                unsigned char temporary = bytes[(position - 1) * size + byte];
+                bytes[(position - 1) * size + byte] =
+                    bytes[position * size + byte];
+                bytes[position * size + byte] = temporary;
+            }
+            position--;
+        }
+    }
+}
+
 char *strdup(const char *source) {    unsigned int length = strlen(source);
     char *result = (char *)malloc(length + 1);
     if (result == 0) {

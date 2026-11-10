@@ -204,6 +204,16 @@ if(TARGET krc)
                 -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/logical_truth_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_libc_sort
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_sort.c
+                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_sort_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_dump_symbols
         COMMAND $<TARGET_FILE:krc> --dump-symbols
                 ${CMAKE_CURRENT_BINARY_DIR}/puts_linked.k32)
