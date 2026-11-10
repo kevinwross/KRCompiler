@@ -3716,6 +3716,13 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                         if (!self.value) {
                             return {};
                         }
+                        if (self.value->type !=
+                            method->second->type->parameters[0]) {
+                            self.value = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self.value}, "call.this");
+                        }
                         std::vector<ir::Value*> arguments{self.value};
                         const auto& argument_nodes = expression.children[1]->children;
                         for (std::size_t index = 0; index < argument_nodes.size();
