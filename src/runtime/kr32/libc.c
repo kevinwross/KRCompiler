@@ -515,8 +515,92 @@ char *strcpy(char *destination, const char *source) {
     return result;
 }
 
-char *strdup(const char *source) {
-    unsigned int length = strlen(source);
+char *strcat(char *destination, const char *source) {
+    char *cursor = destination;
+    while (*cursor) {
+        cursor++;
+    }
+    while (*source) {
+        *cursor = *source;
+        cursor++;
+        source++;
+    }
+    *cursor = 0;
+    return destination;
+}
+
+char *strncpy(char *destination, const char *source, unsigned int count) {
+    unsigned int index = 0;
+    while (index < count && source[index]) {
+        destination[index] = source[index];
+        index++;
+    }
+    while (index < count) {
+        destination[index] = 0;
+        index++;
+    }
+    return destination;
+}
+
+char *strchr(const char *text, int character) {
+    char target = (char)character;
+    while (*text) {
+        if (*text == target) {
+            return (char *)text;
+        }
+        text++;
+    }
+    return target == 0 ? (char *)text : 0;
+}
+
+char *strstr(const char *text, const char *needle) {
+    if (*needle == 0) {
+        return (char *)text;
+    }
+    while (*text) {
+        const char *left = text;
+        const char *right = needle;
+        while (*left && *right && *left == *right) {
+            left++;
+            right++;
+        }
+        if (*right == 0) {
+            return (char *)text;
+        }
+        text++;
+    }
+    return 0;
+}
+
+int atoi(const char *text) {
+    int sign = 1;
+    int value = 0;
+    while (*text == ' ' || *text == '\t' || *text == '\n' ||
+           *text == '\r') {
+        text++;
+    }
+    if (*text == '-') {
+        sign = -1;
+        text++;
+    } else if (*text == '+') {
+        text++;
+    }
+    while (*text >= '0' && *text <= '9') {
+        value = value * 10 + (*text - '0');
+        text++;
+    }
+    return sign * value;
+}
+
+long atol(const char *text) {
+    return (long)atoi(text);
+}
+
+int abs(int value) {
+    return value < 0 ? -value : value;
+}
+
+char *strdup(const char *source) {    unsigned int length = strlen(source);
     char *result = (char *)malloc(length + 1);
     if (result == 0) {
         return 0;

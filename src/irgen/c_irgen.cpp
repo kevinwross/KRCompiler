@@ -3277,8 +3277,29 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
         left.type = right.type;
     }
     if (operation == "&&" || operation == "||") {
-        auto* left_bool = promote(left.value, left.type, module_->types().bool_type());
-        auto* right_bool = promote(right.value, right.type, module_->types().bool_type());
+        auto truth = [&](const Expression& value) -> ir::Value* {
+            if (!value.value || !value.type) {
+                return nullptr;
+            }
+            if (ir::is_integer(value.type) && value.type->bits == 1) {
+                return value.value;
+            }
+            if (ir::is_pointer(value.type)) {
+                return builder_.create_icmp(
+                    ir::ICmpPredicate::Ne, value.value,
+                    module_->constant_null(value.type), "tobool");
+            }
+            if (ir::is_float(value.type)) {
+                return builder_.create_fcmp(
+                    ir::FCmpPredicate::One, value.value,
+                    module_->constant_float(value.type, 0.0), "tobool");
+            }
+            return builder_.create_icmp(
+                ir::ICmpPredicate::Ne, value.value,
+                module_->constant_int(value.type, 0), "tobool");
+        };
+        auto* left_bool = truth(left);
+        auto* right_bool = truth(right);
         const auto opcode = operation == "&&" ? ir::Opcode::And : ir::Opcode::Or;
         auto* value = builder_.create(opcode, module_->types().bool_type(),
                                       {left_bool, right_bool}, "logic");
