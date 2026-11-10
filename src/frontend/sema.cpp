@@ -598,6 +598,13 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
         if (!child) {
             continue;
         }
+        if (child->kind == AstKind::DefaultMemberInitializer) {
+            if (!record.members.empty() &&
+                record.members.back().name == child->text) {
+                record.members.back().default_initializer = child;
+            }
+            continue;
+        }
         if (!is_declarator_kind(child->kind)) {
             long long width = 0;
             if (evaluate_constant(*child, width) && width >= 0) {

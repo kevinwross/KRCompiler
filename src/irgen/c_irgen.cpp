@@ -1207,6 +1207,34 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                       LocalBinding{address, parameter->type, parameter_type});
     }
 
+    std::unordered_set<std::string> explicit_member_initializers;
+    if (definition.children.size() > 3 && definition.children[3] &&
+        definition.children[3]->kind ==
+            frontend::AstKind::MemberInitializerList) {
+        for (const auto& initializer : definition.children[3]->children) {
+            if (initializer) {
+                explicit_member_initializers.insert(initializer->text);
+            }
+        }
+    }
+    if (current_class_) {
+        for (const auto& member : current_class_->members) {
+            if (!member.default_initializer ||
+                explicit_member_initializers.contains(member.name) ||
+                member.default_initializer->children.empty() ||
+                !member.default_initializer->children.front()) {
+                continue;
+            }
+            auto address = emit_implicit_member_lvalue(member.name);
+            if (!address.value || !address.type) {
+                continue;
+            }
+            emit_initializer(
+                *member.default_initializer->children.front(), address.value,
+                address.type);
+        }
+    }
+
     if (definition.children.size() > 3 && definition.children[3] &&
         definition.children[3]->kind == frontend::AstKind::MemberInitializerList) {
         for (const auto& initializer : definition.children[3]->children) {
@@ -2240,6 +2268,30 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                         {constructor_this}, "ctor.this");
                 }
                 builder_.create_call(constructor, {constructor_this}, nullptr, "ctor.call");
+            } else if (record != ir_records_.end() && !record->second->polymorphic &&
+                       !record->second->base) {
+                for (std::size_t member_index = 0;
+                     member_index < record->second->members.size() &&
+                     member_index < type->fields.size();
+                     ++member_index) {
+                    const auto& member = record->second->members[member_index];
+                    if (!member.default_initializer ||
+                        member.default_initializer->children.empty() ||
+                        !member.default_initializer->children.front()) {
+                        continue;
+                    }
+                    auto* zero = module_->constant_int(int_type(), 0);
+                    auto* field_index = module_->constant_int(
+                        int_type(), static_cast<std::int64_t>(member_index));
+                    auto* field = builder_.create_gep(
+                        type, address, {zero, field_index}, false,
+                        "default.field");
+                    field->type = module_->types().pointer_type(
+                        type->fields[member_index]);
+                    emit_initializer(
+                        *member.default_initializer->children.front(), field,
+                        type->fields[member_index]);
+                }
             }
         }
         if (type && type->kind == ir::TypeKind::Struct) {

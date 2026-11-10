@@ -91,6 +91,8 @@ std::string_view ast_kind_name(AstKind kind) noexcept {
         return "LambdaCapture";
     case AstKind::MemberInitializer:
         return "MemberInitializer";
+    case AstKind::DefaultMemberInitializer:
+        return "DefaultMemberInitializer";
     case AstKind::LambdaExpression:
         return "LambdaExpression";
     case AstKind::IntegerLiteral:

@@ -52,6 +52,7 @@ enum class AstKind {
     StructuredBinding,
     MemberInitializerList,
     MemberInitializer,
+    DefaultMemberInitializer,
     LambdaExpression,
     LambdaCapture,
     IntegerLiteral,

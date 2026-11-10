@@ -939,12 +939,24 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
                 member->children.push_back(std::move(width));
             }
         }
+        const bool field_is_function =
+            contains_function_declarator(*declarator);
         member->children.push_back(std::move(declarator));
+        auto field_name = declarator_name(*member->children.back());
         skip_attributes();
         while (peek().text == "const" || peek().text == "volatile" ||
                peek().text == "override" || peek().text == "noexcept" ||
                peek().text == "final") {
             ++position_;
+        }
+        if (!field_is_function && !field_name.empty() && match("=")) {
+            auto initializer =
+                make_ast(AstKind::DefaultMemberInitializer, peek().location,
+                         field_name);
+            if (auto value = parse_assignment_expression()) {
+                initializer->children.push_back(std::move(value));
+            }
+            member->children.push_back(std::move(initializer));
         }
         if (!match(",")) {
             break;

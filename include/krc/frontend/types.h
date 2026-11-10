@@ -30,6 +30,7 @@ enum class TypeKind {
 
 struct Type;
 using TypePtr = std::shared_ptr<const Type>;
+struct AstNode;
 
 struct RecordMember {
     std::string name;
@@ -38,6 +39,7 @@ struct RecordMember {
     bool bit_field = false;
     unsigned bit_width = 0;
     std::uint64_t alignment = 0;
+    const AstNode* default_initializer = nullptr;
 };
 
 struct RecordMethod {
