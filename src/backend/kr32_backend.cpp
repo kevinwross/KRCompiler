@@ -520,6 +520,22 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                        std::to_string(slot->second) + "]\n";
             }
             fp_parameter++;
+        } else if (parameter->type &&
+                   parameter->type->kind == ir::TypeKind::Struct) {
+            std::string size_error;
+            const auto size = size_of(parameter->type, size_error);
+            const auto words = (size + 3) / 4;
+            if (!size_error.empty() || integer_parameter + words > 4) {
+                out += "        ; aggregate parameter unavailable\n";
+                continue;
+            }
+            for (std::uint64_t word = 0; word < words; ++word) {
+                out += "        STORE " +
+                       std::string(register_name(integer_parameter + word)) +
+                       ", [R7 + " +
+                       std::to_string(slot->second + word * 4) + "]\n";
+            }
+            integer_parameter += words;
         } else if (integer_parameter < 4) {
             out += "        STORE " + register_name(integer_parameter) + ", [R7 + " +
                    std::to_string(slot->second) + "]\n";
@@ -779,6 +795,21 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                    std::string(instruction.type->bits == 32 ? "FLOAD.W" : "FLOAD.D") +
                    " F0, [R0]\n";
             store_fp(out, function, layout, instruction, "F0");
+        } else if (instruction.type &&
+                   instruction.type->kind == ir::TypeKind::Struct) {
+            std::string size_error;
+            const auto size = size_of(instruction.type, size_error);
+            const auto slot = layout.slots.find(&instruction);
+            if (!size_error.empty() || slot == layout.slots.end()) {
+                out += "        ; aggregate load unavailable\n";
+                break;
+            }
+            out += "        MOV R1, R0\n";
+            for (std::uint64_t offset = 0; offset < size; offset += 4) {
+                out += "        LOAD R0, [R1 + " + std::to_string(offset) + "]\n";
+                out += "        STORE R0, [R7 + " +
+                       std::to_string(slot->second + offset) + "]\n";
+            }
         } else {
             out += "        " + load_opcode(instruction.type) + " R0, [R0]\n";
             store_value(out, function, layout, instruction, "R0");
@@ -793,6 +824,22 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                    std::string(instruction.operands[0]->type->bits == 32 ? "FSTORE.W"
                                                                          : "FSTORE.D") +
                    " F0, [R1]\n";
+        } else if (instruction.operands[0]->type &&
+                   instruction.operands[0]->type->kind == ir::TypeKind::Struct) {
+            const auto* source = instruction.operands[0];
+            const auto slot = layout.slots.find(source);
+            std::string size_error;
+            const auto size = size_of(source->type, size_error);
+            if (!size_error.empty() || slot == layout.slots.end()) {
+                out += "        ; aggregate store unavailable\n";
+                break;
+            }
+            load_value(out, function, layout, instruction.operands[1], "R1");
+            for (std::uint64_t offset = 0; offset < size; offset += 4) {
+                out += "        LOAD R0, [R7 + " +
+                       std::to_string(slot->second + offset) + "]\n";
+                out += "        STORE R0, [R1 + " + std::to_string(offset) + "]\n";
+            }
         } else {
             load_value(out, function, layout, instruction.operands[0], "R0");
             load_value(out, function, layout, instruction.operands[1], "R1");
@@ -928,6 +975,24 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             const auto* argument = instruction.operands[index + 1];
             if (argument->type && ir::is_float(argument->type)) {
                 load_fp(out, function, layout, argument, "F" + std::to_string(fp_index++));
+            } else if (argument->type &&
+                       argument->type->kind == ir::TypeKind::Struct) {
+                const auto slot = layout.slots.find(argument);
+                std::string size_error;
+                const auto size = size_of(argument->type, size_error);
+                const auto words = (size + 3) / 4;
+                if (!size_error.empty() || slot == layout.slots.end() ||
+                    integer_index + words > 4) {
+                    out += "        ; aggregate argument unavailable\n";
+                    continue;
+                }
+                for (std::uint64_t word = 0; word < words; ++word) {
+                    out += "        LOAD " +
+                           std::string(register_name(integer_index)) +
+                           ", [R7 + " +
+                           std::to_string(slot->second + word * 4) + "]\n";
+                    integer_index++;
+                }
             } else {
                 load_value(out, function, layout, argument,
                            register_name(integer_index++));

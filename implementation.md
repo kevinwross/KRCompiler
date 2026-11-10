@@ -175,11 +175,11 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 112/112 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 113/113 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
-- [x] Structs, pointers, arrays, function pointers, bit-fields, varargs, preprocessor edge cases. Pointers, arrays, recursive named structs, byte-offset member access, struct layout/GEP/load/store, bit-field load/store and signed extraction, positional and nested designated aggregate initializers, function pointers/indirect calls, integer and floating-point varargs, `offsetof`, integer/string/float `printf`, and a free-list allocator/string library are implemented.
+- [x] Structs, pointers, arrays, function pointers, bit-fields, varargs, preprocessor edge cases. Pointers, arrays, recursive named structs, byte-offset member access, struct layout/GEP/load/store, by-value aggregate parameters split across integer registers and copied through aggregate loads/stores, bit-field load/store and signed extraction, positional and nested designated aggregate initializers, function pointers/indirect calls, integer and floating-point varargs, `offsetof`, integer/string/float `printf`, and a free-list allocator/string library are implemented.
 - [x] KR32 `printf` integer/string/float paths and allocator. Integer/string/`%c`/`%x`, `%f`/`%e`/`%g`, `puts`, and a reusable free-list allocator work; the G3 formatting fixtures pass.
 - [x] `KDBG` writer/reader: sources, lines, functions, symbols, types, variables, and build records are implemented in `src/debug/kdbg.*`, emitted by `krld`, and checksum-validated.
 - [x] Freeze `docs/symbols.md` before the KDBG writer. [ADR 0009](docs/decisions/0009-kdbg-v1-freeze.md) freezes the `.kdbg` v1 payload.
@@ -189,7 +189,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 112/112 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 113/113 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -367,3 +367,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T09:46:50-08:00** — Applied the same receiver conversion to inherited `operator()` calls. Calling `value(2)` through an empty derived object reaches `Base::operator()` and returns 5; CTest is 110/110.
 - **2026-11-10T09:56:13-08:00** — Added pure virtual dispatch: a bodyless `virtual int value() = 0` now gets a declaration entry, its base vtable slot is null, and a derived override fills the slot. Calling through `Base*` returns 7; CTest is 111/111.
 - **2026-11-10T10:05:06-08:00** — Added chained namespace qualification: the parser accumulates `outer::inner::name` segments and Sema resolves the final segment. The nested-namespace fixture returns 5; CTest is 112/112.
+- **2026-11-10T10:15:01-08:00** — Added by-value aggregate parameters on KR32: aggregate loads/stores copy every 4-byte word, call sites place words in consecutive integer registers, and the callee prologue stores them into its frame slot. Passing an 8-byte `Point` by value returns 7; CTest is 113/113.

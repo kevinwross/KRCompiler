@@ -56,5 +56,6 @@ What was rejected and why.
 - [0011-m5-static-devirtualization.md](0011-m5-static-devirtualization.md) — accepted; specializes inherited methods per concrete class for G5 without a vtable ABI.
 - [0012-weak-linkage.md](0012-weak-linkage.md) — accepted; adds weak IR linkage and KRO weak symbols for inline/`constexpr` functions.
 - [0013-dynamic-dispatch.md](0013-dynamic-dispatch.md) — accepted; adds a vptr and per-object virtual slot table for single-inheritance dynamic dispatch.
+- [0014-aggregate-parameters.md](0014-aggregate-parameters.md) — accepted; defines small by-value aggregate parameters as consecutive integer-register words on KR32.
 
 The next expected ADRs are the KR16 ABI appendix, the EH descriptor encoding, and the KDBG record layout.
