@@ -20,7 +20,8 @@ implemented yet.
 - Section 1 is `.debug_str`, containing `.text\0.debug_str\0`; it is the shared
   string table referenced by the section headers.
 - A generated `_start` calls `main` and executes `HLT`, so the VM exits with
-  `main`'s result in `R0`.
+  `main`'s result in `R0`. The image also carries a minimal `puts` shim that
+  copies a NUL-terminated string to the `0xF000` console byte port.
 - Symbols, relocations, debug line/type records, and multiple translation units
   are omitted until the KR16 linker lands. A `.kex` produced here is runnable
   but not debuggable.

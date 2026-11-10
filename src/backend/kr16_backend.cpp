@@ -108,6 +108,10 @@ void Kr16Backend::emit_function(std::string& out,
             out += "    MOV " + std::string(reg) + ", #0\n";
             return;
         }
+        if (value->kind == ir::ValueKind::Global) {
+            out += "    LEA " + std::string(reg) + ", [" + value->name + "]\n";
+            return;
+        }
         if (value->kind == ir::ValueKind::Instruction) {
             const auto* instruction =
                 static_cast<const ir::Instruction*>(value);
@@ -263,6 +267,18 @@ void Kr16Backend::emit_function(std::string& out,
                 }
                 break;
             }
+            case ir::Opcode::GetElementPtr:
+                if (!instruction->operands.empty() &&
+                    instruction->operands[0] &&
+                    instruction->operands[0]->kind ==
+                        ir::ValueKind::Global) {
+                    out += "    LEA R0, [" + instruction->operands[0]->name +
+                           "]\n";
+                    store(*instruction, "R0");
+                    break;
+                }
+                error = "KR16 pointer arithmetic is not implemented yet";
+                return;
             case ir::Opcode::Ret:
                 if (!instruction->operands.empty() &&
                     instruction->operands[0]) {
@@ -310,12 +326,26 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
             return std::nullopt;
         }
     }
-    if (!module_.globals().empty()) {
-        error = "KR16 globals are not implemented";
-        return std::nullopt;
+    for (const auto& global : module_.globals()) {
+        const auto* data =
+            dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
+        if (!data) {
+            continue;
+        }
+        out += global->name + ":\n";
+        out += "    .byte ";
+        for (std::size_t index = 0; index < data->bytes.size(); ++index) {
+            if (index != 0) {
+                out += ", ";
+            }
+            out += std::to_string(data->bytes[index]);
+        }
+        out += "\n";
+        if (data->bytes.size() % 2 != 0) {
+            out += "    .byte 0\n";
+        }
     }
     return out;
 }
 
 }  // namespace krc::backend
-

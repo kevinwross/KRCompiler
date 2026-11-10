@@ -305,7 +305,19 @@ int main(int argc, char** argv) {
                             std::string source =
                                 ".text\n.global _start\n_start:\n"
                                 "    CALL main\n"
-                                "    HLT\n";
+                                "    HLT\n"
+                                ".global puts\nputs:\n"
+                                "    MOV R2, #0xF000\n"
+                                ".Lputs_loop:\n"
+                                "    LDB R0, [R1]\n"
+                                "    CMP R0, #0\n"
+                                "    BEQ .Lputs_done\n"
+                                "    STB [R2], R0\n"
+                                "    ADD R1, #1\n"
+                                "    BRA .Lputs_loop\n"
+                                ".Lputs_done:\n"
+                                "    MOV R0, #0\n"
+                                "    RET\n";
                             source += *assembly;
                             krc::asmkr16::AssemblyResult assembled;
                             std::string assemble_error;

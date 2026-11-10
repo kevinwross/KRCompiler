@@ -2091,6 +2091,42 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
                 return emit_implicit_member(expression.text);
             }
         }
+        if (!lookup_function(expression.text) &&
+            profile_.id == target::TargetId::Kr16 &&
+            expression.text == "puts") {
+            const auto ir_type = module_->types().function_type(
+                int_type(),
+                {module_->types().pointer_type(module_->types().int_type(8))},
+                false);
+            auto* declaration = module_->add_function(
+                "puts", ir_type, ir::Linkage::External, true);
+            declaration->declaration = true;
+            declaration->add_parameter(
+                module_->types().pointer_type(module_->types().int_type(8)),
+                "text");
+            functions_["puts"] = declaration;
+        }
+        if (!lookup_function(expression.text)) {
+            const auto symbol = sema_.global_symbol(expression.text);
+            if (symbol && symbol->kind == frontend::Sema::GlobalSymbol::Kind::Function &&
+                symbol->type &&
+                symbol->type->kind == frontend::TypeKind::Function) {
+                const auto ir_type = map_type(symbol->type);
+                if (ir_type && ir_type->kind == ir::TypeKind::Function) {
+                    auto* declaration = module_->add_function(
+                        expression.text, ir_type, ir::Linkage::External, true);
+                    declaration->declaration = true;
+                    for (std::size_t index = 0;
+                         index < ir_type->parameters.size(); ++index) {
+                        declaration->add_parameter(
+                            ir_type->parameters[index],
+                            "parameter" + std::to_string(index));
+                    }
+                    functions_[expression.text] = declaration;
+                    function_ast_types_[declaration] = symbol->type;
+                }
+            }
+        }
         auto* function = lookup_function(expression.text);
         if (function) {
             const auto type = module_->types().pointer_type(function->type);

@@ -158,8 +158,16 @@ std::optional<EncodedInstruction> encode_mnemonic(
             operands[1].front() == '#') {
             const auto immediate = immediate_at(1);
             if (!immediate) {
-                error = "expected immediate";
-                return std::nullopt;
+                auto label_text = trim(std::string_view(operands[1]).substr(1));
+                const auto target = labels.find(label_text);
+                if (target == labels.end()) {
+                    error = "undefined label '" + label_text + "'";
+                    return std::nullopt;
+                }
+                return encode_x(XOp::MoveImmediate, *rd, 0,
+                                static_cast<std::uint16_t>(
+                                    0x0100 + target->second.offset),
+                                error);
             }
             if (name == "MOV" && (*immediate < -128 || *immediate > 255)) {
                 return encode_x(XOp::MoveImmediate, *rd, 0,
@@ -203,6 +211,21 @@ std::optional<EncodedInstruction> encode_mnemonic(
         std::uint8_t base = 0;
         std::int32_t displacement = 0;
         if (!parse_memory(operands[1], base, displacement)) {
+            if (name == "LEA" && operands[1].size() > 2 &&
+                operands[1].front() == '[' && operands[1].back() == ']') {
+                const auto label_text =
+                    trim(std::string_view(operands[1]).substr(1,
+                                                              operands[1].size() - 2));
+                const auto target = labels.find(label_text);
+                if (target == labels.end()) {
+                    error = "undefined label '" + label_text + "'";
+                    return std::optional<EncodedInstruction>{};
+                }
+                return encode_x(XOp::MoveImmediate, *rd, 0,
+                                static_cast<std::uint16_t>(
+                                    0x0100 + target->second.offset),
+                                error);
+            }
             const auto absolute = immediate_at(1);
             if (!absolute) {
                 error = "expected memory operand";
@@ -448,8 +471,7 @@ std::optional<std::uint8_t> instruction_size(const Line& line,
     }
     if (name == "LD" || name == "LDB" || name == "LDSB" || name == "LEA") {
         return line.operands.size() >= 2 ? memory_size(1) : std::uint8_t{1};
-    }
-    if (name == "ST" || name == "STB") {
+    }    if (name == "ST" || name == "STB") {
         return line.operands.empty() ? std::uint8_t{1} : memory_size(0);
     }
     if (name == "JMP" || name == "CALL") {
@@ -517,6 +539,19 @@ bool assemble(std::string_view source, AssemblyResult& result,
                 std::string symbol;
                 directive >> symbol;
                 externs.push_back(symbol);
+            } else if (name == ".byte") {
+                Line data;
+                data.mnemonic = ".byte";
+                data.operands = split_operands(trim(line.substr(5)));
+                for (const auto& operand : data.operands) {
+                    if (!parse_number(operand)) {
+                        error = "invalid .byte value on line " +
+                                std::to_string(line_number);
+                        return false;
+                    }
+                }
+                offset += data.operands.size();
+                lines.push_back(std::move(data));
             } else {
                 error = "unknown directive '" + name + "' on line " +
                         std::to_string(line_number);
@@ -543,6 +578,19 @@ bool assemble(std::string_view source, AssemblyResult& result,
     section = 0;
     offset = 0;
     for (const auto& line : lines) {
+        if (line.mnemonic == ".byte") {
+            for (const auto& operand : line.operands) {
+                const auto value = parse_number(operand);
+                if (!value) {
+                    error = "invalid .byte value";
+                    return false;
+                }
+                result.text.push_back(
+                    static_cast<std::uint8_t>(*value & 0xFF));
+            }
+            offset += line.operands.size();
+            continue;
+        }
         const auto encoded =
             encode_mnemonic(line, static_cast<std::uint32_t>(offset), labels,
                             error);

@@ -37,7 +37,7 @@ A change is done when:
 | M4 C core + debug format | G3/G4 passed locally | complete locally | C core, bit-fields, debugger session, frozen KDBG v1, and dump tooling are in place; M5 C++ is next |
 | M5 C++ core | G5 passed locally | in progress | G5 runs; classes, methods, constructors, destructors, `new`/`delete`, default copy, inheritance, and static devirtualization work; general vtables, move semantics, and dynamic dispatch remain |
 | M6 C++11/14/17 | G6 | in progress | `nullptr`, `auto`/`decltype`, range-for, `constexpr`, `enum class`, and `::` qualification work; templates, lambdas, move semantics, and structured bindings remain |
-| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, and IR generation work; backend codegen, assembler, linker, and runtime remain |
+| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, and a minimal `.kex` image work; `hello.c` and `sum.c` run locally; relocatable objects, the full linker, and the wider runtime remain |
 | M8 v1.0 hardening | G8 | pending | — |
 | M9 v1.1 runtime/libc/host services | G9 partial | pending | — |
 | M10 v1.1 language/runtime completion | G9 | pending | — |
@@ -175,7 +175,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 118/118 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 119/119 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -189,7 +189,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 118/118 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 119/119 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -215,9 +215,9 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 - [ ] KR16 target descriptor: IP16 data model, registers, encodings, relaxation, capabilities. The IP16 profile (16-bit `int`/`long`, 16-bit pointers, unsigned `char`, no `long long`/FP) drives `-fsyntax-only` and `--dump-ir`; register mapping, encoding, and relaxation remain.
 - [ ] KR16 ABI appendix and calling-convention suite.
-- [ ] Codegen, frame layout, image writer. Scalar codegen and SP-relative frame layout work for integer/pointer code; object emission and the image writer remain.
-- [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` emits assembly and runs locally to exit 55 through the external KR16 assembler and VM; `hello.c` needs the runtime/image path.
-- [ ] Gate G7: KR16 C is accepted, assembled, linked, and run.
+- [ ] Codegen, frame layout, image writer. Scalar codegen, SP-relative frame layout, the in-tree assembler, and the minimal `.kex` writer work for single-unit integer/pointer code; relocatable objects and the full linker remain.
+- [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55 and `hello.c` prints `Hello, KR16!` and exits 0 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
+- [ ] Gate G7: KR16 C is accepted, assembled, linked, and run. The single-unit `hello.c`/`sum.c` path passes locally; the relocatable object and linker gate remains.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
 
@@ -229,6 +229,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [ADR 0016](docs/decisions/0016-kr16-scalar-abi.md) and D-040 freeze the M7 scalar calling convention: `R1`–`R3` arguments, `R0` return, `R4` FP, SP-relative frame.
 - [ADR 0017](docs/decisions/0017-kr16-exec-image.md) and D-041 define the minimal `.kex` image: 64-byte header, `.text` at `0x0100`, `.debug_str`, CRC32, and a generated `_start` that calls `main` and halts. `krc -c --target=kr16` writes it.
 - `sum.c` now compiles to assembly, assembles in-tree, writes a `.kex`, and runs on the KR16 VM to exit 55 without the external toolchain.
+- `hello.c` prints `Hello, KR16!` and exits 0: string globals are emitted as `.byte` text data, `LEA` resolves their labels, and the generated image includes a minimal MMIO `puts` shim.
 - Constant folding now applies integer cast width and signedness, so `(char)-1 > 0` is true on the unsigned-char KR16 profile.
 - CTest is 118/118 across all six configurations; `krc_tests` is 98 cases / 585 assertions.
 
@@ -387,3 +388,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T10:55:15-08:00** — Added the KR16 assembler: labels, text/data sections, global/extern declarations, register/immediate ALU forms, loads/stores/LEA, shifts, bit operations, conditional branches, relative and register `JMP`/`CALL`, and control instructions. `krc_tests` is 97 cases / 574 assertions; CTest remains 116/116.
 - **2026-11-10T11:16:06-08:00** — Added the scalar KR16 backend: SP-relative frames, `R1`–`R3` parameters, two-operand ALU, loads/stores/LEA, comparison materialization, branches, calls, and returns. `sum.c` emits assembly, assembles with the external KR16 assembler, and runs to exit 55; CTest is 117/117.
 - **2026-11-10T11:30:14-08:00** — Added the minimal KR16 EXEC image: `krc -c --target=kr16` emits a 64-byte-header `.kex` with `.text`, `.debug_str`, CRC32, and a generated `_start` calling `main`. The in-tree assembler now accepts `SP`/`FP`, negative displacements, and keeps offsets across repeated `.text`. `sum.c` runs to exit 55; CTest is 118/118.
+- **2026-11-10T11:44:36-08:00** — Added string globals, label-resolving `LEA`, `.byte` emission, and an MMIO `puts` shim to the KR16 image path. `hello.c` prints `Hello, KR16!` and exits 0; CTest is 119/119.
