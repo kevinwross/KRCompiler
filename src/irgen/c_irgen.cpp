@@ -93,9 +93,140 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
         static_cast<void>(type);
         static_cast<void>(record);
     }
+    generate_global_constructors();
     sema_.break_cycles();
     function_ast_types_.clear();
     return std::move(module_);
+}
+
+void CIRGen::generate_global_constructors() {
+    if (global_ctors_.empty()) {
+        return;
+    }
+    const auto void_type = module_->types().void_type();
+    const auto void_function =
+        module_->types().function_type(void_type, {}, false);
+    std::vector<ir::Function*> constructors;
+    std::size_t constructor_index = 0;
+    for (const auto& info : global_ctors_) {
+        if (!info.global || !info.record) {
+            continue;
+        }
+        auto* constructor =
+            select_constructor(info.record->tag, info.arguments.size());
+        if (!constructor) {
+            continue;
+        }
+        auto* function = module_->add_function(
+            "__krc_global_ctor_" + std::to_string(constructor_index++),
+            void_function, ir::Linkage::Internal, false);
+        const auto previous_function = current_function_;
+        const auto previous_class = current_class_;
+        auto* previous_block = builder_.insert_block();
+        const auto previous_scopes = std::move(scopes_);
+        scopes_.clear();
+        current_function_ = function;
+        current_class_ = nullptr;
+        auto* entry = function->add_block("entry");
+        builder_.reset_value_names();
+        builder_.set_insert_point(entry);
+        push_scope();
+        auto* self = static_cast<ir::Value*>(info.global);
+        if (self->type != constructor->type->parameters[0]) {
+            self = builder_.create(ir::Opcode::BitCast,
+                                   constructor->type->parameters[0], {self},
+                                   "global.this");
+        }
+        std::vector<ir::Value*> arguments{self};
+        for (std::size_t index = 0; index < info.arguments.size(); ++index) {
+            if (!info.arguments[index]) {
+                continue;
+            }
+            auto argument = emit_expression(*info.arguments[index]);
+            if (!argument.value) {
+                continue;
+            }
+            const auto parameter_index = index + 1;
+            if (parameter_index < constructor->type->parameters.size()) {
+                argument.value = promote(
+                    argument.value, argument.type,
+                    constructor->type->parameters[parameter_index]);
+            }
+            arguments.push_back(argument.value);
+        }
+        builder_.create_call(constructor, std::move(arguments), nullptr,
+                             "global.ctor");
+        builder_.create_ret(nullptr);
+        scopes_ = std::move(previous_scopes);
+        current_function_ = previous_function;
+        current_class_ = previous_class;
+        builder_.set_insert_point(previous_block);
+        constructors.push_back(function);
+    }
+    if (constructors.empty()) {
+        return;
+    }
+
+    auto* init_function = module_->add_function(
+        "__krc_init_globals", void_function, ir::Linkage::Internal, false);
+    const auto previous_function = current_function_;
+    const auto previous_class = current_class_;
+    auto* previous_block = builder_.insert_block();
+    const auto previous_scopes = std::move(scopes_);
+    scopes_.clear();
+    current_function_ = init_function;
+    current_class_ = nullptr;
+    auto* entry = init_function->add_block("entry");
+    builder_.reset_value_names();
+    builder_.set_insert_point(entry);
+    push_scope();
+    for (auto* constructor : constructors) {
+        builder_.create_call(constructor, {}, nullptr, "init.global");
+    }
+    builder_.create_ret(nullptr);
+    scopes_ = std::move(previous_scopes);
+    current_function_ = previous_function;
+    current_class_ = previous_class;
+    builder_.set_insert_point(previous_block);
+
+    const auto main_entry = functions_.find("main");
+    if (main_entry == functions_.end()) {
+        return;
+    }
+    auto* user_main = main_entry->second;
+    user_main->name = "__krc_user_main";
+    functions_.erase(main_entry);
+    functions_["__krc_user_main"] = user_main;
+    auto* wrapper =
+        module_->add_function("main", user_main->type,
+                              ir::Linkage::External, false);
+    for (const auto& parameter : user_main->parameters) {
+        wrapper->add_parameter(parameter->type, parameter->name);
+    }
+    const auto previous_block2 = builder_.insert_block();
+    const auto previous_function2 = current_function_;
+    const auto previous_class2 = current_class_;
+    const auto previous_scopes2 = std::move(scopes_);
+    scopes_.clear();
+    current_function_ = wrapper;
+    current_class_ = nullptr;
+    auto* wrapper_entry = wrapper->add_block("entry");
+    builder_.reset_value_names();
+    builder_.set_insert_point(wrapper_entry);
+    push_scope();
+    builder_.create_call(init_function, {}, nullptr, "init.globals");
+    std::vector<ir::Value*> arguments;
+    for (const auto& parameter : wrapper->parameters) {
+        arguments.push_back(parameter.get());
+    }
+    auto* call = builder_.create_call(user_main, std::move(arguments),
+                                      user_main->type->return_type,
+                                      "user.main");
+    builder_.create_ret(call);
+    scopes_ = std::move(previous_scopes2);
+    current_function_ = previous_function2;
+    current_class_ = previous_class2;
+    builder_.set_insert_point(previous_block2);
 }
 
 void CIRGen::error(const frontend::SourceLocation& location, std::string message) {
@@ -706,6 +837,20 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
     const auto alignment = alignment_of(specifiers, frontend_type);
     auto* global = module_->add_global(name, type, has_label(specifiers, "const"), alignment);
     globals_.emplace(name, global);
+    if (type->kind == ir::TypeKind::Struct && frontend_type->record &&
+        initializer &&
+        initializer->kind == frontend::AstKind::ExpressionStatement) {
+        GlobalCtorInfo info;
+        info.global = global;
+        info.record = frontend_type->record.get();
+        for (const auto& argument : initializer->children) {
+            info.arguments.push_back(argument.get());
+        }
+        if (select_constructor(info.record->tag, info.arguments.size())) {
+            global_ctors_.push_back(std::move(info));
+            return;
+        }
+    }
     if (!initializer) {
         return;
     }

@@ -149,6 +149,13 @@ private:
     std::unordered_map<const frontend::AstNode*, LambdaInfo> lambda_metadata_;
     std::unordered_map<std::string, LambdaInfo> lambda_locals_;
     std::unordered_map<std::string, ir::GlobalVariable*> globals_;
+    struct GlobalCtorInfo {
+        ir::GlobalVariable* global = nullptr;
+        const frontend::RecordInfo* record = nullptr;
+        std::vector<const frontend::AstNode*> arguments;
+    };
+    std::vector<GlobalCtorInfo> global_ctors_;
+    void generate_global_constructors();
     std::unordered_map<const frontend::RecordInfo*, ir::TypePtr> record_types_;
     std::unordered_map<const ir::Type*, const frontend::RecordInfo*> ir_records_;
     std::unordered_map<std::string, std::unordered_map<std::string, ir::Function*>>
