@@ -10,27 +10,33 @@
 
 KRCompiler is a retargetable C/C++ compiler for the KR-family virtual machines: a C11 and C++17 front end, typed-SSA IR, per-target backends (KR32 first, KR16 later), an object format, `krld` linker, runtime/libc, and a symbol/debug format — shipped as `krc`. Two different meanings of "target" live here and must not be confused: the **host** platforms that build and run the toolchain (Windows MSVC, Linux GCC/Clang) and the **VM targets** that compiled output runs on (KR32, KR16). `plan.md` is the design contract — §16's milestone gates, §4's data models, and the decision log in Appendix A are authoritative, and a decision changes only by an Appendix A entry plus an ADR for ABI/object/target/IR changes.
 
-`plan.md` is marked **Draft v0.1 — for approval**, and states that no compiler implementation starts until it is approved. While that status stands, do not write `src/`.
+`plan.md` is **approved** (2026-11-09); implementation proceeds under §18.2, and `src/` may be created starting M0. `implementation.md` is the live tracker.
 
 <!-- project:summary -->
 
 ```sh
-# NOT YET AVAILABLE: M0 creates CMakeLists.txt, CMakePresets.json and cmake/.
-# The toolchain below is the plan's, not the tree's. Run nothing until M0 lands,
-# and do not report these as passing before they exist.
+# Windows (MSVC)
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug
+ctest --preset windows-msvc-debug
 
-# Configure and build (once M0 lands).
-cmake -S . -B build
-cmake --build build --config Release
+# Linux (WSL, GCC)
+cmake --preset linux-gcc-debug
+cmake --build --preset linux-gcc-debug
+ctest --preset linux-gcc-debug
 
-# Test suite: unit, integration, differential, conformance, golden.
-ctest --test-dir build --build-config Release
+# Linux (WSL, Clang)
+cmake --preset linux-clang-debug
+cmake --build --preset linux-clang-debug
+ctest --preset linux-clang-debug
 
-# Deterministic-output check (§15.6): build the same inputs twice, compare bytes.
-# Required before claiming a change is deterministic.
+# Linux ASan/UBSan (WSL, Clang)
+cmake --preset linux-sanitize
+cmake --build --preset linux-sanitize
+ctest --preset linux-sanitize
 
-# Sanitizers (Linux only, per §15.4).
-# Configure a separate build with ASan/UBSan and run the unit suite there.
+# The CLI determinism test is part of ctest. Full object double-build
+# comparison lands with M2/M3.
 ```
 
 <!-- project:commands -->

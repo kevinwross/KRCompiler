@@ -1,0 +1,217 @@
+#include <algorithm>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <string_view>
+
+#include "asm/kr32_assembler.h"
+#include "backend/kr32_backend.h"
+#include "doctest.h"
+#include "ir/ir.h"
+#include "irgen/c_irgen.h"
+#include "krc/frontend/diagnostics.h"
+#include "krc/frontend/parser.h"
+#include "krc/frontend/preprocessor.h"
+#include "krc/frontend/sema.h"
+#include "krc/frontend/source_manager.h"
+#include "krc/target/target.h"
+
+using krc::frontend::DiagnosticEngine;
+using krc::frontend::Parser;
+using krc::frontend::Preprocessor;
+using krc::frontend::Sema;
+using krc::frontend::SourceManager;
+
+namespace {
+
+struct Generated {
+    std::unique_ptr<krc::ir::Module> module;
+    bool had_errors = false;
+    std::string verifier_error;
+};
+
+Generated generate(std::string source) {
+    SourceManager sources;
+    DiagnosticEngine diagnostics(sources);
+    const auto file = sources.add_buffer("test.c", std::move(source));
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    Preprocessor preprocessor(sources, diagnostics, profile);
+    auto tokens = preprocessor.preprocess(file);
+    Parser parser(std::move(tokens), diagnostics, sources);
+    auto ast = parser.parse_translation_unit();
+    if (!ast || parser.had_error()) {
+        return Generated{nullptr, diagnostics.has_errors(), {}};
+    }
+    Sema sema(diagnostics, profile);
+    sema.analyze(*ast);
+    if (diagnostics.has_errors()) {
+        return Generated{nullptr, true, {}};
+    }
+    krc::irgen::CIRGen irgen(sema, *ast, profile, diagnostics);
+    auto module = irgen.generate();
+    std::string verifier_error;
+    if (module) {
+        krc::ir::Verifier verifier;
+        if (!verifier.verify(*module, verifier_error)) {
+            return Generated{std::move(module), true, std::move(verifier_error)};
+        }
+    }
+    return Generated{std::move(module), diagnostics.has_errors(), std::move(verifier_error)};
+}
+
+}  // namespace
+
+TEST_CASE("C IRGen lowers a scalar function") {
+    const auto generated = generate(R"SRC(
+int add(int left, int right) {
+    return left + right;
+}
+int main(void) {
+    return add(1, 2);
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+    CHECK(generated.module->functions().size() == 2);
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    CHECK(text.find("define i32 @add(i32 %left, i32 %right)") != std::string::npos);
+    CHECK(text.find("call i32 @add(i32 1, i32 2)") != std::string::npos);
+}
+
+TEST_CASE("C IRGen lowers the hello program to verified IR") {
+    const auto generated = generate(R"SRC(
+int putchar(int c);
+void exit(int code);
+
+int main(void) {
+    char *message = "Hello, KR32!\n";
+    while (*message) {
+        putchar(*message);
+        message = message + 1;
+    }
+    return 0;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+    CHECK(generated.module->globals().size() == 1);
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    CHECK(text.find("declare i32 @putchar(i32)") != std::string::npos);
+    CHECK(text.find("@.str.0 = constant") != std::string::npos);
+    CHECK(text.find("define i32 @main()") != std::string::npos);
+    CHECK(text.find("while.cond") != std::string::npos);
+    CHECK(text.find("call i32 @putchar") != std::string::npos);
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+    CHECK(assembly->find("PUSH R7") != std::string::npos);
+    CHECK(assembly->find("CALL putchar") != std::string::npos);
+    CHECK(assembly->find(".global main") != std::string::npos);
+    CHECK(assembly->find("HALT ; unsupported") == std::string::npos);
+
+    krc::asmkr32::AssemblyResult assembled;
+    std::string assemble_error;
+    REQUIRE_MESSAGE(krc::asmkr32::assemble(*assembly, assembled, assemble_error),
+                    assemble_error);
+    CHECK_FALSE(assembled.text.empty());
+    CHECK_FALSE(assembled.data.empty());
+    CHECK(assembled.relocations.size() >= 9);
+    const auto has_symbol = [&](std::string_view symbol) {
+        return std::any_of(assembled.relocations.begin(), assembled.relocations.end(),
+                           [&](const krc::asmkr32::AssembledRelocation& relocation) {
+                               return relocation.symbol == symbol;
+                           });
+    };
+    CHECK(has_symbol(".str.0"));
+    CHECK(has_symbol("putchar"));
+}
+
+TEST_CASE("C IRGen lowers structs and recursive pointers") {
+    const auto generated = generate(R"SRC(
+struct Node {
+    int value;
+    struct Node *next;
+};
+int main(void) {
+    struct Node node;
+    node.value = 5;
+    node.next = 0;
+    return node.value;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+    CHECK(assembly->find("MOV R1, #4") != std::string::npos);
+    CHECK(assembly->find("HALT ; unsupported") == std::string::npos);
+
+    krc::asmkr32::AssemblyResult assembled;
+    std::string assemble_error;
+    REQUIRE_MESSAGE(krc::asmkr32::assemble(*assembly, assembled, assemble_error),
+                    assemble_error);
+    CHECK_FALSE(assembled.text.empty());
+}
+
+TEST_CASE("C IRGen lowers mainentry arguments and a for loop") {
+    const auto generated = generate(R"SRC(
+int printf(const char *format, ...);
+
+int main(int argc, char *argv[]) {
+    printf("argc = %d\n", argc);
+    for (int index = 0; index < argc; ++index) {
+        printf("argv[%d] = %s\n", index, argv[index]);
+    }
+    return 0;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    CHECK(text.find("declare i32 @printf(ptr<i8>, ...)") != std::string::npos);
+    CHECK(text.find("define i32 @main(i32 %argc, ptr<ptr<i8>> %argv)") != std::string::npos);
+    CHECK(text.find("for.cond") != std::string::npos);
+    CHECK(text.find("getelementptr ptr<i8>") != std::string::npos);
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+    krc::asmkr32::AssemblyResult assembled;
+    std::string assemble_error;
+    REQUIRE_MESSAGE(krc::asmkr32::assemble(*assembly, assembled, assemble_error),
+                    assemble_error);
+    CHECK_FALSE(assembled.text.empty());
+    CHECK(assembled.relocations.size() >= 12);
+    const auto has_symbol = [&](std::string_view symbol) {
+        return std::any_of(assembled.relocations.begin(), assembled.relocations.end(),
+                           [&](const krc::asmkr32::AssembledRelocation& relocation) {
+                               return relocation.symbol == symbol;
+                           });
+    };
+    CHECK(has_symbol("printf"));
+}

@@ -1,0 +1,60 @@
+# Architecture decision records
+
+ADRs record why a decision was made, what it costs, and what was rejected. They are required before code depends on a change to:
+
+- ABI, calling convention, data model, or mangling;
+- object or executable format;
+- symbol/debug format;
+- target description schema or target capabilities;
+- IR semantics, types, or verifier rules.
+
+A change to a `D-xxx` decision also needs an Appendix A entry in `plan.md`. An ADR does not replace that entry; the two serve different purposes.
+
+## Naming
+
+`NNNN-short-title.md`, numbered in order, for example `0001-kr16-abi.md`.
+
+## Template
+
+```markdown
+# ADR NNNN: Title
+
+- Status: proposed / accepted / superseded
+- Date: YYYY-MM-DD
+- Decision: D-xxx (if applicable)
+- Supersedes: ADR NNNN (if applicable)
+
+## Context
+
+What forces the decision; what the current contract says.
+
+## Decision
+
+What is being chosen, precisely enough to implement.
+
+## Consequences
+
+What becomes easier, what becomes harder, what must be migrated, and what the cost is.
+
+## Alternatives considered
+
+What was rejected and why.
+```
+
+## Index
+
+- [0001-kr32-c-abi-freeze.md](0001-kr32-c-abi-freeze.md) — accepted; freezes the KR32 C data model, layout, calling convention, and varargs rules.
+- [0002-target-descriptor-schema-freeze.md](0002-target-descriptor-schema-freeze.md) — accepted; freezes target descriptor schema v1.
+- [0003-ir-core-freeze.md](0003-ir-core-freeze.md) — accepted; freezes the v1.0 typed-SSA IR core.
+- [0004-ir-data-array-and-declarations.md](0004-ir-data-array-and-declarations.md) — accepted; adds byte-array constants and declaration-only functions.
+- [0005-kro-object-format-freeze.md](0005-kro-object-format-freeze.md) — accepted; freezes the KRO v1 object header, tables, ordering, CRC, and relocation registry.
+- [0006-recursive-aggregate-types.md](0006-recursive-aggregate-types.md) — accepted; adds forward/completion construction for named aggregates.
+- [0007-varargs-base-opcode.md](0007-varargs-base-opcode.md) — accepted; adds the target-lowered `VaStart` opcode.
+- [0008-debug-info-bridge.md](0008-debug-info-bridge.md) — accepted; emits a textual `.debug_info` bridge for the KR32 debugger until KDBG lands.
+- [0009-kdbg-v1-freeze.md](0009-kdbg-v1-freeze.md) — accepted; freezes the `.kdbg` v1 header, records, CRC, and dump schema.
+- [0010-cxx-class-data-layout.md](0010-cxx-class-data-layout.md) — accepted; freezes the first C++ class data layout and naming contract.
+- [0011-m5-static-devirtualization.md](0011-m5-static-devirtualization.md) — accepted; specializes inherited methods per concrete class for G5 without a vtable ABI.
+- [0012-weak-linkage.md](0012-weak-linkage.md) — accepted; adds weak IR linkage and KRO weak symbols for inline/`constexpr` functions.
+- [0013-dynamic-dispatch.md](0013-dynamic-dispatch.md) — accepted; adds a vptr and per-object virtual slot table for single-inheritance dynamic dispatch.
+
+The next expected ADRs are the KR16 ABI appendix, the EH descriptor encoding, and the KDBG record layout.

@@ -1,0 +1,34 @@
+# Build outputs
+/build/
+/out/
+/install/
+/dist/
+/build-*/
+
+# IDE state
+.vs/
+.vscode/
+*.user
+*.suo
+CMakeUserPresets.json
+
+# Local tooling
+compile_commands.json
+.cache/
+node_modules/
+*.vsix
+
+# Test and example artifacts
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.k32
+*.kex
+*.st16
+*.bin
+*.lst
+
+# Keep extracted fixtures and expected-output files under tests/fixtures.
+!tests/fixtures/**

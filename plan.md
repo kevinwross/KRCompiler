@@ -1,11 +1,11 @@
 # KRCompiler — Plan and Specification
 
-**Status:** Draft v0.1 — for approval. **No compiler implementation starts until this document is approved.**
+**Status:** Approved — 2026-11-09 (plan v0.1). Implementation proceeds under §18.2.
 **Date:** 2026-11-09
 **Owner:** Kevin
 **Scope:** A single retargetable C/C++ compiler, intermediate representation, per-target backends, linker, runtime, and symbol/debug format for the KR-family virtual machines.
 
-**Inputs used for this draft**
+**Inputs used for this plan**
 
 - The 2026-11-09 planning survey (R/A/L/G decisions).
 - `../kr32/docs/cpp-plan.md`, `../kr32/cpp-handoff.md`, `../kr32/docs/abi.md`, `../kr32/docs/container.md`, `../kr32/docs/debug.md`.
@@ -34,7 +34,7 @@ It is a specification, not a task tracker. The live task tracker will be `implem
 
 ### 0.2 Approval and change control
 
-- This draft is **not approved**. No implementation work starts until the approval checklist in §18 is signed off.
+- This plan was approved on 2026-11-09; the §18.1 checklist and §18.3 sign-off are complete. Implementation proceeds under §18.2.
 - Every material change after approval MUST update this document and add a decision-log entry.
 - Frozen contracts (ABI, object format, symbol format, target descriptor schema) MUST be versioned before code depends on them.
 - The plan is expected to evolve. “Approved” means the direction, scope, and gates are accepted, not that every detail is final.
@@ -190,6 +190,8 @@ The full decision log is in Appendix A. The architecture-defining decisions are:
 | D-033 | Self-hosting | Not a goal; the compiler runs on the host only. |
 | D-034 | Process | MIT; KR32/KR16 documentation and handoff conventions; ADRs for frozen contracts. |
 | D-035 | Determinism | Byte-identical outputs, sorted symbols, path remapping, build IDs and source hashes. |
+| D-036 | IR linkage | Add weak linkage for inline/`constexpr` definitions (ADR 0012); KRO weak binding unchanged. |
+| D-037 | C++ virtual dispatch | Polymorphic classes carry a vptr at offset 0 and a per-object virtual slot table built at construction (ADR 0013); single inheritance only. |
 
 ---
 
@@ -301,7 +303,7 @@ The compile-first list is in Appendix B.
 
 ### 5.4 Feature extraction from doctest strings
 
-Because the conformance material is embedded in host doctest files, M0/M1 MUST deliver `tools/extract_fixtures`:
+Because the conformance material is embedded in host doctest files, M0/M1 MUST deliver `krc_extract_fixtures` (`src/tools/extract_fixtures`):
 
 - Scan `../kr32/tests/unit` and `../kr32/tests/cxx` for escaped C/C++ source strings.
 - Extract each into `tests/corpus/extracted/<feature>/<name>.c` or `.cpp`.
@@ -1411,17 +1413,17 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 
 ### 18.1 Approval checklist
 
-- [ ] Goals, non-goals, and success criteria (§2) are accepted.
-- [ ] Target matrix and data models (§4) are accepted, including the non-conforming KR16 profile.
-- [ ] Corpus tiers, sysroot requirement, and acceptance gates (§5) are accepted.
-- [ ] C and C++ language scope and staging (§6) are accepted.
-- [ ] Compiler architecture and IR contract (§7–§8) are accepted.
-- [ ] Backend/target-description approach (§9) is accepted.
-- [ ] ABI direction (§10), object format (§11), linker (§12), symbol/debug format (§13) are accepted.
-- [ ] Runtime and library ladder (§14) are accepted.
-- [ ] Tooling, repository, testing, and determinism (§15) are accepted.
-- [ ] Milestones, v1.0/v1.1 boundaries, and schedule (§16) are accepted.
-- [ ] Risks and open questions (§17) are accepted as tracked items.
+- [x] Goals, non-goals, and success criteria (§2) are accepted.
+- [x] Target matrix and data models (§4) are accepted, including the non-conforming KR16 profile.
+- [x] Corpus tiers, sysroot requirement, and acceptance gates (§5) are accepted.
+- [x] C and C++ language scope and staging (§6) are accepted.
+- [x] Compiler architecture and IR contract (§7–§8) are accepted.
+- [x] Backend/target-description approach (§9) is accepted.
+- [x] ABI direction (§10), object format (§11), linker (§12), symbol/debug format (§13) are accepted.
+- [x] Runtime and library ladder (§14) are accepted.
+- [x] Tooling, repository, testing, and determinism (§15) are accepted.
+- [x] Milestones, v1.0/v1.1 boundaries, and schedule (§16) are accepted.
+- [x] Risks and open questions (§17) are accepted as tracked items.
 
 ### 18.2 After approval
 
@@ -1433,9 +1435,9 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 
 ### 18.3 Sign-off
 
-- Project owner: ______________________  Date: __________
-- Compiler lead: ______________________  Date: __________
-- Notes / conditions: ______________________________________________________
+- Project owner: Kevin  Date: 2026-11-09
+- Compiler lead: Kevin (project owner; acting compiler lead)  Date: 2026-11-09
+- Notes / conditions: All eleven §18.1 items approved without conditions. Review findings are recorded in `docs/planning/nemo-plan-review.md`.
 
 ---
 
@@ -1541,6 +1543,8 @@ Survey decision IDs use the `S-G` prefix to avoid collision with acceptance gate
 | D-033 | Self-hosting | Not a goal; host-only compiler. | Avoids hosted C++/runtime requirements. |
 | D-034 | Process | MIT; KR32/KR16 conventions; ADRs. | Consistent with the existing projects. |
 | D-035 | Determinism | Byte-identical outputs, sorted symbols, path remapping, build IDs and source hashes. | Reproducible tests/releases and debugger matching. |
+| D-036 | IR linkage | Add weak linkage for inline/`constexpr` definitions (ADR 0012); KRO weak binding unchanged. | Inline definitions avoid duplicate strong symbols while sharing one link-time copy. |
+| D-037 | C++ virtual dispatch | Polymorphic classes carry a vptr at offset 0 and a per-object virtual slot table built at construction (ADR 0013); single inheritance only. | Calls through a base pointer must select the derived override; a full read-only vtable and relocations are deferred. |
 
 Changing a `D-xxx` decision requires editing its row here and adding an ADR under `docs/decisions/` when the change touches ABI, object format, symbol format, target description, or IR.
 
@@ -1700,4 +1704,4 @@ Appendix D.1 and D.2 track language features; target-specific surfaces are liste
 
 ---
 
-*End of plan.md (draft v0.1).*
+*End of plan.md (approved v0.1, 2026-11-09).*
