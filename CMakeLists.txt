@@ -33,6 +33,7 @@ add_library(krc_core STATIC
     src/debug/kdbg.cpp
     src/frontend/ast.cpp
     src/linker/kro_object.cpp
+    src/linker/kr16_image.cpp
     src/linker/archive.cpp
     src/linker/linker.cpp
     src/frontend/diagnostics.cpp

@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "asm/kr16_assembler.h"
 #include "asm/kr32_assembler.h"
 #include "asm/kro_writer.h"
 #include "backend/kr32_backend.h"
@@ -23,6 +24,7 @@
 #include "krc/target/target.h"
 #include "krc/version.h"
 #include "linker/kro_object.h"
+#include "linker/kr16_image.h"
 
 #ifndef KRC_SYSROOT_DIR
 #define KRC_SYSROOT_DIR "sysroot"
@@ -300,9 +302,60 @@ int main(int argc, char** argv) {
                                                "KR16 backend: " +
                                                    backend_error);
                         } else if (emit_object) {
-                            diagnostics.report(
-                                krc::frontend::Severity::Error,
-                                "KR16 object emission is not implemented yet");
+                            std::string source =
+                                ".text\n.global _start\n_start:\n"
+                                "    CALL main\n"
+                                "    HLT\n";
+                            source += *assembly;
+                            krc::asmkr16::AssemblyResult assembled;
+                            std::string assemble_error;
+                            if (!krc::asmkr16::assemble(source, assembled,
+                                                        assemble_error)) {
+                                diagnostics.report(
+                                    krc::frontend::Severity::Error,
+                                    "KR16 assembler: " + assemble_error);
+                            } else {
+                                bool has_main = false;
+                                for (const auto& symbol : assembled.symbols) {
+                                    has_main = has_main || symbol.name == "main";
+                                }
+                                if (!has_main) {
+                                    diagnostics.report(
+                                        krc::frontend::Severity::Error,
+                                        "KR16 image has no 'main' entry");
+                                } else {
+                                    std::vector<std::uint8_t> bytes;
+                                    std::string image_error;
+                                    if (!krc::linker::write_kr16_image(
+                                            assembled.text, 0x0100, bytes,
+                                            image_error)) {
+                                        diagnostics.report(
+                                            krc::frontend::Severity::Error,
+                                            "KR16 image: " + image_error);
+                                    } else {
+                                        auto path =
+                                            output_path.empty()
+                                                ? std::filesystem::path(input)
+                                                      .replace_extension(".kex")
+                                                : std::filesystem::path(
+                                                      output_path);
+                                        std::ofstream file(path,
+                                                           std::ios::binary);
+                                        if (!file) {
+                                            diagnostics.report(
+                                                krc::frontend::Severity::Error,
+                                                "cannot open image output '" +
+                                                    path.string() + "'");
+                                        } else {
+                                            file.write(
+                                                reinterpret_cast<const char*>(
+                                                    bytes.data()),
+                                                static_cast<std::streamsize>(
+                                                    bytes.size()));
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             std::cout << *assembly;
                         }

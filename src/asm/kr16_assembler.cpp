@@ -65,6 +65,15 @@ std::vector<std::string> split_operands(std::string_view text) {
 }
 
 std::optional<std::uint8_t> parse_register(std::string_view text) {
+    if (text == "SP" || text == "sp") {
+        return static_cast<std::uint8_t>(5);
+    }
+    if (text == "FP" || text == "fp") {
+        return static_cast<std::uint8_t>(4);
+    }
+    if (text == "PC" || text == "pc") {
+        return static_cast<std::uint8_t>(7);
+    }
     if (text.size() < 2 || (text[0] != 'R' && text[0] != 'r')) {
         return std::nullopt;
     }
@@ -94,8 +103,8 @@ bool parse_memory(std::string_view text, std::uint8_t& base,
         return false;
     }
     const auto inner = trim(value.substr(1, value.size() - 2));
-    const auto plus = inner.find('+');
-    if (plus == std::string::npos) {
+    const auto separator = inner.find_first_of("+-");
+    if (separator == std::string::npos) {
         const auto reg = parse_register(inner);
         if (!reg) {
             return false;
@@ -104,13 +113,13 @@ bool parse_memory(std::string_view text, std::uint8_t& base,
         displacement = 0;
         return true;
     }
-    const auto reg = parse_register(trim(inner.substr(0, plus)));
-    const auto offset = parse_number(trim(inner.substr(plus + 1)));
+    const auto reg = parse_register(trim(inner.substr(0, separator)));
+    const auto offset = parse_number(trim(inner.substr(separator + 1)));
     if (!reg || !offset) {
         return false;
     }
     base = *reg;
-    displacement = *offset;
+    displacement = inner[separator] == '-' ? -*offset : *offset;
     return true;
 }
 
@@ -498,10 +507,8 @@ bool assemble(std::string_view source, AssemblyResult& result,
             directive >> name;
             if (name == ".text") {
                 section = 0;
-                offset = 0;
             } else if (name == ".data") {
                 section = 1;
-                offset = 0;
             } else if (name == ".global") {
                 std::string symbol;
                 directive >> symbol;

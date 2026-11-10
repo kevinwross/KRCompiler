@@ -7,6 +7,7 @@ add_executable(krc_tests
     unit/test_kr32_encoder.cpp
     unit/test_kr16_encoder.cpp
     unit/test_kr16_assembler.cpp
+    unit/test_kr16_image.cpp
     unit/test_assembler.cpp
     unit/test_register_allocator.cpp
     unit/test_kro_object.cpp
@@ -54,6 +55,11 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c")
     set_tests_properties(krc_kr16_assembly PROPERTIES
         PASS_REGULAR_EXPRESSION "CALL sum_to")
+
+    add_test(NAME krc_kr16_image
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c"
+                -o "${CMAKE_CURRENT_BINARY_DIR}/kr16_sum.kex")
 
     add_test(NAME krc_unknown_option COMMAND $<TARGET_FILE:krc> --no-such-option)
     set_tests_properties(krc_unknown_option PROPERTIES WILL_FAIL TRUE)

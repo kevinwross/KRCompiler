@@ -195,6 +195,7 @@ The full decision log is in Appendix A. The architecture-defining decisions are:
 | D-038 | Aggregate arguments | By-value aggregates up to four words use consecutive integer registers on KR32 (ADR 0014); larger aggregates are deferred. |
 | D-039 | Aggregate returns | Aggregate returns up to 8 bytes use `R0`/`R1` on KR32 (ADR 0015); larger returns are deferred. |
 | D-040 | KR16 scalar ABI | KR16 passes the first three scalars in `R1`–`R3`, returns in `R0`, and uses `R4` as FP with an SP-relative frame (ADR 0016); aggregates, varargs, and extra arguments are deferred. |
+| D-041 | KR16 image | `krc -c --target=kr16` writes a minimal single-unit EXEC `.kex` with a generated startup and no symbols or relocations (ADR 0017); the full linker path is deferred. |
 
 ---
 
@@ -1551,6 +1552,7 @@ Survey decision IDs use the `S-G` prefix to avoid collision with acceptance gate
 | D-038 | Aggregate arguments | By-value aggregates up to four words use consecutive integer registers on KR32 (ADR 0014); larger aggregates are deferred. | Small records must be usable as ordinary parameters without changing the IR or object format. |
 | D-039 | Aggregate returns | Aggregate returns up to 8 bytes use `R0`/`R1` on KR32 (ADR 0015); larger returns are deferred. | Factory functions must be able to return a small record without an `sret` pointer. |
 | D-040 | KR16 scalar ABI | KR16 passes the first three scalars in `R1`–`R3`, returns in `R0`, and uses `R4` as FP with an SP-relative frame (ADR 0016); aggregates, varargs, and extra arguments are deferred. | G7 needs a stable scalar convention before the full KR16 ABI appendix. |
+| D-041 | KR16 image | `krc -c --target=kr16` writes a minimal single-unit EXEC `.kex` with a generated startup and no symbols or relocations (ADR 0017); the full linker path is deferred. | G7 needs a runnable image before the relocatable object/linker path lands. |
 
 Changing a `D-xxx` decision requires editing its row here and adding an ADR under `docs/decisions/` when the change touches ABI, object format, symbol format, target description, or IR.
 
