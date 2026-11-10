@@ -700,6 +700,7 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             }
             record_defaults(function, *member->children[1]);
             function_ast_types_[function] = frontend_type;
+            function_source_names_[function] = method_name;
             function_classes_[function] = record;
             method_bodies_.push_back({function, member.get()});
         }
@@ -729,6 +730,7 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                     "parameter" + std::to_string(index));
             }
             function_ast_types_[function] = method.type;
+            function_source_names_[function] = method.name;
             methods.emplace(method.name, function);
         }
     }
@@ -770,6 +772,7 @@ void CIRGen::clone_inherited_methods() {
                 clone->add_parameter(parameter->type, parameter->name);
             }
             derived_methods.emplace(name, clone);
+            function_source_names_[clone] = name;
             functions_[clone->name] = clone;
             additions.push_back({clone, body->second});
             class_additions.push_back({clone, record});
@@ -940,6 +943,7 @@ void CIRGen::collect_function(const frontend::AstNode& specifiers,
     std::size_t parameter_index = 0;
     record_defaults(function, declarator);
     function_ast_types_[function] = frontend_type;
+    function_source_names_[function] = name;
     if (function_declarator) {
         for (std::size_t index = 1; index < function_declarator->children.size(); ++index) {
             const auto* parameter = function_declarator->children[index].get();
@@ -2534,7 +2538,13 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
             frontend::AstNode node;
             node.kind = frontend::AstKind::StringLiteral;
             node.location = expression.location;
-            node.text = "\"" + current_function_->name + "\"";
+            const auto source_name =
+                function_source_names_.find(current_function_);
+            node.text = "\"" +
+                        (source_name != function_source_names_.end()
+                             ? source_name->second
+                             : current_function_->name) +
+                        "\"";
             return emit_string_literal(node);
         }
         if (auto* local = lookup_local(expression.text)) {
