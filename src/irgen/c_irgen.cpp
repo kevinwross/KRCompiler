@@ -2530,6 +2530,13 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
     case frontend::AstKind::StringLiteral:
         return emit_string_literal(expression);
     case frontend::AstKind::Identifier: {
+        if (expression.text == "__func__" && current_function_) {
+            frontend::AstNode node;
+            node.kind = frontend::AstKind::StringLiteral;
+            node.location = expression.location;
+            node.text = "\"" + current_function_->name + "\"";
+            return emit_string_literal(node);
+        }
         if (auto* local = lookup_local(expression.text)) {
             if (local->frontend_type && local->frontend_type->is_reference &&
                 local->type && local->type->kind == ir::TypeKind::Pointer) {

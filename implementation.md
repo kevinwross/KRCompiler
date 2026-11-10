@@ -186,7 +186,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `snprintf` bounds the write while returning the untruncated length: with a five-byte buffer, `snprintf(text, 5, "%s", "abcdef")` writes `abcd` and returns 6.
 - `strtol`/`strtoul` parse optional signs and `0x`/octal prefixes with a base argument; `srand`/`rand` expose the existing LCG. The conversion fixture parses `0x1f` as 31, `-42`, and octal `17` as 15.
 - Destructible function-local statics register with `__krc_destroy_globals` and run after user `main`. The fixture prints `ctor`, `main`, then `dtor`.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 142/142 CTest.
+- `__func__` lowers to the current function-name string for free functions; the fixture verifies `__func__` is `"main"`.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 143/143 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -200,7 +201,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 142/142 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 143/143 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -420,3 +421,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T14:17:22-08:00** — Added bounded `snprintf`: it writes at most `size - 1` characters, always terminates, and returns the full formatted length. A five-byte buffer receives `abcd` from `abcdef` and returns 6; CTest is 140/140.
 - **2026-11-10T14:26:35-08:00** — Added `strtol`, `strtoul`, `srand`, and `rand` to the KR32 libc. The fixture parses `0x1f` as 31, `-42`, and octal `17` as 15, then draws two in-range random values; CTest is 141/141.
 - **2026-11-10T14:37:30-08:00** — Added destructors for function-local static objects: each destructible static registers with `__krc_destroy_globals` and runs after user `main`. The fixture prints `ctor main dtor`; CTest is 142/142.
+- **2026-11-10T14:53:32-08:00** — Added the C99 `__func__` predefined identifier for free functions; it lowers to the current function-name string. The fixture checks that `__func__` is `"main"`; CTest is 143/143.
