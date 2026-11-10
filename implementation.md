@@ -178,7 +178,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
 - Local `static` variables are emitted as internal globals with zero or constant initialization, so state persists across calls; non-constant scalar initializers and object constructors (including argument-taking ones) run once behind a guard flag. The fixtures return 3, 6, 3, and 5.
 - Namespace-scope objects with constructors run through `__krc_init_globals` from a generated `main` wrapper (ADR 0018); `global.get()` observes `Counter(5)` and returns 5. Destructors run through `__krc_destroy_globals` after user `main` in reverse order. Non-constant scalar global initializers run in `__krc_init_globals`; `int global = square(3)` returns 9.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 133/133 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 134/134 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -192,7 +192,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 133/133 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 134/134 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -247,7 +247,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 ### M9 — v1.1 runtime/libc/host services (8–10 weeks)
 
 - [ ] Port KR32 `libc.c` (allocator, stdio, string, `strto*`, `qsort`, file I/O).
-- [ ] Standard `printf` with length modifiers and `%p`; float formatting on KR32. `%p`, `%ld`/`%lu`/`%zu`, unsigned values, `%o`, width/zero/left alignment, integer precision, `+`/space signs, and `%.Ns`/`%Ns` strings work; the broader star-width and locale set remains.
+- [ ] Standard `printf` with length modifiers and `%p`; float formatting on KR32. `%p`, `%ld`/`%lu`/`%zu`, unsigned values, `%o`, width/zero/left alignment, integer precision, `+`/space signs, `*` width/precision, and `%.Ns`/`%Ns` strings work; the locale-aware set remains.
 - [ ] Common host-service ABI and per-VM shims; kernel profile.
 - [ ] Integrate KR16 `libc.s`/`resources/fileio.c`.
 - [ ] Gate G9 partial: Tier 3 runtime baseline.
@@ -404,3 +404,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T13:14:51-08:00** — Added integer field width, zero/left padding, and `%o` to the KR32 `printf`. `%05d %-5d %8x %o` prints `00042 7           ff 10`; CTest is 131/131.
 - **2026-11-10T13:20:04-08:00** — Added string precision and field width to the KR32 `printf`: `%.3s`, `%8s`, and `%-8s` print `[abc][      hi][hi      ]`. CTest is 132/132.
 - **2026-11-10T13:25:17-08:00** — Added integer precision and sign flags to the KR32 `printf`: `%.5d`, `%+.2d`, and `% 4d` print `[00042][+07][   9]`. CTest is 133/133.
+- **2026-11-10T13:30:46-08:00** — Added `*` width and precision to the KR32 `printf`: `%*d`, `%-*d`, and `%.*s` print `[   42][7    ][abc]`. CTest is 134/134.

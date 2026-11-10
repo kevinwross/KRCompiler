@@ -288,6 +288,14 @@ int printf(const char *format, ...) {
             }
         }
         int width = 0;
+        if (*format == '*') {
+            width = va_arg(arguments, int);
+            if (width < 0) {
+                left_align = 1;
+                width = -width;
+            }
+            format++;
+        }
         while (*format >= '0' && *format <= '9') {
             width = width * 10 + (*format - '0');
             format++;
@@ -298,6 +306,14 @@ int printf(const char *format, ...) {
             precision_set = 1;
             format++;
             precision = 0;
+            if (*format == '*') {
+                precision = va_arg(arguments, int);
+                if (precision < 0) {
+                    precision_set = 0;
+                    precision = 6;
+                }
+                format++;
+            }
             while (*format >= '0' && *format <= '9') {
                 precision = precision * 10 + (*format - '0');
                 format++;
