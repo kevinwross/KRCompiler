@@ -1557,6 +1557,11 @@ std::unique_ptr<AstNode> Parser::parse_lambda_expression() {
     auto node = make_ast(AstKind::LambdaExpression, location);
     std::vector<std::unique_ptr<AstNode>> init_captures;
     while (!check("]") && !at_end()) {
+        if ((check("=") || check("&")) && peek(1).is("]")) {
+            node->labels.push_back(peek().text);
+            ++position_;
+            break;
+        }
         const bool by_reference = match("&");
         if (peek().kind != TokenKind::Identifier) {
             error(peek(), "expected lambda capture name");

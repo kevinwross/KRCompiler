@@ -2132,12 +2132,33 @@ CIRGen::Expression CIRGen::emit_lambda(const frontend::AstNode& expression) {
     const bool has_captures =
         !expression.labels.empty() || expression.children.size() > 2;
     if (has_captures) {
+        std::vector<std::string> captures = expression.labels;
+        const bool default_by_reference =
+            std::find(captures.begin(), captures.end(), "&") != captures.end();
+        const bool default_by_value =
+            std::find(captures.begin(), captures.end(), "=") != captures.end();
+        if (default_by_reference || default_by_value) {
+            std::vector<std::string> names;
+            for (const auto& scope : scopes_) {
+                for (const auto& [name, binding] : scope) {
+                    if (name != "this" && binding.frontend_type) {
+                        names.push_back(name);
+                    }
+                }
+            }
+            std::sort(names.begin(), names.end());
+            names.erase(std::unique(names.begin(), names.end()), names.end());
+            captures.clear();
+            for (const auto& name : names) {
+                captures.push_back((default_by_reference ? "&" : "") + name);
+            }
+        }
         const auto byte_type = module_->types().int_type(8);
         std::vector<ir::TypePtr> fields{
             module_->types().pointer_type(byte_type)};
         std::vector<std::string> field_names{"__fn"};
         std::vector<frontend::TypePtr> capture_types;
-        for (const auto& capture : expression.labels) {
+        for (const auto& capture : captures) {
             const bool by_reference = capture.starts_with("&");
             const auto name =
                 by_reference ? capture.substr(1) : std::string(capture);
@@ -2250,24 +2271,24 @@ CIRGen::Expression CIRGen::emit_lambda(const frontend::AstNode& expression) {
         auto* closure_pointer = builder_.create_load(
             module_->types().pointer_type(closure_type), closure_address, false,
             0, "__closure.load");
-        for (std::size_t index = 0; index < expression.labels.size(); ++index) {
+        for (std::size_t index = 0; index < captures.size(); ++index) {
             auto* zero = module_->constant_int(int_type(), 0);
             auto* field_index = module_->constant_int(
                 int_type(), static_cast<std::int64_t>(index + 1));
             auto* field = builder_.create_gep(
                 closure_type, closure_pointer, {zero, field_index}, false,
-                "capture." + expression.labels[index]);
+                "capture." + captures[index]);
             field->type = module_->types().pointer_type(fields[index + 1]);
-            const auto name = expression.labels[index].starts_with("&")
-                                  ? expression.labels[index].substr(1)
-                                  : expression.labels[index];
+            const auto name = captures[index].starts_with("&")
+                                  ? captures[index].substr(1)
+                                  : captures[index];
             declare_local(name,
                           LocalBinding{field, fields[index + 1],
                                        capture_types[index]});
         }
         for (std::size_t index = 0; index < init_captures.size(); ++index) {
             auto* zero = module_->constant_int(int_type(), 0);
-            const auto field_position = expression.labels.size() + index + 1;
+            const auto field_position = captures.size() + index + 1;
             auto* field_index = module_->constant_int(
                 int_type(), static_cast<std::int64_t>(field_position));
             auto* field = builder_.create_gep(
@@ -2305,22 +2326,22 @@ CIRGen::Expression CIRGen::emit_lambda(const frontend::AstNode& expression) {
                             module_->types().pointer_type(byte_type), {function},
                             "lambda.fn.ptr"),
             fn_slot);
-        for (std::size_t index = 0; index < expression.labels.size(); ++index) {
+        for (std::size_t index = 0; index < captures.size(); ++index) {
             auto* field_index = module_->constant_int(
                 int_type(), static_cast<std::int64_t>(index + 1));
             auto* field = builder_.create_gep(
                 closure_type, storage, {zero, field_index}, false,
                 "lambda.capture");
             field->type = module_->types().pointer_type(fields[index + 1]);
-            const auto name = expression.labels[index].starts_with("&")
-                                  ? expression.labels[index].substr(1)
-                                  : expression.labels[index];
+            const auto name = captures[index].starts_with("&")
+                                  ? captures[index].substr(1)
+                                  : captures[index];
             auto* local = lookup_local(name);
             if (!local || !local->type) {
                 return {};
             }
             ir::Value* value = nullptr;
-            if (expression.labels[index].starts_with("&")) {
+            if (captures[index].starts_with("&")) {
                 value = local->address;
                 if (value->type != fields[index + 1]) {
                     value = builder_.create(ir::Opcode::BitCast,
@@ -2336,7 +2357,7 @@ CIRGen::Expression CIRGen::emit_lambda(const frontend::AstNode& expression) {
             builder_.create_store(value, field);
         }
         for (std::size_t index = 0; index < init_captures.size(); ++index) {
-            const auto field_position = expression.labels.size() + index + 1;
+            const auto field_position = captures.size() + index + 1;
             auto* field_index = module_->constant_int(
                 int_type(), static_cast<std::int64_t>(field_position));
             auto* field = builder_.create_gep(

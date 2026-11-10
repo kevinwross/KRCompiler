@@ -838,6 +838,24 @@ if(TARGET krc)
                 -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_init_capture_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_lambda_copy_all
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_copy_all.cpp
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_copy_all_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_link_lambda_ref_all
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_ref_all.cpp
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_ref_all_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_c_preprocess
         COMMAND $<TARGET_FILE:krc> -E
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/includes.c")
