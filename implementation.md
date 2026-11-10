@@ -175,7 +175,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 97 cases / 574 assertions; all six configurations pass 116/116 CTest.
+- `krc_tests` has 97 cases / 574 assertions; all six configurations pass 117/117 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -189,7 +189,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 97 cases / 574 assertions; all six configurations pass 116/116 CTest.
+- `krc_tests` has 97 cases / 574 assertions; all six configurations pass 117/117 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -215,8 +215,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 - [ ] KR16 target descriptor: IP16 data model, registers, encodings, relaxation, capabilities. The IP16 profile (16-bit `int`/`long`, 16-bit pointers, unsigned `char`, no `long long`/FP) drives `-fsyntax-only` and `--dump-ir`; register mapping, encoding, and relaxation remain.
 - [ ] KR16 ABI appendix and calling-convention suite.
-- [ ] Codegen, frame layout, image writer.
-- [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`.
+- [ ] Codegen, frame layout, image writer. Scalar codegen and SP-relative frame layout work for integer/pointer code; object emission and the image writer remain.
+- [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` emits assembly and runs locally to exit 55 through the external KR16 assembler and VM; `hello.c` needs the runtime/image path.
 - [ ] Gate G7: KR16 C is accepted, assembled, linked, and run.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
@@ -225,9 +225,11 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `krc --target=kr16 --dump-ir` emits `; target: kr16` with `i16` function signatures.
 - `src/asm/kr16_encoder.*` encodes the R/I/M/M8/B/S/BIT/C/X formats, relative control transfers, shifts, bit operations, and range validation; golden tests cover the ISA examples and out-of-range rejection.
 - `src/asm/kr16_assembler.*` assembles the backend subset: labels, `.text`/`.data`/`.global`/`.extern`, register and immediate ALU forms, loads/stores/LEA, shifts, bit operations, conditional branches, relative and register `JMP`/`CALL`, and the control instructions. An unresolved or unpaired label is rejected.
-- Requesting `-S`/`-c` for KR16 reports that no code generator exists yet rather than silently producing KR32 output.
+- `src/backend/kr16_backend.*` emits scalar integer/pointer functions: SP-relative frame slots, parameters in `R1`–`R3`, two-operand ALU forms, loads/stores, `LEA`, comparisons, branches, calls, and `ret`. `sum.c` assembles and runs locally to exit 55.
+- [ADR 0016](docs/decisions/0016-kr16-scalar-abi.md) and D-040 freeze the M7 scalar calling convention: `R1`–`R3` arguments, `R0` return, `R4` FP, SP-relative frame.
+- Requesting `-S` for KR16 emits assembly; `-c` reports that object emission is not implemented yet.
 - Constant folding now applies integer cast width and signedness, so `(char)-1 > 0` is true on the unsigned-char KR16 profile.
-- CTest is 116/116 across all six configurations; `krc_tests` is 97 cases / 574 assertions.
+- CTest is 117/117 across all six configurations; `krc_tests` is 97 cases / 574 assertions.
 
 ### M8 — v1.0 hardening (6–8 weeks)
 
@@ -382,3 +384,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T10:36:06-08:00** — Started M7: `--target=kr16` now parses and lowers to IR on the IP16 data model, and codegen requests fail explicitly instead of producing KR32 output. Integer cast folding honors width and signedness so `(char)-1 > 0` holds for unsigned KR16 `char`. CTest is 116/116.
 - **2026-11-10T10:45:08-08:00** — Added the KR16 encoder: R/I/M/M8/B/S/BIT/C/X formats, relative control transfers, branch conditions, and range validation, with golden ISA encodings and rejection tests. `krc_tests` is 95 cases / 552 assertions; CTest remains 116/116.
 - **2026-11-10T10:55:15-08:00** — Added the KR16 assembler: labels, text/data sections, global/extern declarations, register/immediate ALU forms, loads/stores/LEA, shifts, bit operations, conditional branches, relative and register `JMP`/`CALL`, and control instructions. `krc_tests` is 97 cases / 574 assertions; CTest remains 116/116.
+- **2026-11-10T11:16:06-08:00** — Added the scalar KR16 backend: SP-relative frames, `R1`–`R3` parameters, two-operand ALU, loads/stores/LEA, comparison materialization, branches, calls, and returns. `sum.c` emits assembly, assembles with the external KR16 assembler, and runs to exit 55; CTest is 117/117.

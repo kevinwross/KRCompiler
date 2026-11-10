@@ -10,6 +10,7 @@
 #include "asm/kr32_assembler.h"
 #include "asm/kro_writer.h"
 #include "backend/kr32_backend.h"
+#include "backend/kr16_backend.h"
 #include "debug/kdbg.h"
 #include "ir/ir.h"
 #include "irgen/c_irgen.h"
@@ -290,7 +291,23 @@ int main(int argc, char** argv) {
                         krc::ir::print_module(*module, std::cout);
                     }
                     if ((emit_assembly || emit_object) &&
-                        !profile.backend_available) {
+                        profile.id == krc::target::TargetId::Kr16) {
+                        krc::backend::Kr16Backend backend(*module, profile);
+                        std::string backend_error;
+                        auto assembly = backend.emit(backend_error);
+                        if (!assembly) {
+                            diagnostics.report(krc::frontend::Severity::Error,
+                                               "KR16 backend: " +
+                                                   backend_error);
+                        } else if (emit_object) {
+                            diagnostics.report(
+                                krc::frontend::Severity::Error,
+                                "KR16 object emission is not implemented yet");
+                        } else {
+                            std::cout << *assembly;
+                        }
+                    } else if ((emit_assembly || emit_object) &&
+                               !profile.backend_available) {
                         diagnostics.report(krc::frontend::Severity::Error,
                                            "target '" + target_name +
                                                "' has no code generator yet");
