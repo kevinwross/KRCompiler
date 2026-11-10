@@ -661,6 +661,105 @@ int abs(int value) {
     return value < 0 ? -value : value;
 }
 
+static int digit_value(char character) {
+    if (character >= '0' && character <= '9') {
+        return character - '0';
+    }
+    if (character >= 'a' && character <= 'z') {
+        return character - 'a' + 10;
+    }
+    if (character >= 'A' && character <= 'Z') {
+        return character - 'A' + 10;
+    }
+    return 99;
+}
+
+long strtol(const char *text, char **end, int base) {
+    const char *cursor = text;
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' ||
+           *cursor == '\r') {
+        cursor++;
+    }
+    int sign = 1;
+    if (*cursor == '-') {
+        sign = -1;
+        cursor++;
+    } else if (*cursor == '+') {
+        cursor++;
+    }
+    if (base == 0) {
+        if (cursor[0] == '0' &&
+            (cursor[1] == 'x' || cursor[1] == 'X')) {
+            base = 16;
+            cursor += 2;
+        } else if (cursor[0] == '0') {
+            base = 8;
+        } else {
+            base = 10;
+        }
+    } else if (base == 16 && cursor[0] == '0' &&
+               (cursor[1] == 'x' || cursor[1] == 'X')) {
+        cursor += 2;
+    }
+    unsigned long value = 0;
+    int digits = 0;
+    while (digit_value(*cursor) < base) {
+        value = value * (unsigned long)base +
+                (unsigned long)digit_value(*cursor);
+        cursor++;
+        digits++;
+    }
+    if (end) {
+        *end = (char *)(digits > 0 ? cursor : text);
+    }
+    return sign * (long)value;
+}
+
+unsigned long strtoul(const char *text, char **end, int base) {
+    const char *cursor = text;
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' ||
+           *cursor == '\r') {
+        cursor++;
+    }
+    if (*cursor == '+') {
+        cursor++;
+    }
+    if (base == 0) {
+        if (cursor[0] == '0' &&
+            (cursor[1] == 'x' || cursor[1] == 'X')) {
+            base = 16;
+            cursor += 2;
+        } else if (cursor[0] == '0') {
+            base = 8;
+        } else {
+            base = 10;
+        }
+    } else if (base == 16 && cursor[0] == '0' &&
+               (cursor[1] == 'x' || cursor[1] == 'X')) {
+        cursor += 2;
+    }
+    unsigned long value = 0;
+    int digits = 0;
+    while (digit_value(*cursor) < base) {
+        value = value * (unsigned long)base +
+                (unsigned long)digit_value(*cursor);
+        cursor++;
+        digits++;
+    }
+    if (end) {
+        *end = (char *)(digits > 0 ? cursor : text);
+    }
+    return value;
+}
+
+void srand(unsigned int seed) {
+    random_state = seed;
+}
+
+int rand(void) {
+    return sys_random();
+}
+
 char *strrchr(const char *text, int character) {
     char target = (char)character;
     const char *last = 0;
