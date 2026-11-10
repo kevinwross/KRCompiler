@@ -58,6 +58,9 @@ static void print_hex(unsigned int value) {
 #define PRINT_ZERO_PAD 4
 #define PRINT_LEFT 8
 #define PRINT_PREFIX 16
+#define PRINT_PLUS 32
+#define PRINT_SPACE 64
+#define PRINT_PRECISION_SHIFT 8
 
 static void print_integer(unsigned int value, int base, int width,
                           int flags) {
@@ -66,7 +69,8 @@ static void print_integer(unsigned int value, int base, int width,
     int negative = (flags & PRINT_NEGATIVE) != 0;
     int uppercase = (flags & PRINT_UPPER) != 0;
     int prefix = (flags & PRINT_PREFIX) != 0;
-    if (value == 0) {
+    int precision = flags >> PRINT_PRECISION_SHIFT;
+    if (value == 0 && precision == 0) {
         digits[count++] = '0';
     } else {
         while (value > 0) {
@@ -79,21 +83,33 @@ static void print_integer(unsigned int value, int base, int width,
             }
             value = value / (unsigned int)base;
         }
+        if (count == 0) {
+            digits[count++] = '0';
+        }
     }
-    int prefix_length = (negative ? 1 : 0) + (prefix ? 2 : 0);
-    int padding =
-        width > prefix_length + count ? width - prefix_length - count : 0;
-    if (negative) {
-        putchar('-');
+    char sign = negative ? '-' : ((flags & PRINT_PLUS) ? '+'
+                                  : ((flags & PRINT_SPACE) ? ' ' : 0));
+    int zeros = precision > count ? precision - count : 0;
+    int prefix_length = (sign ? 1 : 0) + (prefix ? 2 : 0);
+    int digits_length = count + zeros;
+    int padding = width > prefix_length + digits_length
+                      ? width - prefix_length - digits_length
+                      : 0;
+    if (sign) {
+        putchar(sign);
     }
     if (prefix) {
         putchar('0');
         putchar(uppercase ? 'X' : 'x');
     }
     if ((flags & PRINT_LEFT) == 0) {
+        int zero_padding = (flags & PRINT_ZERO_PAD) && precision == 0;
         for (int index = 0; index < padding; index++) {
-            putchar((flags & PRINT_ZERO_PAD) ? '0' : ' ');
+            putchar(zero_padding ? '0' : ' ');
         }
+    }
+    for (int index = 0; index < zeros; index++) {
+        putchar('0');
     }
     while (count > 0) {
         putchar(digits[--count]);
@@ -252,12 +268,20 @@ int printf(const char *format, ...) {
         }
         int zero_pad = 0;
         int left_align = 0;
+        int plus = 0;
+        int space = 0;
         for (;;) {
             if (*format == '0') {
                 zero_pad = 1;
                 format++;
             } else if (*format == '-') {
                 left_align = 1;
+                format++;
+            } else if (*format == '+') {
+                plus = 1;
+                format++;
+            } else if (*format == ' ') {
+                space = 1;
                 format++;
             } else {
                 break;
@@ -289,24 +313,30 @@ int printf(const char *format, ...) {
             int value = va_arg(arguments, int);
             int flags = (value < 0 ? PRINT_NEGATIVE : 0) |
                         (zero_pad ? PRINT_ZERO_PAD : 0) |
-                        (left_align ? PRINT_LEFT : 0);
+                        (left_align ? PRINT_LEFT : 0) |
+                        (plus ? PRINT_PLUS : 0) |
+                        (space ? PRINT_SPACE : 0) |
+                        (precision_set ? (precision << 8) : 0);
             print_integer(value < 0 ? (unsigned int)(-value)
                                     : (unsigned int)value,
                           10, width, flags);
         } else if (*format == 'u') {
             print_integer(va_arg(arguments, unsigned int), 10, width,
                           (zero_pad ? PRINT_ZERO_PAD : 0) |
-                              (left_align ? PRINT_LEFT : 0));
+                              (left_align ? PRINT_LEFT : 0) |
+                              (precision_set ? (precision << 8) : 0));
         } else if (*format == 'o') {
             print_integer(va_arg(arguments, unsigned int), 8, width,
                           (zero_pad ? PRINT_ZERO_PAD : 0) |
-                              (left_align ? PRINT_LEFT : 0));
+                              (left_align ? PRINT_LEFT : 0) |
+                              (precision_set ? (precision << 8) : 0));
         } else if (*format == 'x' || *format == 'X') {
             print_integer(va_arg(arguments, unsigned int), 16, width,
                           (*format == 'X' ? PRINT_UPPER : 0) |
                               (alternate ? PRINT_PREFIX : 0) |
                               (zero_pad ? PRINT_ZERO_PAD : 0) |
-                              (left_align ? PRINT_LEFT : 0));
+                              (left_align ? PRINT_LEFT : 0) |
+                              (precision_set ? (precision << 8) : 0));
         } else if (*format == 'p') {
             print_integer((unsigned int)va_arg(arguments, void *), 16, 0,
                           PRINT_PREFIX);
