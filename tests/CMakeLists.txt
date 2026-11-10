@@ -6,6 +6,7 @@ add_executable(krc_tests
     unit/test_irgen.cpp
     unit/test_kr32_encoder.cpp
     unit/test_kr16_encoder.cpp
+    unit/test_kr16_assembler.cpp
     unit/test_assembler.cpp
     unit/test_register_allocator.cpp
     unit/test_kro_object.cpp

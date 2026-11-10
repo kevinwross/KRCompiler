@@ -175,7 +175,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 95 cases / 552 assertions; all six configurations pass 116/116 CTest.
+- `krc_tests` has 97 cases / 574 assertions; all six configurations pass 116/116 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -189,7 +189,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 95 cases / 552 assertions; all six configurations pass 116/116 CTest.
+- `krc_tests` has 97 cases / 574 assertions; all six configurations pass 116/116 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -224,9 +224,10 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `krc --target=kr16 -std=c11 -fsyntax-only` accepts a fixture asserting 16-bit `int`/`long`/pointers and unsigned `char`.
 - `krc --target=kr16 --dump-ir` emits `; target: kr16` with `i16` function signatures.
 - `src/asm/kr16_encoder.*` encodes the R/I/M/M8/B/S/BIT/C/X formats, relative control transfers, shifts, bit operations, and range validation; golden tests cover the ISA examples and out-of-range rejection.
+- `src/asm/kr16_assembler.*` assembles the backend subset: labels, `.text`/`.data`/`.global`/`.extern`, register and immediate ALU forms, loads/stores/LEA, shifts, bit operations, conditional branches, relative and register `JMP`/`CALL`, and the control instructions. An unresolved or unpaired label is rejected.
 - Requesting `-S`/`-c` for KR16 reports that no code generator exists yet rather than silently producing KR32 output.
 - Constant folding now applies integer cast width and signedness, so `(char)-1 > 0` is true on the unsigned-char KR16 profile.
-- CTest is 116/116 across all six configurations; `krc_tests` is 95 cases / 552 assertions.
+- CTest is 116/116 across all six configurations; `krc_tests` is 97 cases / 574 assertions.
 
 ### M8 — v1.0 hardening (6–8 weeks)
 
@@ -380,3 +381,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T10:26:13-08:00** — Added small aggregate returns: `ret` loads up to two words into `R0`/`R1`, call sites store them into the result slot, and a local record can be initialized directly from a factory call. `make_point()` returns 3/4 and the fixture returns 7; CTest is 114/114.
 - **2026-11-10T10:36:06-08:00** — Started M7: `--target=kr16` now parses and lowers to IR on the IP16 data model, and codegen requests fail explicitly instead of producing KR32 output. Integer cast folding honors width and signedness so `(char)-1 > 0` holds for unsigned KR16 `char`. CTest is 116/116.
 - **2026-11-10T10:45:08-08:00** — Added the KR16 encoder: R/I/M/M8/B/S/BIT/C/X formats, relative control transfers, branch conditions, and range validation, with golden ISA encodings and rejection tests. `krc_tests` is 95 cases / 552 assertions; CTest remains 116/116.
+- **2026-11-10T10:55:15-08:00** — Added the KR16 assembler: labels, text/data sections, global/extern declarations, register/immediate ALU forms, loads/stores/LEA, shifts, bit operations, conditional branches, relative and register `JMP`/`CALL`, and control instructions. `krc_tests` is 97 cases / 574 assertions; CTest remains 116/116.

@@ -1,0 +1,564 @@
+#include "asm/kr16_assembler.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <cstdlib>
+#include <map>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "asm/kr16_encoder.h"
+
+namespace krc::asmkr16 {
+
+namespace {
+
+struct Label {
+    std::uint32_t section = 0;
+    std::uint64_t offset = 0;
+};
+
+struct Line {
+    std::string label;
+    std::string mnemonic;
+    std::vector<std::string> operands;
+};
+
+std::string trim(std::string_view text) {
+    std::size_t begin = 0;
+    while (begin < text.size() &&
+           std::isspace(static_cast<unsigned char>(text[begin])) != 0) {
+        ++begin;
+    }
+    std::size_t end = text.size();
+    while (end > begin &&
+           std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+        --end;
+    }
+    return std::string(text.substr(begin, end - begin));
+}
+
+std::vector<std::string> split_operands(std::string_view text) {
+    std::vector<std::string> operands;
+    std::size_t start = 0;
+    int depth = 0;
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const char character = text[index];
+        if (character == '[') {
+            ++depth;
+        } else if (character == ']') {
+            --depth;
+        } else if (character == ',' && depth == 0) {
+            operands.push_back(trim(text.substr(start, index - start)));
+            start = index + 1;
+        }
+    }
+    const auto last = trim(text.substr(start));
+    if (!last.empty()) {
+        operands.push_back(last);
+    }
+    return operands;
+}
+
+std::optional<std::uint8_t> parse_register(std::string_view text) {
+    if (text.size() < 2 || (text[0] != 'R' && text[0] != 'r')) {
+        return std::nullopt;
+    }
+    if (text[1] >= '0' && text[1] <= '7' && text.size() == 2) {
+        return static_cast<std::uint8_t>(text[1] - '0');
+    }
+    return std::nullopt;
+}
+
+std::optional<std::int32_t> parse_number(std::string_view text) {
+    const auto value = trim(text);
+    if (value.empty()) {
+        return std::nullopt;
+    }
+    char* end = nullptr;
+    const auto parsed = std::strtol(value.c_str(), &end, 0);
+    if (end == value.c_str() || (end && *end != '\0')) {
+        return std::nullopt;
+    }
+    return static_cast<std::int32_t>(parsed);
+}
+
+bool parse_memory(std::string_view text, std::uint8_t& base,
+                  std::int32_t& displacement) {
+    const auto value = trim(text);
+    if (value.size() < 3 || value.front() != '[' || value.back() != ']') {
+        return false;
+    }
+    const auto inner = trim(value.substr(1, value.size() - 2));
+    const auto plus = inner.find('+');
+    if (plus == std::string::npos) {
+        const auto reg = parse_register(inner);
+        if (!reg) {
+            return false;
+        }
+        base = *reg;
+        displacement = 0;
+        return true;
+    }
+    const auto reg = parse_register(trim(inner.substr(0, plus)));
+    const auto offset = parse_number(trim(inner.substr(plus + 1)));
+    if (!reg || !offset) {
+        return false;
+    }
+    base = *reg;
+    displacement = *offset;
+    return true;
+}
+
+std::optional<EncodedInstruction> encode_mnemonic(
+    const Line& line, std::uint32_t address,
+    const std::map<std::string, Label>& labels, std::string& error) {
+    const auto& name = line.mnemonic;
+    const auto& operands = line.operands;
+    const auto register_at = [&](std::size_t index)
+        -> std::optional<std::uint8_t> {
+        if (index >= operands.size()) {
+            return std::nullopt;
+        }
+        return parse_register(operands[index]);
+    };
+    const auto immediate_at = [&](std::size_t index)
+        -> std::optional<std::int32_t> {
+        if (index >= operands.size()) {
+            return std::nullopt;
+        }
+        auto text = trim(operands[index]);
+        if (!text.empty() && text.front() == '#') {
+            text = trim(std::string_view(text).substr(1));
+        }
+        return parse_number(text);
+    };
+
+    if (name == "ADD" || name == "SUB" || name == "CMP" || name == "AND" ||
+        name == "OR" || name == "XOR" || name == "MOV" || name == "TEST") {
+        const auto rd = register_at(0);
+        if (!rd) {
+            error = "expected destination register";
+            return std::nullopt;
+        }
+        if (operands.size() >= 2 && !operands[1].empty() &&
+            operands[1].front() == '#') {
+            const auto immediate = immediate_at(1);
+            if (!immediate) {
+                error = "expected immediate";
+                return std::nullopt;
+            }
+            if (name == "MOV" && (*immediate < -128 || *immediate > 255)) {
+                return encode_x(XOp::MoveImmediate, *rd, 0,
+                                static_cast<std::uint16_t>(*immediate), error);
+            }
+            if (*immediate >= -32 && *immediate <= 31) {
+                const std::map<std::string, IFunction> functions{
+                    {"ADD", IFunction::Add},   {"SUB", IFunction::Sub},
+                    {"CMP", IFunction::Cmp},   {"AND", IFunction::And},
+                    {"OR", IFunction::Or},     {"XOR", IFunction::Xor},
+                    {"MOV", IFunction::Mov},   {"TEST", IFunction::Test}};
+                return encode_i(*rd, functions.at(name), *immediate, error);
+            }
+            const std::map<std::string, XOp> extended{
+                {"ADD", XOp::AddImmediate}, {"SUB", XOp::SubImmediate},
+                {"CMP", XOp::CmpImmediate}, {"AND", XOp::AndImmediate},
+                {"OR", XOp::OrImmediate},   {"XOR", XOp::XorImmediate},
+                {"MOV", XOp::MoveImmediate}, {"TEST", XOp::TestImmediate}};
+            return encode_x(extended.at(name), *rd, 0,
+                            static_cast<std::uint16_t>(*immediate), error);
+        }
+        const auto rs = register_at(1);
+        if (!rs) {
+            error = "expected source register";
+            return std::nullopt;
+        }
+        const std::map<std::string, RFunction> functions{
+            {"ADD", RFunction::Add},   {"SUB", RFunction::Sub},
+            {"CMP", RFunction::Cmp},   {"AND", RFunction::And},
+            {"OR", RFunction::Or},     {"XOR", RFunction::Xor},
+            {"MOV", RFunction::Mov},   {"TEST", RFunction::Test}};
+        return encode_r(*rd, *rs, functions.at(name), error);
+    }
+
+    const auto memory_op = [&](MOpcode opcode, XOp extended) {
+        const auto rd = register_at(0);
+        if (!rd || operands.size() < 2) {
+            error = "expected load destination and address";
+            return std::optional<EncodedInstruction>{};
+        }
+        std::uint8_t base = 0;
+        std::int32_t displacement = 0;
+        if (!parse_memory(operands[1], base, displacement)) {
+            const auto absolute = immediate_at(1);
+            if (!absolute) {
+                error = "expected memory operand";
+                return std::optional<EncodedInstruction>{};
+            }
+            return encode_x(extended, *rd, 0,
+                            static_cast<std::uint16_t>(*absolute), error);
+        }
+        if (displacement >= -32 && displacement <= 31) {
+            return encode_m(opcode, *rd, base, displacement, error);
+        }
+        const auto extended_op =
+            extended == XOp::LoadAbsolute
+                ? XOp::LoadIndexed
+                : (extended == XOp::StoreAbsolute
+                       ? XOp::StoreIndexed
+                       : (extended == XOp::LoadByteAbsolute
+                              ? XOp::LoadIndexed
+                              : (extended == XOp::LoadByteSignedAbsolute
+                                     ? XOp::LoadIndexed
+                                     : (extended == XOp::StoreByteAbsolute
+                                            ? XOp::StoreIndexed
+                                            : XOp::LeaIndexed))));
+        return encode_x(extended_op, *rd, base,
+                        static_cast<std::uint16_t>(displacement), error);
+    };
+
+    if (name == "LD") {
+        return memory_op(MOpcode::Load, XOp::LoadAbsolute);
+    }
+    if (name == "LDB") {
+        return memory_op(MOpcode::LoadByte, XOp::LoadByteAbsolute);
+    }
+    if (name == "LDSB") {
+        return memory_op(MOpcode::LoadByteSigned,
+                         XOp::LoadByteSignedAbsolute);
+    }
+    if (name == "LEA") {
+        return memory_op(MOpcode::Lea, XOp::LeaIndexed);
+    }
+    if (name == "ST" || name == "STB") {
+        if (operands.size() < 2) {
+            error = "expected address and source register";
+            return std::nullopt;
+        }
+        const auto source = register_at(1);
+        if (!source) {
+            error = "expected source register";
+            return std::nullopt;
+        }
+        std::uint8_t base = 0;
+        std::int32_t displacement = 0;
+        if (!parse_memory(operands[0], base, displacement)) {
+            error = "expected memory destination";
+            return std::nullopt;
+        }
+        const auto opcode =
+            name == "ST" ? MOpcode::Store : MOpcode::StoreByte;
+        if (displacement >= -32 && displacement <= 31) {
+            return encode_m(opcode, *source, base, displacement, error);
+        }
+        return encode_x(name == "ST" ? XOp::StoreIndexed
+                                     : XOp::StoreByteAbsolute,
+                        *source, base,
+                        static_cast<std::uint16_t>(displacement), error);
+    }
+
+    if (name == "SHL" || name == "SHR" || name == "SAR") {
+        const auto rd = register_at(0);
+        const auto count = immediate_at(1);
+        if (!rd || !count) {
+            error = "expected shift register and count";
+            return std::nullopt;
+        }
+        const auto shift = name == "SHL" ? Shift::Shl
+                                         : (name == "SHR" ? Shift::Shr
+                                                          : Shift::Sar);
+        return encode_shift(*rd, shift, static_cast<std::uint8_t>(*count),
+                            error);
+    }
+
+    if (name == "BTST" || name == "BSET" || name == "BCLR" ||
+        name == "BTOG") {
+        const auto rd = register_at(0);
+        const auto bit = immediate_at(1);
+        if (!rd || !bit) {
+            error = "expected bit register and index";
+            return std::nullopt;
+        }
+        const auto operation = name == "BTST" ? BitOperation::Btst
+                                              : (name == "BSET"
+                                                     ? BitOperation::Bset
+                                                     : (name == "BCLR"
+                                                            ? BitOperation::Bclr
+                                                            : BitOperation::Btog));
+        return encode_bit(*rd, operation, static_cast<std::uint8_t>(*bit),
+                          error);
+    }
+
+    if (name == "PUSH" || name == "POP") {
+        const auto rd = register_at(0);
+        if (!rd) {
+            error = "expected register";
+            return std::nullopt;
+        }
+        return encode_c(name == "PUSH" ? CSubop::Push : CSubop::Pop, *rd, 0,
+                        error);
+    }
+    if (name == "RET") {
+        return encode_c(CSubop::Return, 0, 0, error);
+    }
+    if (name == "RETI") {
+        return encode_c(CSubop::ReturnInterrupt, 0, 0, error);
+    }
+    if (name == "HLT") {
+        return encode_c(CSubop::Halt, 0, 0, error);
+    }
+    if (name == "NOP") {
+        return encode_c(CSubop::Nop, 0, 0, error);
+    }
+    if (name == "EI") {
+        return encode_c(CSubop::EnableInterrupts, 0, 0, error);
+    }
+    if (name == "DI") {
+        return encode_c(CSubop::DisableInterrupts, 0, 0, error);
+    }
+    if (name == "WAIT") {
+        return encode_c(CSubop::Wait, 0, 0, error);
+    }
+    if (name == "BRK") {
+        return encode_c(CSubop::Break, 0, 0, error);
+    }
+    if (name == "TRAP" || name == "SYS") {
+        const auto number = immediate_at(0);
+        if (!number) {
+            error = "expected service number";
+            return std::nullopt;
+        }
+        return encode_c(name == "TRAP" ? CSubop::Trap : CSubop::System, 0,
+                        static_cast<std::uint8_t>(*number), error);
+    }
+    if (name == "JMP" || name == "CALL") {
+        if (operands.empty()) {
+            error = "expected target";
+            return std::nullopt;
+        }
+        if (const auto reg = register_at(0)) {
+            return encode_c(name == "JMP" ? CSubop::JumpRegister
+                                          : CSubop::CallRegister,
+                            *reg, 0, error);
+        }
+        const auto target = labels.find(trim(operands[0]));
+        if (target == labels.end()) {
+            error = "undefined label '" + trim(operands[0]) + "'";
+            return std::nullopt;
+        }
+        const auto displacement =
+            static_cast<std::int32_t>(target->second.offset) -
+            static_cast<std::int32_t>(address + 4);
+        if (displacement % 2 != 0) {
+            error = "unpaired control-transfer target";
+            return std::nullopt;
+        }
+        return encode_c_relative(name == "JMP" ? CSubop::JumpRelative
+                                               : CSubop::CallRelative,
+                                 displacement / 2, error);
+    }
+
+    static const std::map<std::string, Condition> conditions{
+        {"BEQ", Condition::Eq}, {"BNE", Condition::Ne},
+        {"BCS", Condition::Cs}, {"BCC", Condition::Cc},
+        {"BMI", Condition::Mi}, {"BPL", Condition::Pl},
+        {"BVS", Condition::Vs}, {"BVC", Condition::Vc},
+        {"BHI", Condition::Hi}, {"BLS", Condition::Ls},
+        {"BGE", Condition::Ge}, {"BLT", Condition::Lt},
+        {"BGT", Condition::Gt}, {"BLE", Condition::Le},
+        {"BRA", Condition::Al}};
+    if (const auto found = conditions.find(name); found != conditions.end()) {
+        if (operands.empty()) {
+            error = "expected branch target";
+            return std::nullopt;
+        }
+        const auto target = labels.find(trim(operands[0]));
+        if (target == labels.end()) {
+            error = "undefined label '" + trim(operands[0]) + "'";
+            return std::nullopt;
+        }
+        const auto displacement =
+            static_cast<std::int32_t>(target->second.offset) -
+            static_cast<std::int32_t>(address + 2);
+        if (displacement % 2 != 0) {
+            error = "unpaired branch target";
+            return std::nullopt;
+        }
+        return encode_b(found->second, displacement / 2, error);
+    }
+
+    error = "unknown KR16 mnemonic '" + name + "'";
+    return std::nullopt;
+}
+
+std::optional<std::uint8_t> instruction_size(const Line& line,
+                                             std::string& error) {
+    const auto& name = line.mnemonic;
+    const auto immediate_at = [&](std::size_t index)
+        -> std::optional<std::int32_t> {
+        if (index >= line.operands.size()) {
+            return std::nullopt;
+        }
+        auto text = trim(line.operands[index]);
+        if (!text.empty() && text.front() == '#') {
+            text = trim(std::string_view(text).substr(1));
+        }
+        return parse_number(text);
+    };
+    const auto memory_size = [&](std::size_t index) -> std::uint8_t {
+        std::uint8_t base = 0;
+        std::int32_t displacement = 0;
+        if (!parse_memory(line.operands[index], base, displacement)) {
+            return 2;
+        }
+        return displacement >= -32 && displacement <= 31 ? 1 : 2;
+    };
+
+    if (name == "ADD" || name == "SUB" || name == "CMP" || name == "AND" ||
+        name == "OR" || name == "XOR" || name == "MOV" || name == "TEST") {
+        if (line.operands.size() >= 2 && !line.operands[1].empty() &&
+            line.operands[1].front() == '#') {
+            const auto immediate = immediate_at(1);
+            if (!immediate) {
+                error = "expected immediate";
+                return std::nullopt;
+            }
+            if (name == "MOV") {
+                return *immediate >= -128 && *immediate <= 255
+                           ? std::uint8_t{1}
+                           : std::uint8_t{2};
+            }
+            return *immediate >= -32 && *immediate <= 31 ? std::uint8_t{1}
+                                                         : std::uint8_t{2};
+        }
+        return std::uint8_t{1};
+    }
+    if (name == "LD" || name == "LDB" || name == "LDSB" || name == "LEA") {
+        return line.operands.size() >= 2 ? memory_size(1) : std::uint8_t{1};
+    }
+    if (name == "ST" || name == "STB") {
+        return line.operands.empty() ? std::uint8_t{1} : memory_size(0);
+    }
+    if (name == "JMP" || name == "CALL") {
+        if (line.operands.empty()) {
+            error = "expected target";
+            return std::nullopt;
+        }
+        return parse_register(line.operands[0]) ? std::uint8_t{1}
+                                                : std::uint8_t{2};
+    }
+    return std::uint8_t{1};
+}
+
+void append_word(std::vector<std::uint8_t>& bytes, std::uint16_t word) {
+    bytes.push_back(static_cast<std::uint8_t>(word & 0xFF));
+    bytes.push_back(static_cast<std::uint8_t>(word >> 8));
+}
+
+}  // namespace
+
+bool assemble(std::string_view source, AssemblyResult& result,
+              std::string& error) {
+    std::vector<Line> lines;
+    std::map<std::string, Label> labels;
+    std::vector<std::string> globals;
+    std::vector<std::string> externs;
+
+    std::uint32_t section = 0;
+    std::uint64_t offset = 0;
+    std::istringstream stream{std::string(source)};
+    std::string raw;
+    std::size_t line_number = 0;
+    while (std::getline(stream, raw)) {
+        ++line_number;
+        const auto comment = raw.find(';');
+        if (comment != std::string::npos) {
+            raw.resize(comment);
+        }
+        auto line = trim(raw);
+        if (line.empty()) {
+            continue;
+        }
+        if (line.back() == ':') {
+            const auto name = trim(std::string_view(line).substr(0, line.size() - 1));
+            if (name.empty()) {
+                error = "empty label on line " + std::to_string(line_number);
+                return false;
+            }
+            labels[name] = Label{section, offset};
+            continue;
+        }
+        if (line.front() == '.') {
+            std::istringstream directive(line);
+            std::string name;
+            directive >> name;
+            if (name == ".text") {
+                section = 0;
+                offset = 0;
+            } else if (name == ".data") {
+                section = 1;
+                offset = 0;
+            } else if (name == ".global") {
+                std::string symbol;
+                directive >> symbol;
+                globals.push_back(symbol);
+            } else if (name == ".extern") {
+                std::string symbol;
+                directive >> symbol;
+                externs.push_back(symbol);
+            } else {
+                error = "unknown directive '" + name + "' on line " +
+                        std::to_string(line_number);
+                return false;
+            }
+            continue;
+        }
+
+        Line parsed;
+        std::istringstream instruction(line);
+        instruction >> parsed.mnemonic;
+        std::string rest;
+        std::getline(instruction, rest);
+        parsed.operands = split_operands(trim(rest));
+        const auto size = instruction_size(parsed, error);
+        if (!size) {
+            error += " (line " + std::to_string(line_number) + ")";
+            return false;
+        }
+        lines.push_back(std::move(parsed));
+        offset += static_cast<std::uint64_t>(*size) * 2;
+    }
+
+    section = 0;
+    offset = 0;
+    for (const auto& line : lines) {
+        const auto encoded =
+            encode_mnemonic(line, static_cast<std::uint32_t>(offset), labels,
+                            error);
+        if (!encoded) {
+            return false;
+        }
+        for (std::uint8_t index = 0; index < encoded->count; ++index) {
+            append_word(result.text, encoded->words[index]);
+        }
+        offset += static_cast<std::uint64_t>(encoded->count) * 2;
+    }
+
+    for (const auto& entry : labels) {
+        const bool global = std::find(globals.begin(), globals.end(),
+                                      entry.first) != globals.end();
+        result.symbols.push_back(AssembledSymbol{
+            entry.first, entry.second.section, entry.second.offset, global,
+            false});
+    }
+    for (const auto& name : externs) {
+        result.symbols.push_back(AssembledSymbol{name, 0, 0, false, true});
+    }
+    return true;
+}
+
+}  // namespace krc::asmkr16
