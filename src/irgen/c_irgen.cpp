@@ -1553,6 +1553,21 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             continue;
         }
         if (init->children.size() > 1 && init->children[1] &&
+            type && type->kind == ir::TypeKind::Struct &&
+            init->children[1]->kind == frontend::AstKind::CallExpression &&
+            !init->children[1]->children.empty() &&
+            init->children[1]->children.front() &&
+            init->children[1]->children.front()->kind ==
+                frontend::AstKind::Identifier &&
+            functions_.contains(
+                init->children[1]->children.front()->text)) {
+            auto value = emit_expression(*init->children[1]);
+            if (value.value && value.type == type) {
+                builder_.create_store(value.value, address);
+                continue;
+            }
+        }
+        if (init->children.size() > 1 && init->children[1] &&
             init->children[1]->kind == frontend::AstKind::ExpressionStatement &&
             type && type->kind == ir::TypeKind::Struct) {
             const auto record = ir_records_.find(type);
@@ -1586,6 +1601,13 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                                  reference_mode);
             }
             if (!constructor) {
+                if (argument_nodes.size() == 1 && argument_nodes.front()) {
+                    auto value = emit_expression(*argument_nodes.front());
+                    if (value.value && value.type == type) {
+                        builder_.create_store(value.value, address);
+                        continue;
+                    }
+                }
                 if (record != ir_records_.end() && !argument_nodes.empty()) {
                     for (std::size_t field_position = 0;
                          field_position < type->fields.size(); ++field_position) {

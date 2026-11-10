@@ -939,6 +939,24 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         if (!instruction.operands.empty()) {
             if (ir::is_float(instruction.operands[0]->type)) {
                 load_fp(out, function, layout, instruction.operands[0], "F0");
+            } else if (instruction.operands[0]->type &&
+                       instruction.operands[0]->type->kind ==
+                           ir::TypeKind::Struct) {
+                const auto* value = instruction.operands[0];
+                const auto slot = layout.slots.find(value);
+                std::string size_error;
+                const auto size = size_of(value->type, size_error);
+                const auto words = (size + 3) / 4;
+                if (!size_error.empty() || slot == layout.slots.end() ||
+                    words > 2) {
+                    out += "        ; aggregate return unavailable\n";
+                } else {
+                    for (std::uint64_t word = 0; word < words; ++word) {
+                        out += "        LOAD " +
+                               std::string(register_name(word)) + ", [R7 + " +
+                               std::to_string(slot->second + word * 4) + "]\n";
+                    }
+                }
             } else {
                 load_value(out, function, layout, instruction.operands[0], "R0");
             }
@@ -1007,6 +1025,21 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         if (instruction.type && !ir::is_void(instruction.type)) {
             if (ir::is_float(instruction.type)) {
                 store_fp(out, function, layout, instruction, "F0");
+            } else if (instruction.type->kind == ir::TypeKind::Struct) {
+                const auto slot = layout.slots.find(&instruction);
+                std::string size_error;
+                const auto size = size_of(instruction.type, size_error);
+                const auto words = (size + 3) / 4;
+                if (!size_error.empty() || slot == layout.slots.end() ||
+                    words > 2) {
+                    out += "        ; aggregate result unavailable\n";
+                } else {
+                    for (std::uint64_t word = 0; word < words; ++word) {
+                        out += "        STORE " +
+                               std::string(register_name(word)) + ", [R7 + " +
+                               std::to_string(slot->second + word * 4) + "]\n";
+                    }
+                }
             } else {
                 store_value(out, function, layout, instruction, "R0");
             }

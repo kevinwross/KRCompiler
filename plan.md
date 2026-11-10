@@ -192,7 +192,8 @@ The full decision log is in Appendix A. The architecture-defining decisions are:
 | D-035 | Determinism | Byte-identical outputs, sorted symbols, path remapping, build IDs and source hashes. |
 | D-036 | IR linkage | Add weak linkage for inline/`constexpr` definitions (ADR 0012); KRO weak binding unchanged. |
 | D-037 | C++ virtual dispatch | Polymorphic classes carry a vptr at offset 0 and a per-object virtual slot table built at construction (ADR 0013); single inheritance only. |
-| D-038 | Aggregate arguments | By-value aggregates up to four words use consecutive integer registers on KR32 (ADR 0014); larger aggregates and aggregate returns are deferred. |
+| D-038 | Aggregate arguments | By-value aggregates up to four words use consecutive integer registers on KR32 (ADR 0014); larger aggregates are deferred. |
+| D-039 | Aggregate returns | Aggregate returns up to 8 bytes use `R0`/`R1` on KR32 (ADR 0015); larger returns are deferred. |
 
 ---
 
@@ -1546,7 +1547,8 @@ Survey decision IDs use the `S-G` prefix to avoid collision with acceptance gate
 | D-035 | Determinism | Byte-identical outputs, sorted symbols, path remapping, build IDs and source hashes. | Reproducible tests/releases and debugger matching. |
 | D-036 | IR linkage | Add weak linkage for inline/`constexpr` definitions (ADR 0012); KRO weak binding unchanged. | Inline definitions avoid duplicate strong symbols while sharing one link-time copy. |
 | D-037 | C++ virtual dispatch | Polymorphic classes carry a vptr at offset 0 and a per-object virtual slot table built at construction (ADR 0013); single inheritance only. | Calls through a base pointer must select the derived override; a full read-only vtable and relocations are deferred. |
-| D-038 | Aggregate arguments | By-value aggregates up to four words use consecutive integer registers on KR32 (ADR 0014); larger aggregates and aggregate returns are deferred. | Small records must be usable as ordinary parameters without changing the IR or object format. |
+| D-038 | Aggregate arguments | By-value aggregates up to four words use consecutive integer registers on KR32 (ADR 0014); larger aggregates are deferred. | Small records must be usable as ordinary parameters without changing the IR or object format. |
+| D-039 | Aggregate returns | Aggregate returns up to 8 bytes use `R0`/`R1` on KR32 (ADR 0015); larger returns are deferred. | Factory functions must be able to return a small record without an `sret` pointer. |
 
 Changing a `D-xxx` decision requires editing its row here and adding an ADR under `docs/decisions/` when the change touches ABI, object format, symbol format, target description, or IR.
 
