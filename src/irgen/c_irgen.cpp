@@ -3001,7 +3001,10 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             const auto record = ir_records_.find(type);
             if (record != ir_records_.end()) {
                 auto* constructor = select_constructor(record->second->tag, 0);
-                if (constructor && array && count_value) {
+                const bool needs_vtable =
+                    record->second && record->second->polymorphic;
+                if (array && count_value &&
+                    (constructor || needs_vtable)) {
                     auto* index = builder_.create_alloca(size_type(), 0, "new.index");
                     builder_.create_store(module_->constant_int(size_type(), 0), index);
                     auto* condition_block = current_function_->add_block("new.cond");
@@ -3021,12 +3024,15 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     element->type = module_->types().pointer_type(type);
                     auto* self = element;
                     emit_vtable_init(self, type);
-                    if (self->type != constructor->type->parameters[0]) {
-                        self = builder_.create(ir::Opcode::BitCast,
-                                               constructor->type->parameters[0],
-                                               {self}, "new.this");
+                    if (constructor) {
+                        if (self->type != constructor->type->parameters[0]) {
+                            self = builder_.create(ir::Opcode::BitCast,
+                                                   constructor->type->parameters[0],
+                                                   {self}, "new.this");
+                        }
+                        builder_.create_call(constructor, {self}, nullptr,
+                                             "new.ctor");
                     }
-                    builder_.create_call(constructor, {self}, nullptr, "new.ctor");
                     emit_branch(increment_block);
                     builder_.set_insert_point(increment_block);
                     auto* old = builder_.create_load(size_type(), index, false, 0,
@@ -3145,9 +3151,19 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                                "delete.count");
             const auto element = operand.type->element;
             ir::Function* destructor = nullptr;
+            int destructor_slot = -1;
             if (element && element->kind == ir::TypeKind::Struct) {
                 const auto record = ir_records_.find(element);
                 if (record != ir_records_.end()) {
+                    if (record->second && record->second->polymorphic) {
+                        const auto destructor_name =
+                            "~" + record->second->tag;
+                        if (method_is_virtual(*record->second,
+                                              destructor_name)) {
+                            destructor_slot = virtual_slot(
+                                *record->second, destructor_name);
+                        }
+                    }
                     for (auto* current = record->second; current != nullptr;
                          current = current->base && current->base->record
                                        ? current->base->record.get()
@@ -3190,7 +3206,38 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                            destructor->type->parameters[0], {self},
                                            "delete.this");
                 }
-                builder_.create_call(destructor, {self}, nullptr, "delete.dtor");
+                if (destructor_slot >= 0) {
+                    const auto byte_type = module_->types().int_type(8);
+                    auto* zero = module_->constant_int(int_type(), 0);
+                    auto* vptr_slot = builder_.create_gep(
+                        self->type->element, self, {zero, zero}, false,
+                        "delete.vptr");
+                    vptr_slot->type = module_->types().pointer_type(
+                        module_->types().pointer_type(byte_type));
+                    auto* table = builder_.create_load(
+                        module_->types().pointer_type(byte_type), vptr_slot,
+                        false, 0, "delete.vtable");
+                    auto* function_slot = builder_.create_gep(
+                        byte_type, table,
+                        {module_->constant_int(
+                            size_type(),
+                            static_cast<std::int64_t>(destructor_slot) * 4)},
+                        false, "delete.slot");
+                    function_slot->type = module_->types().pointer_type(
+                        module_->types().pointer_type(byte_type));
+                    auto* function = builder_.create_load(
+                        module_->types().pointer_type(byte_type), function_slot,
+                        false, 0, "delete.vfn");
+                    auto* callee = builder_.create(
+                        ir::Opcode::BitCast,
+                        module_->types().pointer_type(destructor->type),
+                        {function}, "delete.vfn.ptr");
+                    builder_.create_call(callee, {self}, nullptr,
+                                         "delete.vdtor");
+                } else {
+                    builder_.create_call(destructor, {self}, nullptr,
+                                         "delete.dtor");
+                }
                 emit_branch(increment_block);
                 builder_.set_insert_point(increment_block);
                 auto* old = builder_.create_load(size_type(), index, false, 0,
@@ -4248,6 +4295,18 @@ void CIRGen::emit_vtable_init(ir::Value* object, ir::TypePtr type) {
             if (found != methods->second.end()) {
                 implementation = found->second;
                 break;
+            }
+            if (slots[index].starts_with("~")) {
+                for (auto candidate = methods->second.begin();
+                     candidate != methods->second.end(); ++candidate) {
+                    if (candidate->first.starts_with("~")) {
+                        implementation = candidate->second;
+                        break;
+                    }
+                }
+                if (implementation) {
+                    break;
+                }
             }
             if (slots[index].starts_with("~")) {
                 for (const auto& candidate : methods->second) {
