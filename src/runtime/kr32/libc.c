@@ -12,11 +12,23 @@ int puts(const char *text) {
     return 0;
 }
 
+static char *format_buffer;
+static int format_count;
+
+static void emit_char(int character) {
+    if (format_buffer) {
+        format_buffer[format_count] = (char)character;
+        format_count++;
+    } else {
+        putchar(character);
+    }
+}
+
 static void print_unsigned(unsigned int value) {
     char digits[16];
     int count = 0;
     if (value == 0) {
-        putchar('0');
+        emit_char('0');
         return;
     }
     while (value > 0) {
@@ -26,7 +38,7 @@ static void print_unsigned(unsigned int value) {
     }
     while (count > 0) {
         count--;
-        putchar(digits[count]);
+        emit_char(digits[count]);
     }
 }
 
@@ -34,7 +46,7 @@ static void print_hex(unsigned int value) {
     char digits[16];
     int count = 0;
     if (value == 0) {
-        putchar('0');
+        emit_char('0');
         return;
     }
     while (value > 0) {
@@ -49,7 +61,7 @@ static void print_hex(unsigned int value) {
     }
     while (count > 0) {
         count--;
-        putchar(digits[count]);
+        emit_char(digits[count]);
     }
 }
 
@@ -96,27 +108,27 @@ static void print_integer(unsigned int value, int base, int width,
                       ? width - prefix_length - digits_length
                       : 0;
     if (sign) {
-        putchar(sign);
+        emit_char(sign);
     }
     if (prefix) {
-        putchar('0');
-        putchar(uppercase ? 'X' : 'x');
+        emit_char('0');
+        emit_char(uppercase ? 'X' : 'x');
     }
     if ((flags & PRINT_LEFT) == 0) {
         int zero_padding = (flags & PRINT_ZERO_PAD) && precision == 0;
         for (int index = 0; index < padding; index++) {
-            putchar(zero_padding ? '0' : ' ');
+            emit_char(zero_padding ? '0' : ' ');
         }
     }
     for (int index = 0; index < zeros; index++) {
-        putchar('0');
+        emit_char('0');
     }
     while (count > 0) {
-        putchar(digits[--count]);
+        emit_char(digits[--count]);
     }
     if ((flags & PRINT_LEFT) != 0) {
         for (int index = 0; index < padding; index++) {
-            putchar(' ');
+            emit_char(' ');
         }
     }
 }
@@ -136,22 +148,22 @@ static void print_text(const char *text, int width, int precision,
     int padding = width > length ? width - length : 0;
     if (!left_align) {
         for (int index = 0; index < padding; index++) {
-            putchar(' ');
+            emit_char(' ');
         }
     }
     for (int index = 0; index < length; index++) {
-        putchar(text[index]);
+        emit_char(text[index]);
     }
     if (left_align) {
         for (int index = 0; index < padding; index++) {
-            putchar(' ');
+            emit_char(' ');
         }
     }
 }
 
 static void print_fixed(double value, int precision, int trim) {
     if (value < 0.0) {
-        putchar('-');
+        emit_char('-');
         value = -value;
     }
     if (precision > 15) {
@@ -184,9 +196,9 @@ static void print_fixed(double value, int precision, int trim) {
             }
         }
         if (count > 0) {
-            putchar('.');
+            emit_char('.');
             for (int index = 0; index < count; index++) {
-                putchar(digits[index]);
+                emit_char(digits[index]);
             }
         }
     }
@@ -194,7 +206,7 @@ static void print_fixed(double value, int precision, int trim) {
 
 static void print_exponent(double value, int precision) {
     if (value < 0.0) {
-        putchar('-');
+        emit_char('-');
         value = -value;
     }
     int exponent = 0;
@@ -209,15 +221,15 @@ static void print_exponent(double value, int precision) {
         }
     }
     print_fixed(value, precision, 0);
-    putchar('e');
+    emit_char('e');
     if (exponent < 0) {
-        putchar('-');
+        emit_char('-');
         exponent = -exponent;
     } else {
-        putchar('+');
+        emit_char('+');
     }
     if (exponent < 10) {
-        putchar('0');
+        emit_char('0');
     }
     print_unsigned((unsigned int)exponent);
 }
@@ -249,13 +261,11 @@ static void print_general(double value, int precision) {
     }
 }
 
-int printf(const char *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
+static int format_output(const char *format, va_list arguments) {
     int written = 0;
     while (*format) {
         if (*format != '%') {
-            putchar(*format);
+            emit_char(*format);
             format++;
             written++;
             continue;
@@ -323,7 +333,7 @@ int printf(const char *format, ...) {
             format++;
         }
         if (*format == '%') {
-            putchar('%');
+            emit_char('%');
             written++;
         } else if (*format == 'd' || *format == 'i') {
             int value = va_arg(arguments, int);
@@ -357,8 +367,8 @@ int printf(const char *format, ...) {
             print_integer((unsigned int)va_arg(arguments, void *), 16, 0,
                           PRINT_PREFIX);
         } else if (*format == 'h') {
-            putchar('0');
-            putchar('x');
+            emit_char('0');
+            emit_char('x');
             print_hex((unsigned int)va_arg(arguments, void *));
             written += 2;
         } else if (*format == 's') {
@@ -366,7 +376,7 @@ int printf(const char *format, ...) {
                         (left_align ? 1 : 0);
             print_text(va_arg(arguments, char *), width, precision, flags);
         } else if (*format == 'c') {
-            putchar(va_arg(arguments, int));
+            emit_char(va_arg(arguments, int));
             written++;
         } else if (*format == 'f' || *format == 'F') {
             print_fixed(va_arg(arguments, double), precision, 0);
@@ -375,14 +385,37 @@ int printf(const char *format, ...) {
         } else if (*format == 'g' || *format == 'G') {
             print_general(va_arg(arguments, double), precision);
         } else {
-            putchar('%');
-            putchar(*format);
+            emit_char('%');
+            emit_char(*format);
             written += 2;
         }
         format++;
     }
+    return written;
+}
+
+int printf(const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    int written = format_output(format, arguments);
     va_end(arguments);
     return written;
+}
+
+int sprintf(char *destination, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    char *saved_buffer = format_buffer;
+    int saved_count = format_count;
+    format_buffer = destination;
+    format_count = 0;
+    int written = format_output(format, arguments);
+    destination[format_count] = 0;
+    int result = format_count;
+    format_buffer = saved_buffer;
+    format_count = saved_count;
+    va_end(arguments);
+    return result;
 }
 
 struct heap_header {
