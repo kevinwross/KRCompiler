@@ -793,9 +793,26 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
                 ++position_;
             }
         }
+        bool overrides = false;
+        while (check("override") || check("final") || check("noexcept")) {
+            const bool is_noexcept = check("noexcept");
+            overrides = overrides || check("override");
+            ++position_;
+            if (is_noexcept && match("(")) {
+                std::size_t depth = 1;
+                while (!at_end() && depth > 0) {
+                    if (check("(")) {
+                        ++depth;
+                    } else if (check(")")) {
+                        --depth;
+                    }
+                    ++position_;
+                }
+            }
+        }
         auto specifiers = make_ast(AstKind::DeclSpecifiers, location);
         specifiers->labels.push_back("void");
-        if (is_virtual) {
+        if (is_virtual || overrides) {
             specifiers->labels.push_back("virtual");
         }
         auto declarator = make_ast(AstKind::FunctionDeclarator, location);

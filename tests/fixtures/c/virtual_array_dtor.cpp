@@ -7,7 +7,7 @@ public:
 
 class Derived : public Base {
 public:
-    virtual ~Derived() { destroyed = destroyed + 1; }
+    ~Derived() override { destroyed = destroyed + 1; }
 };
 
 int main() {
