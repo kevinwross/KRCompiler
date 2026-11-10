@@ -1467,6 +1467,50 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 }
             }
             static_cast<void>(initialized_at_runtime);
+            if (type->kind == ir::TypeKind::Struct) {
+                const auto record = ir_records_.find(type);
+                if (record != ir_records_.end() && record->second) {
+                    auto* constructor =
+                        select_constructor(record->second->tag, 0);
+                    if (constructor) {
+                        auto* guard = module_->add_global(
+                            "__static_guard_" + std::to_string(id),
+                            module_->types().int_type(8), false, 0);
+                        guard->initializer = module_->constant_int(
+                            module_->types().int_type(8), 0);
+                        auto* guard_value = builder_.create_load(
+                            module_->types().int_type(8), guard, false, 0,
+                            "static.guard");
+                        auto* zero = module_->constant_int(
+                            module_->types().int_type(8), 0);
+                        auto* condition = builder_.create_icmp(
+                            ir::ICmpPredicate::Eq, guard_value, zero,
+                            "static.cmp");
+                        auto* init_block = current_function_->add_block(
+                            "static.init." + std::to_string(id));
+                        auto* end_block = current_function_->add_block(
+                            "static.end." + std::to_string(id));
+                        builder_.create_cond_br(condition, init_block,
+                                                end_block);
+                        builder_.set_insert_point(init_block);
+                        builder_.create_store(
+                            module_->constant_int(
+                                module_->types().int_type(8), 1),
+                            guard);
+                        auto* self = static_cast<ir::Value*>(global);
+                        if (self->type != constructor->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                constructor->type->parameters[0], {self},
+                                "static.this");
+                        }
+                        builder_.create_call(constructor, {self}, nullptr,
+                                             "static.ctor");
+                        emit_branch(end_block);
+                        builder_.set_insert_point(end_block);
+                    }
+                }
+            }
             declare_local(name, LocalBinding{global, type, frontend_type});
         }
         return;
