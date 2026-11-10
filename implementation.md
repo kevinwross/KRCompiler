@@ -175,7 +175,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
 - Basic-block names are uniquified per function, fixing duplicate backend labels in generated control flow.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 111/111 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 112/112 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -189,14 +189,14 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 111/111 CTest.
+- `krc_tests` has 92 cases / 509 assertions; all six configurations pass 112/112 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
 - [ ] Freeze the C++/EH ABI in `docs/abi.md` before codegen. The class data-layout subset is frozen in [ADR 0010](docs/decisions/0010-cxx-class-data-layout.md); polymorphic vptr layout is added by [ADR 0013](docs/decisions/0013-dynamic-dispatch.md); EH and function ABI remain.
 - [ ] Classes, access control, constructors/destructors, copy/move, assignment. Data-only `class` declarations, access labels, inline methods, recursive calls, default/parameterized/overloaded constructors, user-defined copy constructors/assignment, rvalue references, move constructors and move assignment via explicit casts and `std::move`, member `operator[]` including reference-returning and inherited forms, `operator()` including inherited forms, unary operators, distinct prefix/postfix increment/decrement operators, and compound assignment operators, constructor member-initializer lists and delegating constructors, reference-returning assignment via `return *this`, chained assignment results, block/function-scope destructors, default copy, and scalar `new`/`delete` work; general rvalue overload ranking remains.
 - [ ] Single inheritance, virtual functions, abstract classes, virtual destructors, vtables. Single inheritance, pure virtual declarations with null base slots and derived overrides, override methods, `override`/`final`/`noexcept` on destructor declarations, closed-world static devirtualization ([ADR 0011](docs/decisions/0011-m5-static-devirtualization.md)), vptr-based dynamic dispatch through a base pointer or reference, unqualified virtual calls on `this` from base methods, and virtual destructors called by `delete base_pointer` or per element by `delete[]` ([ADR 0013](docs/decisions/0013-dynamic-dispatch.md)) work; multiple inheritance and RTTI remain.
-- [ ] Namespaces, references, default arguments, `explicit`, operator overloading. Flat namespaces, qualified `ns::name` lookup, `using Alias = Type;`, trailing default arguments, explicit constructors, `noexcept`/`final`, reference variables/parameters, reference data members bound in constructor initializer lists, and member/free `operator+`/`operator-`/`operator==` work; the remaining operators and rvalue/move semantics remain.
+- [ ] Namespaces, references, default arguments, `explicit`, operator overloading. Flat namespaces with nested definitions, chained qualified `outer::inner::name` lookup, `using Alias = Type;`, trailing default arguments, explicit constructors, `noexcept`/`final`, reference variables/parameters, reference data members bound in constructor initializer lists, and member/free `operator+`/`operator-`/`operator==` work; the remaining operators and rvalue/move semantics remain.
 - [x] `new`/`delete`, `new[]`/`delete[]`, placement new. Scalar and array `new`/`delete` lower through `malloc`/`free`; array allocations carry a length cookie, construct each element, and destroy each element on `delete[]`; placement `new (storage) T` constructs at a supplied address.
 - [x] Gate G5: `hello.cpp` and `balanced-tree.cpp` run on KR32. `hello.cpp` returns 42; `balanced-tree.cpp` prints both sorted trees and exits 0 via ADR 0011 static devirtualization; ADR 0013 adds vptr-based dispatch through a base pointer.
 
@@ -366,3 +366,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T09:37:29-08:00** — Completed empty class definitions (`class Derived : public Base {};`) and cast the receiver to the declaring base when calling an inherited `operator[]`. The fixture calls the base subscript through an empty derived object and returns 5; CTest is 109/109.
 - **2026-11-10T09:46:50-08:00** — Applied the same receiver conversion to inherited `operator()` calls. Calling `value(2)` through an empty derived object reaches `Base::operator()` and returns 5; CTest is 110/110.
 - **2026-11-10T09:56:13-08:00** — Added pure virtual dispatch: a bodyless `virtual int value() = 0` now gets a declaration entry, its base vtable slot is null, and a derived override fills the slot. Calling through `Base*` returns 7; CTest is 111/111.
+- **2026-11-10T10:05:06-08:00** — Added chained namespace qualification: the parser accumulates `outer::inner::name` segments and Sema resolves the final segment. The nested-namespace fixture returns 5; CTest is 112/112.

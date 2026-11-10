@@ -1773,10 +1773,12 @@ std::unique_ptr<AstNode> Parser::parse_primary_expression() {
         ++position_;
         if (cxx_mode_ && check("::") && peek(1).kind == TokenKind::Identifier) {
             std::string qualified = token.text;
-            ++position_;
-            qualified += "::";
-            qualified += peek().text;
-            ++position_;
+            while (check("::") && peek(1).kind == TokenKind::Identifier) {
+                ++position_;
+                qualified += "::";
+                qualified += peek().text;
+                ++position_;
+            }
             return make_ast(AstKind::Identifier, token.location, std::move(qualified));
         }
         return make_ast(AstKind::Identifier, token.location, token.text);
