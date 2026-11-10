@@ -1747,12 +1747,27 @@ std::unique_ptr<AstNode> Parser::parse_primary_expression() {
         ++position_;
         return make_ast(AstKind::CharLiteral, token.location, token.text);
     case TokenKind::String: {
-        std::string text;
+        std::string prefix;
+        std::string contents;
+        bool first = true;
         while (peek().kind == TokenKind::String) {
-            text += peek().text;
+            const auto raw = peek().text;
+            const auto quote = raw.find('"');
+            if (quote != std::string::npos) {
+                if (first) {
+                    prefix = raw.substr(0, quote);
+                    first = false;
+                }
+                auto body = raw.substr(quote + 1);
+                if (!body.empty() && body.back() == '"') {
+                    body.pop_back();
+                }
+                contents += body;
+            }
             ++position_;
         }
-        return make_ast(AstKind::StringLiteral, token.location, std::move(text));
+        return make_ast(AstKind::StringLiteral, token.location,
+                        prefix + "\"" + contents + "\"");
     }
     case TokenKind::Identifier:
         if (cxx_mode_ && token.text == "nullptr") {
