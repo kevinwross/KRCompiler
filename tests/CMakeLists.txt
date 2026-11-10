@@ -998,6 +998,23 @@ if(TARGET krc)
             -P "${CMAKE_SOURCE_DIR}/cmake/CheckMissingFile.cmake"
     )
 
+    add_test(NAME krc_determinism_object
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/struct.c
+                -DOUT1=${CMAKE_CURRENT_BINARY_DIR}/determinism1.kro
+                -DOUT2=${CMAKE_CURRENT_BINARY_DIR}/determinism2.kro
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
+
+    add_test(NAME krc_determinism_kr16_image
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRC_TARGET=kr16
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c
+                -DOUT1=${CMAKE_CURRENT_BINARY_DIR}/determinism1.kex
+                -DOUT2=${CMAKE_CURRENT_BINARY_DIR}/determinism2.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
+
     krc_add_cli_determinism_test(krc)
 endif()
 
