@@ -648,6 +648,27 @@ void qsort(void *base, unsigned int count, unsigned int size,
     }
 }
 
+void *bsearch(const void *key, const void *base, unsigned int count,
+              unsigned int size,
+              int (*compare)(const void *, const void *)) {
+    const unsigned char *bytes = (const unsigned char *)base;
+    unsigned int low = 0;
+    unsigned int high = count;
+    while (low < high) {
+        unsigned int middle = low + (high - low) / 2;
+        int result = compare(key, bytes + middle * size);
+        if (result == 0) {
+            return (void *)(bytes + middle * size);
+        }
+        if (result < 0) {
+            high = middle;
+        } else {
+            low = middle + 1;
+        }
+    }
+    return 0;
+}
+
 char *strdup(const char *source) {    unsigned int length = strlen(source);
     char *result = (char *)malloc(length + 1);
     if (result == 0) {

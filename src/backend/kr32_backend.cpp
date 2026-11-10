@@ -188,11 +188,32 @@ Kr32Backend::FrameLayout Kr32Backend::layout_function(const ir::Function& functi
                 continue;
             }
             const auto fixed = callee_type->parameters.size();
+            std::size_t integer_arguments = 0;
+            for (const auto& parameter : callee_type->parameters) {
+                if (!parameter || ir::is_float(parameter)) {
+                    continue;
+                }
+                if (parameter->kind == ir::TypeKind::Struct) {
+                    std::string size_error;
+                    const auto size = size_of(parameter, size_error);
+                    if (size_error.empty()) {
+                        integer_arguments += (size + 3) / 4;
+                    }
+                } else {
+                    integer_arguments++;
+                }
+            }
+            const std::size_t fixed_stack_words =
+                integer_arguments > 4 ? integer_arguments - 4 : 0;
+            std::size_t outgoing = fixed_stack_words * 4;
             if (instruction->operands.size() > fixed + 1) {
                 const auto extras = instruction->operands.size() - fixed - 1;
-                layout.outgoing_size = std::max<std::uint32_t>(
-                    layout.outgoing_size, static_cast<std::uint32_t>(extras * 8));
+                outgoing = std::max<std::size_t>(outgoing,
+                                                 fixed_stack_words * 4 +
+                                                     extras * 8);
             }
+            layout.outgoing_size = std::max<std::uint32_t>(
+                layout.outgoing_size, static_cast<std::uint32_t>(outgoing));
         }
     }
 
@@ -974,9 +995,27 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         }
         const auto fixed = callee_type->parameters.size();
         const auto total = instruction.operands.size() - 1;
+        std::size_t fixed_integer_arguments = 0;
+        for (const auto& parameter : callee_type->parameters) {
+            if (!parameter || ir::is_float(parameter)) {
+                continue;
+            }
+            if (parameter->kind == ir::TypeKind::Struct) {
+                std::string size_error;
+                const auto size = size_of(parameter, size_error);
+                if (size_error.empty()) {
+                    fixed_integer_arguments += (size + 3) / 4;
+                }
+            } else {
+                fixed_integer_arguments++;
+            }
+        }
+        const std::size_t fixed_stack_words =
+            fixed_integer_arguments > 4 ? fixed_integer_arguments - 4 : 0;
         for (std::size_t index = fixed; index < total; ++index) {
             const auto* argument = instruction.operands[index + 1];
-            const auto offset = static_cast<std::uint32_t>((index - fixed) * 8);
+            const auto offset = static_cast<std::uint32_t>(
+                fixed_stack_words * 4 + (index - fixed) * 8);
             if (argument->type && ir::is_float(argument->type)) {
                 load_fp(out, function, layout, argument, "F0");
                 out += "        FSTORE.D F0, [R7 + " + std::to_string(offset) + "]\n";
@@ -1012,8 +1051,15 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                     integer_index++;
                 }
             } else {
-                load_value(out, function, layout, argument,
-                           register_name(integer_index++));
+                if (integer_index < 4) {
+                    load_value(out, function, layout, argument,
+                               register_name(integer_index++));
+                } else {
+                    load_value(out, function, layout, argument, "R4");
+                    out += "        STORE R4, [R7 + " +
+                           std::to_string((integer_index - 4) * 4) + "]\n";
+                    integer_index++;
+                }
             }
         }
         if (instruction.operands[0]->kind == ir::ValueKind::Function) {

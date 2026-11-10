@@ -1,6 +1,9 @@
 int printf(const char *format, ...);
 void qsort(void *base, unsigned int count, unsigned int size,
            int (*compare)(const void *, const void *));
+void *bsearch(const void *key, const void *base, unsigned int count,
+              unsigned int size,
+              int (*compare)(const void *, const void *));
 char *strrchr(const char *text, int character);
 char *strncat(char *destination, const char *source, unsigned int count);
 
@@ -24,11 +27,13 @@ int main(void) {
             sorted = 0;
         }
     }
+    int key = 3;
+    int *found = (int *)bsearch(&key, values, 5, sizeof(int), compare_int);
     char text[16];
     text[0] = 0;
     strncat(text, "alpha", 16);
     strncat(text, "/beta", 16);
     int hit = strrchr(text, '/') != 0;
     printf("%s %d %d\n", text, sorted, hit);
-    return sorted && hit ? 0 : 1;
+    return sorted && found && hit ? 0 : 1;
 }
