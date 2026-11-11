@@ -1,7 +1,7 @@
 # Compiles one source twice and fails if the emitted object or image differs.
 #
 # Required: KRC, SOURCE, OUT1, OUT2
-# Optional: KRC_TARGET (kr32 is the default)
+# Optional: KRC_TARGET (kr32 is the default), KRC_ARGS (extra compiler flags)
 
 if(NOT DEFINED KRC OR NOT DEFINED SOURCE OR NOT DEFINED OUT1 OR NOT DEFINED OUT2)
     message(FATAL_ERROR "KRC, SOURCE, OUT1, and OUT2 are required")
@@ -11,10 +11,14 @@ set(target_args)
 if(DEFINED KRC_TARGET AND NOT KRC_TARGET STREQUAL "")
     list(APPEND target_args "--target=${KRC_TARGET}")
 endif()
+set(extra_args)
+if(DEFINED KRC_ARGS AND NOT KRC_ARGS STREQUAL "")
+    list(APPEND extra_args ${KRC_ARGS})
+endif()
 
 foreach(output IN ITEMS "${OUT1}" "${OUT2}")
     execute_process(
-        COMMAND "${KRC}" -c ${target_args} "${SOURCE}" -o "${output}"
+        COMMAND "${KRC}" -c ${target_args} ${extra_args} "${SOURCE}" -o "${output}"
         RESULT_VARIABLE result
         OUTPUT_VARIABLE stdout
         ERROR_VARIABLE stderr)

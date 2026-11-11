@@ -1921,6 +1921,26 @@ if(TARGET krc)
                 -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism2.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
 
+    add_test(NAME krc_determinism_kr16_object
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRC_TARGET=kr16
+                -DKRC_ARGS=--emit-object
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_arith.c
+                -DOUT1=${KRC_TEST_OUTPUT_DIR}/determinism1.kro
+                -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism2.kro
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
+
+    add_test(NAME krc_determinism_kr16_link
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_arith.c
+                -DOUT1=${KRC_TEST_OUTPUT_DIR}/determinism1_linked.kex
+                -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism2_linked.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckLinkDeterminism.cmake)
+
     krc_add_cli_determinism_test(krc)
 endif()
 
