@@ -130,7 +130,25 @@ ir::Function* CIRGen::ensure_member_destructor(
             member_destructors.emplace_back(member_index, found->second);
         }
     }
-    if (member_destructors.empty()) {
+    ir::Function* base_destructor = nullptr;
+    if (record->base &&
+        record->base->kind == frontend::TypeKind::Record &&
+        record->base->record) {
+        const auto base_methods =
+            class_methods_.find(record->base->record->tag);
+        if (base_methods != class_methods_.end()) {
+            const auto found = base_methods->second.find(
+                "~" + record->base->record->tag);
+            if (found != base_methods->second.end()) {
+                base_destructor = found->second;
+            }
+        }
+        if (!base_destructor) {
+            base_destructor =
+                ensure_member_destructor(record->base->record.get());
+        }
+    }
+    if (member_destructors.empty() && !base_destructor) {
         member_destructors_.emplace(record, nullptr);
         return nullptr;
     }
@@ -179,6 +197,17 @@ ir::Function* CIRGen::ensure_member_destructor(
         }
         builder_.create_call(entry_it->second, {self}, nullptr,
                              "member.dtor");
+    }
+    if (base_destructor) {
+        auto* self = static_cast<ir::Value*>(this_argument);
+        if (self->type != base_destructor->type->parameters[0]) {
+            self = builder_.create(
+                ir::Opcode::BitCast,
+                base_destructor->type->parameters[0], {self},
+                "base.dtor.this");
+        }
+        builder_.create_call(base_destructor, {self}, nullptr,
+                             "base.dtor");
     }
     builder_.create_ret(nullptr);
     scopes_ = std::move(previous_scopes);
