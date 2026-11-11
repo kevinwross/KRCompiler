@@ -32,6 +32,7 @@ add_library(krc_core STATIC
     src/asm/kr32_encoder.cpp
     src/asm/kr16_encoder.cpp
     src/asm/kr16_assembler.cpp
+    src/asm/kr16_object.cpp
     src/backend/kr32_backend.cpp
     src/backend/kr16_backend.cpp
     src/backend/kr32_descriptor.cpp

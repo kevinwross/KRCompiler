@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "asm/kr16_assembler.h"
+#include "asm/kr16_object.h"
 #include "asm/kr32_assembler.h"
 #include "asm/kro_writer.h"
 #include "backend/kr32_backend.h"
@@ -51,6 +52,7 @@ void print_usage(std::ostream& out) {
         << "  --json                 Use JSON with --dump-symbols\n"
         << "  -S                     Emit KR32 assembly to stdout\n"
         << "  -c                     Emit a relocatable KRO object\n"
+        << "  --emit-object          Write a KR16 KRO object instead of .kex\n"
         << "  -o FILE                Output path for -c\n"
         << "  -I DIR                 Add an include search directory\n"
         << "  --sysroot DIR          Use DIR as the target sysroot\n"
@@ -84,6 +86,7 @@ int main(int argc, char** argv) {
     bool dump_ir = false;
     bool emit_assembly = false;
     bool emit_object = false;
+    bool emit_object_container = false;
     bool dump_symbols = false;
     bool json_output = false;
     bool cxx_mode = false;
@@ -192,6 +195,10 @@ int main(int argc, char** argv) {
         }
         if (argument == "-c") {
             emit_object = true;
+            continue;
+        }
+        if (argument == "--emit-object") {
+            emit_object_container = true;
             continue;
         }
         if (argument == "-o") {
@@ -308,22 +315,25 @@ int main(int argc, char** argv) {
                                                "KR16 backend: " +
                                                    backend_error);
                         } else if (emit_object) {
-                            std::string source =
-                                ".text\n.global _start\n_start:\n"
-                                "    CALL main\n"
-                                "    HLT\n"
-                                ".global puts\nputs:\n"
-                                "    MOV R2, #0xF000\n"
-                                ".Lputs_loop:\n"
-                                "    LDB R0, [R1]\n"
-                                "    CMP R0, #0\n"
-                                "    BEQ .Lputs_done\n"
-                                "    STB [R2], R0\n"
-                                "    ADD R1, #1\n"
-                                "    BRA .Lputs_loop\n"
-                                ".Lputs_done:\n"
-                                "    MOV R0, #0\n"
-                                "    RET\n";
+                            std::string source;
+                            if (!emit_object_container) {
+                                source =
+                                    ".text\n.global _start\n_start:\n"
+                                    "    CALL main\n"
+                                    "    HLT\n"
+                                    ".global puts\nputs:\n"
+                                    "    MOV R2, #0xF000\n"
+                                    ".Lputs_loop:\n"
+                                    "    LDB R0, [R1]\n"
+                                    "    CMP R0, #0\n"
+                                    "    BEQ .Lputs_done\n"
+                                    "    STB [R2], R0\n"
+                                    "    ADD R1, #1\n"
+                                    "    BRA .Lputs_loop\n"
+                                    ".Lputs_done:\n"
+                                    "    MOV R0, #0\n"
+                                    "    RET\n";
+                            }
                             source += *assembly;
                             krc::asmkr16::AssemblyResult assembled;
                             std::string assemble_error;
@@ -332,6 +342,45 @@ int main(int argc, char** argv) {
                                 diagnostics.report(
                                     krc::frontend::Severity::Error,
                                     "KR16 assembler: " + assemble_error);
+                            } else if (emit_object_container) {
+                                krc::linker::KroObject object;
+                                std::string object_error;
+                                if (!krc::asmkr16::make_object(
+                                        assembled, profile, object,
+                                        object_error)) {
+                                    diagnostics.report(
+                                        krc::frontend::Severity::Error,
+                                        "KR16 object: " + object_error);
+                                } else {
+                                    std::vector<std::uint8_t> bytes;
+                                    if (!krc::linker::write_object(
+                                            object, bytes, object_error)) {
+                                        diagnostics.report(
+                                            krc::frontend::Severity::Error,
+                                            "KR16 object: " + object_error);
+                                    } else {
+                                        auto path =
+                                            output_path.empty()
+                                                ? std::filesystem::path(input)
+                                                      .replace_extension(".kro")
+                                                : std::filesystem::path(
+                                                      output_path);
+                                        std::ofstream file(path,
+                                                           std::ios::binary);
+                                        if (!file) {
+                                            diagnostics.report(
+                                                krc::frontend::Severity::Error,
+                                                "cannot open object output '" +
+                                                    path.string() + "'");
+                                        } else {
+                                            file.write(
+                                                reinterpret_cast<const char*>(
+                                                    bytes.data()),
+                                                static_cast<std::streamsize>(
+                                                    bytes.size()));
+                                        }
+                                    }
+                                }
                             } else {
                                 bool has_main = false;
                                 for (const auto& symbol : assembled.symbols) {

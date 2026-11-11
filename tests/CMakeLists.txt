@@ -12,6 +12,7 @@ add_executable(krc_tests
     unit/test_kr16_encoder.cpp
     unit/test_kr16_assembler.cpp
     unit/test_kr16_image.cpp
+    unit/test_kr16_object.cpp
     unit/test_assembler.cpp
     unit/test_register_allocator.cpp
     unit/test_kro_object.cpp
@@ -104,6 +105,11 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_arith.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_arith.kex")
+
+    add_test(NAME krc_kr16_arith_object
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16 --emit-object
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_arith.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_arith.kro")
 
     add_test(NAME krc_kr16_shift_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
