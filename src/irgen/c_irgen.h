@@ -76,7 +76,7 @@ private:
     void emit_declaration(const frontend::AstNode& declaration);
     void emit_compound(const frontend::AstNode& compound);
     void emit_initializer(const frontend::AstNode& initializer, ir::Value* address,
-                          ir::TypePtr type);
+                          ir::TypePtr type, bool is_volatile = false);
     void emit_zero_initializer(ir::Value* address, ir::TypePtr type);
     void emit_vtable_init(ir::Value* object, ir::TypePtr type);
     [[nodiscard]] std::vector<std::string> virtual_slots(

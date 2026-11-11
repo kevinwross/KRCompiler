@@ -116,6 +116,12 @@ if(TARGET krc)
     set_tests_properties(krc_volatile_ir PROPERTIES
         PASS_REGULAR_EXPRESSION "load i32, @counter, volatile")
 
+    add_test(NAME krc_volatile_store_ir
+        COMMAND $<TARGET_FILE:krc> --dump-ir
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/volatile.c")
+    set_tests_properties(krc_volatile_store_ir PROPERTIES
+        PASS_REGULAR_EXPRESSION "store i32 2, %local.addr, volatile")
+
     add_test(NAME krc_link_volatile
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

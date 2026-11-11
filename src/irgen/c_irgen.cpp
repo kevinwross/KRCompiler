@@ -2967,7 +2967,8 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 }
             }
             if (!copied) {
-                emit_initializer(*init->children[1], address, type);
+                emit_initializer(*init->children[1], address, type,
+                                 frontend_type && frontend_type->is_volatile);
             }
         } else if (type && type->kind == ir::TypeKind::Struct) {
             const auto record = ir_records_.find(type);
@@ -3104,7 +3105,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
 }
 
 void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* address,
-                              ir::TypePtr type) {
+                              ir::TypePtr type, bool is_volatile) {
     if (initializer.kind == frontend::AstKind::CompoundLiteral &&
         initializer.children.size() > 1 && initializer.children[1]) {
         emit_initializer(*initializer.children[1], address, type);
@@ -3262,7 +3263,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
     const auto value = emit_expression(initializer);
     auto* converted = promote(value.value, value.type, type);
     if (converted) {
-        builder_.create_store(converted, address, false, 0);
+        builder_.create_store(converted, address, is_volatile, 0);
     }
 }
 
