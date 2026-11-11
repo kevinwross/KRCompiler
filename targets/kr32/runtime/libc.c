@@ -834,6 +834,35 @@ char *strtok(char *text, const char *delimiters) {
     return token;
 }
 
+char *strtok_r(char *text, const char *delimiters, char **save) {
+    if (save == 0) {
+        return 0;
+    }
+    if (text == 0) {
+        text = *save;
+    }
+    if (text == 0) {
+        return 0;
+    }
+    while (*text && character_in_set(*text, delimiters)) {
+        text++;
+    }
+    if (*text == 0) {
+        *save = text;
+        return 0;
+    }
+    char *token = text;
+    while (*text && !character_in_set(*text, delimiters)) {
+        text++;
+    }
+    if (*text) {
+        *text = 0;
+        text++;
+    }
+    *save = text;
+    return token;
+}
+
 int atoi(const char *text) {
     int sign = 1;
     int value = 0;
@@ -1142,6 +1171,52 @@ char *strdup(const char *source) {    unsigned int length = strlen(source);
     }
     *cursor = 0;
     return result;
+}
+
+char *strndup(const char *source, unsigned int maximum) {
+    unsigned int length = 0;
+    while (length < maximum && source[length] != 0) {
+        length++;
+    }
+    char *result = (char *)malloc(length + 1);
+    if (result == 0) {
+        return 0;
+    }
+    for (unsigned int index = 0; index < length; index++) {
+        result[index] = source[index];
+    }
+    result[length] = 0;
+    return result;
+}
+
+int strcoll(const char *left, const char *right) {
+    return strcmp(left, right);
+}
+
+unsigned int strxfrm(char *destination, const char *source,
+                     unsigned int count) {
+    unsigned int length = strlen(source);
+    if (count > 0) {
+        unsigned int copied = length < count - 1 ? length : count - 1;
+        for (unsigned int index = 0; index < copied; index++) {
+            destination[index] = source[index];
+        }
+        destination[copied] = 0;
+    }
+    return length;
+}
+
+void *memccpy(void *destination, const void *source, int character,
+              unsigned int count) {
+    unsigned char *to = (unsigned char *)destination;
+    const unsigned char *from = (const unsigned char *)source;
+    for (unsigned int index = 0; index < count; index++) {
+        to[index] = from[index];
+        if (from[index] == (unsigned char)character) {
+            return to + index + 1;
+        }
+    }
+    return 0;
 }
 
 void *memcpy(void *destination, const void *source, unsigned int count) {
