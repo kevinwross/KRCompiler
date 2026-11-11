@@ -1910,3 +1910,61 @@ void _Exit(int status) {
     exit(status);
 }
 
+int isalpha(int character) {
+    return (character >= 'a' && character <= 'z') ||
+           (character >= 'A' && character <= 'Z');
+}
+
+int isdigit(int character) {
+    return character >= '0' && character <= '9';
+}
+
+int isalnum(int character) {
+    return isalpha(character) || isdigit(character);
+}
+
+int isblank(int character) {
+    return character == ' ' || character == '\t';
+}
+
+int iscntrl(int character) {
+    return (character >= 0 && character < 32) || character == 127;
+}
+
+int isgraph(int character) {
+    return character >= 33 && character <= 126;
+}
+
+int islower(int character) {
+    return character >= 'a' && character <= 'z';
+}
+
+int isprint(int character) {
+    return character >= 32 && character <= 126;
+}
+
+int ispunct(int character) {
+    return isgraph(character) && !isalnum(character);
+}
+
+int isspace(int character) {
+    return character == ' ' || (character >= 9 && character <= 13);
+}
+
+int isupper(int character) {
+    return character >= 'A' && character <= 'Z';
+}
+
+int isxdigit(int character) {
+    return isdigit(character) || (character >= 'a' && character <= 'f') ||
+           (character >= 'A' && character <= 'F');
+}
+
+int tolower(int character) {
+    return isupper(character) ? character + ('a' - 'A') : character;
+}
+
+int toupper(int character) {
+    return islower(character) ? character - ('a' - 'A') : character;
+}
+
