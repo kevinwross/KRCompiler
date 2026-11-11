@@ -958,6 +958,23 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
                 initializer->children.push_back(std::move(value));
             }
             member->children.push_back(std::move(initializer));
+        } else if (!field_is_function && !field_name.empty() && match("{")) {
+            auto initializer =
+                make_ast(AstKind::DefaultMemberInitializer, peek().location,
+                         field_name);
+            auto list = make_ast(AstKind::InitializerList, peek().location);
+            while (!check("}") && !at_end()) {
+                auto value = parse_assignment_expression();
+                if (value) {
+                    list->children.push_back(std::move(value));
+                }
+                if (!match(",")) {
+                    break;
+                }
+            }
+            expect("}", "after member initializer");
+            initializer->children.push_back(std::move(list));
+            member->children.push_back(std::move(initializer));
         }
         if (!match(",")) {
             break;
