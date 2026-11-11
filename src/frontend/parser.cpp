@@ -386,6 +386,29 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
         init->children.push_back(std::move(declarator));
         if (match("=")) {
             auto initializer = parse_initializer();
+            if (cxx_mode_ && initializer &&
+                initializer->kind == AstKind::CallExpression &&
+                initializer->children.size() >= 2 && initializer->children[0] &&
+                initializer->children[0]->kind == AstKind::Identifier &&
+                initializer->children[1] &&
+                declaration->children.front()) {
+                const auto& labels = declaration->children.front()->labels;
+                const auto callee = initializer->children[0]->text;
+                const bool names_type =
+                    std::any_of(labels.begin(), labels.end(),
+                                [&](const std::string& label) {
+                                    return label == callee &&
+                                           (class_names_.contains(label) ||
+                                            is_typedef_name(label));
+                                });
+                if (names_type) {
+                    auto arguments = make_ast(AstKind::ExpressionStatement,
+                                              initializer->children[1]->location);
+                    arguments->children =
+                        std::move(initializer->children[1]->children);
+                    initializer = std::move(arguments);
+                }
+            }
             if (initializer) {
                 init->children.push_back(std::move(initializer));
             }
