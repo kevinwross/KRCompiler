@@ -455,6 +455,10 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     next_debug_source_ = 0;
 
     for (const auto& global : module_.globals()) {
+        if (global->external) {
+            out += "        .extern " + global->name + "\n";
+            continue;
+        }
         out += "        .data\n";
         out += "        .align 4\n";
         out += global->name + ":\n";
@@ -493,6 +497,9 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
         emit_function(out, *function, layout);
     }
     for (const auto& global : module_.globals()) {
+        if (global->external) {
+            continue;
+        }
         add_debug_type(global->element_type);
         std::string size_error;
         const auto size = size_of(global->element_type, size_error);

@@ -1430,8 +1430,16 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
                             const frontend::AstNode& declarator,
                             const frontend::AstNode* initializer) {
     const auto name = declarator_name(declarator);
-    if (name.empty() || globals_.find(name) != globals_.end()) {
+    if (name.empty()) {
         return;
+    }
+    const bool external = has_label(specifiers, "extern") && initializer == nullptr;
+    auto existing = globals_.find(name);
+    if (existing != globals_.end()) {
+        if (!existing->second->external || external) {
+            return;
+        }
+        existing->second->external = false;
     }
     auto frontend_type = sema_.declaration_type(specifiers, &declarator);
     if (!frontend_type) {
@@ -1455,11 +1463,20 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
     }
     const auto type = map_type(frontend_type);
     const auto alignment = alignment_of(specifiers, frontend_type);
-    auto* global = module_->add_global(name, type, has_label(specifiers, "const"), alignment);
-    globals_.emplace(name, global);
+    auto* global = existing != globals_.end()
+                       ? existing->second
+                       : module_->add_global(name, type, has_label(specifiers, "const"),
+                                             alignment);
+    if (existing == globals_.end()) {
+        globals_.emplace(name, global);
+    }
+    global->external = external;
     global_frontend_types_[global] = frontend_type;
     if (frontend_type->is_volatile) {
         volatile_globals_.insert(global);
+    }
+    if (external) {
+        return;
     }
     if (type->kind == ir::TypeKind::Struct && frontend_type->record) {
         bool has_destructor = false;

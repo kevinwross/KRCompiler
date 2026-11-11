@@ -126,7 +126,7 @@ entry:
 }
 ```
 
-Constants are `i32 42`, `f64 1.5`, `null`, `undef`, and `c"..."` for a byte array. Globals are `@name = global T ...`. Instruction names are assigned deterministically by the builder; unnamed values print as `%tmpN`. Target id appears as a module comment.
+Constants are `i32 42`, `f64 1.5`, `null`, `undef`, and `c"..."` for a byte array. Globals are `@name = global T ...`; linker-resolved declarations print as `@name = external global T`. External globals have no initializer and no storage in the module. Instruction names are assigned deterministically by the builder; unnamed values print as `%tmpN`. Target id appears as a module comment.
 
 ## Passes and levels
 

@@ -290,6 +290,7 @@ struct GlobalVariable final : Value {
     TypePtr element_type = nullptr;
     Value* initializer = nullptr;
     bool constant = false;
+    bool external = false;
     std::uint32_t alignment = 0;
 };
 
