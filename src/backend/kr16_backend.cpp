@@ -270,9 +270,11 @@ void Kr16Backend::emit_function(std::string& out,
                 load(instruction->operands[1], "R1");
                 out += "    CMP R0, R1\n";
                 const auto true_label =
-                    ".Lcmp.true." + std::to_string(synthetic_label);
+                    ".Lcmp.true." + function.name + "." +
+                    std::to_string(synthetic_label);
                 const auto end_label =
-                    ".Lcmp.end." + std::to_string(synthetic_label);
+                    ".Lcmp.end." + function.name + "." +
+                    std::to_string(synthetic_label);
                 ++synthetic_label;
                 out += "    " + condition_for(instruction->icmp_predicate) + " " +
                        true_label + "\n";

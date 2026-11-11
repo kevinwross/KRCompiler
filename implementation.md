@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 214/214 CTest.
+- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 215/215 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 214/214 CTest.
+- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 215/215 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -290,7 +290,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - KR16 string literals use byte loads/stores (`LDB`/`STB`), and extended `MOV` immediates are sized as two words; `kr16_string.kex` checks `"hi"` and exits 0 on the KR16 VM.
 - KR16 dynamic GEP indices scale by the element size and add to the base pointer; `kr16_index.kex` indexes a global array with a runtime variable and exits 3.
 - KR16 `switch` functions work after handling `ConstantUndef` return values; `kr16_switch.kex` returns 15 on the KR16 VM.
-- Known KR16 gap: calling a function with control-flow blocks (`if`/`switch`) more than once from a loop raises VM exception 5 on the second call; straight-line callees and sequential calls work. The frame/call interaction is under investigation.
+- KR16 per-function compare labels are unique, so a callee with `if`/`switch` can be called repeatedly from a loop; `kr16_call_loop.kex` returns 15 on the KR16 VM.
 - `src/backend/kr16_backend.*` emits scalar integer/pointer functions: SP-relative frame slots, parameters in `R1`–`R3`, two-operand ALU forms, loads/stores, `LEA`, comparisons, branches, calls, and `ret`. `sum.c` assembles and runs locally to exit 55.
 - [ADR 0016](docs/decisions/0016-kr16-scalar-abi.md) and D-040 freeze the M7 scalar calling convention: `R1`–`R3` arguments, `R0` return, `R4` FP, SP-relative frame.
 - [ADR 0017](docs/decisions/0017-kr16-exec-image.md) and D-041 define the minimal `.kex` image: 64-byte header, `.text` at `0x0100`, `.debug_str`, CRC32, and a generated `_start` that calls `main` and halts. `krc -c --target=kr16` writes it.
@@ -534,3 +534,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T04:00:59-08:00** — Fixed KR16 assembler sizing for extended `MOV` immediates and added byte `LDB`/`STB` for i8 accesses. String literals now work: `kr16_string.c` exits 0 on the KR16 VM, with a new assembler unit test; all six configurations pass 212/212 CTest.
 - **2026-11-11T04:10:22-08:00** — KR16 dynamic GEP indices now scale by element size; `values[index]` with a runtime index works, the new `kr16_index.c` image exits 3 on the KR16 VM, and all six configurations pass 213/213 CTest.
 - **2026-11-11T07:56:55-08:00** — KR16 now handles `ConstantUndef` return values, so `switch` functions lower and run; `kr16_switch.kex` returns 15 on the KR16 VM, and all six configurations pass 214/214 CTest.
+- **2026-11-11T08:10:22-08:00** — KR16 compare labels are now unique per function, fixing repeated loop calls to branchy callees; `kr16_call_loop.kex` returns 15 on the KR16 VM, and all six configurations pass 215/215 CTest.
