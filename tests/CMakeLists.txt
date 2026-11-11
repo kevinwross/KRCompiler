@@ -135,6 +135,11 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/bitfields_init.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_bits.kex")
 
+    add_test(NAME krc_kr16_bits_designated_image
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/bitfields_designated.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_bits_designated.kex")
+
     add_test(NAME krc_link_bitfields
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

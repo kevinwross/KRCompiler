@@ -3242,6 +3242,18 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                     }
                     const auto& value = *element->children.back();
                     const std::size_t path_count = element->children.size() - 1;
+                    if (path_count == 1 && init_record &&
+                        element->children.front()) {
+                        for (std::size_t index = 0;
+                             index < init_record->members.size(); ++index) {
+                            if (init_record->members[index].name ==
+                                element->children.front()->text) {
+                                store_member(index, value);
+                                break;
+                            }
+                        }
+                        continue;
+                    }
                     std::function<bool(ir::Value*, ir::TypePtr, std::size_t)> apply =
                         [&](ir::Value* target, ir::TypePtr target_type,
                             std::size_t path) -> bool {
