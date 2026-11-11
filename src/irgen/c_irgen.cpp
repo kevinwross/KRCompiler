@@ -5059,7 +5059,16 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
         if (!operand.value) {
             return {};
         }
+        ir::BasicBlock* done_block = nullptr;
         if (operand.value) {
+            auto* nonnull_block =
+                current_function_->add_block("delete.nonnull");
+            done_block = current_function_->add_block("delete.done");
+            auto* null_value = module_->constant_null(operand.type);
+            auto* is_null = builder_.create_icmp(
+                ir::ICmpPredicate::Eq, operand.value, null_value, "delete.isnull");
+            builder_.create_cond_br(is_null, done_block, nonnull_block);
+            builder_.set_insert_point(nonnull_block);
             const auto element = operand.type && operand.type->kind == ir::TypeKind::Pointer
                                      ? operand.type->element
                                      : nullptr;
@@ -5286,6 +5295,8 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 "delete.base.raw");
         }
         builder_.create_call(free_function, {cast}, nullptr, "delete.call");
+        builder_.create_br(done_block);
+        builder_.set_insert_point(done_block);
         return {nullptr, module_->types().void_type()};
     }
     if (expression.text == "-" || expression.text == "!" ||

@@ -51,6 +51,7 @@ private:
     [[nodiscard]] std::string block_label(const ir::Function& function,
                                           const ir::BasicBlock& block) const;
     [[nodiscard]] std::string escape_string(const std::vector<std::uint8_t>& bytes) const;
+    mutable std::size_t compare_label_counter_ = 0;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;

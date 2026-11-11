@@ -936,8 +936,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         load_value(out, function, layout, instruction.operands[1], "R1");
         out += "        CMP R0, R1\n";
         out += "        MOV R2, #0\n";
-        const auto true_label = ".L" + function.name + "." + instruction.name + ".true";
-        const auto done_label = ".L" + function.name + "." + instruction.name + ".done";
+        const auto serial = compare_label_counter_++;
+        const auto true_label = ".L" + function.name + ".icmp." +
+                                std::to_string(serial) + ".true";
+        const auto done_label = ".L" + function.name + ".icmp." +
+                                std::to_string(serial) + ".done";
         out += "        " + condition_for(instruction.icmp_predicate) + " " + true_label + "\n";
         out += "        JMP " + done_label + "\n";
         out += true_label + ":\n";
