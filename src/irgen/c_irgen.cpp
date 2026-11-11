@@ -4597,7 +4597,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                             break;
                         }
                     }
-                    if (!destructor) {
+                    if (destructor_slot < 0) {
                         destructor =
                             ensure_member_destructor(record->second);
                     }

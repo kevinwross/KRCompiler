@@ -221,7 +221,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Method bodies are generated before free-function definitions, so destructor bodies exist when block-scope cleanups are synthesized.
 - A synthesized `__krc_member_dtor_<class>` now calls the class's own destructor first, then members, then the base; a local `Derived` prints `derived` then `base`.
 - `delete` of a non-virtually-dispatched object calls that complete destructor, so `delete new Derived()` prints `derived` then `base`.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 188/188 CTest.
+- `delete[]` uses the same complete destructor per element for non-virtual classes; a two-element `Derived` array prints `derived`, `base` twice.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 190/190 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -235,7 +236,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 188/188 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 190/190 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -491,3 +492,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T22:28:52-08:00** — Added `atof`, `strtof`, and `llabs` to the KR32 libc. The fixture prints `2.50 1.25 7`; CTest is 184/184.
 - **2026-11-10T22:43:55-08:00** — Generated method bodies before free functions so synthesized cleanups can see destructor bodies, and made block-scope destructors call the class's own destructor, members, then base. A local `Derived` prints `derived` then `base`; the link and IR checks make CTest 186/186.
 - **2026-11-10T22:58:06-08:00** — `delete` now uses the complete destructor for non-virtually-dispatched objects. `delete new Derived()` prints `derived` then `base`; the link and IR checks make CTest 188/188.
+- **2026-11-10T23:10:48-08:00** — `delete[]` uses the same complete destructor per element for non-virtual classes. A two-element `Derived` array prints `derived`, `base` twice; the link and IR checks make CTest 190/190.

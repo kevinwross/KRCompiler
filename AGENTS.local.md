@@ -25,8 +25,8 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 <!-- project:targets:start — generated from .dev-template.json targets; edit the Notes column, not the rows -->
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
-| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release verified locally 2026-11-09; 188/188 CTest; remote CI pending. |
-| Linux | x64 | <ubuntu-latest in CI> | WSL Alpine 3.22 GCC 14.2 Debug/Release and Clang 20.1 Debug/ASan verified locally 2026-11-09; 188/188 CTest; remote CI pending. |
+| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release verified locally 2026-11-09; 190/190 CTest; remote CI pending. |
+| Linux | x64 | <ubuntu-latest in CI> | WSL Alpine 3.22 GCC 14.2 Debug/Release and Clang 20.1 Debug/ASan verified locally 2026-11-09; 190/190 CTest; remote CI pending. |
 <!-- project:targets:end -->
 
 **Host, not VM.** This table is where the toolchain is *built and tested*. The compiler's output targets are KR32 and KR16 — they are not host platforms and do not belong here. ARM64 host CI is deliberately deferred (§15.4); the compiler must nevertheless stay portable C++20, so do not introduce host-specific code without an ADR.
