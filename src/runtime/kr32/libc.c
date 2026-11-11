@@ -528,8 +528,7 @@ void *realloc(void *pointer, unsigned int size) {
 }
 
 static unsigned int random_state = 1;
-int sys_random(void) {
-    random_state = random_state * 1103515245u + 12345u;
+int sys_random(void) {    random_state = random_state * 1103515245u + 12345u;
     return (int)((random_state >> 16) & 0x7fff);
 }
 
@@ -719,6 +718,37 @@ int atoi(const char *text) {
 
 long atol(const char *text) {
     return (long)atoi(text);
+}
+
+double fabs(double value) {
+    return value < 0.0 ? -value : value;
+}
+
+double floor(double value) {
+    long truncated = (long)value;
+    if ((double)truncated > value) {
+        truncated = truncated - 1;
+    }
+    return (double)truncated;
+}
+
+double ceil(double value) {
+    long truncated = (long)value;
+    if ((double)truncated < value) {
+        truncated = truncated + 1;
+    }
+    return (double)truncated;
+}
+
+double sqrt(double value) {
+    if (value <= 0.0) {
+        return 0.0;
+    }
+    double estimate = value >= 1.0 ? value : 1.0;
+    for (int iteration = 0; iteration < 32; iteration++) {
+        estimate = (estimate + value / estimate) / 2.0;
+    }
+    return estimate;
 }
 
 int abs(int value) {

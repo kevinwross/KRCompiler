@@ -3314,7 +3314,51 @@ CIRGen::Expression CIRGen::emit_condition_expression(
         return {};
     }
     auto* condition = emit_condition(*expression.children[0]);
-    auto* temporary = builder_.create_alloca(int_type(), 0, "cond.tmp");
+    std::function<frontend::TypePtr(const frontend::AstNode&)> infer_type =
+        [&](const frontend::AstNode& node) -> frontend::TypePtr {
+        switch (node.kind) {
+        case frontend::AstKind::FloatLiteral: {
+            auto type = std::make_shared<frontend::Type>();
+            type->kind = !node.text.empty() &&
+                                 (node.text.back() == 'f' ||
+                                  node.text.back() == 'F')
+                             ? frontend::TypeKind::Float
+                             : frontend::TypeKind::Double;
+            return type;
+        }
+        case frontend::AstKind::Identifier: {
+            const auto* local = lookup_local(node.text);
+            return local ? local->frontend_type : nullptr;
+        }
+        case frontend::AstKind::UnaryExpression:
+            return node.children.empty() || !node.children.front()
+                       ? nullptr
+                       : infer_type(*node.children.front());
+        case frontend::AstKind::BinaryExpression:
+            if (node.children.size() >= 2 && node.children.front()) {
+                auto left = infer_type(*node.children.front());
+                if (left && left->kind == frontend::TypeKind::Double) {
+                    return left;
+                }
+                if (node.children[1]) {
+                    return infer_type(*node.children[1]);
+                }
+            }
+            return nullptr;
+        case frontend::AstKind::CastExpression:
+            return node.children.empty() || !node.children.front()
+                       ? nullptr
+                       : sema_.type_from_type_name(*node.children.front());
+        default:
+            return nullptr;
+        }
+    };
+    const auto result_frontend = infer_type(*expression.children[1]);
+    const auto result_type = map_type(result_frontend);
+    if (!result_type) {
+        return {};
+    }
+    auto* temporary = builder_.create_alloca(result_type, 0, "cond.tmp");
     auto* then_block = current_function_->add_block("cond.then");
     auto* else_block = current_function_->add_block("cond.else");
     auto* end_block = current_function_->add_block("cond.end");
@@ -3325,7 +3369,7 @@ CIRGen::Expression CIRGen::emit_condition_expression(
     if (!then_value.value) {
         return {};
     }
-    auto* converted_then = promote(then_value.value, then_value.type, int_type());
+    auto* converted_then = promote(then_value.value, then_value.type, result_type);
     builder_.create_store(converted_then, temporary);
     emit_branch(end_block);
 
@@ -3334,13 +3378,13 @@ CIRGen::Expression CIRGen::emit_condition_expression(
     if (!else_value.value) {
         return {};
     }
-    auto* converted_else = promote(else_value.value, else_value.type, int_type());
+    auto* converted_else = promote(else_value.value, else_value.type, result_type);
     builder_.create_store(converted_else, temporary);
     emit_branch(end_block);
 
     builder_.set_insert_point(end_block);
-    return {builder_.create_load(int_type(), temporary, false, 0, "cond.load"),
-            int_type()};
+    return {builder_.create_load(result_type, temporary, false, 0, "cond.load"),
+            result_type};
 }
 
 CIRGen::Expression CIRGen::emit_integer_literal(const frontend::AstNode& expression) {
