@@ -6273,6 +6273,12 @@ void CIRGen::emit_vtable_init(ir::Value* object, ir::TypePtr type) {
              current = current->base && current->base->record
                            ? current->base->record.get()
                            : nullptr) {
+            if (slots[index].starts_with("~")) {
+                implementation = ensure_member_destructor(current);
+                if (implementation) {
+                    break;
+                }
+            }
             const auto methods = class_methods_.find(current->tag);
             if (methods == class_methods_.end()) {
                 continue;
