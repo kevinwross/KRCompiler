@@ -154,6 +154,7 @@ private:
         ir::GlobalVariable* global = nullptr;
         const frontend::RecordInfo* record = nullptr;
         std::vector<const frontend::AstNode*> arguments;
+        bool default_construct = false;
     };
     std::vector<GlobalCtorInfo> global_ctors_;
     struct GlobalInitInfo {

@@ -115,6 +115,72 @@ void CIRGen::generate_global_constructors() {
         }
         auto* constructor =
             select_constructor(info.record->tag, info.arguments.size());
+        if (!constructor && info.default_construct) {
+            auto* function = module_->add_function(
+                "__krc_global_ctor_" + std::to_string(constructor_index++),
+                void_function, ir::Linkage::Internal, false);
+            const auto previous_function = current_function_;
+            const auto previous_class = current_class_;
+            auto* previous_block = builder_.insert_block();
+            const auto previous_scopes = std::move(scopes_);
+            scopes_.clear();
+            current_function_ = function;
+            current_class_ = nullptr;
+            auto* entry = function->add_block("entry");
+            builder_.reset_value_names();
+            builder_.set_insert_point(entry);
+            push_scope();
+            const auto type = info.global->element_type;
+            for (std::size_t member_index = 0;
+                 member_index < info.record->members.size() &&
+                 member_index < type->fields.size();
+                 ++member_index) {
+                const auto& member = info.record->members[member_index];
+                auto* zero = module_->constant_int(int_type(), 0);
+                auto* field_index = module_->constant_int(
+                    int_type(), static_cast<std::int64_t>(member_index));
+                auto* field = builder_.create_gep(
+                    type, info.global, {zero, field_index}, false,
+                    "global.default.field");
+                field->type = module_->types().pointer_type(
+                    type->fields[member_index]);
+                if (member.default_initializer &&
+                    !member.default_initializer->children.empty() &&
+                    member.default_initializer->children.front()) {
+                    emit_initializer(
+                        *member.default_initializer->children.front(), field,
+                        type->fields[member_index]);
+                    continue;
+                }
+                if (!member.type ||
+                    member.type->kind != frontend::TypeKind::Record ||
+                    !member.type->record) {
+                    continue;
+                }
+                auto* member_constructor = select_constructor(
+                    member.type->record->tag, 0);
+                if (!member_constructor) {
+                    continue;
+                }
+                auto* self = field;
+                if (self->type !=
+                    member_constructor->type->parameters[0]) {
+                    self = builder_.create(
+                        ir::Opcode::BitCast,
+                        member_constructor->type->parameters[0], {self},
+                        "global.member.this");
+                }
+                builder_.create_call(member_constructor, {self}, nullptr,
+                                     "global.member.ctor");
+            }
+            builder_.create_ret(nullptr);
+            scopes_ = std::move(previous_scopes);
+            current_function_ = previous_function;
+            current_class_ = previous_class;
+            builder_.set_insert_point(previous_block);
+            constructors.push_back(function);
+            continue;
+        }
         if (!constructor) {
             continue;
         }
@@ -1028,10 +1094,24 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         }
         const bool has_constructor =
             select_constructor(frontend_type->record->tag, 0) != nullptr;
-        if (has_constructor || has_destructor) {
+        bool has_member_initialization = false;
+        for (const auto& member : frontend_type->record->members) {
+            if (member.default_initializer) {
+                has_member_initialization = true;
+            }
+            if (member.type &&
+                member.type->kind == frontend::TypeKind::Record &&
+                member.type->record &&
+                select_constructor(member.type->record->tag, 0)) {
+                has_member_initialization = true;
+            }
+        }
+        if (has_constructor || has_destructor ||
+            has_member_initialization) {
             GlobalCtorInfo info;
             info.global = global;
             info.record = frontend_type->record.get();
+            info.default_construct = !has_constructor;
             global_ctors_.push_back(std::move(info));
             return;
         }
