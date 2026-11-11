@@ -1725,9 +1725,8 @@ static int scan_integer(const char **cursor, int base, long *value,
     return 1;
 }
 
-int sscanf(const char *input, const char *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
+static int scan_text(const char *input, const char *format,
+                     va_list arguments) {
     const char *cursor = input;
     int assigned = 0;
     while (*format) {
@@ -1834,6 +1833,43 @@ int sscanf(const char *input, const char *format, ...) {
             break;
         }
     }
+    return assigned;
+}
+
+int sscanf(const char *input, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int assigned = scan_text(input, format, arguments);
+    va_end(arguments);
+    return assigned;
+}
+
+int vsscanf(const char *input, const char *format, va_list arguments) {
+    return scan_text(input, format, arguments);
+}
+
+int vfscanf(struct FILE *stream, const char *format, va_list arguments) {
+    if (stream == 0) {
+        return -1;
+    }
+    char buffer[4096];
+    const unsigned int length = fread(buffer, 1, sizeof(buffer) - 1, stream);
+    buffer[length] = 0;
+    return scan_text(buffer, format, arguments);
+}
+
+int fscanf(struct FILE *stream, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int assigned = vfscanf(stream, format, arguments);
+    va_end(arguments);
+    return assigned;
+}
+
+int scanf(const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int assigned = vfscanf(stdin, format, arguments);
     va_end(arguments);
     return assigned;
 }
