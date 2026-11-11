@@ -460,7 +460,7 @@ std::optional<std::uint8_t> instruction_size(const Line& line,
                 return std::nullopt;
             }
             if (name == "MOV") {
-                return *immediate >= -128 && *immediate <= 255
+                return *immediate >= -32 && *immediate <= 31
                            ? std::uint8_t{1}
                            : std::uint8_t{2};
             }

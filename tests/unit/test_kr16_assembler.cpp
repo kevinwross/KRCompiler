@@ -7,6 +7,25 @@
 
 using namespace krc::asmkr16;
 
+TEST_CASE("kr16 assembler sizes extended MOV immediates") {
+    const std::string source = R"(
+.text
+_start:
+    MOV R1, #104
+    MOV R0, #1
+    HLT
+)";
+    AssemblyResult result;
+    std::string error;
+    REQUIRE_MESSAGE(assemble(source, result, error), error);
+    REQUIRE(result.text.size() == 8);
+    CHECK(result.text[0] == 0x20);
+    CHECK(result.text[1] == 0xF0);
+    CHECK(result.text[2] == 0x68);
+    CHECK(result.text[3] == 0x00);
+}
+
+
 TEST_CASE("kr16 assembler emits instructions and resolves local labels") {
     const std::string source = R"(
 .text

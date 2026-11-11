@@ -229,13 +229,19 @@ void Kr16Backend::emit_function(std::string& out,
                 break;
             case ir::Opcode::Load:
                 load(instruction->operands[0], "R0");
-                out += "    LD R1, [R0]\n";
+                out += instruction->type && instruction->type->bits == 8
+                           ? "    LDB R1, [R0]\n"
+                           : "    LD R1, [R0]\n";
                 store(*instruction, "R1");
                 break;
             case ir::Opcode::Store:
                 load(instruction->operands[0], "R0");
                 load(instruction->operands[1], "R1");
-                out += "    ST [R1], R0\n";
+                out += instruction->operands[0] &&
+                               instruction->operands[0]->type &&
+                               instruction->operands[0]->type->bits == 8
+                           ? "    STB [R1], R0\n"
+                           : "    ST [R1], R0\n";
                 break;
             case ir::Opcode::Add:
             case ir::Opcode::Sub:
