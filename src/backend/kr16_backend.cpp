@@ -484,6 +484,21 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
             }
             continue;
         }
+        if (const auto* constant =
+                dynamic_cast<const ir::ConstantInt*>(global->initializer)) {
+            const auto size = type_size(global->element_type);
+            out += "    .byte ";
+            for (std::uint32_t index = 0; index < size; ++index) {
+                if (index != 0) {
+                    out += ", ";
+                }
+                out += std::to_string(
+                    static_cast<std::uint8_t>(
+                        (constant->value >> (index * 8)) & 0xFF));
+            }
+            out += "\n";
+            continue;
+        }
         const auto size = type_size(global->element_type);
         for (std::uint32_t offset = 0; offset < size; offset += 16) {
             out += "    .byte ";
