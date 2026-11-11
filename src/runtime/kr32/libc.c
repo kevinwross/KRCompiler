@@ -947,6 +947,40 @@ void *memcpy(void *destination, const void *source, unsigned int count) {
     return destination;
 }
 
+void *memmove(void *destination, const void *source, unsigned int count) {
+    unsigned char *to = (unsigned char *)destination;
+    const unsigned char *from = (const unsigned char *)source;
+    if (to < from) {
+        for (unsigned int index = 0; index < count; index++) {
+            to[index] = from[index];
+        }
+    } else if (to > from) {
+        for (unsigned int index = count; index > 0; index--) {
+            to[index - 1] = from[index - 1];
+        }
+    }
+    return destination;
+}
+
+void *memchr(const void *memory, int character, unsigned int count) {
+    const unsigned char *bytes = (const unsigned char *)memory;
+    const unsigned char target = (unsigned char)character;
+    for (unsigned int index = 0; index < count; index++) {
+        if (bytes[index] == target) {
+            return (void *)(bytes + index);
+        }
+    }
+    return 0;
+}
+
+unsigned int strnlen(const char *text, unsigned int limit) {
+    unsigned int length = 0;
+    while (length < limit && text[length]) {
+        length++;
+    }
+    return length;
+}
+
 void *memset(void *destination, int value, unsigned int count) {
     unsigned char *to = (unsigned char *)destination;
     for (unsigned int index = 0; index < count; index++) {
