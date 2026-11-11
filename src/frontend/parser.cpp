@@ -1678,6 +1678,24 @@ std::unique_ptr<AstNode> Parser::parse_postfix_expression() {
         return nullptr;
     }
     for (;;) {
+        if (cxx_mode_ && check("<") &&
+            expression->kind == AstKind::Identifier) {
+            const auto saved = position_;
+            ++position_;
+            int depth = 1;
+            while (!at_end() && depth > 0) {
+                if (check("<")) {
+                    ++depth;
+                } else if (check(">")) {
+                    --depth;
+                }
+                ++position_;
+            }
+            if (depth == 0 && check("(")) {
+                continue;
+            }
+            position_ = saved;
+        }
         if (match("[")) {
             auto index = parse_expression();
             expect("]", "after subscript");
