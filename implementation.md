@@ -339,6 +339,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - A startup + runtime + user-image link runs the string, conversion, allocation, random, and tokenizer functions and exits 3.
 - KR16 unconditional branches now use `JMP`; conditional branches invert and jump through a short local branch, so large functions assemble without branch-range failures.
 - KR16 aggregate/array allocas reserve their full type size in the frame; previously every local reserved one two-byte slot and overlapping locals could corrupt arrays.
+- `sysroot/include/krc/host.h` declares the KR32 host-service wrappers and open flags.
 - `targets/kr32/runtime/fileio.s` provides `getchar`, `open`, `close`, `read`, `write`, `seek`, `unlink`, `rename`, `stat`, `truncate`, `getcwd`, `chdir`, `dup`, `dup2`, `sys_time`, `sys_argc`, and `sys_arg` over the KR32 host-service vectors; the linked file I/O fixture writes, renames, and unlinks a file and exits 0.
 
 ### M10 — v1.1 language/runtime completion (8–10 weeks)
@@ -581,3 +582,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T10:59:33-08:00** — Added a bump allocator (`malloc`, `free`, `calloc`, `realloc`), `strdup`, `rand`/`srand`, and `strtok` to the KR16 runtime; the linked fixture exercises them and exits 3. All six configurations pass 234/234 CTest.
 - **2026-11-11T11:06:19-08:00** — Added KR32 host-service wrappers for console input and file I/O, with a linked fixture that creates and writes a file. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:11:59-08:00** — Extended the KR32 host-service wrappers with `unlink`, `rename`, `stat`, `truncate`, `getcwd`, `chdir`, `dup`, and `dup2`; the file I/O fixture now writes, renames, and unlinks. All six configurations pass 235/235 CTest.
+- **2026-11-11T11:17:45-08:00** — Added `sysroot/include/krc/host.h` with the KR32 host-service prototypes and open flags; the linked file I/O fixture now uses the header. All six configurations pass 235/235 CTest.
