@@ -68,11 +68,6 @@ CIRGen::CIRGen(frontend::Sema& sema, const frontend::AstNode& translation_unit,
 std::unique_ptr<ir::Module> CIRGen::generate() {
     collect_declarations();
     clone_inherited_methods();
-    for (const auto* definition : definitions_) {
-        if (definition) {
-            generate_function(*definition);
-        }
-    }
     for (const auto& [function, definition] : method_bodies_) {
         const auto class_found = function_classes_.find(function);
         if (class_found != function_classes_.end() && class_found->second) {
@@ -88,6 +83,11 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
             }
         }
         generate_function(*definition, function);
+    }
+    for (const auto* definition : definitions_) {
+        if (definition) {
+            generate_function(*definition);
+        }
     }
     for (const auto& [type, record] : ir_records_) {
         static_cast<void>(type);
@@ -139,7 +139,9 @@ ir::Function* CIRGen::ensure_member_destructor(
         if (base_methods != class_methods_.end()) {
             const auto found = base_methods->second.find(
                 "~" + record->base->record->tag);
-            if (found != base_methods->second.end()) {
+            if (found != base_methods->second.end() &&
+                !found->second->declaration &&
+                !found->second->blocks.empty()) {
                 base_destructor = found->second;
             }
         }
@@ -148,8 +150,18 @@ ir::Function* CIRGen::ensure_member_destructor(
                 ensure_member_destructor(record->base->record.get());
         }
     }
-    if (member_destructors.empty() && !base_destructor) {
-        member_destructors_.emplace(record, nullptr);
+    ir::Function* own_destructor = nullptr;
+    const auto own_methods = class_methods_.find(record->tag);
+    if (own_methods != class_methods_.end()) {
+        const auto found = own_methods->second.find("~" + record->tag);
+        if (found != own_methods->second.end() &&
+            !found->second->declaration &&
+            !found->second->blocks.empty()) {
+            own_destructor = found->second;
+        }
+    }
+    if (member_destructors.empty() && !base_destructor &&
+        !own_destructor) {
         return nullptr;
     }
     auto* function_type = module_->types().function_type(
@@ -173,6 +185,16 @@ ir::Function* CIRGen::ensure_member_destructor(
     push_scope();
     const auto type = record_type->second;
     auto* this_argument = function->parameters[0].get();
+    if (own_destructor) {
+        auto* self = static_cast<ir::Value*>(this_argument);
+        if (self->type != own_destructor->type->parameters[0]) {
+            self = builder_.create(
+                ir::Opcode::BitCast,
+                own_destructor->type->parameters[0], {self},
+                "own.dtor.this");
+        }
+        builder_.create_call(own_destructor, {self}, nullptr, "own.dtor");
+    }
     const auto field_offset =
         type->fields.size() - record->members.size();
     for (auto entry_it = member_destructors.rbegin();
@@ -2806,30 +2828,8 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
         if (type && type->kind == ir::TypeKind::Struct) {
             const auto record = ir_records_.find(type);
             if (record != ir_records_.end()) {
-                ir::Function* cleanup = nullptr;
-                for (auto* current = record->second; current != nullptr;
-                     current = current->base && current->base->record
-                                   ? current->base->record.get()
-                                   : nullptr) {
-                    const auto methods = class_methods_.find(current->tag);
-                    if (methods != class_methods_.end()) {
-                        auto destructor = methods->second.end();
-                        for (auto candidate = methods->second.begin();
-                             candidate != methods->second.end(); ++candidate) {
-                            if (candidate->first.starts_with("~")) {
-                                destructor = candidate;
-                                break;
-                            }
-                        }
-                        if (destructor != methods->second.end()) {
-                            cleanup = destructor->second;
-                            break;
-                        }
-                    }
-                }
-                if (!cleanup) {
-                    cleanup = ensure_member_destructor(record->second);
-                }
+                ir::Function* cleanup =
+                    ensure_member_destructor(record->second);
                 if (cleanup) {
                     local_cleanups_.push_back({address, cleanup});
                 }
