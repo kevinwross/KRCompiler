@@ -1874,3 +1874,19 @@ int scanf(const char *format, ...) {
     return assigned;
 }
 
+long time(long *result) {
+    const long now = (long)sys_time();
+    if (result != 0) {
+        *result = now;
+    }
+    return now;
+}
+
+double difftime(long end, long beginning) {
+    return (double)end - (double)beginning;
+}
+
+long clock(void) {
+    return (long)sys_time() * 1000000L;
+}
+
