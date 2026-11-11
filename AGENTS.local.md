@@ -6,10 +6,44 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 
 **Keep this file current.** When a condition named here changes — a plan leaves DRAFT, a missing directory is created, a trap stops reproducing — update or delete the entry in the same change. A stale instruction is worse than a missing one: it is believed.
 
+## Build policy
+
+Three tiers. Run the smallest one the change needs; never run a larger one "to be safe".
+
+**1. Inner loop — per edit.** One build: the host's debug preset. `windows-msvc-debug` on Windows; `linux-gcc-debug` in WSL or on Linux. `cmake --build --preset …`, then `ctest --preset …`. CMake rebuilds only what changed. While iterating, do not configure or build a release preset, a second compiler, or another host.
+
+**2. Completed change — the matrix for this host.** If the change touched `src/`, `include/krc/`, `targets/`, `sysroot/`, `CMakeLists.txt` or `CMakePresets.json`, build and test every configuration this host can reach:
+
+| Host | Configurations |
+|---|---|
+| Windows | `windows-msvc-debug`, `windows-msvc-release`, plus `linux-gcc-debug`, `linux-gcc-release` in WSL |
+| Linux x64 | `linux-gcc-debug`, `linux-gcc-release` |
+
+Run only your host's row. A change confined to `docs/`, `tests/` or `implementation.md` needs only the inner loop.
+
+**Build the row concurrently.** Each preset has its own binary directory and they are independent, so launch them as separate background jobs and collect the results rather than running them one after another — four at once on Windows, two on Linux. Never point two presets at one build directory.
+
+**3. Milestone gate — clean builds for this host.** Delete the build directories first; incremental output is not a gate. Build and test this host's full row. On Windows that is four configurations covering Windows x64 and Linux x64; on a Linux host, two.
+
+**The gate closes on this host's row, not on every host.** A Windows gate passing says nothing about native Linux or ARM64, and those are expected to need fixing when first built. Do not wait for them, and do not imply they passed — record in `implementation.md` exactly which configurations were built and which remain unverified.
+
+**Target sources rebuild with the compiler.** `targets/**` and `sysroot/**` are compiled by `krc`, not by the host compiler, so a green host build says nothing about them. After any change under `src/`, rebuild the target artifacts and compare: an artifact that changes when only compiler internals changed is a regression signal — investigate it before committing rather than accepting the new bytes.
+
+## Commits and pushing
+
+**This section authorises local commits without asking, and authorises pushing when a gate passes.**
+
+- Commit after each coherent change, once the tier it required is green. Local commits need no permission.
+- **Push when — and only when — a host gate passes.** A gate is tier 3 above: clean builds for every configuration this host can reach. Do not push on a working change, a partial matrix, or a judgement that it "looks good".
+- A tier 2 change stays local until the next gate, unless the operator asks for it to be published.
+- **Tidy unpublished history before pushing** if that produces a clearer record — squash fixups, reorder, reword. That rewrites only commits nobody has seen.
+- **Never rewrite or force-push anything already pushed.** If CI fails on a pushed commit, fix forward with a new commit.
+- One logical change per commit; subject imperative, at most 72 characters.
+
 ## Definition of done
 
-- [ ] Builds clean with **no warnings** on both toolchains: `/W4 /WX` on MSVC **and** `-Wall -Wextra -Wpedantic -Werror` on GCC/Clang. A change clean on one and warning on the other is incomplete (plan §15.4).
-- [ ] `ctest --test-dir build --build-config Release` is green.
+- [ ] Builds clean with **no warnings** in **every configuration this host built**: `/W4 /WX` on MSVC, `-Wall -Wextra -Wpedantic -Werror` on GCC/Clang (plan §15.4).
+- [ ] `ctest --preset <host-debug>` is green, and so is the test run for every other configuration this host built.
 - [ ] The deterministic-output check passes: the same inputs built twice compare byte-for-byte (§15.6).
 - [ ] `docs/` and `implementation.md` are updated in the same change — every merged change updates the implementation log (§15.7).
 - [ ] An ADR under `docs/decisions/` exists when the change touches ABI, object format, symbol format, target description, or IR.
@@ -49,7 +83,7 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 - CMake 3.25 or newer; C++20; no external runtime dependencies.
 - MSVC on Windows and GCC/Clang on Linux, both with warnings as errors. Sanitizers (ASan/UBSan) are configured on Linux only.
 - doctest is vendored for tests — do not replace it with a fetched framework.
-- M0 and M1 are complete locally. M2 is in progress: the v1.0 typed-SSA IR core, builder, verifier, and printer are implemented under `src/ir/`; `src/irgen/` lowers C scalars, pointers, arrays, calls, globals/string literals, and core control flow into verified IR; `src/backend/kr32_backend.*` emits KR32 assembly; `src/backend/kr32_descriptor.*` records the C ABI register roles; `src/asm/kr32_encoder.*` and `src/asm/kr32_assembler.*` encode and assemble the emitted subset; `src/backend/register_allocator.*` implements graph-colouring allocation with spill reporting; `src/backend/peephole.*` removes identity operations; and `krc -S` exposes assembly. M3 is in progress: `docs/object.md`/ADR 0005 freeze KRO v1, `src/linker/kro_object.*` reads/writes objects, `krc -c` emits them, `src/linker/linker.*` plus `krld` link them into a KR32 `.k32` executable, and `targets/kr32/runtime/crt0.s`/`libc.c` provide startup, console, and `puts`; the linker defines heap/stack symbols. G2a and G2b have local evidence: hello prints/exits 0; mainentry prints argc/argv and exits 0; puts prints/exits 0. M4 is complete locally: G3/G4 pass, recursive named structs, byte-offset member access, bit-fields, positional, designated, and nested designated aggregate initializers, integer/floating-point varargs, integer/string/float `printf`, function pointers, and a free-list allocator plus string/memory library are implemented. Debug info uses the ADR 0008 `.debug_info` bridge and a frozen KDBG v1 `.kdbg` section (ADR 0009); `krc --dump-symbols [--json]` decodes it. M5 has reached G5 locally: class data, methods, constructors, block/function-scope destructors, recursive methods, scalar/array `new`/`delete`, default copy, single inheritance, pure virtual declarations, and overrides work. ADR 0011 statically devirtualizes inherited methods per concrete class, and ADR 0013 adds vptr-based dynamic dispatch through a base pointer or reference; `hello.cpp` returns 42 and `balanced-tree.cpp` prints both sorted trees and exits 0. M6 has started: `nullptr`, `true`/`false`, `auto` locals and return types, `decltype`, range-for over arrays and braced lists, `constexpr` variables/functions with branches, loops (for/while/do), recursion, and constant array bounds, C++ `static_assert`, named `static_cast`/`reinterpret_cast`/`const_cast`, `if constexpr` with branch discard, inline variables and weak inline functions/methods, scoped `enum class` with underlying types, applied `alignas`, flat namespaces, chained qualified `outer::inner::name` lookup, `using` aliases, default function/method arguments, constructor overloads, constructor member-initializer lists and delegating constructors, reference-returning and chained assignment via `return *this`, braced class/aggregate initialization, copy and move constructors/assignment via rvalue casts and `std::move`, `explicit`, `noexcept`/`final`, reference variables/parameters and reference members, member/free operators including subscript, call, unary, distinct prefix/postfix increment-decrement, and compound assignment, implicit array-member indexing, no-capture lambdas with deduced return types and by-value, by-reference, init, and default [=]/[&] capturing lambdas, structured bindings over structs and arrays, array `new[]`/`delete[]` object lifetimes, placement new, and int-bound function-template syntax work. Move semantics, templates, lambdas, compile-time `constexpr`, weak/COMDAT/GC/relaxation, and M2 pattern/relaxation/allocator-emission work remain. The KR32 C ABI is frozen by ADR 0001, target descriptor schema v1 by ADR 0002, and the IR core by ADR 0003/0004. The GitHub CI job has not run because this checkout has no remote configured.
+- Current milestone state lives in `implementation.md`; read it before starting work. Do not restate it here.
 - Sibling repositories `../kr32` and `../kr16` are **read-only inputs** (their docs, corpus and conventions are cited throughout `plan.md`). Never edit them from here.
 
 ## Known traps
