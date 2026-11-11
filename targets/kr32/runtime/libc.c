@@ -1296,3 +1296,170 @@ void perror(const char *prefix) {
     puts(strerror(krc_errno));
 }
 
+struct FILE {
+    int descriptor;
+    int eof;
+    int error;
+};
+
+static struct FILE standard_input = {0, 0, 0};
+static struct FILE standard_output = {1, 0, 0};
+static struct FILE standard_error = {2, 0, 0};
+
+struct FILE *stdin = &standard_input;
+struct FILE *stdout = &standard_output;
+struct FILE *stderr = &standard_error;
+
+struct FILE *__krc_stdin_stream(void) {
+    return &standard_input;
+}
+
+struct FILE *__krc_stdout_stream(void) {
+    return &standard_output;
+}
+
+struct FILE *__krc_stderr_stream(void) {
+    return &standard_error;
+}
+
+static int stdio_flags(const char *mode, int *ok) {
+    int flags = 0;
+    int plus = 0;
+    *ok = 1;
+    if (mode == 0 || *mode == 0) {
+        *ok = 0;
+        return 0;
+    }
+    if (*mode == 'r') {
+        flags = 0;
+    } else if (*mode == 'w') {
+        flags = 1 | 4 | 8;
+    } else if (*mode == 'a') {
+        flags = 1 | 4 | 16;
+    } else {
+        *ok = 0;
+        return 0;
+    }
+    for (const char *cursor = mode + 1; *cursor != 0; ++cursor) {
+        if (*cursor == '+') {
+            plus = 1;
+        }
+    }
+    if (plus) {
+        flags = (flags & ~3) | 2;
+    }
+    return flags;
+}
+
+struct FILE *fopen(const char *path, const char *mode) {
+    int ok = 0;
+    const int flags = stdio_flags(mode, &ok);
+    if (!ok) {
+        krc_errno = 22;
+        return 0;
+    }
+    const int descriptor = open(path, flags);
+    if (descriptor < 0) {
+        return 0;
+    }
+    struct FILE *stream = (struct FILE *)malloc(sizeof(struct FILE));
+    if (stream == 0) {
+        close(descriptor);
+        krc_errno = 12;
+        return 0;
+    }
+    stream->descriptor = descriptor;
+    stream->eof = 0;
+    stream->error = 0;
+    return stream;
+}
+
+int fclose(struct FILE *stream) {
+    if (stream == 0 || stream == stdin || stream == stdout || stream == stderr) {
+        return 0;
+    }
+    const int result = close(stream->descriptor);
+    free(stream);
+    return result;
+}
+
+int fflush(struct FILE *stream) {
+    (void)stream;
+    return 0;
+}
+
+int fseek(struct FILE *stream, long offset, int origin) {
+    if (stream == 0) {
+        return -1;
+    }
+    const int result = seek(stream->descriptor, (int)offset, origin);
+    if (result < 0) {
+        stream->error = 1;
+        return -1;
+    }
+    stream->eof = 0;
+    return 0;
+}
+
+long ftell(struct FILE *stream) {
+    if (stream == 0) {
+        return -1;
+    }
+    return (long)seek(stream->descriptor, 0, 1);
+}
+
+unsigned int fread(void *buffer, unsigned int size, unsigned int count,
+                   struct FILE *stream) {
+    if (stream == 0 || size == 0 || count == 0) {
+        return 0;
+    }
+    const unsigned int total = size * count;
+    const int result = read(stream->descriptor, buffer, (int)total);
+    if (result < 0) {
+        stream->error = 1;
+        return 0;
+    }
+    if ((unsigned int)result < total) {
+        stream->eof = 1;
+    }
+    return (unsigned int)result / size;
+}
+
+unsigned int fwrite(const void *buffer, unsigned int size, unsigned int count,
+                    struct FILE *stream) {
+    if (stream == 0 || size == 0 || count == 0) {
+        return 0;
+    }
+    const unsigned int total = size * count;
+    const int result = write(stream->descriptor, buffer, (int)total);
+    if (result < 0) {
+        stream->error = 1;
+        return 0;
+    }
+    return (unsigned int)result / size;
+}
+
+int getc(struct FILE *stream) {
+    unsigned char value = 0;
+    if (fread(&value, 1, 1, stream) != 1) {
+        return -1;
+    }
+    return (int)value;
+}
+
+int fgetc(struct FILE *stream) {
+    return getc(stream);
+}
+
+int fputc(int character, struct FILE *stream) {
+    const unsigned char value = (unsigned char)character;
+    if (fwrite(&value, 1, 1, stream) != 1) {
+        return -1;
+    }
+    return character;
+}
+
+int remove(const char *path) {
+    return unlink(path);
+}
+

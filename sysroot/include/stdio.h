@@ -9,9 +9,13 @@ typedef struct FILE FILE;
 #define EOF (-1)
 #define BUFSIZ 512
 
-extern FILE *stdin;
-extern FILE *stdout;
-extern FILE *stderr;
+FILE *__krc_stdin_stream(void);
+FILE *__krc_stdout_stream(void);
+FILE *__krc_stderr_stream(void);
+
+#define stdin (__krc_stdin_stream())
+#define stdout (__krc_stdout_stream())
+#define stderr (__krc_stderr_stream())
 
 int printf(const char *format, ...);
 int fprintf(FILE *stream, const char *format, ...);
@@ -30,6 +34,8 @@ int getchar(void);
 void perror(const char *s);
 
 FILE *fopen(const char *path, const char *mode);
+int remove(const char *path);
+int rename(const char *old_path, const char *new_path);
 int fclose(FILE *stream);
 size_t fread(void *buffer, size_t size, size_t count, FILE *stream);
 size_t fwrite(const void *buffer, size_t size, size_t count, FILE *stream);
