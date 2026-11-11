@@ -1567,10 +1567,14 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
 
     const auto previous_class = current_class_;
     const auto previous_destructor = in_destructor_;
+    const auto previous_constructor = in_constructor_;
     const auto class_found = function_classes_.find(function);
     current_class_ = class_found == function_classes_.end() ? nullptr : class_found->second;
     in_destructor_ =
         function->name.starts_with("~") || function->name.ends_with("_dtor");
+    const bool emitting_constructor =
+        function->name.find("_ctor_") != std::string::npos;
+    in_constructor_ = emitting_constructor;
     current_function_ = function;
     auto* entry = function->add_block("entry");
     builder_.reset_value_names();
@@ -1615,7 +1619,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
             }
         }
     }
-    if (current_class_) {
+    if (emitting_constructor && current_class_) {
         if (current_class_->base &&
             current_class_->base->kind == frontend::TypeKind::Record &&
             current_class_->base->record &&
@@ -1865,6 +1869,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     current_function_ = nullptr;
     current_class_ = previous_class;
     in_destructor_ = previous_destructor;
+    in_constructor_ = previous_constructor;
 }
 
 void CIRGen::emit_statement(const frontend::AstNode& statement) {
@@ -5718,7 +5723,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                         arguments.push_back(argument.value);
                     }
                     ir::Value* callee = method->second;
-                    if (!in_destructor_ && current_class_ &&
+                    if (!in_destructor_ && !in_constructor_ && current_class_ &&
                         current_class_->polymorphic &&
                         method_is_virtual(*current_class_,
                                           expression.children[0]->text)) {
@@ -5870,7 +5875,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     }
                 }
                 ir::Value* callee = method;
-                if (!in_destructor_ && (arrow || reference_base) && base.value &&
+                if (!in_destructor_ && !in_constructor_ && (arrow || reference_base) && base.value &&
                     source_record != ir_records_.end() &&
                     method_is_virtual(*source_record->second, member.text)) {
                     const int slot = virtual_slot(*source_record->second, member.text);
