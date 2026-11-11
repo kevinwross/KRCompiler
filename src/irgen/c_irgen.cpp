@@ -2778,6 +2778,25 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                    : nullptr) {
                     levels.push_back(current);
                 }
+                if (record->second->base &&
+                    record->second->base->kind ==
+                        frontend::TypeKind::Record &&
+                    record->second->base->record) {
+                    auto* base_constructor = select_constructor(
+                        record->second->base->record->tag, 0);
+                    if (base_constructor) {
+                        auto* base_this = address;
+                        if (base_this->type !=
+                            base_constructor->type->parameters[0]) {
+                            base_this = builder_.create(
+                                ir::Opcode::BitCast,
+                                base_constructor->type->parameters[0],
+                                {base_this}, "default.base.this");
+                        }
+                        builder_.create_call(base_constructor, {base_this},
+                                             nullptr, "default.base.ctor");
+                    }
+                }
                 std::reverse(levels.begin(), levels.end());
                 for (const auto* level : levels) {
                     const auto level_type = record_types_.find(level);
