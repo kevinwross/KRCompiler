@@ -720,6 +720,63 @@ long atol(const char *text) {
     return (long)atoi(text);
 }
 
+double strtod(const char *text, char **end) {
+    const char *cursor = text;
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n' ||
+           *cursor == '\r') {
+        cursor++;
+    }
+    int negative = 0;
+    if (*cursor == '+' || *cursor == '-') {
+        negative = *cursor == '-';
+        cursor++;
+    }
+    double value = 0.0;
+    int digits = 0;
+    while (*cursor >= '0' && *cursor <= '9') {
+        value = value * 10.0 + (double)(*cursor - '0');
+        cursor++;
+        digits++;
+    }
+    if (*cursor == '.') {
+        cursor++;
+        double scale = 0.1;
+        while (*cursor >= '0' && *cursor <= '9') {
+            value += (double)(*cursor - '0') * scale;
+            scale *= 0.1;
+            cursor++;
+            digits++;
+        }
+    }
+    if (digits > 0 && (*cursor == 'e' || *cursor == 'E')) {
+        const char *exponent_start = cursor;
+        cursor++;
+        int exponent_negative = 0;
+        if (*cursor == '+' || *cursor == '-') {
+            exponent_negative = *cursor == '-';
+            cursor++;
+        }
+        int exponent = 0;
+        int exponent_digits = 0;
+        while (*cursor >= '0' && *cursor <= '9') {
+            exponent = exponent * 10 + (*cursor - '0');
+            cursor++;
+            exponent_digits++;
+        }
+        if (exponent_digits == 0) {
+            cursor = exponent_start;
+        } else {
+            for (int index = 0; index < exponent; index++) {
+                value = exponent_negative ? value / 10.0 : value * 10.0;
+            }
+        }
+    }
+    if (end) {
+        *end = (char *)(digits > 0 ? cursor : text);
+    }
+    return negative ? -value : value;
+}
+
 double fabs(double value) {
     return value < 0.0 ? -value : value;
 }

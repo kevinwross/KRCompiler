@@ -4951,6 +4951,17 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
         } else if (expression.text == "^=") {
             opcode = ir::Opcode::Xor;
         }
+        if (ir::is_float(address.type)) {
+            if (expression.text == "+=") {
+                opcode = ir::Opcode::FAdd;
+            } else if (expression.text == "-=") {
+                opcode = ir::Opcode::FSub;
+            } else if (expression.text == "*=") {
+                opcode = ir::Opcode::FMul;
+            } else if (expression.text == "/=") {
+                opcode = ir::Opcode::FDiv;
+            }
+        }
         value = builder_.create(opcode, address.type, {left, value}, "assign.op");
     }
     builder_.create_store(value, address.value);
