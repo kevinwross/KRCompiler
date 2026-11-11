@@ -1413,7 +1413,7 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 14. **Symbol format text/JSON schema.** Confirm the canonical dump is the tooling contract.
 15. **Host ARM64 CI.** Required at v1.0 or later?
 16. **Third-party test suites.** Are c-testsuite/libc++ tests acceptable as test-only dependencies, given the “own tools” goal?
-17. **KDBG portable source paths.** KDBG v1 stores physical host paths in source records. Should v1.1 add a source-root table so images built on Windows and Linux resolve the same project and sysroot paths, and what is the compatibility contract for existing v1 readers? This is unresolved and needs an ADR before the debug path work.
+17. **KDBG portable source paths.** Resolved by [ADR 0020](docs/decisions/0020-kdbg-source-path-policy.md): KDBG v1 keeps its layout, and `krld --source-root=DIR` emits `/`-separated relative paths for sources under `DIR`. A source-root table and v1.1 path-remap record are deferred; no v1.1 table is currently planned.
 
 ---
 

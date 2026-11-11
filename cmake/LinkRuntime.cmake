@@ -32,7 +32,9 @@ endif()
 if(DEFINED IO AND NOT IO STREQUAL "")
     list(APPEND extra_objects "${IO}")
 endif()
-execute_process(COMMAND "${KRLD}" "${object}" ${extra_objects} "${RUNTIME}" -o "${OUTPUT}"
+get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+execute_process(COMMAND "${KRLD}" "${object}" ${extra_objects} "${RUNTIME}"
+                        "--source-root=${root}" -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)
     message(FATAL_ERROR "krld failed with ${link_result}")

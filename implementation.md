@@ -324,7 +324,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 **M8 evidence (2026-11-11, in progress):**
 
 - Deterministic double-build checks cover KR32 objects, single-unit KR16 `.kex`, KR16 KRO objects, and linked KR16 images.
-- `krld --source-root=DIR` rewrites KDBG source paths under `DIR` to relative paths; `krc_debug_paths_relative` verifies hello records `tests/fixtures/c/hello.c` with no absolute root.
+- [ADR 0020](docs/decisions/0020-kdbg-source-path-policy.md) keeps KDBG v1 and defines `krld --source-root=DIR`; the runtime link helper passes the project root, and `krc_debug_paths_relative` verifies hello records `tests/fixtures/c/hello.c` with no absolute root.
 
 ### M9 — v1.1 runtime/libc/host services (8–10 weeks)
 
@@ -361,7 +361,7 @@ Approval conditions: none.
 Tracked open questions are in `plan.md` §17.2. The decision points that affect milestones are:
 
 - Target-descriptor schema and C ABI frozen before M2/M5.
-- KDBG portable source paths and the v1.1 source-root decision. `krld --source-root=DIR` can emit relative KDBG paths, but the default remains absolute and the policy needs an ADR.
+- KDBG portable source paths: [ADR 0020](docs/decisions/0020-kdbg-source-path-policy.md) resolves the policy; `krld --source-root=DIR` is available, the default remains the recorded path, and a v1.1 source-root table is deferred.
 - KR16 ABI appendix before M7.
 - EH record encoding ADR before M10.
 - `libc.c` port strategy before M9.
@@ -591,3 +591,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T11:32:42-08:00** — Documented the KR32 host-service layers, vectors, flags, errno mapping, sandbox, and KR16 status in [docs/host-services.md](docs/host-services.md), and refreshed the KR16 ABI summary and freeze checklist.
 - **2026-11-11T11:38:39-08:00** — Made KR16 `puts` emit a trailing newline and added `getchar` alongside `putchar`; linked hello now prints a newline. All six configurations pass 236/236 CTest.
 - **2026-11-11T11:48:15-08:00** — Added `krld --source-root=DIR`, which rewrites KDBG source paths under the root to `/`-separated relative paths, with a CTest verifying hello records no absolute root. All six configurations pass 237/237 CTest.
+- **2026-11-11T11:49:57-08:00** — Recorded the KDBG path decision in ADR 0020, marked the plan open item resolved, and made the normal runtime link helper emit project-relative source paths. All six configurations pass 237/237 CTest.

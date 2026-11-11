@@ -62,5 +62,6 @@ What was rejected and why.
 - [0017-kr16-exec-image.md](0017-kr16-exec-image.md) — accepted; emits a minimal single-unit KR16 EXEC image with a generated startup.
 - [0018-global-constructors.md](0018-global-constructors.md) — accepted; initializes namespace-scope objects through a generated `main` wrapper.
 - [0019-kr16-object-linker.md](0019-kr16-object-linker.md) — accepted; adds KR16 relocatable objects, absolute relocations, and the linker path.
+- [0020-kdbg-source-path-policy.md](0020-kdbg-source-path-policy.md) — accepted; keeps KDBG v1 and adds `krld --source-root` relative source paths.
 
 The next expected ADRs are the KR16 ABI appendix, the EH descriptor encoding, and the KDBG record layout.
