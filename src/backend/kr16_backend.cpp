@@ -346,8 +346,13 @@ void Kr16Backend::emit_function(std::string& out,
                 break;
             }
             case ir::Opcode::GetElementPtr: {
+                const bool dynamic_index =
+                    instruction->operands.size() == 2 &&
+                    dynamic_cast<const ir::ConstantInt*>(
+                        instruction->operands[1]) == nullptr;
                 std::uint32_t offset = 0;
-                if (!gep_offset(*instruction, offset, error)) {
+                if (!dynamic_index &&
+                    !gep_offset(*instruction, offset, error)) {
                     return;
                 }
                 if (!instruction->operands.empty() &&
@@ -359,7 +364,21 @@ void Kr16Backend::emit_function(std::string& out,
                 } else {
                     load(instruction->operands[0], "R0");
                 }
-                if (offset != 0) {
+                if (dynamic_index) {
+                    const auto size = type_size(instruction->source_type);
+                    load(instruction->operands[1], "R1");
+                    if (size == 2) {
+                        out += "    ADD R1, R1\n";
+                    } else if (size == 4) {
+                        out += "    SHL R1, #1\n";
+                    } else if (size == 8) {
+                        out += "    SHL R1, #2\n";
+                    } else if (size != 1) {
+                        error = "KR16 dynamic GEP element size is unsupported";
+                        return;
+                    }
+                    out += "    ADD R0, R1\n";
+                } else if (offset != 0) {
                     out += "    MOV R1, #" + std::to_string(offset) + "\n";
                     out += "    ADD R0, R1\n";
                 }
