@@ -300,16 +300,26 @@ std::optional<EncodedInstruction> encode_mnemonic(
 
     if (name == "SHL" || name == "SHR" || name == "SAR") {
         const auto rd = register_at(0);
-        const auto count = immediate_at(1);
-        if (!rd || !count) {
-            error = "expected shift register and count";
+        if (!rd) {
+            error = "expected shift register";
             return std::nullopt;
         }
-        const auto shift = name == "SHL" ? Shift::Shl
-                                         : (name == "SHR" ? Shift::Shr
-                                                          : Shift::Sar);
-        return encode_shift(*rd, shift, static_cast<std::uint8_t>(*count),
-                            error);
+        const auto shift = name == "SHL" ? RFunction::Shl
+                                         : (name == "SHR" ? RFunction::Shr
+                                                          : RFunction::Sar);
+        if (const auto count = immediate_at(1)) {
+            const auto immediate_shift =
+                name == "SHL" ? Shift::Shl
+                              : (name == "SHR" ? Shift::Shr : Shift::Sar);
+            return encode_shift(*rd, immediate_shift,
+                                static_cast<std::uint8_t>(*count), error);
+        }
+        const auto rs = register_at(1);
+        if (!rs) {
+            error = "expected shift count register";
+            return std::nullopt;
+        }
+        return encode_r(*rd, *rs, shift, error);
     }
 
     if (name == "BTST" || name == "BSET" || name == "BCLR" ||

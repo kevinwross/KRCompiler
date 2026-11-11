@@ -263,6 +263,18 @@ void Kr16Backend::emit_function(std::string& out,
                                                 : "    MODU R0, R1\n")));
                 store(*instruction, "R0");
                 break;
+            case ir::Opcode::Shl:
+            case ir::Opcode::LShr:
+            case ir::Opcode::AShr:
+                load(instruction->operands[0], "R0");
+                load(instruction->operands[1], "R1");
+                out += instruction->opcode == ir::Opcode::Shl
+                           ? "    SHL R0, R1\n"
+                           : (instruction->opcode == ir::Opcode::LShr
+                                  ? "    SHR R0, R1\n"
+                                  : "    SAR R0, R1\n");
+                store(*instruction, "R0");
+                break;
             case ir::Opcode::Add:
             case ir::Opcode::Sub:
             case ir::Opcode::And:
