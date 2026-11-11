@@ -111,6 +111,11 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_arith.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_arith.kro")
 
+    add_test(NAME krc_kr16_asm_object
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16 --emit-object
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr16/entry.s"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_entry.kro")
+
     add_test(NAME krc_kr16_shift_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_shift.c"

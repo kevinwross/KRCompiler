@@ -266,6 +266,55 @@ int main(int argc, char** argv) {
     options.include_paths = include_paths;
 
     for (const auto& input : inputs) {
+        const auto input_extension =
+            std::filesystem::path(input).extension().string();
+        if (emit_object_container && input_extension == ".s") {
+            std::ifstream source_file(input, std::ios::binary);
+            if (!source_file) {
+                diagnostics.report(krc::frontend::Severity::Error,
+                                   "cannot open '" + input + "'");
+                continue;
+            }
+            const std::string source_text(
+                (std::istreambuf_iterator<char>(source_file)),
+                std::istreambuf_iterator<char>());
+            krc::asmkr16::AssemblyResult assembled;
+            std::string assemble_error;
+            if (!krc::asmkr16::assemble(source_text, assembled,
+                                        assemble_error)) {
+                diagnostics.report(krc::frontend::Severity::Error,
+                                   "KR16 assembler: " + assemble_error);
+                continue;
+            }
+            krc::linker::KroObject object;
+            std::string object_error;
+            if (!krc::asmkr16::make_object(assembled, profile, object,
+                                           object_error)) {
+                diagnostics.report(krc::frontend::Severity::Error,
+                                   "KR16 object: " + object_error);
+                continue;
+            }
+            std::vector<std::uint8_t> bytes;
+            if (!krc::linker::write_object(object, bytes, object_error)) {
+                diagnostics.report(krc::frontend::Severity::Error,
+                                   "KR16 object: " + object_error);
+                continue;
+            }
+            auto path = output_path.empty()
+                            ? std::filesystem::path(input).replace_extension(
+                                  ".kro")
+                            : std::filesystem::path(output_path);
+            std::ofstream file(path, std::ios::binary);
+            if (!file) {
+                diagnostics.report(krc::frontend::Severity::Error,
+                                   "cannot open object output '" +
+                                       path.string() + "'");
+                continue;
+            }
+            file.write(reinterpret_cast<const char*>(bytes.data()),
+                       static_cast<std::streamsize>(bytes.size()));
+            continue;
+        }
         krc::frontend::Preprocessor preprocessor(sources, diagnostics, profile, options);
         auto tokens = preprocessor.preprocess_file(input);
         if (!tokens) {
