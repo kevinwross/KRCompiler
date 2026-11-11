@@ -4405,6 +4405,29 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                                  "delete.dtor");
                         }
                     }
+                    const auto delete_methods =
+                        class_methods_.find(record->second->tag);
+                    const bool has_own_destructor =
+                        delete_methods != class_methods_.end() &&
+                        delete_methods->second.find(destructor_name) !=
+                            delete_methods->second.end();
+                    if (!has_own_destructor) {
+                        auto* member_destructor =
+                            ensure_member_destructor(record->second);
+                        if (member_destructor) {
+                            auto* self = operand.value;
+                            if (self->type !=
+                                member_destructor->type->parameters[0]) {
+                                self = builder_.create(
+                                    ir::Opcode::BitCast,
+                                    member_destructor->type->parameters[0],
+                                    {self}, "delete.member.this");
+                            }
+                            builder_.create_call(member_destructor, {self},
+                                                 nullptr,
+                                                 "delete.member.dtor");
+                        }
+                    }
                 }
             }
         }
