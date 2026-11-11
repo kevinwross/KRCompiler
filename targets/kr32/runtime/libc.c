@@ -1285,3 +1285,14 @@ char *strerror(int code) {
     }
 }
 
+void perror(const char *prefix) {
+    if (prefix != 0 && *prefix != 0) {
+        while (*prefix != 0) {
+            putchar(*prefix++);
+        }
+        putchar(':');
+        putchar(' ');
+    }
+    puts(strerror(krc_errno));
+}
+

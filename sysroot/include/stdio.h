@@ -27,6 +27,7 @@ int sscanf(const char *input, const char *format, ...);
 int putchar(int c);
 int puts(const char *s);
 int getchar(void);
+void perror(const char *s);
 
 FILE *fopen(const char *path, const char *mode);
 int fclose(FILE *stream);

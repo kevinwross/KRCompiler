@@ -343,7 +343,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - A startup + runtime + user-image link runs the string, conversion, allocation, random, and tokenizer functions and exits 3.
 - KR16 unconditional branches now use `JMP`; conditional branches invert and jump through a short local branch, so large functions assemble without branch-range failures.
 - KR16 aggregate/array allocas reserve their full type size in the frame; previously every local reserved one two-byte slot and overlapping locals could corrupt arrays.
-- KR32 `strerror` maps the runtime errno values and returns stable text for unknown codes.\n- [docs/host-services.md](docs/host-services.md) records the KR32 wrapper layers, vectors, flags, errno mapping, sandbox, and the KR16 `SYS_VERSION`-only status.
+- KR32 `strerror` maps the runtime errno values, and `perror` writes an optional prefix plus the current error text to the console.\n- [docs/host-services.md](docs/host-services.md) records the KR32 wrapper layers, vectors, flags, errno mapping, sandbox, and the KR16 `SYS_VERSION`-only status.
 - `sysroot/include/krc/host.h` declares the KR32 host-service wrappers and open flags; C wrappers map negative host results to `-1` and set `errno` through `__krc_errno_location`.
 - `targets/kr32/runtime/fileio.s` provides `getchar`, `open`, `close`, `read`, `write`, `seek`, `unlink`, `rename`, `stat`, `truncate`, `getcwd`, `chdir`, `dup`, `dup2`, `sys_time`, `sys_argc`, and `sys_arg` over the KR32 host-service vectors; the linked file I/O fixture writes, renames, and unlinks a file and exits 0.
 
@@ -603,3 +603,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T13:40:20-08:00** — Registered C++ `struct` tags as class names for construction syntax, so `Box box(7)` parses as a constructor-initialized declaration. Added a linked fixture returning 7; tier-2 builds pass 244/244.
 - **2026-11-11T14:03:28-08:00** — Made `delete`/`delete[]` on null skip destruction and freeing, and replaced KR32 ICmp name-based labels with a per-function counter to avoid duplicate labels across repeated comparisons. Added a linked null-delete fixture; debug CTest is 245/245.
 - **2026-11-11T14:05:23-08:00** — Added KR32 `strerror` for the runtime errno values and a linked fixture covering `ENOENT`, `EINVAL`, and an unknown code. Debug CTest is 246/246.
+- **2026-11-11T14:07:38-08:00** — Added KR32 `perror` on top of `strerror` and the console, declared it in `<stdio.h>`, and exercised `open: No such file or directory` in the linked fixture. Debug CTest is 246/246.

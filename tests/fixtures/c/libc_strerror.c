@@ -1,7 +1,6 @@
 #include <errno.h>
+#include <stdio.h>
 #include <string.h>
-
-char *strerror(int code);
 
 int main(void) {
     errno = 0;
@@ -14,5 +13,7 @@ int main(void) {
     if (strcmp(strerror(999), "Unknown error") != 0) {
         return 3;
     }
+    errno = ENOENT;
+    perror("open");
     return 0;
 }
