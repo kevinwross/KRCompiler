@@ -81,6 +81,10 @@ int putchar(int character) {
     return character;
 }
 
+int getchar(void) {
+    return (int)*(unsigned char *)0xF004;
+}
+
 char *strncpy(char *destination, const char *source, unsigned int count) {
     char *result = destination;
     while (count > 0 && *source != 0) {

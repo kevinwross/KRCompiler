@@ -17,5 +17,7 @@ puts:
     ADD R1, #1
     BRA .Lputs_loop
 .Lputs_done:
+    MOV R0, #10
+    STB [R2], R0
     MOV R0, #0
     RET
