@@ -209,3 +209,111 @@ int atoi(const char *text) {
 int abs(int value) {
     return value < 0 ? -value : value;
 }
+
+static unsigned char *heap_next;
+#define HEAP_BEGIN ((unsigned char *)0x2000)
+#define HEAP_END ((unsigned char *)0xE000)
+
+void *malloc(unsigned int size) {
+    size = (size + 1) & ~1u;
+    if (heap_next == 0) {
+        heap_next = HEAP_BEGIN;
+    }
+    if (size == 0 || heap_next + size > HEAP_END) {
+        return 0;
+    }
+    void *result = heap_next;
+    heap_next += size;
+    return result;
+}
+
+void free(void *pointer) {
+    (void)pointer;
+}
+
+void *calloc(unsigned int count, unsigned int size) {
+    unsigned int total = count * size;
+    unsigned char *memory = (unsigned char *)malloc(total);
+    if (memory == 0) {
+        return 0;
+    }
+    unsigned int index = 0;
+    while (index < total) {
+        memory[index++] = 0;
+    }
+    return memory;
+}
+
+void *realloc(void *pointer, unsigned int size) {
+    if (pointer == 0) {
+        return malloc(size);
+    }
+    void *result = malloc(size);
+    if (result == 0) {
+        return 0;
+    }
+    unsigned char *source = (unsigned char *)pointer;
+    unsigned char *destination = (unsigned char *)result;
+    unsigned int index = 0;
+    while (index < size) {
+        destination[index] = source[index];
+        index++;
+    }
+    return result;
+}
+
+char *strdup(const char *source) {
+    const unsigned int size = strlen(source) + 1;
+    char *copy = (char *)malloc(size);
+    if (copy != 0) {
+        strcpy(copy, source);
+    }
+    return copy;
+}
+
+static unsigned int random_state = 1;
+
+void srand(unsigned int seed) {
+    random_state = seed;
+}
+
+int rand(void) {
+    random_state = random_state * 1103515245u + 12345u;
+    return (int)((random_state >> 16) & 0x7FFF);
+}
+
+static char *token_cursor;
+
+static int is_delimiter(char character, const char *delimiters) {
+    while (*delimiters != 0) {
+        if (*delimiters == character) {
+            return 1;
+        }
+        delimiters++;
+    }
+    return 0;
+}
+
+char *strtok(char *text, const char *delimiters) {
+    if (text != 0) {
+        token_cursor = text;
+    }
+    if (token_cursor == 0) {
+        return 0;
+    }
+    while (*token_cursor != 0 && is_delimiter(*token_cursor, delimiters)) {
+        token_cursor++;
+    }
+    if (*token_cursor == 0) {
+        token_cursor = 0;
+        return 0;
+    }
+    char *token = token_cursor;
+    while (*token_cursor != 0 && !is_delimiter(*token_cursor, delimiters)) {
+        token_cursor++;
+    }
+    if (*token_cursor != 0) {
+        *token_cursor++ = 0;
+    }
+    return token;
+}
