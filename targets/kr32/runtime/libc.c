@@ -1968,3 +1968,11 @@ int toupper(int character) {
     return islower(character) ? character - ('a' - 'A') : character;
 }
 
+double fmin(double left, double right) {
+    return left < right ? left : right;
+}
+
+double fmax(double left, double right) {
+    return left > right ? left : right;
+}
+
