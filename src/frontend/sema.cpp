@@ -2116,6 +2116,31 @@ std::optional<long long> Sema::parse_character_literal(std::string_view text) co
         case '0':
             value = 0;
             break;
+        case 'x': {
+            value = 0;
+            int digits = 0;
+            while (index < text.size()) {
+                const char character = text[index];
+                int digit = -1;
+                if (character >= '0' && character <= '9') {
+                    digit = character - '0';
+                } else if (character >= 'a' && character <= 'f') {
+                    digit = character - 'a' + 10;
+                } else if (character >= 'A' && character <= 'F') {
+                    digit = character - 'A' + 10;
+                }
+                if (digit < 0) {
+                    break;
+                }
+                value = value * 16 + digit;
+                digits++;
+                index++;
+            }
+            if (digits == 0) {
+                return std::nullopt;
+            }
+            break;
+        }
         default:
             if (escape >= '0' && escape <= '7') {
                 value = escape - '0';
