@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 234/234 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 235/235 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 234/234 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 235/235 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -327,7 +327,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 ### M9 — v1.1 runtime/libc/host services (8–10 weeks)
 
-- [ ] Port KR32 `libc.c` (allocator, stdio, string, `strto*`, `qsort`, file I/O).
+- [ ] Port KR32 `libc.c` (allocator, stdio, string, `strto*`, `qsort`, file I/O). The allocator, stdio/string/conversion, `qsort`/`bsearch`, and KR32 host-service file wrappers are present; broader file APIs and error mapping remain.
 - [ ] Standard `printf` with length modifiers and `%p`; float formatting on KR32. `%p`, `%ld`/`%lu`/`%zu`, unsigned values, `%o`, width/zero/left alignment, integer precision, `+`/space signs, `*` width/precision, and `%.Ns`/`%Ns` strings work; the locale-aware set remains.
 - [ ] Common host-service ABI and per-VM shims; kernel profile.
 - [ ] Integrate KR16 `libc.s`/`resources/fileio.c`. A C string/memory runtime (`strlen`, `strcmp`, `strncmp`, `strcpy`, `strncpy`, `strcat`, `strncat`, `strchr`, `strrchr`, `strstr`, `memcpy`, `memset`, `memcmp`, `atoi`, `strtol`, `strtoul`, `abs`, `putchar`, `malloc`, `free`, `calloc`, `realloc`, `strdup`, `rand`, `srand`, `strtok`) builds to `libkrcrt.kro` and links with the startup object; file I/O and the existing assembly libc remain.
@@ -339,6 +339,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - A startup + runtime + user-image link runs the string, conversion, allocation, random, and tokenizer functions and exits 3.
 - KR16 unconditional branches now use `JMP`; conditional branches invert and jump through a short local branch, so large functions assemble without branch-range failures.
 - KR16 aggregate/array allocas reserve their full type size in the frame; previously every local reserved one two-byte slot and overlapping locals could corrupt arrays.
+- `targets/kr32/runtime/fileio.s` provides `getchar`, `open`, `close`, `read`, `write`, `seek`, `sys_time`, `sys_argc`, and `sys_arg` over the KR32 host-service vectors; the linked file I/O fixture writes a file and exits 0.
 
 ### M10 — v1.1 language/runtime completion (8–10 weeks)
 
@@ -573,8 +574,9 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T10:01:08-08:00** — The object path now accepts `.s` input, with a test object from `entry.s`; `targets/kr16/runtime/crt0.s` is present but still needs external `main` relocations. All six configurations pass 228/228 CTest.
 - **2026-11-11T10:13:08-08:00** — KR16 external absolute references now emit 16-bit KRO relocations, calls lower through `MOV R0,#callee; CALL R0`, and `crt0.s` builds to an object. All six configurations pass 229/229 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:26:43-08:00** — Completed the KR16 relocatable link path under ADR 0019/D-041: every label-based MOV/LEA is relocated, `krld` links target ID 2 at `0x0100`, and the KEX writer separates load base from entry. Linked `hello.c` prints and exits 0, `sum.c` exits 55, and a two-object image exits 42. All six configurations pass 231/231 CTest.
-- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 234/234 CTest with 101 doctest cases / 615 assertions.
+- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 235/235 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:34:07-08:00** — Wrote [docs/abi-kr16.md](docs/abi-kr16.md), covering the IP16 data model, registers, frame layout, indirect calls, globals, startup, relocations, and deferred features; linked it from the docs index, README, and ABI overview.
 - **2026-11-11T10:44:52-08:00** — Added a compilable KR16 string/memory runtime, a staged `libkrcrt.kro` target, and a startup+runtime+user link fixture. Long KR16 functions now use `JMP` plus short inverted conditional branches. All six configurations pass 234/234 CTest.
-- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 234/234 CTest.
+- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 235/235 CTest.
 - **2026-11-11T10:59:33-08:00** — Added a bump allocator (`malloc`, `free`, `calloc`, `realloc`), `strdup`, `rand`/`srand`, and `strtok` to the KR16 runtime; the linked fixture exercises them and exits 3. All six configurations pass 234/234 CTest.
+- **2026-11-11T11:06:19-08:00** — Added KR32 host-service wrappers for console input and file I/O, with a linked fixture that creates and writes a file. All six configurations pass 235/235 CTest.
