@@ -37,7 +37,7 @@ A change is done when:
 | M4 C core + debug format | G3/G4 passed locally | complete locally | C core, bit-fields, debugger session, frozen KDBG v1, and dump tooling are in place; M5 C++ is next |
 | M5 C++ core | G5 passed locally | in progress | G5 runs; classes, methods, constructors, destructors, `new`/`delete`, default copy, inheritance, and static devirtualization work; general vtables, move semantics, and dynamic dispatch remain |
 | M6 C++11/14/17 | G6 | in progress | `nullptr`, `auto`/`decltype`, range-for, `constexpr`, `enum class`, and `::` qualification work; templates, lambdas, move semantics, and structured bindings remain |
-| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global arrays, and a minimal `.kex` image work; `hello.c`, `sum.c`, global-array fixtures, dynamic indexing, switch, string, integer-arithmetic, shift, global-pointer, multidimensional-array, function-pointer, and pointer-difference fixtures run locally; relocatable objects, the full linker, and the wider runtime remain |
+| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global arrays, and a minimal `.kex` image work; `hello.c`, `sum.c`, global-array fixtures, dynamic indexing, switch, string, integer-arithmetic, shift, global-pointer, multidimensional-array, function-pointer, pointer-difference, and bit-field-initializer fixtures run locally; relocatable objects, the full linker, and the wider runtime remain |
 | M8 v1.0 hardening | G8 | pending | — |
 | M9 v1.1 runtime/libc/host services | G9 partial | pending | — |
 | M10 v1.1 language/runtime completion | G9 | pending | — |
@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 222/222 CTest.
+- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 224/224 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 222/222 CTest.
+- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 224/224 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -297,6 +297,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Multidimensional array subscripts decay intermediate arrays to pointers; `matrix2d.c` returns 3 on both KR32 and KR16.
 - KR16 indirect calls use `CALL R0` and function values lower to `MOV R0, #name`; `kr16_fnptr.kex` calls through a local function pointer and exits 5.
 - Pointer subtraction converts both operands to integers, subtracts, and divides by the element size; `kr16_ptrdiff.kex` returns 3.
+- Bit-field aggregate initializers now use shifted read-modify-write stores; `bitfields_init.c` returns 22 on both KR32 and KR16.
 - `src/backend/kr16_backend.*` emits scalar integer/pointer functions: SP-relative frame slots, parameters in `R1`–`R3`, two-operand ALU forms, loads/stores, `LEA`, comparisons, branches, calls, and `ret`. `sum.c` assembles and runs locally to exit 55.
 - [ADR 0016](docs/decisions/0016-kr16-scalar-abi.md) and D-040 freeze the M7 scalar calling convention: `R1`–`R3` arguments, `R0` return, `R4` FP, SP-relative frame.
 - [ADR 0017](docs/decisions/0017-kr16-exec-image.md) and D-041 define the minimal `.kex` image: 64-byte header, `.text` at `0x0100`, `.debug_str`, CRC32, and a generated `_start` that calls `main` and halts. `krc -c --target=kr16` writes it.
@@ -547,3 +548,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T08:51:51-08:00** — Intermediate array subscripts now decay to element pointers, fixing multidimensional indexing on both targets; corrected KR16 scaling for 4- and 8-byte GEP elements. `matrix2d.c` returns 3 on both VMs, and all six configurations pass 220/220 CTest.
 - **2026-11-11T09:01:24-08:00** — KR16 indirect calls now load the callee into `R0` and use `CALL R0`, and function values get their real address; `kr16_fnptr.kex` calls through a pointer and exits 5, and all six configurations pass 221/221 CTest.
 - **2026-11-11T09:11:17-08:00** — Pointer subtraction now converts both pointers to integers and divides by the pointee size; `kr16_ptrdiff.kex` returns 3, and all six configurations pass 222/222 CTest.
+- **2026-11-11T09:21:42-08:00** — Bit-field aggregate initializers now use shifted read-modify-write stores; `bitfields_init.c` returns 22 on both VMs, and all six configurations pass 224/224 CTest.

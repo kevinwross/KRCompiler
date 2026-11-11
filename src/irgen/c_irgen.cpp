@@ -3152,6 +3152,76 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
             return member;
         };
         if (type && type->kind == ir::TypeKind::Struct) {
+            const auto* init_record =
+                ir_records_.find(type) == ir_records_.end()
+                    ? nullptr
+                    : ir_records_.find(type)->second;
+            const auto store_member =
+                [&](std::size_t index, const frontend::AstNode& value) {
+                const auto member_type = type->fields[index];
+                if (init_record && index < init_record->members.size() &&
+                    init_record->members[index].bit_field &&
+                    init_record->members[index].bit_width > 0) {
+                    const auto offsets =
+                        sema_.record_member_offsets(*init_record);
+                    const auto byte_offset = offsets[index];
+                    std::uint32_t bit_offset = 0;
+                    for (std::size_t previous = 0; previous < index;
+                         ++previous) {
+                        if (init_record->members[previous].bit_field &&
+                            offsets[previous] == byte_offset &&
+                            init_record->members[previous].bit_width > 0) {
+                            bit_offset +=
+                                init_record->members[previous].bit_width;
+                        }
+                    }
+                    auto* byte_type = module_->types().int_type(8, false);
+                    auto* byte_pointer = builder_.create(
+                        ir::Opcode::BitCast,
+                        module_->types().pointer_type(byte_type), {address},
+                        "init.bitfield.byte");
+                    auto* offset = module_->constant_int(
+                        int_type(),
+                        static_cast<std::int64_t>(byte_offset));
+                    auto* slot = builder_.create_gep(
+                        byte_type, byte_pointer, {offset}, false,
+                        "init.bitfield");
+                    slot->type = module_->types().pointer_type(member_type);
+                    auto value_expression = emit_expression(value);
+                    if (!value_expression.value) {
+                        return;
+                    }
+                    auto* converted = promote(value_expression.value,
+                                              value_expression.type,
+                                              member_type);
+                    auto* old = builder_.create_load(
+                        member_type, slot, false, 0, "init.bitfield.old");
+                    const auto width =
+                        init_record->members[index].bit_width;
+                    const std::uint64_t field_mask =
+                        width >= 64 ? ~0ull : ((1ull << width) - 1);
+                    auto* mask = module_->constant_int(member_type,
+                                                       field_mask);
+                    auto* inverse = module_->constant_int(
+                        member_type,
+                        ~(field_mask << bit_offset));
+                    auto* cleared =
+                        builder_.create_and(old, inverse, "init.bitfield.clear");
+                    auto* narrowed =
+                        builder_.create_and(converted, mask, "init.bitfield.value");
+                    auto* shift = module_->constant_int(member_type,
+                                                        bit_offset);
+                    auto* shifted =
+                        builder_.create_shl(narrowed, shift, "init.bitfield.shift");
+                    auto* combined =
+                        builder_.create_or(cleared, shifted,
+                                           "init.bitfield.combine");
+                    builder_.create_store(combined, slot, false, 0);
+                    return;
+                }
+                auto* member = member_address(type, index, member_type);
+                emit_initializer(value, member, member_type);
+            };
             const bool designated = std::any_of(
                 initializer.children.begin(), initializer.children.end(),
                 [](const std::unique_ptr<frontend::AstNode>& child) {
@@ -3213,9 +3283,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                     continue;
                 }
                 if (positional < type->fields.size()) {
-                    auto* member = member_address(type, positional,
-                                                  type->fields[positional]);
-                    emit_initializer(*element, member, type->fields[positional]);
+                    store_member(positional, *element);
                 }
                 ++positional;
             }
