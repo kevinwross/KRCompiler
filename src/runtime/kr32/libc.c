@@ -633,6 +633,70 @@ char *strstr(const char *text, const char *needle) {
     return 0;
 }
 
+static int character_in_set(char character, const char *set) {
+    while (*set) {
+        if (*set == character) {
+            return 1;
+        }
+        set++;
+    }
+    return 0;
+}
+
+unsigned int strspn(const char *text, const char *accept) {
+    unsigned int count = 0;
+    while (text[count] && character_in_set(text[count], accept)) {
+        count++;
+    }
+    return count;
+}
+
+unsigned int strcspn(const char *text, const char *reject) {
+    unsigned int count = 0;
+    while (text[count] && !character_in_set(text[count], reject)) {
+        count++;
+    }
+    return count;
+}
+
+char *strpbrk(const char *text, const char *accept) {
+    while (*text) {
+        if (character_in_set(*text, accept)) {
+            return (char *)text;
+        }
+        text++;
+    }
+    return 0;
+}
+
+static char *token_cursor;
+
+char *strtok(char *text, const char *delimiters) {
+    if (text == 0) {
+        text = token_cursor;
+    }
+    if (text == 0) {
+        return 0;
+    }
+    while (*text && character_in_set(*text, delimiters)) {
+        text++;
+    }
+    if (*text == 0) {
+        token_cursor = text;
+        return 0;
+    }
+    char *token = text;
+    while (*text && !character_in_set(*text, delimiters)) {
+        text++;
+    }
+    if (*text) {
+        *text = 0;
+        text++;
+    }
+    token_cursor = text;
+    return token;
+}
+
 int atoi(const char *text) {
     int sign = 1;
     int value = 0;
