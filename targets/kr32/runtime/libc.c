@@ -1,5 +1,29 @@
 #include <stdarg.h>
 
+int krc_errno = 0;
+
+int *__krc_errno_location(void) {
+    return &krc_errno;
+}
+
+extern int krc_sys_getchar(void);
+extern int krc_sys_open(const char *path, int flags);
+extern int krc_sys_close(int descriptor);
+extern int krc_sys_read(int descriptor, void *buffer, int count);
+extern int krc_sys_write(int descriptor, const void *buffer, int count);
+extern int krc_sys_seek(int descriptor, int offset, int whence);
+extern int krc_sys_time(void);
+extern int krc_sys_argc(void);
+extern int krc_sys_arg(int index, char *buffer, int size);
+extern int krc_sys_unlink(const char *path);
+extern int krc_sys_rename(const char *old_path, const char *new_path);
+extern int krc_sys_stat(const char *path, void *buffer, int capacity);
+extern int krc_sys_truncate(const char *path, int length);
+extern int krc_sys_getcwd(char *buffer, int capacity);
+extern int krc_sys_chdir(const char *path);
+extern int krc_sys_dup(int descriptor);
+extern int krc_sys_dup2(int source, int target);
+
 int putchar(int character);
 void exit(int status);
 
@@ -1132,5 +1156,81 @@ int memcmp(const void *left, const void *right, unsigned int count) {
 
 void abort(void) {
     exit(1);
+}
+
+static int host_result(int result) {
+    if (result < 0) {
+        krc_errno = -result;
+        return -1;
+    }
+    return result;
+}
+
+int getchar(void) {
+    return krc_sys_getchar();
+}
+
+int open(const char *path, int flags) {
+    return host_result(krc_sys_open(path, flags));
+}
+
+int close(int descriptor) {
+    return host_result(krc_sys_close(descriptor));
+}
+
+int read(int descriptor, void *buffer, int count) {
+    return host_result(krc_sys_read(descriptor, buffer, count));
+}
+
+int write(int descriptor, const void *buffer, int count) {
+    return host_result(krc_sys_write(descriptor, buffer, count));
+}
+
+int seek(int descriptor, int offset, int whence) {
+    return host_result(krc_sys_seek(descriptor, offset, whence));
+}
+
+int unlink(const char *path) {
+    return host_result(krc_sys_unlink(path));
+}
+
+int rename(const char *old_path, const char *new_path) {
+    return host_result(krc_sys_rename(old_path, new_path));
+}
+
+int stat(const char *path, void *buffer, int capacity) {
+    return host_result(krc_sys_stat(path, buffer, capacity));
+}
+
+int truncate(const char *path, int length) {
+    return host_result(krc_sys_truncate(path, length));
+}
+
+int getcwd(char *buffer, int capacity) {
+    return host_result(krc_sys_getcwd(buffer, capacity));
+}
+
+int chdir(const char *path) {
+    return host_result(krc_sys_chdir(path));
+}
+
+int dup(int descriptor) {
+    return host_result(krc_sys_dup(descriptor));
+}
+
+int dup2(int source, int target) {
+    return host_result(krc_sys_dup2(source, target));
+}
+
+int sys_time(void) {
+    return krc_sys_time();
+}
+
+int sys_argc(void) {
+    return krc_sys_argc();
+}
+
+int sys_arg(int index, char *buffer, int size) {
+    return host_result(krc_sys_arg(index, buffer, size));
 }
 

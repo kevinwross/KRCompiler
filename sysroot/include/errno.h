@@ -1,7 +1,9 @@
 #ifndef KRC_ERRNO_H
 #define KRC_ERRNO_H
 
-extern int errno;
+int *__krc_errno_location(void);
+
+#define errno (*__krc_errno_location())
 
 #define EDOM 33
 #define ERANGE 34

@@ -1,88 +1,88 @@
-; KR32 host-service wrappers. Arguments follow the C ABI in R0..R3 and the
-; host result is returned in R0.
+; KR32 host-service syscall stubs. The C runtime wraps these to map negative
+; host results to -1 and errno. Arguments follow the C ABI in R0..R3.
         .text
 
-        .global getchar
-getchar:
+        .global krc_sys_getchar
+krc_sys_getchar:
         SYSCALL #34
         RET
 
-        .global open
-open:
+        .global krc_sys_open
+krc_sys_open:
         SYSCALL #35
         RET
 
-        .global close
-close:
+        .global krc_sys_close
+krc_sys_close:
         SYSCALL #36
         RET
 
-        .global read
-read:
+        .global krc_sys_read
+krc_sys_read:
         SYSCALL #37
         RET
 
-        .global write
-write:
+        .global krc_sys_write
+krc_sys_write:
         SYSCALL #38
         RET
 
-        .global seek
-seek:
+        .global krc_sys_seek
+krc_sys_seek:
         SYSCALL #39
         RET
 
-        .global sys_time
-sys_time:
+        .global krc_sys_time
+krc_sys_time:
         SYSCALL #40
         RET
 
-        .global sys_argc
-sys_argc:
+        .global krc_sys_argc
+krc_sys_argc:
         SYSCALL #42
         RET
 
-        .global sys_arg
-sys_arg:
+        .global krc_sys_arg
+krc_sys_arg:
         SYSCALL #43
         RET
 
-        .global unlink
-unlink:
+        .global krc_sys_unlink
+krc_sys_unlink:
         SYSCALL #52
         RET
 
-        .global rename
-rename:
+        .global krc_sys_rename
+krc_sys_rename:
         SYSCALL #53
         RET
 
-        .global stat
-stat:
+        .global krc_sys_stat
+krc_sys_stat:
         SYSCALL #54
         RET
 
-        .global truncate
-truncate:
+        .global krc_sys_truncate
+krc_sys_truncate:
         SYSCALL #55
         RET
 
-        .global getcwd
-getcwd:
+        .global krc_sys_getcwd
+krc_sys_getcwd:
         SYSCALL #56
         RET
 
-        .global chdir
-chdir:
+        .global krc_sys_chdir
+krc_sys_chdir:
         SYSCALL #57
         RET
 
-        .global dup
-dup:
+        .global krc_sys_dup
+krc_sys_dup:
         SYSCALL #58
         RET
 
-        .global dup2
-dup2:
+        .global krc_sys_dup2
+krc_sys_dup2:
         SYSCALL #59
         RET
