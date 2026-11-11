@@ -200,7 +200,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - The KR32 libc adds `fabs`, `floor`, `ceil`, and Newton-iteration `sqrt`; the math fixture prints `4.0 -2.0 2.0 3.5`.
 - It also adds overlap-safe `memmove`, `memchr`, and `strnlen`; the memory fixture shifts within a buffer and prints `aabcd l 3`.
 - Explicit template arguments on a function call are consumed by the parser, so `maximum<int>(3,4)` reaches the int-bound template body and returns 4; deduction and substitution remain deferred.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 160/160 CTest.
+- `new` of a class with no user constructor applies default member initializers; `new Value()` observes `number == 5`.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 161/161 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -214,7 +215,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 160/160 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 161/161 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -452,3 +453,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T18:37:20-08:00** — Improved conditional result typing to prefer a double/float/pointer branch from either side, so `condition ? 0 : 3.5` and `condition ? 0 : "text"` keep their types. The fixture returns 0; CTest is 158/158.
 - **2026-11-10T18:46:35-08:00** — Added `memmove`, `memchr`, and `strnlen` to the KR32 libc. The memory fixture shifts `abcde` to `aabcd` and checks a bounded length; CTest is 159/159.
 - **2026-11-10T18:56:15-08:00** — Consumed explicit template-argument lists in function calls, so `maximum<int>(3,4)` reaches the int-bound template body. The fixture returns 4; CTest is 160/160.
+- **2026-11-10T19:06:26-08:00** — Applied default member initializers to `new` allocations when the class has no user constructor. The fixture observes 5 from `new Value()`; CTest is 161/161.

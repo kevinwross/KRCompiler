@@ -3957,6 +3957,32 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     builder_.set_insert_point(end_block);
                 } else if (constructor) {
                     builder_.create_call(constructor, {pointer}, nullptr, "new.ctor");
+                } else if (!array && !record->second->polymorphic &&
+                           !record->second->base) {
+                    for (std::size_t member_index = 0;
+                         member_index < record->second->members.size() &&
+                         member_index < type->fields.size();
+                         ++member_index) {
+                        const auto& member =
+                            record->second->members[member_index];
+                        if (!member.default_initializer ||
+                            member.default_initializer->children.empty() ||
+                            !member.default_initializer->children.front()) {
+                            continue;
+                        }
+                        auto* zero = module_->constant_int(int_type(), 0);
+                        auto* field_index = module_->constant_int(
+                            int_type(),
+                            static_cast<std::int64_t>(member_index));
+                        auto* field = builder_.create_gep(
+                            type, pointer, {zero, field_index}, false,
+                            "new.default");
+                        field->type = module_->types().pointer_type(
+                            type->fields[member_index]);
+                        emit_initializer(
+                            *member.default_initializer->children.front(),
+                            field, type->fields[member_index]);
+                    }
                 }
             }
         }
