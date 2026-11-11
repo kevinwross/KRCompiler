@@ -4428,6 +4428,24 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
         auto* value = builder_.create_icmp(predicate, left.value, right.value, "cmp");
         return {value, value->type};
     }
+    if (operation == "-" && ir::is_pointer(left.type) &&
+        ir::is_pointer(right.type)) {
+        auto* left_integer = builder_.create(
+            ir::Opcode::PtrToInt, int_type(), {left.value}, "ptrdiff.left");
+        auto* right_integer = builder_.create(
+            ir::Opcode::PtrToInt, int_type(), {right.value}, "ptrdiff.right");
+        auto* difference = builder_.create_sub(left_integer, right_integer,
+                                               "ptrdiff.bytes");
+        const auto element_size =
+            left.type->element ? ir_size_of(left.type->element) : 0;
+        if (element_size > 1) {
+            auto* divisor = module_->constant_int(
+                int_type(), static_cast<std::int64_t>(element_size));
+            difference = builder_.create_sdiv(difference, divisor,
+                                             "ptrdiff.elements");
+        }
+        return {difference, int_type()};
+    }
     if ((operation == "+" || operation == "-") && ir::is_pointer(left.type)) {
         auto* zero = module_->constant_int(int_type(), 0);
         const bool subtract = operation == "-";
