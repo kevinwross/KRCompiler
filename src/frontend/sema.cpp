@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -1327,13 +1328,43 @@ TypePtr Sema::analyze_type_name(const AstNode& type_name) {
     if (type_name.text == "decltype") {
         if (!type_name.children.empty() && type_name.children.front()) {
             const auto* operand = type_name.children.front().get();
-            if (operand && operand->kind == AstKind::Identifier) {
-                if (auto* symbol = lookup_ordinary(operand->text)) {
-                    return symbol->type ? symbol->type : int_type_;
+            std::function<TypePtr(const AstNode&)> infer_decltype =
+                [&](const AstNode& node) -> TypePtr {
+                switch (node.kind) {
+                case AstKind::Identifier:
+                    if (auto* symbol = lookup_ordinary(node.text)) {
+                        return symbol->type ? symbol->type : int_type_;
+                    }
+                    return int_type_;
+                case AstKind::IntegerLiteral:
+                    return int_type_;
+                case AstKind::FloatLiteral:
+                    return type_named("double");
+                case AstKind::CastExpression:
+                    return node.children.empty() || !node.children.front()
+                               ? int_type_
+                               : analyze_type_name(*node.children.front());
+                case AstKind::BinaryExpression: {
+                    if (node.children.size() < 2) {
+                        return int_type_;
+                    }
+                    const auto left = infer_decltype(*node.children[0]);
+                    const auto right = infer_decltype(*node.children[1]);
+                    if ((left && left->kind == TypeKind::Double) ||
+                        (right && right->kind == TypeKind::Double)) {
+                        return type_named("double");
+                    }
+                    if ((left && left->kind == TypeKind::Float) ||
+                        (right && right->kind == TypeKind::Float)) {
+                        return type_named("float");
+                    }
+                    return left ? left : int_type_;
                 }
-                return int_type_;
-            }
-            return analyze_expression(*operand);
+                default:
+                    return int_type_;
+                }
+            };
+            return infer_decltype(*operand);
         }
         return int_type_;
     }

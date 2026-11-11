@@ -228,7 +228,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Global object initialization offsets derived member fields past the base fields; `Derived global` with a base value 5 and an extra member 7 sums to 12.
 - C11 `_Generic` selects the matching association by the inferred control type, comparing pointer element types and record tags, and falls back to `default`; the fixture selects 3 for `int`, 7 for `double`, and 9 for `int *`.
 - `_Generic` also infers a cast expression's type, so `_Generic((double)integer, double:11)` selects 11.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 200/200 CTest.
+- `decltype(expression)` infers arithmetic types from locals, integer/float literals, casts, and binary operands; `decltype(integer + 1) sum` declares an `int`.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 201/201 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -242,7 +243,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 200/200 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 201/201 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -506,3 +507,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T00:20:43-08:00** — Implemented C11 `_Generic` selection by inferred control type with a `default` fallback. The fixture selects 3 for `int` and 7 for `double`; CTest is 199/199.
 - **2026-11-11T00:33:40-08:00** — `_Generic` now compares pointer element types and record tags, and the fixture also selects 9 for `int *`; CTest remains 199/199.
 - **2026-11-11T00:46:56-08:00** — `_Generic` now infers a cast expression's type, so a `(double)` control selects the `double` association. CTest is 200/200.
+- **2026-11-11T01:01:15-08:00** — `decltype(expression)` now infers locals, literals, casts, and binary arithmetic operands in Sema and CIRGen. The fixture declares an `int` from `decltype(integer + 1)` and returns 0; CTest is 201/201.

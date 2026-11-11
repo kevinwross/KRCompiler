@@ -2515,13 +2515,53 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             init->children[1]) {
             frontend_type = sema_.expression_type(*init->children[1]);
         }
+        std::function<frontend::TypePtr(const frontend::AstNode&)>
+            infer_decltype;
+        infer_decltype = [&](const frontend::AstNode& node)
+            -> frontend::TypePtr {
+            switch (node.kind) {
+            case frontend::AstKind::Identifier:
+                if (auto* local = lookup_local(node.text)) {
+                    return local->frontend_type;
+                }
+                return nullptr;
+            case frontend::AstKind::IntegerLiteral:
+                return sema_.type_named("int");
+            case frontend::AstKind::FloatLiteral:
+                return sema_.type_named("double");
+            case frontend::AstKind::CastExpression:
+                return node.children.empty() || !node.children.front()
+                           ? nullptr
+                           : sema_.type_from_type_name(
+                                 *node.children.front());
+            case frontend::AstKind::BinaryExpression: {
+                if (node.children.size() < 2) {
+                    return nullptr;
+                }
+                const auto left = infer_decltype(*node.children[0]);
+                const auto right = infer_decltype(*node.children[1]);
+                if ((left && left->kind == frontend::TypeKind::Double) ||
+                    (right && right->kind == frontend::TypeKind::Double)) {
+                    return sema_.type_named("double");
+                }
+                if ((left && left->kind == frontend::TypeKind::Float) ||
+                    (right && right->kind == frontend::TypeKind::Float)) {
+                    return sema_.type_named("float");
+                }
+                return left ? left : right;
+            }
+            default:
+                return nullptr;
+            }
+        };
         for (const auto& specifier : specifiers.children) {
             if (specifier && specifier->kind == frontend::AstKind::TypeName &&
-                specifier->text == "decltype" && !specifier->children.empty() &&
-                specifier->children.front() &&
-                specifier->children.front()->kind == frontend::AstKind::Identifier) {
-                if (auto* local = lookup_local(specifier->children.front()->text)) {
-                    frontend_type = local->frontend_type;
+                specifier->text == "decltype" &&
+                !specifier->children.empty() &&
+                specifier->children.front()) {
+                if (const auto inferred =
+                        infer_decltype(*specifier->children.front())) {
+                    frontend_type = inferred;
                 }
             }
         }
