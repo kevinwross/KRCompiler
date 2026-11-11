@@ -1498,19 +1498,43 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     }
     if (current_class_) {
         for (const auto& member : current_class_->members) {
-            if (!member.default_initializer ||
-                explicit_member_initializers.contains(member.name) ||
-                member.default_initializer->children.empty() ||
-                !member.default_initializer->children.front()) {
+            if (explicit_member_initializers.contains(member.name)) {
+                continue;
+            }
+            if (member.default_initializer &&
+                !member.default_initializer->children.empty() &&
+                member.default_initializer->children.front()) {
+                auto address = emit_implicit_member_lvalue(member.name);
+                if (!address.value || !address.type) {
+                    continue;
+                }
+                emit_initializer(
+                    *member.default_initializer->children.front(),
+                    address.value, address.type);
                 continue;
             }
             auto address = emit_implicit_member_lvalue(member.name);
-            if (!address.value || !address.type) {
+            if (!address.value || !address.type ||
+                address.type->kind != ir::TypeKind::Struct) {
                 continue;
             }
-            emit_initializer(
-                *member.default_initializer->children.front(), address.value,
-                address.type);
+            const auto record = ir_records_.find(address.type);
+            if (record == ir_records_.end() || !record->second) {
+                continue;
+            }
+            auto* constructor = select_constructor(record->second->tag, 0);
+            if (!constructor) {
+                continue;
+            }
+            auto* self = address.value;
+            if (self->type != constructor->type->parameters[0]) {
+                self = builder_.create(
+                    ir::Opcode::BitCast,
+                    constructor->type->parameters[0], {self},
+                    "ctor.member.this");
+            }
+            builder_.create_call(constructor, {self}, nullptr,
+                                 "ctor.member.default");
         }
     }
 
@@ -5529,7 +5553,15 @@ CIRGen::Expression CIRGen::emit_implicit_member_lvalue(std::string_view name) {
     if (index >= owner->members.size() || !owner->members[index].type) {
         return {};
     }
-    const auto field_type = map_type(owner->members[index].type);
+    ir::TypePtr field_type = nullptr;
+    const auto owner_type = record_types_.find(owner);
+    if (owner_type != record_types_.end() &&
+        index < owner_type->second->fields.size()) {
+        field_type = owner_type->second->fields[index];
+    }
+    if (!field_type) {
+        field_type = map_type(owner->members[index].type);
+    }
     if (!field_type) {
         return {};
     }
