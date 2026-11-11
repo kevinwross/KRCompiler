@@ -3405,6 +3405,26 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
         }
         const frontend::AstNode* selected = nullptr;
         const frontend::AstNode* fallback = nullptr;
+        std::function<bool(const frontend::TypePtr&,
+                           const frontend::TypePtr&)>
+            types_match;
+        types_match = [&](const frontend::TypePtr& left,
+                          const frontend::TypePtr& right) -> bool {
+            if (!left || !right) {
+                return false;
+            }
+            if (left->kind != right->kind) {
+                return false;
+            }
+            if (left->kind == frontend::TypeKind::Pointer) {
+                return types_match(left->element, right->element);
+            }
+            if (left->kind == frontend::TypeKind::Record) {
+                return left->record && right->record &&
+                       left->record->tag == right->record->tag;
+            }
+            return true;
+        };
         for (std::size_t index = 1; index + 1 < expression.children.size();) {
             const auto* label = expression.children[index].get();
             if (!label) {
@@ -3412,8 +3432,7 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
             }
             if (label->kind == frontend::AstKind::TypeName) {
                 const auto label_type = sema_.type_from_type_name(*label);
-                if (!selected && control_type && label_type &&
-                    control_type->kind == label_type->kind) {
+                if (!selected && types_match(control_type, label_type)) {
                     selected = expression.children[index + 1].get();
                 }
                 index += 2;

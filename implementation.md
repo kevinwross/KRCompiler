@@ -226,7 +226,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Block-scope default construction runs the base-class zero-argument constructor before member initialization; a local `Derived` observes `Base`'s 5.
 - `new Derived()` also runs the base-class zero-argument constructor and starts member fields at the base offset.
 - Global object initialization offsets derived member fields past the base fields; `Derived global` with a base value 5 and an extra member 7 sums to 12.
-- C11 `_Generic` selects the matching association by the inferred control type and falls back to `default`; the fixture selects 3 for `int` and 7 for `double`.
+- C11 `_Generic` selects the matching association by the inferred control type, comparing pointer element types and record tags, and falls back to `default`; the fixture selects 3 for `int`, 7 for `double`, and 9 for `int *`.
 - `krc_tests` has 98 cases / 585 assertions; all six configurations pass 199/199 CTest.
 
 ### M4 — C core + debug format (complete locally)
@@ -503,3 +503,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T23:54:25-08:00** — `new Derived()` now runs an unnamed base-class zero-argument constructor and offsets member initialization past the base fields. The fixture returns 5; the link and IR checks make CTest 196/196.
 - **2026-11-11T00:07:25-08:00** — Global object initialization now starts derived member fields after the base fields. A base value 5 plus an extra member 7 sums to 12; the link and IR checks make CTest 198/198.
 - **2026-11-11T00:20:43-08:00** — Implemented C11 `_Generic` selection by inferred control type with a `default` fallback. The fixture selects 3 for `int` and 7 for `double`; CTest is 199/199.
+- **2026-11-11T00:33:40-08:00** — `_Generic` now compares pointer element types and record tags, and the fixture also selects 9 for `int *`; CTest remains 199/199.
