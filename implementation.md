@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 235/235 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 236/236 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 235/235 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 236/236 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -278,7 +278,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [ ] KR16 ABI appendix and calling-convention suite.
 - [ ] Codegen, frame layout, image writer. Scalar codegen, SP-relative frame layout, the in-tree assembler, global arrays, and the minimal `.kex` writer work for single-unit integer/pointer code; relocatable objects and the full linker remain.
 - [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55, `hello.c` prints `Hello, KR16!` and exits 0, and a global-array fixture exits 6 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
-- [x] Gate G7: KR16 C is accepted, assembled, linked, and run. Linked `hello.c` prints `Hello, KR16!` and exits 0; `sum.c` exits 55; a two-object `lib`/`main` image returns 42.
+- [x] Gate G7: KR16 C is accepted, assembled, linked, and run. Linked `hello.c` prints `Hello, KR16!` and exits 0; `sum.c` exits 55; a two-object `lib`/`main` image returns 42, and local/nested/array struct copies return 81.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
 
@@ -310,7 +310,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `hello.c` prints `Hello, KR16!` and exits 0: string globals are emitted as `.byte` text data, `LEA` resolves their labels, and the generated image includes a minimal MMIO `puts` shim.
 - Constant folding now applies integer cast width and signedness, so `(char)-1 > 0` is true on the unsigned-char KR16 profile.
 - [ADR 0019](docs/decisions/0019-kr16-object-linker.md) extends D-041: `--emit-object` writes KRO objects, external absolute labels get `Abs16` relocations, calls use `MOV R0,#callee; CALL R0`, and `krld` writes a KR16 EXEC with a separate load base and entry.
-- The linked path runs `hello.c` (`Hello, KR16!`, exit 0), `sum.c` (exit 55), and a two-object `lib`/`main` image (exit 42).
+- The linked path runs `hello.c` (`Hello, KR16!`, exit 0), `sum.c` (exit 55), a two-object `lib`/`main` image (exit 42), and local/nested/array struct copies (exit 81).
 - CTest is 118/118 across all six configurations; `krc_tests` is 98 cases / 585 assertions.
 
 ### M8 — v1.0 hardening (6–8 weeks)
@@ -575,12 +575,13 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T10:01:08-08:00** — The object path now accepts `.s` input, with a test object from `entry.s`; `targets/kr16/runtime/crt0.s` is present but still needs external `main` relocations. All six configurations pass 228/228 CTest.
 - **2026-11-11T10:13:08-08:00** — KR16 external absolute references now emit 16-bit KRO relocations, calls lower through `MOV R0,#callee; CALL R0`, and `crt0.s` builds to an object. All six configurations pass 229/229 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:26:43-08:00** — Completed the KR16 relocatable link path under ADR 0019/D-041: every label-based MOV/LEA is relocated, `krld` links target ID 2 at `0x0100`, and the KEX writer separates load base from entry. Linked `hello.c` prints and exits 0, `sum.c` exits 55, and a two-object image exits 42. All six configurations pass 231/231 CTest.
-- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 235/235 CTest with 101 doctest cases / 615 assertions.
+- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 236/236 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:34:07-08:00** — Wrote [docs/abi-kr16.md](docs/abi-kr16.md), covering the IP16 data model, registers, frame layout, indirect calls, globals, startup, relocations, and deferred features; linked it from the docs index, README, and ABI overview.
 - **2026-11-11T10:44:52-08:00** — Added a compilable KR16 string/memory runtime, a staged `libkrcrt.kro` target, and a startup+runtime+user link fixture. Long KR16 functions now use `JMP` plus short inverted conditional branches. All six configurations pass 234/234 CTest.
-- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 235/235 CTest.
+- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 236/236 CTest.
 - **2026-11-11T10:59:33-08:00** — Added a bump allocator (`malloc`, `free`, `calloc`, `realloc`), `strdup`, `rand`/`srand`, and `strtok` to the KR16 runtime; the linked fixture exercises them and exits 3. All six configurations pass 234/234 CTest.
 - **2026-11-11T11:06:19-08:00** — Added KR32 host-service wrappers for console input and file I/O, with a linked fixture that creates and writes a file. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:11:59-08:00** — Extended the KR32 host-service wrappers with `unlink`, `rename`, `stat`, `truncate`, `getcwd`, `chdir`, `dup`, and `dup2`; the file I/O fixture now writes, renames, and unlinks. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:17:45-08:00** — Added `sysroot/include/krc/host.h` with the KR32 host-service prototypes and open flags; the linked file I/O fixture now uses the header. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:25:49-08:00** — Separated the KR32 syscall stubs from their C wrappers, mapped negative host results to `-1` plus `errno`, gave every runtime link the host stubs by default, and tested a failed open. All six configurations pass 235/235 CTest.
+- **2026-11-11T11:31:38-08:00** — Added a linked KR16 fixture for local, copied, nested, and array-of-struct values; it runs to exit 81. All six configurations pass 236/236 CTest.

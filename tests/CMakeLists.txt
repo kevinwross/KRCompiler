@@ -140,6 +140,15 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_multi.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Multi.cmake)
 
+    add_test(NAME krc_kr16_link_struct_local
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_struct_local.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_struct_local.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
+
     add_test(NAME krc_kr16_link_runtime
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
