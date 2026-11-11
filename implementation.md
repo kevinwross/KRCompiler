@@ -339,6 +339,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - A startup + runtime + user-image link runs the string, conversion, allocation, random, and tokenizer functions and exits 3.
 - KR16 unconditional branches now use `JMP`; conditional branches invert and jump through a short local branch, so large functions assemble without branch-range failures.
 - KR16 aggregate/array allocas reserve their full type size in the frame; previously every local reserved one two-byte slot and overlapping locals could corrupt arrays.
+- [docs/host-services.md](docs/host-services.md) records the KR32 wrapper layers, vectors, flags, errno mapping, sandbox, and the KR16 `SYS_VERSION`-only status.
 - `sysroot/include/krc/host.h` declares the KR32 host-service wrappers and open flags; C wrappers map negative host results to `-1` and set `errno` through `__krc_errno_location`.
 - `targets/kr32/runtime/fileio.s` provides `getchar`, `open`, `close`, `read`, `write`, `seek`, `unlink`, `rename`, `stat`, `truncate`, `getcwd`, `chdir`, `dup`, `dup2`, `sys_time`, `sys_argc`, and `sys_arg` over the KR32 host-service vectors; the linked file I/O fixture writes, renames, and unlinks a file and exits 0.
 
@@ -585,3 +586,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T11:17:45-08:00** — Added `sysroot/include/krc/host.h` with the KR32 host-service prototypes and open flags; the linked file I/O fixture now uses the header. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:25:49-08:00** — Separated the KR32 syscall stubs from their C wrappers, mapped negative host results to `-1` plus `errno`, gave every runtime link the host stubs by default, and tested a failed open. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:31:38-08:00** — Added a linked KR16 fixture for local, copied, nested, and array-of-struct values; it runs to exit 81. All six configurations pass 236/236 CTest.
+- **2026-11-11T11:32:42-08:00** — Documented the KR32 host-service layers, vectors, flags, errno mapping, sandbox, and KR16 status in [docs/host-services.md](docs/host-services.md), and refreshed the KR16 ABI summary and freeze checklist.
