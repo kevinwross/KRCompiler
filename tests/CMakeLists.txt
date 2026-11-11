@@ -494,6 +494,22 @@ if(TARGET krc)
                 -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_member_default_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_global_member_dtor
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_member_dtor.cpp
+                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_member_dtor_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_global_member_dtor_ir
+        COMMAND $<TARGET_FILE:krc> --dump-ir
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_member_dtor.cpp")
+    set_tests_properties(krc_global_member_dtor_ir PROPERTIES
+        PASS_REGULAR_EXPRESSION "global.member.dtor")
+
     add_test(NAME krc_dump_symbols
         COMMAND $<TARGET_FILE:krc> --dump-symbols
                 ${CMAKE_CURRENT_BINARY_DIR}/puts_linked.k32)

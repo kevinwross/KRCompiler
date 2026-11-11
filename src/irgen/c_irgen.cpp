@@ -252,7 +252,25 @@ void CIRGen::generate_global_constructors() {
             }
         }
         if (!destructor) {
-            continue;
+            bool has_member_destructor = false;
+            for (const auto& member : info.record->members) {
+                if (!member.type ||
+                    member.type->kind != frontend::TypeKind::Record ||
+                    !member.type->record) {
+                    continue;
+                }
+                const auto member_methods =
+                    class_methods_.find(member.type->record->tag);
+                if (member_methods != class_methods_.end() &&
+                    member_methods->second.find(
+                        "~" + member.type->record->tag) !=
+                        member_methods->second.end()) {
+                    has_member_destructor = true;
+                }
+            }
+            if (!has_member_destructor) {
+                continue;
+            }
         }
         auto* function = module_->add_function(
             "__krc_global_dtor_" + std::to_string(destructor_index++),
@@ -269,12 +287,58 @@ void CIRGen::generate_global_constructors() {
         builder_.set_insert_point(entry);
         push_scope();
         auto* self = static_cast<ir::Value*>(info.global);
-        if (self->type != destructor->type->parameters[0]) {
-            self = builder_.create(ir::Opcode::BitCast,
-                                   destructor->type->parameters[0], {self},
-                                   "global.dtor.this");
+        if (destructor) {
+            if (self->type != destructor->type->parameters[0]) {
+                self = builder_.create(ir::Opcode::BitCast,
+                                       destructor->type->parameters[0],
+                                       {self}, "global.dtor.this");
+            }
+            builder_.create_call(destructor, {self}, nullptr, "global.dtor");
         }
-        builder_.create_call(destructor, {self}, nullptr, "global.dtor");
+        const auto type = info.global->element_type;
+        const auto field_offset =
+            type->fields.size() - info.record->members.size();
+        for (std::size_t member_index = info.record->members.size();
+             member_index > 0; --member_index) {
+            const auto& member = info.record->members[member_index - 1];
+            if (!member.type ||
+                member.type->kind != frontend::TypeKind::Record ||
+                !member.type->record) {
+                continue;
+            }
+            const auto member_methods =
+                class_methods_.find(member.type->record->tag);
+            if (member_methods == class_methods_.end()) {
+                continue;
+            }
+            const auto found = member_methods->second.find(
+                "~" + member.type->record->tag);
+            if (found == member_methods->second.end()) {
+                continue;
+            }
+            const auto position = field_offset + member_index - 1;
+            if (position >= type->fields.size()) {
+                continue;
+            }
+            auto* zero = module_->constant_int(int_type(), 0);
+            auto* field_index = module_->constant_int(
+                int_type(), static_cast<std::int64_t>(position));
+            auto* field = builder_.create_gep(
+                type, info.global, {zero, field_index}, false,
+                "global.member.dtor.field");
+            field->type = module_->types().pointer_type(
+                type->fields[position]);
+            auto* member_self = field;
+            if (member_self->type !=
+                found->second->type->parameters[0]) {
+                member_self = builder_.create(
+                    ir::Opcode::BitCast,
+                    found->second->type->parameters[0], {member_self},
+                    "global.member.dtor.this");
+            }
+            builder_.create_call(found->second, {member_self}, nullptr,
+                                 "global.member.dtor");
+        }
         builder_.create_ret(nullptr);
         scopes_ = std::move(previous_scopes);
         current_function_ = previous_function;
