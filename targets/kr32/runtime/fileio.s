@@ -46,3 +46,43 @@ sys_argc:
 sys_arg:
         SYSCALL #43
         RET
+
+        .global unlink
+unlink:
+        SYSCALL #52
+        RET
+
+        .global rename
+rename:
+        SYSCALL #53
+        RET
+
+        .global stat
+stat:
+        SYSCALL #54
+        RET
+
+        .global truncate
+truncate:
+        SYSCALL #55
+        RET
+
+        .global getcwd
+getcwd:
+        SYSCALL #56
+        RET
+
+        .global chdir
+chdir:
+        SYSCALL #57
+        RET
+
+        .global dup
+dup:
+        SYSCALL #58
+        RET
+
+        .global dup2
+dup2:
+        SYSCALL #59
+        RET
