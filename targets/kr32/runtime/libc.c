@@ -1988,3 +1988,28 @@ int putc(int character, struct FILE *stream) {
     return fputc(character, stream);
 }
 
+int setbuf(struct FILE *stream, char *buffer) {
+    return setvbuf(stream, buffer, buffer == 0 ? 2 : 0, 1024);
+}
+
+int fgetpos(struct FILE *stream, long *position) {
+    const long offset = ftell(stream);
+    if (offset < 0) {
+        return -1;
+    }
+    *position = offset;
+    return 0;
+}
+
+int fsetpos(struct FILE *stream, const long *position) {
+    return fseek(stream, *position, 0);
+}
+
+struct FILE *freopen(const char *path, const char *mode,
+                    struct FILE *stream) {
+    if (stream != 0) {
+        fclose(stream);
+    }
+    return fopen(path, mode);
+}
+

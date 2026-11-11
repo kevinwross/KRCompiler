@@ -52,7 +52,12 @@ int fputc(int c, FILE *stream);
 int putc(int c, FILE *stream);
 int fputs(const char *s, FILE *stream);
 int ungetc(int c, FILE *stream);
+typedef long fpos_t;
 int setvbuf(FILE *stream, char *buffer, int mode, size_t size);
+int setbuf(FILE *stream, char *buffer);
+int fgetpos(FILE *stream, fpos_t *position);
+int fsetpos(FILE *stream, const fpos_t *position);
+FILE *freopen(const char *path, const char *mode, FILE *stream);
 int fflush(FILE *stream);
 
 #endif
