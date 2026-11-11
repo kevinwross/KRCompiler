@@ -749,6 +749,15 @@ if(TARGET krc)
     set_tests_properties(krc_global_derived_member_ir PROPERTIES
         PASS_REGULAR_EXPRESSION "global.default.field")
 
+    add_test(NAME krc_link_generic_selection
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/generic_selection.c
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/generic_selection_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_dump_symbols
         COMMAND $<TARGET_FILE:krc> --dump-symbols
                 ${CMAKE_CURRENT_BINARY_DIR}/puts_linked.k32)

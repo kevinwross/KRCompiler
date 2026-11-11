@@ -3388,6 +3388,43 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
     }
     case frontend::AstKind::CastExpression:
         return emit_cast(expression);
+    case frontend::AstKind::GenericSelection: {
+        if (expression.children.empty() || !expression.children.front()) {
+            return {};
+        }
+        frontend::TypePtr control_type;
+        const auto& control = *expression.children.front();
+        if (control.kind == frontend::AstKind::Identifier) {
+            if (const auto* local = lookup_local(control.text)) {
+                control_type = local->frontend_type;
+            }
+        } else if (control.kind == frontend::AstKind::IntegerLiteral) {
+            control_type = sema_.type_named("int");
+        } else if (control.kind == frontend::AstKind::FloatLiteral) {
+            control_type = sema_.type_named("double");
+        }
+        const frontend::AstNode* selected = nullptr;
+        const frontend::AstNode* fallback = nullptr;
+        for (std::size_t index = 1; index + 1 < expression.children.size();) {
+            const auto* label = expression.children[index].get();
+            if (!label) {
+                break;
+            }
+            if (label->kind == frontend::AstKind::TypeName) {
+                const auto label_type = sema_.type_from_type_name(*label);
+                if (!selected && control_type && label_type &&
+                    control_type->kind == label_type->kind) {
+                    selected = expression.children[index + 1].get();
+                }
+                index += 2;
+            } else {
+                fallback = expression.children[index].get();
+                index += 1;
+            }
+        }
+        const auto* chosen = selected ? selected : fallback;
+        return chosen ? emit_expression(*chosen) : CIRGen::Expression{};
+    }
     case frontend::AstKind::SizeofExpression:
     case frontend::AstKind::AlignofExpression:
         return emit_sizeof(expression);
