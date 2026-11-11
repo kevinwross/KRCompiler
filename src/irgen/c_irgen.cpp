@@ -2122,7 +2122,110 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         break;
     case frontend::AstKind::StaticAssertDeclaration:
         break;
-    case frontend::AstKind::SwitchStatement:
+    case frontend::AstKind::SwitchStatement: {
+        if (statement.children.size() < 2 || !statement.children[0] ||
+            !statement.children[1]) {
+            error(statement.location, "malformed switch statement");
+            break;
+        }
+        auto condition = emit_expression(*statement.children[0]);
+        if (!condition.value || !ir::is_integer(condition.type)) {
+            error(statement.location, "switch condition must be an integer");
+            break;
+        }
+        const auto* body = statement.children[1].get();
+        if (!body ||
+            body->kind != frontend::AstKind::CompoundStatement) {
+            error(statement.location, "switch body must be a block");
+            break;
+        }
+        auto* end_block = current_function_->add_block("switch.end");
+        std::vector<std::pair<const frontend::AstNode*, ir::BasicBlock*>>
+            case_entries;
+        ir::BasicBlock* default_block = end_block;
+        for (const auto& child : body->children) {
+            if (!child) {
+                continue;
+            }
+            if (child->kind == frontend::AstKind::CaseStatement) {
+                case_entries.emplace_back(
+                    child.get(),
+                    current_function_->add_block("switch.case"));
+            } else if (child->kind ==
+                       frontend::AstKind::DefaultStatement) {
+                default_block =
+                    current_function_->add_block("switch.default");
+                case_entries.emplace_back(child.get(), default_block);
+            }
+        }
+        std::vector<std::pair<ir::ConstantInt*, ir::BasicBlock*>>
+            switch_cases;
+        for (const auto& [node, block] : case_entries) {
+            if (node->kind != frontend::AstKind::CaseStatement ||
+                node->children.empty() || !node->children.front()) {
+                continue;
+            }
+            long long value = 0;
+            if (!sema_.evaluate_constant_expression(
+                    *node->children.front(), value)) {
+                error(node->location,
+                      "case label is not an integer constant");
+                continue;
+            }
+            switch_cases.push_back(
+                {module_->constant_int(condition.type, value), block});
+        }
+        for (const auto& [value, block] : switch_cases) {
+            auto* comparison = builder_.create_icmp(
+                ir::ICmpPredicate::Eq, condition.value, value,
+                "switch.compare");
+            auto* next = current_function_->add_block("switch.check");
+            builder_.create_cond_br(comparison, block, next);
+            builder_.set_insert_point(next);
+        }
+        emit_branch(default_block);
+        push_scope();
+        const auto mark = local_cleanups_.size();
+        cleanup_marks_.push_back(mark);
+        break_targets_.push_back(end_block);
+        for (const auto& child : body->children) {
+            if (!child) {
+                continue;
+            }
+            const auto entry = std::find_if(
+                case_entries.begin(), case_entries.end(),
+                [&](const auto& candidate) {
+                    return candidate.first == child.get();
+                });
+            if (entry != case_entries.end()) {
+                if (!builder_.insert_block()->terminated() &&
+                    builder_.insert_block() != entry->second) {
+                    emit_branch(entry->second);
+                }
+                builder_.set_insert_point(entry->second);
+                if (child->kind == frontend::AstKind::CaseStatement) {
+                    if (child->children.size() > 1 &&
+                        child->children[1]) {
+                        emit_statement(*child->children[1]);
+                    }
+                } else if (!child->children.empty() &&
+                           child->children.front()) {
+                    emit_statement(*child->children.front());
+                }
+            } else if (!builder_.insert_block()->terminated()) {
+                emit_statement(*child);
+            }
+        }
+        emit_cleanups_to(mark);
+        cleanup_marks_.pop_back();
+        pop_scope();
+        if (!builder_.insert_block()->terminated()) {
+            emit_branch(end_block);
+        }
+        builder_.set_insert_point(end_block);
+        break_targets_.pop_back();
+        break;
+    }
     case frontend::AstKind::GotoStatement: {
         if (!local_cleanups_.empty()) {
             error(statement.location,
