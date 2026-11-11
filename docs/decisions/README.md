@@ -64,5 +64,6 @@ What was rejected and why.
 - [0019-kr16-object-linker.md](0019-kr16-object-linker.md) — accepted; adds KR16 relocatable objects, absolute relocations, and the linker path.
 - [0020-kdbg-source-path-policy.md](0020-kdbg-source-path-policy.md) — accepted; keeps KDBG v1 and adds `krld --source-root` relative source paths.
 - [0021-external-globals.md](0021-external-globals.md) — accepted; adds external global declarations to IR and `.extern` emission.
+- [0022-internal-globals.md](0022-internal-globals.md) — accepted; adds internal global linkage for C `static` objects.
 
 The next expected ADRs are the KR16 ABI appendix, the EH descriptor encoding, and the KDBG record layout.

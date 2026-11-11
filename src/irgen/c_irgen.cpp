@@ -1471,6 +1471,7 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         globals_.emplace(name, global);
     }
     global->external = external;
+    global->internal = has_label(specifiers, "static");
     global_frontend_types_[global] = frontend_type;
     if (frontend_type->is_volatile) {
         volatile_globals_.insert(global);

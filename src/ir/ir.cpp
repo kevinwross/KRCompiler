@@ -1265,6 +1265,7 @@ void print_module(const Module& module, std::ostream& out) {
     for (const auto& global : module.globals()) {
         out << '@' << global->name << " = "
             << (global->external ? "external " : "")
+            << (global->internal ? "internal " : "")
             << (global->constant ? "constant " : "global ")
             << type_to_string(global->element_type) << ' ';
         if (global->initializer) {

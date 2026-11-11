@@ -463,7 +463,9 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
         out += "        .align 4\n";
         out += global->name + ":\n";
         if (global->name.empty() || global->name.front() != '.') {
-            out += "        .global " + global->name + "\n";
+            if (!global->internal) {
+                out += "        .global " + global->name + "\n";
+            }
         }
         if (global->initializer &&
             global->initializer->kind == ir::ValueKind::ConstantDataArray) {

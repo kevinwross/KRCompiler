@@ -609,6 +609,18 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/extern_shared_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntimeTwo.cmake)
 
+    add_test(NAME krc_link_static_global
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE1=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_global_one.c
+                -DSOURCE2=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_global_two.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DIO=${CMAKE_SOURCE_DIR}/targets/kr32/runtime/fileio.s
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_global_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntimeTwo.cmake)
+
     add_test(NAME krc_link_extern_redeclare
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

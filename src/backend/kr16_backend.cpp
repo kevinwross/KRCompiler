@@ -488,7 +488,9 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
         const auto* data =
             dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
         if (global->name.empty() || global->name.front() != '.') {
-            out += "    .global " + global->name + "\n";
+            if (!global->internal) {
+                out += "    .global " + global->name + "\n";
+            }
         }
         out += global->name + ":\n";
         if (data) {

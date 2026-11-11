@@ -291,6 +291,7 @@ struct GlobalVariable final : Value {
     Value* initializer = nullptr;
     bool constant = false;
     bool external = false;
+    bool internal = false;
     std::uint32_t alignment = 0;
 };
 
