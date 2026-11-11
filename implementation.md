@@ -188,8 +188,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Destructible function-local statics register with `__krc_destroy_globals` and run after user `main`. The fixture prints `ctor`, `main`, then `dtor`.
 - `__func__` lowers to the source-level function name for free functions and methods; the fixtures verify `"main"` and `"method_name"`.
 - Adjacent string literals concatenate their decoded contents, including prefixed literals; `"hello" " world"` compares equal to `"hello world"`.
-- Default member initializers are collected by Sema and applied by constructors or by default construction; `int value = 5` and a plain `int value = 7` both hold.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 147/147 CTest.
+- Default member initializers are collected by Sema and applied by constructors or by default construction; the `int value = 5`, plain `int value = 7`, and polymorphic/derived fixtures return 5, 7, and 12.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 148/148 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -203,7 +203,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 147/147 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 148/148 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -427,3 +427,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T15:08:00-08:00** — Extended `__func__` to class methods by recording each function's source-level name separately from its mangled IR symbol. The method fixture compares `__func__` with `"method_name"`; CTest is 144/144.
 - **2026-11-10T15:23:44-08:00** — Fixed adjacent string-literal concatenation: the parser now merges literal contents rather than raw token text, so `"hello" " world"` compares equal to `"hello world"`. CTest is 145/145.
 - **2026-11-10T15:44:11-08:00** — Added C++11 default member initializers: Sema records `int value = 5` on the member, constructors apply it unless the member is in the initializer list, and objects without a user constructor apply it during default construction. The fixtures return 5 and 7; CTest is 147/147.
+- **2026-11-10T16:00:31-08:00** — Extended default-construction member initialization past the vptr and inherited base fields, so polymorphic and derived classes apply their defaults. The derived/base fixture returns 12; CTest is 148/148.

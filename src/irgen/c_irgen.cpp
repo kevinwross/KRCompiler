@@ -2268,11 +2268,13 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                         {constructor_this}, "ctor.this");
                 }
                 builder_.create_call(constructor, {constructor_this}, nullptr, "ctor.call");
-            } else if (record != ir_records_.end() && !record->second->polymorphic &&
-                       !record->second->base) {
+            } else if (record != ir_records_.end() &&
+                       type->fields.size() >=
+                           record->second->members.size()) {
+                const auto field_offset =
+                    type->fields.size() - record->second->members.size();
                 for (std::size_t member_index = 0;
-                     member_index < record->second->members.size() &&
-                     member_index < type->fields.size();
+                     member_index < record->second->members.size();
                      ++member_index) {
                     const auto& member = record->second->members[member_index];
                     if (!member.default_initializer ||
@@ -2280,17 +2282,18 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                         !member.default_initializer->children.front()) {
                         continue;
                     }
+                    const auto field_position = field_offset + member_index;
                     auto* zero = module_->constant_int(int_type(), 0);
                     auto* field_index = module_->constant_int(
-                        int_type(), static_cast<std::int64_t>(member_index));
+                        int_type(), static_cast<std::int64_t>(field_position));
                     auto* field = builder_.create_gep(
                         type, address, {zero, field_index}, false,
                         "default.field");
                     field->type = module_->types().pointer_type(
-                        type->fields[member_index]);
+                        type->fields[field_position]);
                     emit_initializer(
                         *member.default_initializer->children.front(), field,
-                        type->fields[member_index]);
+                        type->fields[field_position]);
                 }
             }
         }
