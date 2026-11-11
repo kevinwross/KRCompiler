@@ -473,6 +473,9 @@ std::optional<std::uint8_t> instruction_size(const Line& line,
             line.operands[1].front() == '#') {
             const auto immediate = immediate_at(1);
             if (!immediate) {
+                if (name == "MOV") {
+                    return std::uint8_t{2};
+                }
                 error = "expected immediate";
                 return std::nullopt;
             }

@@ -321,7 +321,8 @@ void Kr16Backend::emit_function(std::string& out,
                 if (!instruction->operands.empty() &&
                     instruction->operands[0] &&
                     instruction->operands[0]->kind == ir::ValueKind::Function) {
-                    out += "    MOV R0, #0\n";
+                    out += "    MOV R0, #" + instruction->operands[0]->name +
+                           "\n";
                     store(*instruction, "R0");
                     break;
                 }
@@ -371,8 +372,8 @@ void Kr16Backend::emit_function(std::string& out,
                 if (callee->kind == ir::ValueKind::Function) {
                     out += "    CALL " + callee->name + "\n";
                 } else {
-                    error = "KR16 indirect calls are not implemented yet";
-                    return;
+                    load(callee, "R0");
+                    out += "    CALL R0\n";
                 }
                 if (instruction->type && !ir::is_void(instruction->type)) {
                     store(*instruction, "R0");

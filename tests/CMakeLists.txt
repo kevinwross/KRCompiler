@@ -120,6 +120,11 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/matrix2d.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_matrix.kex")
 
+    add_test(NAME krc_kr16_fnptr_image
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_fnptr.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_fnptr.kex")
+
     add_test(NAME krc_link_matrix
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
