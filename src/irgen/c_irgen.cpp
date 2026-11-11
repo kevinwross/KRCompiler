@@ -4517,7 +4517,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                         delete_methods != class_methods_.end() &&
                         delete_methods->second.find(destructor_name) !=
                             delete_methods->second.end();
-                    if (!has_own_destructor) {
+                    if (!has_own_destructor || slot < 0) {
                         auto* member_destructor =
                             ensure_member_destructor(record->second);
                         if (member_destructor) {
