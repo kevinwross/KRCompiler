@@ -3353,8 +3353,25 @@ CIRGen::Expression CIRGen::emit_condition_expression(
             return nullptr;
         }
     };
-    const auto result_frontend = infer_type(*expression.children[1]);
-    const auto result_type = map_type(result_frontend);
+    const auto then_frontend = infer_type(*expression.children[1]);
+    const auto else_frontend = expression.children[2]
+                                   ? infer_type(*expression.children[2])
+                                   : nullptr;
+    const auto pick_result = [&](frontend::TypePtr preferred,
+                                 frontend::TypePtr fallback) {
+        if (preferred && (preferred->kind == frontend::TypeKind::Double ||
+                          preferred->kind == frontend::TypeKind::Float ||
+                          preferred->kind == frontend::TypeKind::Pointer)) {
+            return preferred;
+        }
+        if (fallback && (fallback->kind == frontend::TypeKind::Double ||
+                         fallback->kind == frontend::TypeKind::Float ||
+                         fallback->kind == frontend::TypeKind::Pointer)) {
+            return fallback;
+        }
+        return preferred ? preferred : fallback;
+    };
+    const auto result_type = map_type(pick_result(then_frontend, else_frontend));
     if (!result_type) {
         return {};
     }
