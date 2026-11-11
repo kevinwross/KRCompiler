@@ -101,7 +101,7 @@ static void print_hex(unsigned int value) {
 #define PRINT_SPACE 64
 #define PRINT_PRECISION_SHIFT 8
 
-static void print_integer(unsigned int value, int base, int width,
+static void print_integer(unsigned long long value, int base, int width,
                           int flags) {
     char digits[32];
     int count = 0;
@@ -113,14 +113,14 @@ static void print_integer(unsigned int value, int base, int width,
         digits[count++] = '0';
     } else {
         while (value > 0) {
-            unsigned int digit = value % (unsigned int)base;
+            unsigned long long digit = value % (unsigned long long)base;
             if (digit < 10) {
                 digits[count++] = (char)('0' + digit);
             } else {
                 digits[count++] =
                     (char)((uppercase ? 'A' : 'a') + (digit - 10));
             }
-            value = value / (unsigned int)base;
+            value = value / (unsigned long long)base;
         }
         if (count == 0) {
             digits[count++] = '0';
@@ -413,40 +413,72 @@ static int format_output(const char *format, va_list arguments) {
                 format++;
             }
         }
-        while (*format == 'l' || *format == 'z') {
+        int long_count = 0;
+        while (*format == 'l') {
+            long_count++;
+            format++;
+        }
+        if (*format == 'z') {
             format++;
         }
         if (*format == '%') {
             emit_char('%');
             written++;
         } else if (*format == 'd' || *format == 'i') {
-            int value = va_arg(arguments, int);
-            int flags = (value < 0 ? PRINT_NEGATIVE : 0) |
-                        (zero_pad ? PRINT_ZERO_PAD : 0) |
+            int flags = (zero_pad ? PRINT_ZERO_PAD : 0) |
                         (left_align ? PRINT_LEFT : 0) |
                         (plus ? PRINT_PLUS : 0) |
                         (space ? PRINT_SPACE : 0) |
                         (precision_set ? (precision << 8) : 0);
-            print_integer(value < 0 ? (unsigned int)(-value)
-                                    : (unsigned int)value,
-                          10, width, flags);
+            if (long_count >= 2) {
+                long long value = va_arg(arguments, long long);
+                unsigned long long magnitude =
+                    value < 0 ? (unsigned long long)(-(value + 1)) + 1
+                              : (unsigned long long)value;
+                print_integer(magnitude, 10, width,
+                              flags | (value < 0 ? PRINT_NEGATIVE : 0));
+            } else {
+                int value = va_arg(arguments, int);
+                print_integer(value < 0 ? (unsigned int)(-value)
+                                        : (unsigned int)value,
+                              10, width,
+                              flags | (value < 0 ? PRINT_NEGATIVE : 0));
+            }
         } else if (*format == 'u') {
-            print_integer(va_arg(arguments, unsigned int), 10, width,
-                          (zero_pad ? PRINT_ZERO_PAD : 0) |
-                              (left_align ? PRINT_LEFT : 0) |
-                              (precision_set ? (precision << 8) : 0));
+            int flags = (zero_pad ? PRINT_ZERO_PAD : 0) |
+                        (left_align ? PRINT_LEFT : 0) |
+                        (precision_set ? (precision << 8) : 0);
+            if (long_count >= 2) {
+                print_integer(va_arg(arguments, unsigned long long), 10,
+                              width, flags);
+            } else {
+                print_integer(va_arg(arguments, unsigned int), 10, width,
+                              flags);
+            }
         } else if (*format == 'o') {
-            print_integer(va_arg(arguments, unsigned int), 8, width,
-                          (zero_pad ? PRINT_ZERO_PAD : 0) |
-                              (left_align ? PRINT_LEFT : 0) |
-                              (precision_set ? (precision << 8) : 0));
+            int flags = (zero_pad ? PRINT_ZERO_PAD : 0) |
+                        (left_align ? PRINT_LEFT : 0) |
+                        (precision_set ? (precision << 8) : 0);
+            if (long_count >= 2) {
+                print_integer(va_arg(arguments, unsigned long long), 8,
+                              width, flags);
+            } else {
+                print_integer(va_arg(arguments, unsigned int), 8, width,
+                              flags);
+            }
         } else if (*format == 'x' || *format == 'X') {
-            print_integer(va_arg(arguments, unsigned int), 16, width,
-                          (*format == 'X' ? PRINT_UPPER : 0) |
-                              (alternate ? PRINT_PREFIX : 0) |
-                              (zero_pad ? PRINT_ZERO_PAD : 0) |
-                              (left_align ? PRINT_LEFT : 0) |
-                              (precision_set ? (precision << 8) : 0));
+            int flags = (*format == 'X' ? PRINT_UPPER : 0) |
+                        (alternate ? PRINT_PREFIX : 0) |
+                        (zero_pad ? PRINT_ZERO_PAD : 0) |
+                        (left_align ? PRINT_LEFT : 0) |
+                        (precision_set ? (precision << 8) : 0);
+            if (long_count >= 2) {
+                print_integer(va_arg(arguments, unsigned long long), 16,
+                              width, flags);
+            } else {
+                print_integer(va_arg(arguments, unsigned int), 16, width,
+                              flags);
+            }
         } else if (*format == 'p') {
             print_integer((unsigned int)va_arg(arguments, void *), 16, 0,
                           PRINT_PREFIX);
