@@ -287,6 +287,11 @@ void CIRGen::generate_global_constructors() {
         if (!info.global || !info.expression) {
             continue;
         }
+        if (info.expression->kind == frontend::AstKind::InitializerList) {
+            emit_initializer(*info.expression, info.global,
+                             info.global->element_type);
+            continue;
+        }
         auto value = emit_expression(*info.expression);
         if (!value.value) {
             continue;
@@ -1053,6 +1058,11 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         }
         global->initializer =
             module_->constant_data_array(type, std::move(data));
+        return;
+    }
+    if (type->kind == ir::TypeKind::Struct && initializer &&
+        initializer->kind == frontend::AstKind::InitializerList) {
+        global_initializers_.push_back({global, initializer});
         return;
     }
     switch (initializer->kind) {
