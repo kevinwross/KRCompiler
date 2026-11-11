@@ -3402,6 +3402,10 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
             control_type = sema_.type_named("int");
         } else if (control.kind == frontend::AstKind::FloatLiteral) {
             control_type = sema_.type_named("double");
+        } else if (control.kind == frontend::AstKind::CastExpression &&
+                   !control.children.empty() && control.children.front()) {
+            control_type = sema_.type_from_type_name(
+                *control.children.front());
         }
         const frontend::AstNode* selected = nullptr;
         const frontend::AstNode* fallback = nullptr;
