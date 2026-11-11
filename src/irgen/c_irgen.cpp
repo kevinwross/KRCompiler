@@ -5875,7 +5875,13 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     }
                 }
                 ir::Value* callee = method;
-                if (!in_destructor_ && !in_constructor_ && (arrow || reference_base) && base.value &&
+                const bool receiver_is_this =
+                    expression.children[0] &&
+                    expression.children[0]->kind == frontend::AstKind::Identifier &&
+                    expression.children[0]->text == "this";
+                if (!((in_destructor_ || in_constructor_) &&
+                      receiver_is_this) &&
+                    (arrow || reference_base) && base.value &&
                     source_record != ir_records_.end() &&
                     method_is_virtual(*source_record->second, member.text)) {
                     const int slot = virtual_slot(*source_record->second, member.text);
