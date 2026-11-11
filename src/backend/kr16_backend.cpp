@@ -129,8 +129,9 @@ Kr16Backend::FrameLayout Kr16Backend::layout_function(
             if (instruction->opcode == ir::Opcode::Alloca) {
                 offset = (offset + 1) & ~1u;
                 layout.allocas[instruction.get()] = offset;
-                offset += kSlotSize;
-                layout.slots[instruction.get()] = layout.allocas[instruction.get()];
+                layout.slots[instruction.get()] = offset;
+                offset += std::max<std::uint32_t>(
+                    kSlotSize, type_size(instruction->allocated_type));
                 continue;
             }
             if (instruction->type && !ir::is_void(instruction->type)) {

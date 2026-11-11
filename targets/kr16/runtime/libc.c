@@ -75,3 +75,137 @@ int memcmp(const void *left, const void *right, unsigned int count) {
     }
     return (int)*a - (int)*b;
 }
+
+int putchar(int character) {
+    *(unsigned char *)0xF000 = (unsigned char)character;
+    return character;
+}
+
+char *strncpy(char *destination, const char *source, unsigned int count) {
+    char *result = destination;
+    while (count > 0 && *source != 0) {
+        *destination++ = *source++;
+        count--;
+    }
+    while (count > 0) {
+        *destination++ = 0;
+        count--;
+    }
+    return result;
+}
+
+char *strncat(char *destination, const char *source, unsigned int count) {
+    char *result = destination;
+    while (*destination != 0) {
+        destination++;
+    }
+    while (count > 0 && *source != 0) {
+        *destination++ = *source++;
+        count--;
+    }
+    *destination = 0;
+    return result;
+}
+
+char *strchr(const char *text, int character) {
+    while (*text != 0) {
+        if (*text == (char)character) {
+            return (char *)text;
+        }
+        text++;
+    }
+    return character == 0 ? (char *)text : 0;
+}
+
+char *strrchr(const char *text, int character) {
+    const char *last = 0;
+    while (*text != 0) {
+        if (*text == (char)character) {
+            last = text;
+        }
+        text++;
+    }
+    if (character == 0) {
+        return (char *)text;
+    }
+    return (char *)last;
+}
+
+char *strstr(const char *text, const char *needle) {
+    if (*needle == 0) {
+        return (char *)text;
+    }
+    while (*text != 0) {
+        const char *a = text;
+        const char *b = needle;
+        while (*b != 0 && *a == *b) {
+            a++;
+            b++;
+        }
+        if (*b == 0) {
+            return (char *)text;
+        }
+        text++;
+    }
+    return 0;
+}
+
+static int digit_value(char character) {
+    if (character >= '0' && character <= '9') {
+        return (int)(character - '0');
+    }
+    if (character >= 'a' && character <= 'z') {
+        return (int)(character - 'a') + 10;
+    }
+    if (character >= 'A' && character <= 'Z') {
+        return (int)(character - 'A') + 10;
+    }
+    return 99;
+}
+
+long strtol(const char *text, char **end, int base) {
+    const char *cursor = text;
+    int negative = 0;
+    unsigned long value = 0;
+    if (base == 0) {
+        base = 10;
+        if (*cursor == '0') {
+            base = 8;
+            cursor++;
+            if (*cursor == 'x' || *cursor == 'X') {
+                base = 16;
+                cursor++;
+            }
+        }
+    }
+    if (*cursor == '-') {
+        negative = 1;
+        cursor++;
+    } else if (*cursor == '+') {
+        cursor++;
+    }
+    while (*cursor != 0) {
+        const int digit = digit_value(*cursor);
+        if (digit >= base) {
+            break;
+        }
+        value = value * (unsigned long)base + (unsigned long)digit;
+        cursor++;
+    }
+    if (end != 0) {
+        *end = (char *)cursor;
+    }
+    return negative ? (long)(0ul - value) : (long)value;
+}
+
+unsigned long strtoul(const char *text, char **end, int base) {
+    return (unsigned long)strtol(text, end, base);
+}
+
+int atoi(const char *text) {
+    return (int)strtol(text, 0, 10);
+}
+
+int abs(int value) {
+    return value < 0 ? -value : value;
+}

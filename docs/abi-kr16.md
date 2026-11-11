@@ -49,6 +49,10 @@ is `0xE000`. All slots are two bytes.
 6. The result is returned in `R0`.
 7. The epilogue restores `MOV SP, R4; POP R4; RET`.
 
+Frame offsets are two-byte aligned. A scalar SSA value occupies one two-byte
+slot; an array or record `alloca` reserves its full type size, rounded to two
+bytes, so aggregate locals cannot overlap neighboring slots.
+
 All registers except `R4` are caller-saved. The compiler currently allocates
 every SSA value to a frame slot rather than to a register.
 
@@ -69,7 +73,8 @@ lower addresses
 ```
 
 Frame slots are addressed relative to the current `SP`; `R4` is used only for
-prologue/epilogue restoration.
+prologue/epilogue restoration. Scalar slots are two bytes; aggregate/array
+allocations reserve their full size.
 
 ## Function pointers
 

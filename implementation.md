@@ -330,14 +330,15 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [ ] Port KR32 `libc.c` (allocator, stdio, string, `strto*`, `qsort`, file I/O).
 - [ ] Standard `printf` with length modifiers and `%p`; float formatting on KR32. `%p`, `%ld`/`%lu`/`%zu`, unsigned values, `%o`, width/zero/left alignment, integer precision, `+`/space signs, `*` width/precision, and `%.Ns`/`%Ns` strings work; the locale-aware set remains.
 - [ ] Common host-service ABI and per-VM shims; kernel profile.
-- [ ] Integrate KR16 `libc.s`/`resources/fileio.c`. A C string/memory runtime (`strlen`, `strcmp`, `strncmp`, `strcpy`, `strcat`, `memcpy`, `memset`, `memcmp`) builds to `libkrcrt.kro` and links with the startup object; file I/O and the existing assembly libc remain.
+- [ ] Integrate KR16 `libc.s`/`resources/fileio.c`. A C string/memory runtime (`strlen`, `strcmp`, `strncmp`, `strcpy`, `strncpy`, `strcat`, `strncat`, `strchr`, `strrchr`, `strstr`, `memcpy`, `memset`, `memcmp`, `atoi`, `strtol`, `strtoul`, `abs`, `putchar`) builds to `libkrcrt.kro` and links with the startup object; file I/O and the existing assembly libc remain.
 - [ ] Gate G9 partial: Tier 3 runtime baseline.
 
 **M9 evidence (2026-11-11, in progress):**
 
 - `targets/kr16/runtime/libc.c` builds to `stage/sysroot/kr16/lib/libkrcrt.kro` through `krc --emit-object`.
-- A startup + runtime + user-image link runs `strlen`, `strcmp`, and `strcpy` and exits 4.
+- A startup + runtime + user-image link runs `strlen`, `strcmp`, `strcpy`, `strstr`, `strchr`, `atoi`, `strtol`, and `abs` and exits 3.
 - KR16 unconditional branches now use `JMP`; conditional branches invert and jump through a short local branch, so large functions assemble without branch-range failures.
+- KR16 aggregate/array allocas reserve their full type size in the frame; previously every local reserved one two-byte slot and overlapping locals could corrupt arrays.
 
 ### M10 — v1.1 language/runtime completion (8–10 weeks)
 
@@ -575,3 +576,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 234/234 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:34:07-08:00** — Wrote [docs/abi-kr16.md](docs/abi-kr16.md), covering the IP16 data model, registers, frame layout, indirect calls, globals, startup, relocations, and deferred features; linked it from the docs index, README, and ABI overview.
 - **2026-11-11T10:44:52-08:00** — Added a compilable KR16 string/memory runtime, a staged `libkrcrt.kro` target, and a startup+runtime+user link fixture. Long KR16 functions now use `JMP` plus short inverted conditional branches. All six configurations pass 234/234 CTest.
+- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 234/234 CTest.
