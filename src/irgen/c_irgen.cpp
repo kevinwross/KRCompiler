@@ -1818,10 +1818,32 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             if (name.empty()) {
                 continue;
             }
-            const auto frontend_type =
+            auto frontend_type =
                 sema_.declaration_type(specifiers, declarator);
             if (!frontend_type) {
                 continue;
+            }
+            if (frontend_type->kind == frontend::TypeKind::Array &&
+                !frontend_type->array_has_count &&
+                init->children.size() > 1 && init->children[1]) {
+                if (init->children[1]->kind ==
+                    frontend::AstKind::InitializerList) {
+                    auto inferred =
+                        std::make_shared<frontend::Type>(*frontend_type);
+                    inferred->array_count =
+                        init->children[1]->children.size();
+                    inferred->array_has_count = true;
+                    frontend_type = inferred;
+                } else if (init->children[1]->kind ==
+                           frontend::AstKind::StringLiteral) {
+                    const auto bytes =
+                        decode_string(init->children[1]->text);
+                    auto inferred =
+                        std::make_shared<frontend::Type>(*frontend_type);
+                    inferred->array_count = bytes.size() + 1;
+                    inferred->array_has_count = true;
+                    frontend_type = inferred;
+                }
             }
             const auto type = map_type(frontend_type);
             if (!type) {
@@ -1831,6 +1853,44 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             auto* global = module_->add_global(
                 "__static_" + std::to_string(id) + "_" + name, type, false, 0);
             bool initialized_at_runtime = false;
+            const bool aggregate_initializer =
+                init->children.size() > 1 && init->children[1] &&
+                ((type->kind == ir::TypeKind::Array &&
+                  (init->children[1]->kind ==
+                       frontend::AstKind::InitializerList ||
+                   init->children[1]->kind ==
+                       frontend::AstKind::StringLiteral)) ||
+                 (type->kind == ir::TypeKind::Struct &&
+                  init->children[1]->kind ==
+                      frontend::AstKind::InitializerList &&
+                  frontend_type->record &&
+                  !select_constructor(frontend_type->record->tag, 0)));
+            if (aggregate_initializer) {
+                auto* guard = module_->add_global(
+                    "__static_guard_" + std::to_string(id),
+                    module_->types().int_type(8), false, 0);
+                guard->initializer =
+                    module_->constant_int(module_->types().int_type(8), 0);
+                auto* guard_value = builder_.create_load(
+                    module_->types().int_type(8), guard, false, 0,
+                    "static.guard");
+                auto* zero =
+                    module_->constant_int(module_->types().int_type(8), 0);
+                auto* condition = builder_.create_icmp(
+                    ir::ICmpPredicate::Eq, guard_value, zero, "static.cmp");
+                auto* init_block = current_function_->add_block(
+                    "static.init." + std::to_string(id));
+                auto* end_block = current_function_->add_block(
+                    "static.end." + std::to_string(id));
+                builder_.create_cond_br(condition, init_block, end_block);
+                builder_.set_insert_point(init_block);
+                builder_.create_store(
+                    module_->constant_int(module_->types().int_type(8), 1),
+                    guard);
+                emit_initializer(*init->children[1], global, type);
+                emit_branch(end_block);
+                builder_.set_insert_point(end_block);
+            }
             if (init->children.size() > 1 && init->children[1]) {
                 long long constant = 0;
                 if ((ir::is_integer(type) || ir::is_pointer(type)) &&
