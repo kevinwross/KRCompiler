@@ -42,6 +42,78 @@ std::string condition_for(ir::ICmpPredicate predicate) {
     return "BEQ";
 }
 
+std::uint32_t type_size(const ir::TypePtr& type) {
+    if (!type) {
+        return 0;
+    }
+    switch (type->kind) {
+    case ir::TypeKind::Void:
+        return 0;
+    case ir::TypeKind::Integer:
+        return static_cast<std::uint32_t>(
+            std::max<std::uint64_t>(1, type->bits / 8));
+    case ir::TypeKind::Pointer:
+        return 2;
+    case ir::TypeKind::Array:
+        return type_size(type->element) *
+               static_cast<std::uint32_t>(type->count);
+    case ir::TypeKind::Struct: {
+        std::uint32_t size = 0;
+        for (const auto& field : type->fields) {
+            size = (size + 1) & ~1u;
+            size += type_size(field);
+        }
+        return (size + 1) & ~1u;
+    }
+    default:
+        return 2;
+    }
+}
+
+bool gep_offset(const ir::Instruction& instruction, std::uint32_t& offset,
+                std::string& error) {
+    offset = 0;
+    ir::TypePtr current = instruction.source_type;
+    for (std::size_t index = 1; index < instruction.operands.size(); ++index) {
+        const auto* constant =
+            dynamic_cast<const ir::ConstantInt*>(instruction.operands[index]);
+        if (!constant) {
+            error = "KR16 dynamic GEP indices are not implemented yet";
+            return false;
+        }
+        const auto element = constant->value;
+        if (index == 1) {
+            offset += static_cast<std::uint32_t>(
+                element *
+                static_cast<std::int64_t>(type_size(current)));
+            continue;
+        }
+        if (current && current->kind == ir::TypeKind::Array) {
+            offset += static_cast<std::uint32_t>(
+                element *
+                static_cast<std::int64_t>(type_size(current->element)));
+            current = current->element;
+            continue;
+        }
+        if (current && current->kind == ir::TypeKind::Struct) {
+            if (element < 0 ||
+                static_cast<std::size_t>(element) >= current->fields.size()) {
+                error = "KR16 GEP struct index is out of range";
+                return false;
+            }
+            for (std::int64_t field = 0; field < element; ++field) {
+                offset += type_size(
+                    current->fields[static_cast<std::size_t>(field)]);
+            }
+            current = current->fields[static_cast<std::size_t>(element)];
+            continue;
+        }
+        error = "KR16 GEP index does not select an aggregate element";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 Kr16Backend::Kr16Backend(const ir::Module& module,
@@ -267,18 +339,27 @@ void Kr16Backend::emit_function(std::string& out,
                 }
                 break;
             }
-            case ir::Opcode::GetElementPtr:
+            case ir::Opcode::GetElementPtr: {
+                std::uint32_t offset = 0;
+                if (!gep_offset(*instruction, offset, error)) {
+                    return;
+                }
                 if (!instruction->operands.empty() &&
                     instruction->operands[0] &&
                     instruction->operands[0]->kind ==
                         ir::ValueKind::Global) {
                     out += "    LEA R0, [" + instruction->operands[0]->name +
                            "]\n";
-                    store(*instruction, "R0");
-                    break;
+                } else {
+                    load(instruction->operands[0], "R0");
                 }
-                error = "KR16 pointer arithmetic is not implemented yet";
-                return;
+                if (offset != 0) {
+                    out += "    MOV R1, #" + std::to_string(offset) + "\n";
+                    out += "    ADD R0, R1\n";
+                }
+                store(*instruction, "R0");
+                break;
+            }
             case ir::Opcode::Ret:
                 if (!instruction->operands.empty() &&
                     instruction->operands[0]) {
@@ -329,20 +410,32 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
     for (const auto& global : module_.globals()) {
         const auto* data =
             dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
-        if (!data) {
+        out += global->name + ":\n";
+        if (data) {
+            out += "    .byte ";
+            for (std::size_t index = 0; index < data->bytes.size(); ++index) {
+                if (index != 0) {
+                    out += ", ";
+                }
+                out += std::to_string(data->bytes[index]);
+            }
+            out += "\n";
+            if (data->bytes.size() % 2 != 0) {
+                out += "    .byte 0\n";
+            }
             continue;
         }
-        out += global->name + ":\n";
-        out += "    .byte ";
-        for (std::size_t index = 0; index < data->bytes.size(); ++index) {
-            if (index != 0) {
-                out += ", ";
+        const auto size = type_size(global->element_type);
+        for (std::uint32_t offset = 0; offset < size; offset += 16) {
+            out += "    .byte ";
+            const auto count = std::min<std::uint32_t>(16, size - offset);
+            for (std::uint32_t index = 0; index < count; ++index) {
+                if (index != 0) {
+                    out += ", ";
+                }
+                out += "0";
             }
-            out += std::to_string(data->bytes[index]);
-        }
-        out += "\n";
-        if (data->bytes.size() % 2 != 0) {
-            out += "    .byte 0\n";
+            out += "\n";
         }
     }
     return out;

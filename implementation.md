@@ -37,7 +37,7 @@ A change is done when:
 | M4 C core + debug format | G3/G4 passed locally | complete locally | C core, bit-fields, debugger session, frozen KDBG v1, and dump tooling are in place; M5 C++ is next |
 | M5 C++ core | G5 passed locally | in progress | G5 runs; classes, methods, constructors, destructors, `new`/`delete`, default copy, inheritance, and static devirtualization work; general vtables, move semantics, and dynamic dispatch remain |
 | M6 C++11/14/17 | G6 | in progress | `nullptr`, `auto`/`decltype`, range-for, `constexpr`, `enum class`, and `::` qualification work; templates, lambdas, move semantics, and structured bindings remain |
-| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, and a minimal `.kex` image work; `hello.c` and `sum.c` run locally; relocatable objects, the full linker, and the wider runtime remain |
+| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global arrays, and a minimal `.kex` image work; `hello.c`, `sum.c`, and a global-array fixture run locally; relocatable objects, the full linker, and the wider runtime remain |
 | M8 v1.0 hardening | G8 | pending | — |
 | M9 v1.1 runtime/libc/host services | G9 partial | pending | — |
 | M10 v1.1 language/runtime completion | G9 | pending | — |
@@ -103,7 +103,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Corpus check: 132 C fixtures extracted from `../kr32/tests/unit/test_cc_*.cpp`; 112 pass. The 20 rejects are 3 `<input>` artifacts, 1 missing `<stdlib.h>` include, 2 GCC builtin extensions, 1 `typeof`, 8 atomic/thread cases, 2 complex/imaginary cases, and 3 expected header/#error/invalid-syntax negatives.
 - `krc -E` prints a preprocessed token stream, `krc --dump-ast` prints the generic AST, and `__has_include`, `#line` (including filename override), deterministic `__DATE__`/`__TIME__`, `__func__`, `__builtin_offsetof`, anonymous structs/unions, nested designators, `_Generic`, and `_Alignas` are handled.
 - `_Static_assert` is evaluated: `libc-test.c` passes its `sizeof`/`offsetof` assertions; record, bit-field, and `_Alignas` layout tests pass.
-- The sysroot has 16 common headers plus per-target `bits/types.h` and `bits/stdint.h` for KR32, KR16, and KR64. `krc_gen_sysroot_bits` generates those bits into the build tree and `krc` uses the generated directory before the checked-in fallback; `test_sysroot_bits` verifies the generator output matches the checked-in headers.
+- The sysroot has 16 common headers plus per-target `bits/types.h` and `bits/stdint.h` for KR32, KR16, and KR64. `krc_gen_sysroot_bits` writes those bits into the staged sysroot at `build/<preset>/stage/sysroot`; `test_sysroot_bits` verifies the generator output matches the checked-in headers.
 - `tests/unit/test_sema.cpp` covers scopes, duplicate declarations, struct members, function arity, arrays/pointers, enums, sizeof/offsetof, bit-fields, `_Alignas`, static assertions, K&R rejection, and unsupported features.
 - M1 has no local checklist items left. The only open evidence item is the remote CI run, which cannot start until a GitHub remote exists. C++ remains M5.
 
@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 210/210 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 211/211 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 210/210 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 211/211 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -276,8 +276,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 - [ ] KR16 target descriptor: IP16 data model, registers, encodings, relaxation, capabilities. The IP16 profile (16-bit `int`/`long`, 16-bit pointers, unsigned `char`, no `long long`/FP) drives `-fsyntax-only` and `--dump-ir`; register mapping, encoding, and relaxation remain.
 - [ ] KR16 ABI appendix and calling-convention suite.
-- [ ] Codegen, frame layout, image writer. Scalar codegen, SP-relative frame layout, the in-tree assembler, and the minimal `.kex` writer work for single-unit integer/pointer code; relocatable objects and the full linker remain.
-- [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55 and `hello.c` prints `Hello, KR16!` and exits 0 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
+- [ ] Codegen, frame layout, image writer. Scalar codegen, SP-relative frame layout, the in-tree assembler, global arrays, and the minimal `.kex` writer work for single-unit integer/pointer code; relocatable objects and the full linker remain.
+- [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55, `hello.c` prints `Hello, KR16!` and exits 0, and a global-array fixture exits 6 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
 - [ ] Gate G7: KR16 C is accepted, assembled, linked, and run. The single-unit `hello.c`/`sum.c` path passes locally; the relocatable object and linker gate remains.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
@@ -286,6 +286,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `krc --target=kr16 --dump-ir` emits `; target: kr16` with `i16` function signatures.
 - `src/asm/kr16_encoder.*` encodes the R/I/M/M8/B/S/BIT/C/X formats, relative control transfers, shifts, bit operations, and range validation; golden tests cover the ISA examples and out-of-range rejection.
 - `src/asm/kr16_assembler.*` assembles the backend subset: labels, `.text`/`.data`/`.global`/`.extern`, register and immediate ALU forms, loads/stores/LEA, shifts, bit operations, conditional branches, relative and register `JMP`/`CALL`, and the control instructions. An unresolved or unpaired label is rejected.
+- KR16 GEP lowers constant array/struct indices and nonzero byte offsets, and zero-initialized globals are emitted as data; `kr16_data.kex` runs to exit 6 on the KR16 VM.
 - `src/backend/kr16_backend.*` emits scalar integer/pointer functions: SP-relative frame slots, parameters in `R1`–`R3`, two-operand ALU forms, loads/stores, `LEA`, comparisons, branches, calls, and `ret`. `sum.c` assembles and runs locally to exit 55.
 - [ADR 0016](docs/decisions/0016-kr16-scalar-abi.md) and D-040 freeze the M7 scalar calling convention: `R1`–`R3` arguments, `R0` return, `R4` FP, SP-relative frame.
 - [ADR 0017](docs/decisions/0017-kr16-exec-image.md) and D-041 define the minimal `.kex` image: 64-byte header, `.text` at `0x0100`, `.debug_str`, CRC32, and a generated `_start` that calls `main` and halts. `krc -c --target=kr16` writes it.
@@ -525,3 +526,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T03:13:20-08:00** — Scalar `volatile` initialization stores now carry the IR flag too, and a second IR test asserts the initial store. All six configurations pass 209/209 CTest.
 - **2026-11-11T03:24:40-08:00** — Volatile object members accessed with `.` now inherit the flag on loads, stores, and bit-field read-modify-write; the fixture checks a volatile struct member and a third IR test asserts `member.load`. All six configurations pass 210/210 CTest.
 - **2026-11-11T03:34:37-08:00** — Volatile pointer-to-struct members accessed through a direct local/global pointer identifier now inherit the flag too; the fixture checks both `.` and `->` updates. All six configurations pass 210/210 CTest.
+- **2026-11-11T03:45:24-08:00** — KR16 GEP now handles constant array/struct indices and nonzero offsets, and zero-initialized globals are emitted as data. The new `kr16_data.c` image runs to exit 6 on the KR16 VM; all six configurations pass 211/211 CTest.
