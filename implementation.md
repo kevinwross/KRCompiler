@@ -111,7 +111,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 - [x] Typed SSA IR model, builder, verifier, and textual printer.
 - [ ] Freeze `docs/ir.md` and `docs/targets/kr32.md` before implementation. `docs/ir.md` is frozen by [ADR 0003](docs/decisions/0003-ir-core-freeze.md) and extended by [ADR 0004](docs/decisions/0004-ir-data-array-and-declarations.md); the KR32 register/instruction tables and their values remain the M2 descriptor task.
-- [ ] C IRGen: scalars, aggregates, pointers, arrays, calls, varargs, `volatile`, debug locations. Scalars, pointers, arrays, calls, varargs calls, globals/string literals, returns, if/while/do/for, break/continue, switch, goto, and labels are implemented; aggregates are largely implemented; direct `volatile` local/global accesses carry IR flags; volatile members, references, debug locations, and some conversions remain.
+- [ ] C IRGen: scalars, aggregates, pointers, arrays, calls, varargs, `volatile`, debug locations. Scalars, pointers, arrays, calls, varargs calls, globals/string literals, returns, if/while/do/for, break/continue, switch, goto, and labels are implemented; aggregates are largely implemented; direct `volatile` local/global accesses carry IR flags; volatile pointer/reference qualifiers, debug locations, and some conversions remain.
 - [ ] KR32 target descriptor: data model, registers, patterns, ABI, encodings, relaxation. `src/backend/kr32_descriptor.*` has the register/ABI subset and `src/asm/kr32_encoder.*` has the base encoding subset; pattern selection, relocation/relaxation, and the remaining encodings are pending.
 - [x] Instruction selection, graph-colouring register allocation, frame layout, peepholes. The backend uses a deterministic stack-slot selection/frame baseline; `src/backend/register_allocator.*` implements liveness, interference, degree-ordered graph colouring, and spill reporting; `src/backend/peephole.*` removes identity/zero-strength operations. Register allocation is not yet wired into code emission.
 - [x] Assembly printer and shared assembler framework with the KR32 syntax/encoding module. `src/asm/kr32_assembler.*` parses the emitted subset, lays out text/data, resolves local labels, records external relocations, and emits section bytes; the object writer path remains M3.
@@ -232,8 +232,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `printf` `%f` now honors width, left alignment, `+`, space, and zero padding; the fixture prints `[    3.50][3.50    ][   +2.3][00001.50]`.
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
-- Direct `volatile` local and global loads, stores, and scalar initialization stores set the IR flag; volatile members and references are not yet marked.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 209/209 CTest.
+- Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` set the IR flag; volatile pointer and reference qualifiers are not fully propagated.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 210/210 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -249,8 +249,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
-- Direct `volatile` local and global loads, stores, and scalar initialization stores set the IR flag; volatile members and references are not yet marked.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 209/209 CTest.
+- Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` set the IR flag; volatile pointer and reference qualifiers are not fully propagated.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 210/210 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -523,3 +523,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T02:49:41-08:00** — Implemented C `switch` by lowering cases to an ordered comparison chain with case blocks, default, fallthrough, and `break`. The fixture checks all four forms; all six configurations pass 206/206 CTest.
 - **2026-11-11T03:02:43-08:00** — Direct `volatile` locals and globals now mark their IR loads and stores; the fixture checks the IR flag and links/runs. All six configurations pass 208/208 CTest.
 - **2026-11-11T03:13:20-08:00** — Scalar `volatile` initialization stores now carry the IR flag too, and a second IR test asserts the initial store. All six configurations pass 209/209 CTest.
+- **2026-11-11T03:24:40-08:00** — Volatile object members accessed with `.` now inherit the flag on loads, stores, and bit-field read-modify-write; the fixture checks a volatile struct member and a third IR test asserts `member.load`. All six configurations pass 210/210 CTest.

@@ -5377,8 +5377,9 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
     }
     if (address.bit_field) {
         auto* converted = promote(right.value, right.type, address.type);
-        auto* old = builder_.create_load(address.type, address.value, false, 0,
-                                        "bitfield.old");
+        auto* old = builder_.create_load(address.type, address.value,
+                                         address.is_volatile, 0,
+                                         "bitfield.old");
         std::uint64_t mask = address.bit_width >= 64
                                  ? ~0ull
                                  : ((1ull << address.bit_width) - 1);
@@ -5394,7 +5395,8 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
             return wide;
         }(), "bitfield.insert");
         auto* combined = builder_.create_or(cleared, inserted, "bitfield.combine");
-        builder_.create_store(combined, address.value, false, 0);
+        builder_.create_store(combined, address.value,
+                              address.is_volatile, 0);
         return {converted, address.type};
     }
     if (address.type && address.type->kind == ir::TypeKind::Pointer &&
@@ -5950,6 +5952,7 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
         address->type = module_->types().pointer_type(field_type);
         Expression result{address, field_type};
         result.reference_member = member.type->is_reference;
+        result.is_volatile = base.is_volatile || member.type->is_volatile;
         if (member.bit_field && member.bit_width > 0) {
             std::uint32_t bit_offset = 0;
             for (std::size_t index = 0; index < field_index; ++index) {
@@ -5983,7 +5986,9 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
     auto* address = builder_.create_gep(record_type, record_address, {zero, index_value},
                                         false, "member");
     address->type = module_->types().pointer_type(record_type->fields[field_index]);
-    return {address, record_type->fields[field_index]};
+    Expression result{address, record_type->fields[field_index]};
+    result.is_volatile = base.is_volatile;
+    return result;
 }
 
 CIRGen::Expression CIRGen::emit_implicit_member_lvalue(std::string_view name) {
@@ -6228,7 +6233,8 @@ CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {   
             error(expression.location, "bit-field has no storage type");
             return {};
         }
-        auto* loaded = builder_.create_load(address.type, address.value, false, 0,
+        auto* loaded = builder_.create_load(address.type, address.value,
+                                            address.is_volatile, 0,
                                             "bitfield.load");
         auto* shift = module_->constant_int(address.type, address.bit_offset);
         auto* shifted = builder_.create_lshr(loaded, shift, "bitfield.shift");
@@ -6264,7 +6270,8 @@ CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {   
         error(expression.location, "aggregate member load is not implemented yet");
         return {};
     }
-    return {builder_.create_load(address.type, address.value, false, 0, "member.load"),
+    return {builder_.create_load(address.type, address.value,
+                                 address.is_volatile, 0, "member.load"),
             address.type};
 }
 
