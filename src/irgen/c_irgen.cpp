@@ -2030,6 +2030,16 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
         if (!frontend_type) {
             continue;
         }
+        if (frontend_type->kind == frontend::TypeKind::Array &&
+            !frontend_type->array_has_count && init->children.size() > 1 &&
+            init->children[1] &&
+            init->children[1]->kind == frontend::AstKind::StringLiteral) {
+            const auto bytes = decode_string(init->children[1]->text);
+            auto inferred = std::make_shared<frontend::Type>(*frontend_type);
+            inferred->array_count = bytes.size() + 1;
+            inferred->array_has_count = true;
+            frontend_type = inferred;
+        }
         const auto type = map_type(frontend_type);
         const auto name = declarator_name(*declarator);
         if (name.empty()) {
@@ -2351,6 +2361,26 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
 
 void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* address,
                               ir::TypePtr type) {
+    if (type && type->kind == ir::TypeKind::Array && type->element &&
+        ir::is_integer(type->element) && type->element->bits == 8 &&
+        initializer.kind == frontend::AstKind::StringLiteral) {
+        const auto bytes = decode_string(initializer.text);
+        for (std::size_t index = 0; index < type->count; ++index) {
+            auto* zero = module_->constant_int(int_type(), 0);
+            auto* element_index = module_->constant_int(
+                int_type(), static_cast<std::int64_t>(index));
+            auto* element = builder_.create_gep(
+                type, address, {zero, element_index}, false, "string.byte");
+            element->type = module_->types().pointer_type(type->element);
+            const auto value =
+                index < bytes.size()
+                    ? static_cast<unsigned char>(bytes[index])
+                    : 0;
+            builder_.create_store(
+                module_->constant_int(type->element, value), element);
+        }
+        return;
+    }
     if (type && type->kind == ir::TypeKind::Struct &&
         initializer.kind != frontend::AstKind::InitializerList) {
         auto source = emit_lvalue(initializer);

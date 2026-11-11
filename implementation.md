@@ -189,8 +189,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `__func__` lowers to the source-level function name for free functions and methods; the fixtures verify `"main"` and `"method_name"`.
 - Adjacent string literals concatenate their decoded contents, including prefixed literals; `"hello" " world"` compares equal to `"hello world"`.
 - Default member initializers are collected by Sema and applied by constructors or by default construction; the `int value = 5`, plain `int value = 7`, and polymorphic/derived fixtures return 5, 7, and 12. Base-level defaults are applied before derived ones, and inherited data members resolve through the base record.
-- The KR32 libc adds `strspn`, `strcspn`, `strpbrk`, and `strtok`; the tokenizer fixture splits `alpha,beta;gamma` into three tokens. Unsized `char text[] = "..."` declaration from a string literal still needs array-size inference.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 149/149 CTest.
+- The KR32 libc adds `strspn`, `strcspn`, `strpbrk`, and `strtok`; the tokenizer fixture splits `alpha,beta;gamma` into three tokens. Unsized `char text[] = "..."` now infers its length from the literal and copies the bytes.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 150/150 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -204,7 +204,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 149/149 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 150/150 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -431,3 +431,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T16:00:31-08:00** — Extended default-construction member initialization past the vptr and inherited base fields, so polymorphic and derived classes apply their defaults. The derived/base fixture returns 12; CTest is 148/148.
 - **2026-11-10T16:28:11-08:00** — Resolved inherited data-member lvalues through the base record and applied base-level default member initializers before derived ones. `object.value + object.base_value` returns 12; CTest is 148/148.
 - **2026-11-10T16:31:31-08:00** — Added `strspn`, `strcspn`, `strpbrk`, and `strtok` to the KR32 libc. The fixture splits `alpha,beta;gamma` into three tokens and returns 0; CTest is 149/149.
+- **2026-11-10T16:50:32-08:00** — Implemented unsized `char text[] = "..."`: CIRGen infers the array length from the literal and stores its bytes plus the terminator. The fixture measures length 3; CTest is 150/150.
