@@ -88,6 +88,7 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 
 ## Known traps
 
+- **`AGENTS.local.md` is an instruction file, not a log.** Update it when a rule it states becomes false; never record progress, status, or milestone state here — that belongs in `implementation.md`. This file was rewritten with milestone state in 117 of 135 commits, so the rules governing the work changed almost every commit and nothing reviewed those changes.
 - **The plan is approved (2026-11-09).** Implement under §18.2; `implementation.md` is the live tracker. A `D-xxx` change needs an Appendix A entry; ABI, object, symbol, target, or IR changes also need an ADR under `docs/decisions/`.
 - **"Target" is two words here.** Host platforms (Windows, Linux) versus VM targets (KR32, KR16). Confusing them produces wrong CI matrices, wrong ABI assumptions, and target-descriptor code checked into the front end.
 - **Warnings-as-errors cuts both ways.** A change verified only on MSVC can fail the Linux build on `-Wpedantic`, and vice versa. When a warning appears, fix the code; do not add a pragma, and do not narrow the warning set.
