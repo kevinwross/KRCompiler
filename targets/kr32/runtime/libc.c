@@ -1266,3 +1266,22 @@ int sys_arg(int index, char *buffer, int size) {
     return host_result(krc_sys_arg(index, buffer, size));
 }
 
+char *strerror(int code) {
+    switch (code) {
+    case 0:
+        return "no error";
+    case 2:
+        return "No such file or directory";
+    case 12:
+        return "Cannot allocate memory";
+    case 22:
+        return "Invalid argument";
+    case 33:
+        return "Domain error";
+    case 34:
+        return "Result out of range";
+    default:
+        return "Unknown error";
+    }
+}
+
