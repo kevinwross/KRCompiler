@@ -3157,28 +3157,34 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                     ? nullptr
                     : ir_records_.find(type)->second;
             const auto store_member =
-                [&](std::size_t index, const frontend::AstNode& value) {
-                const auto member_type = type->fields[index];
-                if (init_record && index < init_record->members.size() &&
-                    init_record->members[index].bit_field &&
-                    init_record->members[index].bit_width > 0) {
+                [&](ir::Value* base, ir::TypePtr struct_type,
+                    std::size_t index, const frontend::AstNode& value) {
+                const auto member_type = struct_type->fields[index];
+                const frontend::RecordInfo* member_record = nullptr;
+                if (const auto found = ir_records_.find(struct_type);
+                    found != ir_records_.end()) {
+                    member_record = found->second;
+                }
+                if (member_record && index < member_record->members.size() &&
+                    member_record->members[index].bit_field &&
+                    member_record->members[index].bit_width > 0) {
                     const auto offsets =
-                        sema_.record_member_offsets(*init_record);
+                        sema_.record_member_offsets(*member_record);
                     const auto byte_offset = offsets[index];
                     std::uint32_t bit_offset = 0;
                     for (std::size_t previous = 0; previous < index;
                          ++previous) {
-                        if (init_record->members[previous].bit_field &&
+                        if (member_record->members[previous].bit_field &&
                             offsets[previous] == byte_offset &&
-                            init_record->members[previous].bit_width > 0) {
+                            member_record->members[previous].bit_width > 0) {
                             bit_offset +=
-                                init_record->members[previous].bit_width;
+                                member_record->members[previous].bit_width;
                         }
                     }
                     auto* byte_type = module_->types().int_type(8, false);
                     auto* byte_pointer = builder_.create(
                         ir::Opcode::BitCast,
-                        module_->types().pointer_type(byte_type), {address},
+                        module_->types().pointer_type(byte_type), {base},
                         "init.bitfield.byte");
                     auto* offset = module_->constant_int(
                         int_type(),
@@ -3197,7 +3203,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                     auto* old = builder_.create_load(
                         member_type, slot, false, 0, "init.bitfield.old");
                     const auto width =
-                        init_record->members[index].bit_width;
+                        member_record->members[index].bit_width;
                     const std::uint64_t field_mask =
                         width >= 64 ? ~0ull : ((1ull << width) - 1);
                     auto* mask = module_->constant_int(member_type,
@@ -3219,7 +3225,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                     builder_.create_store(combined, slot, false, 0);
                     return;
                 }
-                auto* member = member_address(type, index, member_type);
+                auto* member = member_address(struct_type, index, member_type);
                 emit_initializer(value, member, member_type);
             };
             const bool designated = std::any_of(
@@ -3248,7 +3254,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                              index < init_record->members.size(); ++index) {
                             if (init_record->members[index].name ==
                                 element->children.front()->text) {
-                                store_member(index, value);
+                                store_member(address, type, index, value);
                                 break;
                             }
                         }
@@ -3281,6 +3287,11 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                         if (field_index >= target_type->fields.size()) {
                             return false;
                         }
+                        if (path + 1 == path_count) {
+                            store_member(target, target_type, field_index,
+                                         value);
+                            return true;
+                        }
                         auto* zero = module_->constant_int(int_type(), 0);
                         auto* member_index = module_->constant_int(
                             int_type(), static_cast<std::int64_t>(field_index));
@@ -3295,7 +3306,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                     continue;
                 }
                 if (positional < type->fields.size()) {
-                    store_member(positional, *element);
+                    store_member(address, type, positional, *element);
                 }
                 ++positional;
             }
