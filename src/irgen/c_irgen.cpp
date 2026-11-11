@@ -2268,32 +2268,56 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                         {constructor_this}, "ctor.this");
                 }
                 builder_.create_call(constructor, {constructor_this}, nullptr, "ctor.call");
-            } else if (record != ir_records_.end() &&
-                       type->fields.size() >=
-                           record->second->members.size()) {
-                const auto field_offset =
-                    type->fields.size() - record->second->members.size();
-                for (std::size_t member_index = 0;
-                     member_index < record->second->members.size();
-                     ++member_index) {
-                    const auto& member = record->second->members[member_index];
-                    if (!member.default_initializer ||
-                        member.default_initializer->children.empty() ||
-                        !member.default_initializer->children.front()) {
+            } else if (record != ir_records_.end()) {
+                std::vector<const frontend::RecordInfo*> levels;
+                for (auto* current = record->second; current != nullptr;
+                     current = current->base && current->base->record
+                                   ? current->base->record.get()
+                                   : nullptr) {
+                    levels.push_back(current);
+                }
+                std::reverse(levels.begin(), levels.end());
+                for (const auto* level : levels) {
+                    const auto level_type = record_types_.find(level);
+                    if (level_type == record_types_.end()) {
                         continue;
                     }
-                    const auto field_position = field_offset + member_index;
-                    auto* zero = module_->constant_int(int_type(), 0);
-                    auto* field_index = module_->constant_int(
-                        int_type(), static_cast<std::int64_t>(field_position));
-                    auto* field = builder_.create_gep(
-                        type, address, {zero, field_index}, false,
-                        "default.field");
-                    field->type = module_->types().pointer_type(
-                        type->fields[field_position]);
-                    emit_initializer(
-                        *member.default_initializer->children.front(), field,
-                        type->fields[field_position]);
+                    std::size_t field_position = 0;
+                    if (level->base && level->base->record) {
+                        const auto base_type =
+                            record_types_.find(level->base->record.get());
+                        if (base_type != record_types_.end()) {
+                            field_position = base_type->second->fields.size();
+                        }
+                    } else if (level->polymorphic) {
+                        field_position = 1;
+                    }
+                    for (std::size_t member_index = 0;
+                         member_index < level->members.size();
+                         ++member_index) {
+                        const auto& member = level->members[member_index];
+                        if (!member.default_initializer ||
+                            member.default_initializer->children.empty() ||
+                            !member.default_initializer->children.front()) {
+                            continue;
+                        }
+                        const auto position = field_position + member_index;
+                        if (position >= type->fields.size()) {
+                            continue;
+                        }
+                        auto* zero = module_->constant_int(int_type(), 0);
+                        auto* field_index = module_->constant_int(
+                            int_type(),
+                            static_cast<std::int64_t>(position));
+                        auto* field = builder_.create_gep(
+                            type, address, {zero, field_index}, false,
+                            "default.field");
+                        field->type = module_->types().pointer_type(
+                            type->fields[position]);
+                        emit_initializer(
+                            *member.default_initializer->children.front(),
+                            field, type->fields[position]);
+                    }
                 }
             }
         }
@@ -4766,14 +4790,25 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
     }
 
     if (source_record) {
-        const auto& record = *source_record;
-        std::size_t field_index = record.members.size();
-        for (std::size_t index = 0; index < record.members.size(); ++index) {
-            if (record.members[index].name == expression.text) {
-                field_index = index;
+        const frontend::RecordInfo* selected_record = source_record;
+        std::size_t field_index = selected_record->members.size();
+        for (auto* current = source_record; current != nullptr;
+             current = current->base && current->base->record
+                           ? current->base->record.get()
+                           : nullptr) {
+            for (std::size_t index = 0; index < current->members.size();
+                 ++index) {
+                if (current->members[index].name == expression.text) {
+                    field_index = index;
+                    selected_record = current;
+                    break;
+                }
+            }
+            if (field_index < current->members.size()) {
                 break;
             }
         }
+        const auto& record = *selected_record;
         if (field_index >= record.members.size() || !record.members[field_index].type) {
             error(expression.location, "no member named '" + expression.text + "'");
             return {};

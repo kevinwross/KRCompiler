@@ -188,7 +188,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Destructible function-local statics register with `__krc_destroy_globals` and run after user `main`. The fixture prints `ctor`, `main`, then `dtor`.
 - `__func__` lowers to the source-level function name for free functions and methods; the fixtures verify `"main"` and `"method_name"`.
 - Adjacent string literals concatenate their decoded contents, including prefixed literals; `"hello" " world"` compares equal to `"hello world"`.
-- Default member initializers are collected by Sema and applied by constructors or by default construction; the `int value = 5`, plain `int value = 7`, and polymorphic/derived fixtures return 5, 7, and 12.
+- Default member initializers are collected by Sema and applied by constructors or by default construction; the `int value = 5`, plain `int value = 7`, and polymorphic/derived fixtures return 5, 7, and 12. Base-level defaults are applied before derived ones, and inherited data members resolve through the base record.
 - `krc_tests` has 98 cases / 585 assertions; all six configurations pass 148/148 CTest.
 
 ### M4 — C core + debug format (complete locally)
@@ -428,3 +428,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T15:23:44-08:00** — Fixed adjacent string-literal concatenation: the parser now merges literal contents rather than raw token text, so `"hello" " world"` compares equal to `"hello world"`. CTest is 145/145.
 - **2026-11-10T15:44:11-08:00** — Added C++11 default member initializers: Sema records `int value = 5` on the member, constructors apply it unless the member is in the initializer list, and objects without a user constructor apply it during default construction. The fixtures return 5 and 7; CTest is 147/147.
 - **2026-11-10T16:00:31-08:00** — Extended default-construction member initialization past the vptr and inherited base fields, so polymorphic and derived classes apply their defaults. The derived/base fixture returns 12; CTest is 148/148.
+- **2026-11-10T16:28:11-08:00** — Resolved inherited data-member lvalues through the base record and applied base-level default member initializers before derived ones. `object.value + object.base_value` returns 12; CTest is 148/148.

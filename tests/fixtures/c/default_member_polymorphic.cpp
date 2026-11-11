@@ -10,7 +10,6 @@ public:
 };
 
 int main() {
-    Base base;
     Derived object;
-    return object.value + base.base_value;
+    return object.value + object.base_value;
 }
