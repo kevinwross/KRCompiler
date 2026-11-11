@@ -232,7 +232,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `printf` `%f` now honors width, left alignment, `+`, space, and zero padding; the fixture prints `[    3.50][3.50    ][   +2.3][00001.50]`.
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
-- Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` set the IR flag; volatile pointer and reference qualifiers are not fully propagated.
+- Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
 - `krc_tests` has 98 cases / 585 assertions; all six configurations pass 210/210 CTest.
 
 ### M4 — C core + debug format (complete locally)
@@ -249,7 +249,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
-- Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` set the IR flag; volatile pointer and reference qualifiers are not fully propagated.
+- Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
 - `krc_tests` has 98 cases / 585 assertions; all six configurations pass 210/210 CTest.
 
 ### M5 — C++ core (8–10 weeks)
@@ -524,3 +524,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T03:02:43-08:00** — Direct `volatile` locals and globals now mark their IR loads and stores; the fixture checks the IR flag and links/runs. All six configurations pass 208/208 CTest.
 - **2026-11-11T03:13:20-08:00** — Scalar `volatile` initialization stores now carry the IR flag too, and a second IR test asserts the initial store. All six configurations pass 209/209 CTest.
 - **2026-11-11T03:24:40-08:00** — Volatile object members accessed with `.` now inherit the flag on loads, stores, and bit-field read-modify-write; the fixture checks a volatile struct member and a third IR test asserts `member.load`. All six configurations pass 210/210 CTest.
+- **2026-11-11T03:34:37-08:00** — Volatile pointer-to-struct members accessed through a direct local/global pointer identifier now inherit the flag too; the fixture checks both `.` and `->` updates. All six configurations pass 210/210 CTest.

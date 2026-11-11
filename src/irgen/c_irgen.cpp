@@ -1334,6 +1334,7 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
     const auto alignment = alignment_of(specifiers, frontend_type);
     auto* global = module_->add_global(name, type, has_label(specifiers, "const"), alignment);
     globals_.emplace(name, global);
+    global_frontend_types_[global] = frontend_type;
     if (frontend_type->is_volatile) {
         volatile_globals_.insert(global);
     }
@@ -5892,6 +5893,30 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
         }
         record_type = base.type->element;
         record_address = base.value;
+        if (expression.children.front()->kind ==
+            frontend::AstKind::Identifier) {
+            frontend::TypePtr pointer_frontend;
+            if (auto* local = lookup_local(
+                    expression.children.front()->text)) {
+                pointer_frontend = local->frontend_type;
+            } else {
+                const auto found = globals_.find(
+                    expression.children.front()->text);
+                if (found != globals_.end()) {
+                    const auto frontend =
+                        global_frontend_types_.find(found->second);
+                    if (frontend != global_frontend_types_.end()) {
+                        pointer_frontend = frontend->second;
+                    }
+                }
+            }
+            if (pointer_frontend &&
+                pointer_frontend->kind == frontend::TypeKind::Pointer &&
+                pointer_frontend->element &&
+                pointer_frontend->element->is_volatile) {
+                base.is_volatile = true;
+            }
+        }
         const auto source = ir_records_.find(record_type);
         if (source != ir_records_.end()) {
             source_record = source->second;

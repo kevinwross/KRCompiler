@@ -152,6 +152,8 @@ private:
     std::unordered_map<const frontend::AstNode*, LambdaInfo> lambda_metadata_;
     std::unordered_map<std::string, LambdaInfo> lambda_locals_;
     std::unordered_map<std::string, ir::GlobalVariable*> globals_;
+    std::unordered_map<ir::GlobalVariable*, frontend::TypePtr>
+        global_frontend_types_;
     std::unordered_set<ir::GlobalVariable*> volatile_globals_;
     struct GlobalCtorInfo {
         ir::GlobalVariable* global = nullptr;

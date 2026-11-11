@@ -126,7 +126,7 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> --dump-ir
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/volatile.c")
     set_tests_properties(krc_volatile_member_ir PROPERTIES
-        PASS_REGULAR_EXPRESSION "%member.load = load i32, %member.5, volatile")
+        PASS_REGULAR_EXPRESSION "member.load = load i32, %member.[0-9]+, volatile")
 
     add_test(NAME krc_link_volatile
         COMMAND ${CMAKE_COMMAND}
