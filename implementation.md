@@ -372,6 +372,20 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - 64-bit VM/ISA specification before any 64-bit backend work.
 - ARM64 host CI timing; third-party test-suite policy.
 
+## Gate verification
+
+Most recent first.
+
+### 2026-11-11T14:17:51-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 247/247
+windows-msvc-release  PASS 247/247
+linux-gcc-debug       PASS 247/247
+linux-gcc-release     PASS 247/247
+not verified: native Linux x64, Linux ARM64
+```
+
 ## 6. Running log
 
 - **2026-11-09** — Plan approved. §18.1 checklist signed off with no conditions; `plan.md` status set to Approved; `implementation.md` and the draft docs created. M0 not started.
@@ -607,3 +621,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T14:07:38-08:00** — Added KR32 `perror` on top of `strerror` and the console, declared it in `<stdio.h>`, and exercised `open: No such file or directory` in the linked fixture. Debug CTest is 246/246.
 - **2026-11-11T14:10:22-08:00** — Added KR32 stdio over the host file wrappers (`fopen`, `fclose`, `fread`, `fwrite`, `fseek`, `ftell`, `fflush`, `getc`/`fgetc`/`fputc`, `remove`) and stream access for `stdin`/`stdout`/`stderr`. A linked fixture writes, reads, and removes a file; debug CTest is 247/247.
 - **2026-11-11T14:13:22-08:00** — Extended KR32 stdio with `fgets`, `getline`, `ungetc`, `vfprintf`, `fprintf`, `vprintf`, `vsnprintf`, and `setvbuf`; the linked fixture round-trips `abc-7`, reads it back, and returns 0. Debug CTest is 247/247.
+- **2026-11-11T14:36:18-08:00** — Added the `## Gate verification` section and recorded the 2026-11-11 Windows gate per configuration, with native Linux x64 and Linux ARM64 listed as unverified.
