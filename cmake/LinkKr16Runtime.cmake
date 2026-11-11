@@ -21,7 +21,7 @@ if(NOT user_result EQUAL 0)
     message(FATAL_ERROR "krc failed to compile the KR16 source")
 endif()
 
-execute_process(COMMAND "${KRLD}" "${crt_object}" "${user_object}"
+execute_process(COMMAND "${KRLD}" "${crt_object}" ${RUNTIME} "${user_object}"
                         -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)

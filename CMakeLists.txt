@@ -15,6 +15,7 @@ endforeach()
 set(KRC_STAGE_DIR "${CMAKE_BINARY_DIR}/stage")
 set(KRC_STAGE_SYSROOT "${KRC_STAGE_DIR}/sysroot")
 set(KRC_STAGE_RUNTIME "${KRC_STAGE_SYSROOT}/kr32/lib")
+set(KRC_STAGE_RUNTIME_KR16 "${KRC_STAGE_SYSROOT}/kr16/lib")
 set(KRC_TEST_OUTPUT_DIR "${KRC_STAGE_DIR}/tests")
 file(MAKE_DIRECTORY "${KRC_TEST_OUTPUT_DIR}")
 
@@ -128,6 +129,18 @@ if(KRC_BUILD_TOOLS)
             COMMENT "Building the staged KR32 runtime"
             VERBATIM)
         add_dependencies(krc_target_runtime_kr32 krc krc_stage_sysroot)
+
+        add_custom_target(krc_target_runtime_kr16 ALL
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${KRC_STAGE_RUNTIME_KR16}"
+            COMMAND $<TARGET_FILE:krc> --target=kr16 -c --emit-object
+                    "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr16/runtime/libc.c"
+                    -o "${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr16/runtime/crt0.s"
+                    "${KRC_STAGE_RUNTIME_KR16}/crt0.s"
+            COMMENT "Building the staged KR16 runtime"
+            VERBATIM)
+        add_dependencies(krc_target_runtime_kr16 krc krc_stage_sysroot)
     endif()
 endif()
 

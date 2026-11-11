@@ -16,30 +16,30 @@ std::string label_for(const ir::BasicBlock& block) {
     return ".L" + block.parent->name + "." + block.name;
 }
 
-std::string condition_for(ir::ICmpPredicate predicate) {
+std::string inverse_condition_for(ir::ICmpPredicate predicate) {
     switch (predicate) {
     case ir::ICmpPredicate::Eq:
-        return "BEQ";
-    case ir::ICmpPredicate::Ne:
         return "BNE";
+    case ir::ICmpPredicate::Ne:
+        return "BEQ";
     case ir::ICmpPredicate::Ult:
-        return "BCC";
-    case ir::ICmpPredicate::Ule:
-        return "BLS";
-    case ir::ICmpPredicate::Ugt:
-        return "BHI";
-    case ir::ICmpPredicate::Uge:
         return "BCS";
+    case ir::ICmpPredicate::Ule:
+        return "BHI";
+    case ir::ICmpPredicate::Ugt:
+        return "BLS";
+    case ir::ICmpPredicate::Uge:
+        return "BCC";
     case ir::ICmpPredicate::Slt:
-        return "BLT";
-    case ir::ICmpPredicate::Sle:
-        return "BLE";
-    case ir::ICmpPredicate::Sgt:
-        return "BGT";
-    case ir::ICmpPredicate::Sge:
         return "BGE";
+    case ir::ICmpPredicate::Sle:
+        return "BGT";
+    case ir::ICmpPredicate::Sgt:
+        return "BLE";
+    case ir::ICmpPredicate::Sge:
+        return "BLT";
     }
-    return "BEQ";
+    return "BNE";
 }
 
 std::uint32_t type_size(const ir::TypePtr& type) {
@@ -300,6 +300,9 @@ void Kr16Backend::emit_function(std::string& out,
                 load(instruction->operands[0], "R0");
                 load(instruction->operands[1], "R1");
                 out += "    CMP R0, R1\n";
+                const auto false_label =
+                    ".Lcmp.false." + function.name + "." +
+                    std::to_string(synthetic_label);
                 const auto true_label =
                     ".Lcmp.true." + function.name + "." +
                     std::to_string(synthetic_label);
@@ -307,10 +310,13 @@ void Kr16Backend::emit_function(std::string& out,
                     ".Lcmp.end." + function.name + "." +
                     std::to_string(synthetic_label);
                 ++synthetic_label;
-                out += "    " + condition_for(instruction->icmp_predicate) + " " +
-                       true_label + "\n";
+                out += "    " +
+                       inverse_condition_for(instruction->icmp_predicate) + " " +
+                       false_label + "\n";
+                out += "    JMP " + true_label + "\n";
+                out += false_label + ":\n";
                 out += "    MOV R0, #0\n";
-                out += "    BRA " + end_label + "\n";
+                out += "    JMP " + end_label + "\n";
                 out += true_label + ":\n";
                 out += "    MOV R0, #1\n";
                 out += end_label + ":\n";
@@ -342,7 +348,7 @@ void Kr16Backend::emit_function(std::string& out,
                     error = "KR16 branch has no destination";
                     return;
                 }
-                out += "    BRA " + label_for(*instruction->successors[0]) +
+                out += "    JMP " + label_for(*instruction->successors[0]) +
                        "\n";
                 break;
             case ir::Opcode::CondBr: {
@@ -352,9 +358,15 @@ void Kr16Backend::emit_function(std::string& out,
                 }
                 load(instruction->operands[0], "R0");
                 out += "    CMP R0, #0\n";
-                out += "    BNE " + label_for(*instruction->successors[0]) +
+                const auto false_label =
+                    ".Lcond.false." + function.name + "." +
+                    std::to_string(synthetic_label);
+                ++synthetic_label;
+                out += "    BEQ " + false_label + "\n";
+                out += "    JMP " + label_for(*instruction->successors[0]) +
                        "\n";
-                out += "    BRA " + label_for(*instruction->successors[1]) +
+                out += false_label + ":\n";
+                out += "    JMP " + label_for(*instruction->successors[1]) +
                        "\n";
                 break;
             }
@@ -425,7 +437,7 @@ void Kr16Backend::emit_function(std::string& out,
                     instruction->operands[0]) {
                     load(instruction->operands[0], "R0");
                 }
-                out += "    BRA .L" + function.name + ".ret\n";
+                out += "    JMP .L" + function.name + ".ret\n";
                 break;
             default:
                 error = "KR16 backend does not support opcode " +
