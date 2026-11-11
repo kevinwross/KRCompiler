@@ -404,9 +404,9 @@ void Kr16Backend::emit_function(std::string& out,
                     if (size == 2) {
                         out += "    ADD R1, R1\n";
                     } else if (size == 4) {
-                        out += "    SHL R1, #1\n";
-                    } else if (size == 8) {
                         out += "    SHL R1, #2\n";
+                    } else if (size == 8) {
+                        out += "    SHL R1, #3\n";
                     } else if (size != 1) {
                         error = "KR16 dynamic GEP element size is unsupported";
                         return;

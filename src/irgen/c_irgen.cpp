@@ -6368,6 +6368,13 @@ CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
                                         "element");
     address->type = base.type;
     const auto type = base.type->element;
+    if (type && type->kind == ir::TypeKind::Array) {
+        auto* zero = module_->constant_int(int_type(), 0);
+        auto* decay = builder_.create_gep(type, address, {zero, zero}, false,
+                                          "element.decay");
+        decay->type = module_->types().pointer_type(type->element);
+        return {decay, decay->type};
+    }
     return {builder_.create_load(type, address, false, 0, "element.load"), type};
 }
 

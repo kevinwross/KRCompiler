@@ -115,6 +115,21 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_pointer.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_pointer.kex")
 
+    add_test(NAME krc_kr16_matrix_image
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/matrix2d.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_matrix.kex")
+
+    add_test(NAME krc_link_matrix
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/matrix2d.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/matrix_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_unknown_option COMMAND $<TARGET_FILE:krc> --no-such-option)
     set_tests_properties(krc_unknown_option PROPERTIES WILL_FAIL TRUE)
 
