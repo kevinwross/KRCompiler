@@ -3915,8 +3915,44 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 auto* constructor = select_constructor(record->second->tag, 0);
                 const bool needs_vtable =
                     record->second && record->second->polymorphic;
+                const bool has_defaults = std::any_of(
+                    record->second->members.begin(),
+                    record->second->members.end(),
+                    [](const frontend::RecordMember& member) {
+                        return member.default_initializer != nullptr;
+                    });
+                const auto emit_defaults = [&](ir::Value* target) {
+                    if (record->second->polymorphic ||
+                        record->second->base) {
+                        return;
+                    }
+                    for (std::size_t member_index = 0;
+                         member_index < record->second->members.size() &&
+                         member_index < type->fields.size();
+                         ++member_index) {
+                        const auto& member =
+                            record->second->members[member_index];
+                        if (!member.default_initializer ||
+                            member.default_initializer->children.empty() ||
+                            !member.default_initializer->children.front()) {
+                            continue;
+                        }
+                        auto* zero = module_->constant_int(int_type(), 0);
+                        auto* field_index = module_->constant_int(
+                            int_type(),
+                            static_cast<std::int64_t>(member_index));
+                        auto* field = builder_.create_gep(
+                            type, target, {zero, field_index}, false,
+                            "new.default");
+                        field->type = module_->types().pointer_type(
+                            type->fields[member_index]);
+                        emit_initializer(
+                            *member.default_initializer->children.front(),
+                            field, type->fields[member_index]);
+                    }
+                };
                 if (array && count_value &&
-                    (constructor || needs_vtable)) {
+                    (constructor || needs_vtable || has_defaults)) {
                     auto* index = builder_.create_alloca(size_type(), 0, "new.index");
                     builder_.create_store(module_->constant_int(size_type(), 0), index);
                     auto* condition_block = current_function_->add_block("new.cond");
@@ -3944,6 +3980,8 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                         }
                         builder_.create_call(constructor, {self}, nullptr,
                                              "new.ctor");
+                    } else if (has_defaults) {
+                        emit_defaults(self);
                     }
                     emit_branch(increment_block);
                     builder_.set_insert_point(increment_block);
@@ -3957,32 +3995,8 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     builder_.set_insert_point(end_block);
                 } else if (constructor) {
                     builder_.create_call(constructor, {pointer}, nullptr, "new.ctor");
-                } else if (!array && !record->second->polymorphic &&
-                           !record->second->base) {
-                    for (std::size_t member_index = 0;
-                         member_index < record->second->members.size() &&
-                         member_index < type->fields.size();
-                         ++member_index) {
-                        const auto& member =
-                            record->second->members[member_index];
-                        if (!member.default_initializer ||
-                            member.default_initializer->children.empty() ||
-                            !member.default_initializer->children.front()) {
-                            continue;
-                        }
-                        auto* zero = module_->constant_int(int_type(), 0);
-                        auto* field_index = module_->constant_int(
-                            int_type(),
-                            static_cast<std::int64_t>(member_index));
-                        auto* field = builder_.create_gep(
-                            type, pointer, {zero, field_index}, false,
-                            "new.default");
-                        field->type = module_->types().pointer_type(
-                            type->fields[member_index]);
-                        emit_initializer(
-                            *member.default_initializer->children.front(),
-                            field, type->fields[member_index]);
-                    }
+                } else if (!array && has_defaults) {
+                    emit_defaults(pointer);
                 }
             }
         }
