@@ -481,8 +481,15 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
         }
     }
     for (const auto& global : module_.globals()) {
+        if (global->external) {
+            out += "    .extern " + global->name + "\n";
+            continue;
+        }
         const auto* data =
             dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
+        if (global->name.empty() || global->name.front() != '.') {
+            out += "    .global " + global->name + "\n";
+        }
         out += global->name + ":\n";
         if (data) {
             out += "    .byte ";
