@@ -2466,6 +2466,11 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
 
 void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* address,
                               ir::TypePtr type) {
+    if (initializer.kind == frontend::AstKind::CompoundLiteral &&
+        initializer.children.size() > 1 && initializer.children[1]) {
+        emit_initializer(*initializer.children[1], address, type);
+        return;
+    }
     if (type && type->kind == ir::TypeKind::Array && type->element &&
         ir::is_integer(type->element) && type->element->bits == 8 &&
         initializer.kind == frontend::AstKind::StringLiteral) {
@@ -2941,6 +2946,22 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
         return emit_subscript(expression);
     case frontend::AstKind::MemberExpression:
         return emit_member(expression);
+    case frontend::AstKind::CompoundLiteral: {
+        if (expression.children.size() < 2 || !expression.children[0] ||
+            !expression.children[1]) {
+            error(expression.location, "malformed compound literal");
+            return {};
+        }
+        const auto frontend_type =
+            sema_.type_from_type_name(*expression.children[0]);
+        const auto type = map_type(frontend_type);
+        if (!type) {
+            return {};
+        }
+        auto* storage = builder_.create_alloca(type, 0, "compound.literal");
+        emit_initializer(*expression.children[1], storage, type);
+        return {storage, type};
+    }
     case frontend::AstKind::CastExpression:
         return emit_cast(expression);
     case frontend::AstKind::SizeofExpression:
@@ -4179,6 +4200,9 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
 }
 
 CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
+    if (expression.kind == frontend::AstKind::CompoundLiteral) {
+        return emit_expression(expression);
+    }
     if (expression.kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(expression.text)) {
             if (local->frontend_type && local->frontend_type->is_reference &&
