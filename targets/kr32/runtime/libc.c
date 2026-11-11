@@ -1890,3 +1890,23 @@ long clock(void) {
     return (long)sys_time() * 1000000L;
 }
 
+long labs(long value) {
+    return value < 0 ? -value : value;
+}
+
+long long atoll(const char *text) {
+    return (long long)atol(text);
+}
+
+long long strtoll(const char *text, char **end, int base) {
+    return (long long)strtol(text, end, base);
+}
+
+unsigned long long strtoull(const char *text, char **end, int base) {
+    return (unsigned long long)strtoul(text, end, base);
+}
+
+void _Exit(int status) {
+    exit(status);
+}
+
