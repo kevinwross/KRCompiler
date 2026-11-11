@@ -207,6 +207,63 @@ static void print_fixed(double value, int precision, int trim) {
     }
 }
 
+static void print_float_formatted(double value, int precision, int width,
+                                  int flags) {
+    char buffer[96];
+    char *saved_buffer = format_buffer;
+    int saved_count = format_count;
+    int saved_limit = format_limit;
+    format_buffer = buffer;
+    format_count = 0;
+    format_limit = -1;
+    print_fixed(value, precision, 0);
+    int length = format_count;
+    if (length > (int)sizeof(buffer) - 1) {
+        length = (int)sizeof(buffer) - 1;
+    }
+    buffer[length] = 0;
+    format_buffer = saved_buffer;
+    format_count = saved_count;
+    format_limit = saved_limit;
+    const int negative = length > 0 && buffer[0] == '-';
+    int sign = 0;
+    int start = 0;
+    if (negative) {
+        sign = '-';
+        start = 1;
+    } else if ((flags & PRINT_PLUS) != 0) {
+        sign = '+';
+    } else if ((flags & PRINT_SPACE) != 0) {
+        sign = ' ';
+    }
+    const int body = length - start;
+    const int total = body + (sign ? 1 : 0);
+    int padding = width > total ? width - total : 0;
+    if ((flags & PRINT_LEFT) == 0 &&
+        (flags & PRINT_ZERO_PAD) == 0) {
+        while (padding-- > 0) {
+            emit_char(' ');
+        }
+    }
+    if (sign) {
+        emit_char(sign);
+    }
+    if ((flags & PRINT_LEFT) == 0 &&
+        (flags & PRINT_ZERO_PAD) != 0) {
+        while (padding-- > 0) {
+            emit_char('0');
+        }
+    }
+    for (int index = start; index < length; index++) {
+        emit_char(buffer[index]);
+    }
+    if ((flags & PRINT_LEFT) != 0) {
+        while (padding-- > 0) {
+            emit_char(' ');
+        }
+    }
+}
+
 static void print_exponent(double value, int precision) {
     if (value < 0.0) {
         emit_char('-');
@@ -382,7 +439,12 @@ static int format_output(const char *format, va_list arguments) {
             emit_char(va_arg(arguments, int));
             written++;
         } else if (*format == 'f' || *format == 'F') {
-            print_fixed(va_arg(arguments, double), precision, 0);
+            int flags = (zero_pad ? PRINT_ZERO_PAD : 0) |
+                        (left_align ? PRINT_LEFT : 0) |
+                        (plus ? PRINT_PLUS : 0) |
+                        (space ? PRINT_SPACE : 0);
+            print_float_formatted(va_arg(arguments, double), precision,
+                                  width, flags);
         } else if (*format == 'e' || *format == 'E') {
             print_exponent(va_arg(arguments, double), precision);
         } else if (*format == 'g' || *format == 'G') {
