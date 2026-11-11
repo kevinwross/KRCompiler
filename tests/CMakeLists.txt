@@ -64,7 +64,7 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> -S --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c")
     set_tests_properties(krc_kr16_assembly PROPERTIES
-        PASS_REGULAR_EXPRESSION "CALL sum_to")
+        PASS_REGULAR_EXPRESSION "MOV R0, #sum_to")
 
     add_test(NAME krc_kr16_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
@@ -115,6 +115,11 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> -c --target=kr16 --emit-object
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr16/entry.s"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_entry.kro")
+
+    add_test(NAME krc_kr16_crt0_object
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16 --emit-object
+                "${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_crt0.kro")
 
     add_test(NAME krc_kr16_shift_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16

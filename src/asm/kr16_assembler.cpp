@@ -125,7 +125,9 @@ bool parse_memory(std::string_view text, std::uint8_t& base,
 
 std::optional<EncodedInstruction> encode_mnemonic(
     const Line& line, std::uint32_t address,
-    const std::map<std::string, Label>& labels, std::string& error) {
+    const std::map<std::string, Label>& labels,
+    const std::vector<std::string>& externs,
+    std::vector<AssembledRelocation>& relocations, std::string& error) {
     const auto& name = line.mnemonic;
     const auto& operands = line.operands;
     const auto register_at = [&](std::size_t index)
@@ -163,8 +165,14 @@ std::optional<EncodedInstruction> encode_mnemonic(
                 auto label_text = trim(std::string_view(operands[1]).substr(1));
                 const auto target = labels.find(label_text);
                 if (target == labels.end()) {
-                    error = "undefined label '" + label_text + "'";
-                    return std::nullopt;
+                    if (std::find(externs.begin(), externs.end(),
+                                  label_text) == externs.end()) {
+                        error = "undefined label '" + label_text + "'";
+                        return std::nullopt;
+                    }
+                    relocations.push_back(
+                        AssembledRelocation{label_text, 0, address + 2});
+                    return encode_x(XOp::MoveImmediate, *rd, 0, 0, error);
                 }
                 return encode_x(XOp::MoveImmediate, *rd, 0,
                                 static_cast<std::uint16_t>(
@@ -223,8 +231,14 @@ std::optional<EncodedInstruction> encode_mnemonic(
                                                               operands[1].size() - 2));
                 const auto target = labels.find(label_text);
                 if (target == labels.end()) {
-                    error = "undefined label '" + label_text + "'";
-                    return std::optional<EncodedInstruction>{};
+                    if (std::find(externs.begin(), externs.end(),
+                                  label_text) == externs.end()) {
+                        error = "undefined label '" + label_text + "'";
+                        return std::optional<EncodedInstruction>{};
+                    }
+                    relocations.push_back(
+                        AssembledRelocation{label_text, 0, address + 2});
+                    return encode_x(XOp::MoveImmediate, *rd, 0, 0, error);
                 }
                 return encode_x(XOp::MoveImmediate, *rd, 0,
                                 static_cast<std::uint16_t>(
@@ -613,7 +627,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
         }
         const auto encoded =
             encode_mnemonic(line, static_cast<std::uint32_t>(offset), labels,
-                            error);
+                            externs, result.relocations, error);
         if (!encoded) {
             return false;
         }

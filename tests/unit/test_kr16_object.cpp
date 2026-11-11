@@ -8,6 +8,35 @@
 
 #include "doctest.h"
 
+TEST_CASE("kr16 object writer carries external absolute relocations") {
+    const std::string source = R"(
+.text
+.extern target
+_start:
+    MOV R0, #target
+    RET
+)";
+    krc::asmkr16::AssemblyResult assembly;
+    std::string error;
+    REQUIRE_MESSAGE(krc::asmkr16::assemble(source, assembly, error), error);
+    REQUIRE(assembly.relocations.size() == 1);
+    CHECK(assembly.relocations[0].symbol == "target");
+    CHECK(assembly.relocations[0].offset == 2);
+
+    krc::linker::KroObject object;
+    REQUIRE_MESSAGE(
+        krc::asmkr16::make_object(assembly, krc::target::get_target(
+                                                krc::target::TargetId::Kr16),
+                                  object, error),
+        error);
+    REQUIRE(object.relocations.size() == 1);
+    CHECK(object.relocations[0].type ==
+          krc::linker::KroRelocationType::Abs16);
+    CHECK(object.relocations[0].width == 2);
+    CHECK(object.symbols[object.relocations[0].symbol].name == "target");
+}
+
+
 TEST_CASE("kr16 object writer emits a KRO object with text and symbols") {
     const std::string source = R"(
 .text

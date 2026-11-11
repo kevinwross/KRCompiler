@@ -370,11 +370,11 @@ void Kr16Backend::emit_function(std::string& out,
                 }
                 const auto* callee = instruction->operands[0];
                 if (callee->kind == ir::ValueKind::Function) {
-                    out += "    CALL " + callee->name + "\n";
+                    out += "    MOV R0, #" + callee->name + "\n";
                 } else {
                     load(callee, "R0");
-                    out += "    CALL R0\n";
                 }
+                out += "    CALL R0\n";
                 if (instruction->type && !ir::is_void(instruction->type)) {
                     store(*instruction, "R0");
                 }

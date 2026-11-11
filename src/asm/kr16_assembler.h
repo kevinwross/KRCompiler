@@ -15,10 +15,17 @@ struct AssembledSymbol {
     bool external = false;
 };
 
+struct AssembledRelocation {
+    std::string symbol;
+    std::uint32_t section = 0;
+    std::uint64_t offset = 0;
+};
+
 struct AssemblyResult {
     std::vector<std::uint8_t> text;
     std::vector<std::uint8_t> data;
     std::vector<AssembledSymbol> symbols;
+    std::vector<AssembledRelocation> relocations;
 };
 
 // Assembles the KR16 textual subset emitted by the backend. Text and data are
