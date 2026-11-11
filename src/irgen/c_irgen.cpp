@@ -99,6 +99,129 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
     return std::move(module_);
 }
 
+ir::Function* CIRGen::ensure_default_constructor(
+    const frontend::RecordInfo* record) {
+    if (!record) {
+        return nullptr;
+    }
+    if (auto* existing = select_constructor(record->tag, 0)) {
+        return existing;
+    }
+    const auto cached = default_constructors_.find(record);
+    if (cached != default_constructors_.end()) {
+        return cached->second;
+    }
+    const auto type_entry = record_types_.find(record);
+    if (type_entry == record_types_.end() || !type_entry->second) {
+        return nullptr;
+    }
+    ir::Function* base_constructor = nullptr;
+    if (record->base && record->base->kind == frontend::TypeKind::Record &&
+        record->base->record) {
+        base_constructor = ensure_default_constructor(record->base->record.get());
+    }
+    bool needs_construction = record->polymorphic || base_constructor != nullptr;
+    for (const auto& member : record->members) {
+        if (member.type && member.type->kind == frontend::TypeKind::Record &&
+            member.type->record &&
+            ensure_default_constructor(member.type->record.get()) != nullptr) {
+            needs_construction = true;
+        }
+        if (member.default_initializer) {
+            needs_construction = true;
+        }
+    }
+    if (!needs_construction) {
+        default_constructors_[record] = nullptr;
+        return nullptr;
+    }
+    const auto type = type_entry->second;
+    auto* function_type = module_->types().function_type(
+        module_->types().void_type(),
+        {module_->types().pointer_type(type)}, false);
+    auto* function = module_->add_function(record->tag + "_ctor_0",
+                                           function_type, ir::Linkage::Weak,
+                                           false);
+    function->add_parameter(module_->types().pointer_type(type), "this");
+    const auto previous_function = current_function_;
+    const auto previous_class = current_class_;
+    const auto previous_destructor = in_destructor_;
+    const auto previous_constructor = in_constructor_;
+    auto* previous_block = builder_.insert_block();
+    current_function_ = function;
+    current_class_ = record;
+    in_destructor_ = false;
+    in_constructor_ = true;
+    auto* entry = function->add_block("entry");
+    builder_.reset_value_names();
+    builder_.set_insert_point(entry);
+    auto* self = static_cast<ir::Value*>(function->parameters[0].get());
+    if (base_constructor) {
+        auto* base_self = self;
+        if (base_self->type != base_constructor->type->parameters[0]) {
+            base_self = builder_.create(
+                ir::Opcode::BitCast, base_constructor->type->parameters[0],
+                {base_self}, "implicit.base.this");
+        }
+        builder_.create_call(base_constructor, {base_self}, nullptr,
+                             "implicit.base.ctor");
+    }
+    std::size_t field_position = 0;
+    if (record->base && record->base->kind == frontend::TypeKind::Record &&
+        record->base->record) {
+        const auto base_type = record_types_.find(record->base->record.get());
+        if (base_type != record_types_.end()) {
+            field_position = base_type->second->fields.size();
+        }
+    } else if (record->polymorphic) {
+        field_position = 1;
+    }
+    for (const auto& member : record->members) {
+        auto* constructor =
+            member.type && member.type->kind == frontend::TypeKind::Record &&
+                    member.type->record
+                ? ensure_default_constructor(member.type->record.get())
+                : nullptr;
+        if (field_position >= type->fields.size()) {
+            break;
+        }
+        auto* zero = module_->constant_int(int_type(), 0);
+        auto* field_index = module_->constant_int(
+            int_type(), static_cast<std::int64_t>(field_position));
+        auto* field = builder_.create_gep(type, self, {zero, field_index}, false,
+                                          "implicit.field");
+        field->type = module_->types().pointer_type(
+            type->fields[field_position]);
+        if (member.default_initializer &&
+            !member.default_initializer->children.empty() &&
+            member.default_initializer->children.front()) {
+            emit_initializer(*member.default_initializer->children.front(), field,
+                             type->fields[field_position]);
+        } else if (constructor) {
+            auto* member_self = field;
+            if (member_self->type != constructor->type->parameters[0]) {
+                member_self = builder_.create(
+                    ir::Opcode::BitCast, constructor->type->parameters[0],
+                    {member_self}, "implicit.member.this");
+            }
+            builder_.create_call(constructor, {member_self}, nullptr,
+                                 "implicit.member.ctor");
+        }
+        field_position++;
+    }
+    if (record->polymorphic) {
+        emit_vtable_init(self, type);
+    }
+    builder_.create_ret(nullptr);
+    current_function_ = previous_function;
+    current_class_ = previous_class;
+    in_destructor_ = previous_destructor;
+    in_constructor_ = previous_constructor;
+    builder_.set_insert_point(previous_block);
+    default_constructors_[record] = function;
+    return function;
+}
+
 ir::Function* CIRGen::ensure_member_destructor(
     const frontend::RecordInfo* record) {
     if (!record) {
@@ -2984,15 +3107,13 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             const auto record = ir_records_.find(type);
             ir::Function* constructor = nullptr;
             if (record != ir_records_.end()) {
-                for (auto* current = record->second; current != nullptr;) {
-                    constructor = select_constructor(current->tag, 0);
-                    if (constructor) {
-                        break;
-                    }
-                    current = current->base && current->base->record
-                                  ? current->base->record.get()
-                                  : nullptr;
+                constructor = select_constructor(record->second->tag, 0);
+                if (!constructor) {
+                    constructor = ensure_default_constructor(record->second);
                 }
+            }
+            if (!constructor && record != ir_records_.end()) {
+                constructor = ensure_default_constructor(record->second);
             }
             if (constructor) {
                 auto* constructor_this = address;
@@ -3035,21 +3156,18 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                     if (level_type == record_types_.end()) {
                         continue;
                     }
-                    std::size_t field_position = 0;
-                    if (level->base && level->base->record) {
-                        const auto base_type =
-                            record_types_.find(level->base->record.get());
-                        if (base_type != record_types_.end()) {
-                            field_position = base_type->second->fields.size();
-                        }
-                    } else if (level->polymorphic) {
-                        field_position = 1;
-                    }
                     for (std::size_t member_index = 0;
                          member_index < level->members.size();
                          ++member_index) {
                         const auto& member = level->members[member_index];
-                        const auto position = field_position + member_index;
+                        const auto named = std::find(type->field_names.begin(),
+                                                     type->field_names.end(),
+                                                     member.name);
+                        if (named == type->field_names.end()) {
+                            continue;
+                        }
+                        const auto position = static_cast<std::size_t>(
+                            std::distance(type->field_names.begin(), named));
                         if (position >= type->fields.size()) {
                             continue;
                         }
@@ -4749,6 +4867,9 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             if (record != ir_records_.end()) {
                 auto* constructor = select_constructor(
                     record->second->tag, constructor_arguments.size());
+                if (!constructor && constructor_arguments.empty()) {
+                    constructor = ensure_default_constructor(record->second);
+                }
                 const bool needs_vtable =
                     record->second && record->second->polymorphic;
                 const bool has_defaults = std::any_of(

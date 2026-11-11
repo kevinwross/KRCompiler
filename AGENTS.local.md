@@ -59,8 +59,8 @@ Run only your host's row. A change confined to `docs/`, `tests/` or `implementat
 <!-- project:targets:start — generated from .dev-template.json targets; edit the Notes column, not the rows -->
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
-| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release verified locally 2026-11-09; 242/242 CTest; remote CI pending. |
-| Linux | x64 | <ubuntu-latest in CI> | WSL Alpine 3.22 GCC 14.2 Debug/Release and Clang 20.1 Debug/ASan verified locally 2026-11-09; 242/242 CTest; remote CI pending. |
+| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release; remote CI pending. |
+| Linux | x64 | <ubuntu-latest in CI> | WSL Alpine 3.22 GCC 14.2 Debug/Release and Clang 20.1 Debug/ASan; remote CI pending. |
 
 Target-specific notes:
 

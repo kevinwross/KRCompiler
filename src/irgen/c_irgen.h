@@ -172,8 +172,12 @@ private:
     void generate_global_constructors();
     ir::Function* ensure_member_destructor(
         const frontend::RecordInfo* record);
+    ir::Function* ensure_default_constructor(
+        const frontend::RecordInfo* record);
     std::unordered_map<const frontend::RecordInfo*, ir::Function*>
         member_destructors_;
+    std::unordered_map<const frontend::RecordInfo*, ir::Function*>
+        default_constructors_;
     std::unordered_map<const frontend::RecordInfo*, ir::TypePtr> record_types_;
     std::unordered_map<const ir::Type*, const frontend::RecordInfo*> ir_records_;
     std::unordered_map<std::string, std::unordered_map<std::string, ir::Function*>>

@@ -958,7 +958,7 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> --dump-ir
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/new_derived_ctor.cpp")
     set_tests_properties(krc_new_derived_ctor_ir PROPERTIES
-        PASS_REGULAR_EXPRESSION "new.base.this")
+        PASS_REGULAR_EXPRESSION "implicit.base.this")
 
     add_test(NAME krc_link_global_derived_member
         COMMAND ${CMAKE_COMMAND}
@@ -1906,6 +1906,16 @@ if(TARGET krc)
                 -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/virtual_destructor_other_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_link_constructor_once
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constructor_once.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constructor_once_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_pure_virtual_call
