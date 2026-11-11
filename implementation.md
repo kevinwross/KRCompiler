@@ -214,7 +214,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - The KR32 libc adds `strtod` with sign, fraction, and decimal exponent; it parses `-3.25e2tail` as `-325.00` with `end` at `tail`.
 - User-defined constructors default-construct class-type members that have neither an explicit initializer nor a default member initializer; an `Outer(){}` with `Inner inner` observes 5.
 - `emit_implicit_member_lvalue` prefers the IR record field type, so class-type member lvalues carry struct type instead of a fallback integer.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 177/177 CTest.
+- A user-defined constructor calls the zero-argument constructor of its base class when the initializer list does not name it; `Derived(){}` observes `Base`'s 5.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 179/179 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -228,7 +229,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 177/177 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 179/179 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -478,3 +479,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T20:47:14-08:00** — `delete[]` now uses the synthesized member destructor for every element. A two-element `Outer` array prints `inner` twice; the link and IR checks make CTest 174/174.
 - **2026-11-10T21:02:55-08:00** — Fixed floating compound assignments to emit `fadd`/`fsub`/`fmul`/`fdiv`, then added `strtod` with sign, fraction, and exponent handling. The parser reads `-3.25e2tail` as `-325.00`; CTest is 175/175.
 - **2026-11-10T21:21:03-08:00** — User-defined constructors now default-construct class-type members without explicit or default initializers. The `Outer(){}`/`Inner` fixture returns 5; the link and IR checks make CTest 177/177.
+- **2026-11-10T21:37:14-08:00** — User-defined constructors now call an unnamed base-class zero-argument constructor first. The `Derived`/`Base` fixture returns 5; the link and IR checks make CTest 179/179.

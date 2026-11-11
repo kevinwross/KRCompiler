@@ -1497,6 +1497,29 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
         }
     }
     if (current_class_) {
+        if (current_class_->base &&
+            current_class_->base->kind == frontend::TypeKind::Record &&
+            current_class_->base->record &&
+            !explicit_member_initializers.contains(
+                current_class_->base->record->tag)) {
+            auto* base_constructor = select_constructor(
+                current_class_->base->record->tag, 0);
+            auto* self = lookup_local("this");
+            if (base_constructor && self && self->type &&
+                self->type->kind == ir::TypeKind::Pointer) {
+                auto* self_value = builder_.create_load(
+                    self->type, self->address, false, 0, "ctor.base.this");
+                if (self_value->type !=
+                    base_constructor->type->parameters[0]) {
+                    self_value = builder_.create(
+                        ir::Opcode::BitCast,
+                        base_constructor->type->parameters[0],
+                        {self_value}, "ctor.base.cast");
+                }
+                builder_.create_call(base_constructor, {self_value},
+                                     nullptr, "ctor.base.default");
+            }
+        }
         for (const auto& member : current_class_->members) {
             if (explicit_member_initializers.contains(member.name)) {
                 continue;
