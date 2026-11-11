@@ -183,6 +183,7 @@ private:
     std::vector<std::pair<ir::Value*, ir::Function*>> local_cleanups_;
     std::vector<std::size_t> cleanup_marks_;
     const frontend::RecordInfo* current_class_ = nullptr;
+    bool in_destructor_ = false;
     std::vector<const frontend::AstNode*> definitions_;
     std::vector<std::unordered_map<std::string, LocalBinding>> scopes_;
     std::vector<ir::BasicBlock*> break_targets_;
