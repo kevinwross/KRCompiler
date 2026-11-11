@@ -1673,3 +1673,168 @@ int remove(const char *path) {
     return unlink(path);
 }
 
+static int scan_space(char character) {
+    if (character == ' ' || character == '\t' || character == '\n' ||
+        character == '\r' || character == 11 || character == 12) {
+        return 1;
+    }
+    return 0;
+}
+
+static void skip_space(const char **cursor) {
+    while (scan_space(**cursor)) {
+        (*cursor)++;
+    }
+}
+
+static int scan_integer(const char **cursor, int base, long *value,
+                        int *negative) {
+    const char *text = *cursor;
+    int sign = 1;
+    if (*text == '-') {
+        sign = -1;
+        text++;
+    } else if (*text == '+') {
+        text++;
+    }
+    long result = 0;
+    int digits = 0;
+    for (;;) {
+        const char character = *text;
+        int digit = -1;
+        if (character >= '0' && character <= '9') {
+            digit = character - '0';
+        } else if (character >= 'a' && character <= 'f') {
+            digit = character - 'a' + 10;
+        } else if (character >= 'A' && character <= 'F') {
+            digit = character - 'A' + 10;
+        }
+        if (digit < 0 || digit >= base) {
+            break;
+        }
+        result = result * base + digit;
+        digits++;
+        text++;
+    }
+    if (digits == 0) {
+        return 0;
+    }
+    *cursor = text;
+    *value = result * sign;
+    *negative = sign < 0;
+    return 1;
+}
+
+int sscanf(const char *input, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const char *cursor = input;
+    int assigned = 0;
+    while (*format) {
+        if (scan_space(*format)) {
+            skip_space(&cursor);
+            while (scan_space(*format)) {
+                format++;
+            }
+            continue;
+        }
+        if (*format != '%') {
+            if (*cursor != *format) {
+                break;
+            }
+            cursor++;
+            format++;
+            continue;
+        }
+        format++;
+        int suppress = 0;
+        if (*format == '*') {
+            suppress = 1;
+            format++;
+        }
+        int width = 0;
+        while (*format >= '0' && *format <= '9') {
+            width = width * 10 + (*format - '0');
+            format++;
+        }
+        int long_modifier = 0;
+        if (*format == 'l') {
+            long_modifier = 1;
+            format++;
+        }
+        const char conversion = *format;
+        if (conversion == '%') {
+            if (*cursor != '%') {
+                break;
+            }
+            cursor++;
+            format++;
+            continue;
+        }
+        if (conversion == 0) {
+            break;
+        }
+        format++;
+        if (conversion == 'd' || conversion == 'i' || conversion == 'u' ||
+            conversion == 'x') {
+            skip_space(&cursor);
+            const int base = conversion == 'x' ? 16
+                              : conversion == 'i' ? 10
+                                                  : 10;
+            long value = 0;
+            int negative = 0;
+            if (!scan_integer(&cursor, base, &value, &negative)) {
+                break;
+            }
+            if (!suppress) {
+                if (long_modifier) {
+                    *va_arg(arguments, long *) = value;
+                } else if (conversion == 'u' || conversion == 'x') {
+                    *va_arg(arguments, unsigned int *) = (unsigned int)value;
+                } else {
+                    *va_arg(arguments, int *) = (int)value;
+                }
+                assigned++;
+            }
+        } else if (conversion == 's') {
+            skip_space(&cursor);
+            if (*cursor == 0) {
+                break;
+            }
+            char *destination = suppress ? 0 : va_arg(arguments, char *);
+            int copied = 0;
+            while (*cursor != 0 && !scan_space(*cursor) &&
+                   (width == 0 || copied < width)) {
+                if (destination) {
+                    destination[copied] = *cursor;
+                }
+                copied++;
+                cursor++;
+            }
+            if (destination) {
+                destination[copied] = 0;
+                assigned++;
+            }
+        } else if (conversion == 'c') {
+            const int count = width == 0 ? 1 : width;
+            char *destination = suppress ? 0 : va_arg(arguments, char *);
+            for (int index = 0; index < count; index++) {
+                if (*cursor == 0) {
+                    break;
+                }
+                if (destination) {
+                    destination[index] = *cursor;
+                }
+                cursor++;
+            }
+            if (destination) {
+                assigned++;
+            }
+        } else {
+            break;
+        }
+    }
+    va_end(arguments);
+    return assigned;
+}
+

@@ -4425,6 +4425,21 @@ std::string CIRGen::decode_string(std::string_view text) const {
         case 'r':
             result.push_back('\r');
             break;
+        case 'a':
+            result.push_back(7);
+            break;
+        case 'b':
+            result.push_back(8);
+            break;
+        case 'f':
+            result.push_back(12);
+            break;
+        case 'v':
+            result.push_back(11);
+            break;
+        case '?':
+            result.push_back('?');
+            break;
         case '\\':
             result.push_back('\\');
             break;

@@ -2089,6 +2089,21 @@ std::optional<long long> Sema::parse_character_literal(std::string_view text) co
         case 'r':
             value = '\r';
             break;
+        case 'a':
+            value = 7;
+            break;
+        case 'b':
+            value = 8;
+            break;
+        case 'f':
+            value = 12;
+            break;
+        case 'v':
+            value = 11;
+            break;
+        case '?':
+            value = '?';
+            break;
         case '\\':
             value = '\\';
             break;
