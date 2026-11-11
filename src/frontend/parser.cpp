@@ -720,6 +720,7 @@ std::unique_ptr<AstNode> Parser::parse_struct_specifier(bool is_union) {
             class_names_.insert(node->text);
         } else if (cxx_mode_ && !specifiers_have_typedef_) {
             typedef_names_.insert(node->text);
+            class_names_.insert(node->text);
         }
         ++position_;
     }
