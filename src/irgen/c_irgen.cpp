@@ -272,6 +272,24 @@ void CIRGen::generate_global_constructors() {
             builder_.set_insert_point(entry);
             push_scope();
             const auto type = info.global->element_type;
+            if (info.record->base &&
+                info.record->base->kind == frontend::TypeKind::Record &&
+                info.record->base->record) {
+                auto* base_constructor = select_constructor(
+                    info.record->base->record->tag, 0);
+                if (base_constructor) {
+                    auto* self = static_cast<ir::Value*>(info.global);
+                    if (self->type !=
+                        base_constructor->type->parameters[0]) {
+                        self = builder_.create(
+                            ir::Opcode::BitCast,
+                            base_constructor->type->parameters[0], {self},
+                            "global.base.ctor.this");
+                    }
+                    builder_.create_call(base_constructor, {self}, nullptr,
+                                         "global.base.ctor");
+                }
+            }
             for (std::size_t member_index = 0;
                  member_index < info.record->members.size() &&
                  member_index < type->fields.size();
@@ -1341,8 +1359,15 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
                 has_member_initialization = true;
             }
         }
+        const bool has_base_initialization =
+            frontend_type->record->base &&
+            frontend_type->record->base->kind ==
+                frontend::TypeKind::Record &&
+            frontend_type->record->base->record &&
+            select_constructor(
+                frontend_type->record->base->record->tag, 0) != nullptr;
         if (has_constructor || has_destructor ||
-            has_member_initialization) {
+            has_member_initialization || has_base_initialization) {
             GlobalCtorInfo info;
             info.global = global;
             info.record = frontend_type->record.get();
