@@ -148,7 +148,9 @@ std::optional<EncodedInstruction> encode_mnemonic(
     };
 
     if (name == "ADD" || name == "SUB" || name == "CMP" || name == "AND" ||
-        name == "OR" || name == "XOR" || name == "MOV" || name == "TEST") {
+        name == "OR" || name == "XOR" || name == "MOV" || name == "TEST" ||
+        name == "MUL" || name == "DIV" || name == "DIVU" || name == "MOD" ||
+        name == "MODU") {
         const auto rd = register_at(0);
         if (!rd) {
             error = "expected destination register";
@@ -198,7 +200,10 @@ std::optional<EncodedInstruction> encode_mnemonic(
             {"ADD", RFunction::Add},   {"SUB", RFunction::Sub},
             {"CMP", RFunction::Cmp},   {"AND", RFunction::And},
             {"OR", RFunction::Or},     {"XOR", RFunction::Xor},
-            {"MOV", RFunction::Mov},   {"TEST", RFunction::Test}};
+            {"MOV", RFunction::Mov},   {"TEST", RFunction::Test},
+            {"MUL", RFunction::Mul},   {"DIV", RFunction::Div},
+            {"DIVU", RFunction::DivU}, {"MOD", RFunction::Mod},
+            {"MODU", RFunction::ModU}};
         return encode_r(*rd, *rs, functions.at(name), error);
     }
 
@@ -451,7 +456,9 @@ std::optional<std::uint8_t> instruction_size(const Line& line,
     };
 
     if (name == "ADD" || name == "SUB" || name == "CMP" || name == "AND" ||
-        name == "OR" || name == "XOR" || name == "MOV" || name == "TEST") {
+        name == "OR" || name == "XOR" || name == "MOV" || name == "TEST" ||
+        name == "MUL" || name == "DIV" || name == "DIVU" || name == "MOD" ||
+        name == "MODU") {
         if (line.operands.size() >= 2 && !line.operands[1].empty() &&
             line.operands[1].front() == '#') {
             const auto immediate = immediate_at(1);

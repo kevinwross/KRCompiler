@@ -244,6 +244,25 @@ void Kr16Backend::emit_function(std::string& out,
                            ? "    STB [R1], R0\n"
                            : "    ST [R1], R0\n";
                 break;
+            case ir::Opcode::Mul:
+            case ir::Opcode::SDiv:
+            case ir::Opcode::UDiv:
+            case ir::Opcode::SRem:
+            case ir::Opcode::URem:
+                load(instruction->operands[0], "R0");
+                load(instruction->operands[1], "R1");
+                out += instruction->opcode == ir::Opcode::Mul
+                           ? "    MUL R0, R1\n"
+                           : (instruction->opcode == ir::Opcode::SDiv
+                                  ? "    DIV R0, R1\n"
+                                  : (instruction->opcode == ir::Opcode::UDiv
+                                         ? "    DIVU R0, R1\n"
+                                         : (instruction->opcode ==
+                                                    ir::Opcode::SRem
+                                                ? "    MOD R0, R1\n"
+                                                : "    MODU R0, R1\n")));
+                store(*instruction, "R0");
+                break;
             case ir::Opcode::Add:
             case ir::Opcode::Sub:
             case ir::Opcode::And:
