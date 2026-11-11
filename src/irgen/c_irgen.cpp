@@ -997,6 +997,13 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         inferred->array_count = bytes.size() + 1;
         inferred->array_has_count = true;
         frontend_type = inferred;
+    } else if (frontend_type->kind == frontend::TypeKind::Array &&
+               !frontend_type->array_has_count && initializer &&
+               initializer->kind == frontend::AstKind::InitializerList) {
+        auto inferred = std::make_shared<frontend::Type>(*frontend_type);
+        inferred->array_count = initializer->children.size();
+        inferred->array_has_count = true;
+        frontend_type = inferred;
     }
     const auto type = map_type(frontend_type);
     const auto alignment = alignment_of(specifiers, frontend_type);
@@ -1061,6 +1068,11 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         return;
     }
     if (type->kind == ir::TypeKind::Struct && initializer &&
+        initializer->kind == frontend::AstKind::InitializerList) {
+        global_initializers_.push_back({global, initializer});
+        return;
+    }
+    if (type->kind == ir::TypeKind::Array && initializer &&
         initializer->kind == frontend::AstKind::InitializerList) {
         global_initializers_.push_back({global, initializer});
         return;
