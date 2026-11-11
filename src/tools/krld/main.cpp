@@ -13,6 +13,7 @@
 #include "krc/version.h"
 #include "linker/archive.h"
 #include "linker/kro_object.h"
+#include "linker/kr16_image.h"
 #include "linker/linker.h"
 
 namespace {
@@ -65,6 +66,7 @@ std::uint64_t parse_address(std::string_view text, bool& ok) {
 int main(int argc, char** argv) {
     std::string entry = "_start";
     std::uint64_t base = 0x00010000;
+    bool base_set = false;
     std::string output;
     std::string map_path;
     std::string layout_path;
@@ -116,6 +118,7 @@ int main(int argc, char** argv) {
         if (argument.starts_with("--base=")) {
             bool ok = false;
             base = parse_address(argument.substr(std::string_view("--base=").size()), ok);
+            base_set = true;
             if (!ok) {
                 std::cerr << "krld: invalid --base value\n";
                 return 1;
@@ -182,6 +185,11 @@ int main(int argc, char** argv) {
         objects.push_back(std::move(object));
     }
 
+    const bool kr16 =
+        !objects.empty() && objects.front().target_id == 2;
+    if (kr16 && !base_set) {
+        base = 0x0100;
+    }
     krc::linker::LinkOptions options;
     options.base = base;
     options.entry_symbol = entry;
@@ -253,7 +261,30 @@ int main(int argc, char** argv) {
     }
 
     std::vector<std::uint8_t> executable;
-    if (!krc::linker::write_kr32_executable(image, executable, error)) {
+    bool wrote = false;
+    if (kr16) {
+        const krc::linker::LinkedSection* text = nullptr;
+        for (const auto& section : image.sections) {
+            if (section.type == krc::linker::KroSectionType::Text) {
+                text = &section;
+                break;
+            }
+        }
+        if (!text) {
+            std::cerr << "krld: KR16 image has no text section\n";
+            return 1;
+        }
+        if (image.entry > 0xFFFF || image.base > 0xFFFF) {
+            std::cerr << "krld: KR16 address exceeds 16 bits\n";
+            return 1;
+        }
+        wrote = krc::linker::write_kr16_image(
+            text->data, static_cast<std::uint16_t>(image.base),
+            static_cast<std::uint16_t>(image.entry), executable, error);
+    } else {
+        wrote = krc::linker::write_kr32_executable(image, executable, error);
+    }
+    if (!wrote) {
         std::cerr << "krld: " << error << '\n';
         return 1;
     }

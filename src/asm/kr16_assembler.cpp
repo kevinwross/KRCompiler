@@ -174,6 +174,8 @@ std::optional<EncodedInstruction> encode_mnemonic(
                         AssembledRelocation{label_text, 0, address + 2});
                     return encode_x(XOp::MoveImmediate, *rd, 0, 0, error);
                 }
+                relocations.push_back(
+                    AssembledRelocation{label_text, 0, address + 2});
                 return encode_x(XOp::MoveImmediate, *rd, 0,
                                 static_cast<std::uint16_t>(
                                     0x0100 + target->second.offset),
@@ -240,6 +242,8 @@ std::optional<EncodedInstruction> encode_mnemonic(
                         AssembledRelocation{label_text, 0, address + 2});
                     return encode_x(XOp::MoveImmediate, *rd, 0, 0, error);
                 }
+                relocations.push_back(
+                    AssembledRelocation{label_text, 0, address + 2});
                 return encode_x(XOp::MoveImmediate, *rd, 0,
                                 static_cast<std::uint16_t>(
                                     0x0100 + target->second.offset),

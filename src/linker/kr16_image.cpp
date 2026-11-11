@@ -49,8 +49,8 @@ void write_section(std::vector<std::uint8_t>& bytes, std::size_t offset,
 }  // namespace
 
 bool write_kr16_image(const std::vector<std::uint8_t>& text,
-                      std::uint16_t entry, std::vector<std::uint8_t>& bytes,
-                      std::string& error) {
+                      std::uint16_t load_address, std::uint16_t entry,
+                      std::vector<std::uint8_t>& bytes, std::string& error) {
     if (text.size() > 0xFFFF) {
         error = "KR16 text section exceeds 64 KiB";
         return false;
@@ -86,7 +86,7 @@ bool write_kr16_image(const std::vector<std::uint8_t>& text,
     write_u32(bytes, 44, 0);
     write_u32(bytes, 48, 0);
 
-    write_section(bytes, section_table, 0, 1, 0x1 | 0x2, entry,
+    write_section(bytes, section_table, 0, 1, 0x1 | 0x2, load_address,
                   static_cast<std::uint32_t>(text_offset),
                   static_cast<std::uint32_t>(text.size()), 2);
     write_section(bytes, section_table + kSectionHeaderSize, 6, 1, 0x8, 0,
@@ -102,6 +102,13 @@ bool write_kr16_image(const std::vector<std::uint8_t>& text,
     write_u32(bytes, 52, 0);
     write_u32(bytes, 52, crc32(bytes));
     return true;
+}
+
+bool write_kr16_image(const std::vector<std::uint8_t>& text,
+                      std::uint16_t entry,
+                      std::vector<std::uint8_t>& bytes,
+                      std::string& error) {
+    return write_kr16_image(text, entry, entry, bytes, error);
 }
 
 }  // namespace krc::linker

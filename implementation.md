@@ -37,7 +37,7 @@ A change is done when:
 | M4 C core + debug format | G3/G4 passed locally | complete locally | C core, bit-fields, debugger session, frozen KDBG v1, and dump tooling are in place; M5 C++ is next |
 | M5 C++ core | G5 passed locally | in progress | G5 runs; classes, methods, constructors, destructors, `new`/`delete`, default copy, inheritance, and static devirtualization work; general vtables, move semantics, and dynamic dispatch remain |
 | M6 C++11/14/17 | G6 | in progress | `nullptr`, `auto`/`decltype`, range-for, `constexpr`, `enum class`, and `::` qualification work; templates, lambdas, move semantics, and structured bindings remain |
-| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global arrays, and a minimal `.kex` image work; `hello.c`, `sum.c`, global-array fixtures, dynamic indexing, switch, string, integer-arithmetic, shift, global-pointer, multidimensional-array, function-pointer, pointer-difference, and nested bit-field initializer fixtures run locally; a KRO object path exists behind `--emit-object` for C and `.s` input, external absolute relocations are emitted, but the full linker and the wider runtime remain |
+| M7 KR16 backend + C | G7 | complete locally | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global data, and a minimal `.kex` image work; `--emit-object` plus `krld` link startup and multiple user objects with absolute relocations. `hello.c`, `sum.c`, and a cross-object fixture run through the linked path; the wider runtime remains |
 | M8 v1.0 hardening | G8 | pending | — |
 | M9 v1.1 runtime/libc/host services | G9 partial | pending | — |
 | M10 v1.1 language/runtime completion | G9 | pending | — |
@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 229/229 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 231/231 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 229/229 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 231/231 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -278,7 +278,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [ ] KR16 ABI appendix and calling-convention suite.
 - [ ] Codegen, frame layout, image writer. Scalar codegen, SP-relative frame layout, the in-tree assembler, global arrays, and the minimal `.kex` writer work for single-unit integer/pointer code; relocatable objects and the full linker remain.
 - [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55, `hello.c` prints `Hello, KR16!` and exits 0, and a global-array fixture exits 6 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
-- [ ] Gate G7: KR16 C is accepted, assembled, linked, and run. The single-unit `hello.c`/`sum.c` path passes locally; the relocatable object and linker gate remains.
+- [x] Gate G7: KR16 C is accepted, assembled, linked, and run. Linked `hello.c` prints `Hello, KR16!` and exits 0; `sum.c` exits 55; a two-object `lib`/`main` image returns 42.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
 
@@ -309,6 +309,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `sum.c` now compiles to assembly, assembles in-tree, writes a `.kex`, and runs on the KR16 VM to exit 55 without the external toolchain.
 - `hello.c` prints `Hello, KR16!` and exits 0: string globals are emitted as `.byte` text data, `LEA` resolves their labels, and the generated image includes a minimal MMIO `puts` shim.
 - Constant folding now applies integer cast width and signedness, so `(char)-1 > 0` is true on the unsigned-char KR16 profile.
+- [ADR 0019](docs/decisions/0019-kr16-object-linker.md) extends D-041: `--emit-object` writes KRO objects, external absolute labels get `Abs16` relocations, calls use `MOV R0,#callee; CALL R0`, and `krld` writes a KR16 EXEC with a separate load base and entry.
+- The linked path runs `hello.c` (`Hello, KR16!`, exit 0), `sum.c` (exit 55), and a two-object `lib`/`main` image (exit 42).
 - CTest is 118/118 across all six configurations; `krc_tests` is 98 cases / 585 assertions.
 
 ### M8 — v1.0 hardening (6–8 weeks)
@@ -559,3 +561,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T09:53:26-08:00** — Added `krc -c --target=kr16 --emit-object` and a KR16 KRO object writer with text and symbols, covered by a round-trip unit test. Relocations and the KR16 linker remain; all six configurations pass 227/227 CTest with 100 doctest cases / 606 assertions.
 - **2026-11-11T10:01:08-08:00** — The object path now accepts `.s` input, with a test object from `entry.s`; `targets/kr16/runtime/crt0.s` is present but still needs external `main` relocations. All six configurations pass 228/228 CTest.
 - **2026-11-11T10:13:08-08:00** — KR16 external absolute references now emit 16-bit KRO relocations, calls lower through `MOV R0,#callee; CALL R0`, and `crt0.s` builds to an object. All six configurations pass 229/229 CTest with 101 doctest cases / 615 assertions.
+- **2026-11-11T10:26:43-08:00** — Completed the KR16 relocatable link path under ADR 0019/D-041: every label-based MOV/LEA is relocated, `krld` links target ID 2 at `0x0100`, and the KEX writer separates load base from entry. Linked `hello.c` prints and exits 0, `sum.c` exits 55, and a two-object image exits 42. All six configurations pass 231/231 CTest.
