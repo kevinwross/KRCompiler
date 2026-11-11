@@ -734,6 +734,21 @@ if(TARGET krc)
     set_tests_properties(krc_new_derived_ctor_ir PROPERTIES
         PASS_REGULAR_EXPRESSION "new.base.this")
 
+    add_test(NAME krc_link_global_derived_member
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_derived_member.cpp
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
+                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_derived_member_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_global_derived_member_ir
+        COMMAND $<TARGET_FILE:krc> --dump-ir
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_derived_member.cpp")
+    set_tests_properties(krc_global_derived_member_ir PROPERTIES
+        PASS_REGULAR_EXPRESSION "global.default.field")
+
     add_test(NAME krc_dump_symbols
         COMMAND $<TARGET_FILE:krc> --dump-symbols
                 ${CMAKE_CURRENT_BINARY_DIR}/puts_linked.k32)

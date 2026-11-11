@@ -290,25 +290,31 @@ void CIRGen::generate_global_constructors() {
                                          "global.base.ctor");
                 }
             }
+            const auto field_offset =
+                type->fields.size() - info.record->members.size();
             for (std::size_t member_index = 0;
                  member_index < info.record->members.size() &&
                  member_index < type->fields.size();
                  ++member_index) {
                 const auto& member = info.record->members[member_index];
+                const auto position = field_offset + member_index;
+                if (position >= type->fields.size()) {
+                    continue;
+                }
                 auto* zero = module_->constant_int(int_type(), 0);
                 auto* field_index = module_->constant_int(
-                    int_type(), static_cast<std::int64_t>(member_index));
+                    int_type(), static_cast<std::int64_t>(position));
                 auto* field = builder_.create_gep(
                     type, info.global, {zero, field_index}, false,
                     "global.default.field");
                 field->type = module_->types().pointer_type(
-                    type->fields[member_index]);
+                    type->fields[position]);
                 if (member.default_initializer &&
                     !member.default_initializer->children.empty() &&
                     member.default_initializer->children.front()) {
                     emit_initializer(
                         *member.default_initializer->children.front(), field,
-                        type->fields[member_index]);
+                        type->fields[position]);
                     continue;
                 }
                 if (!member.type ||

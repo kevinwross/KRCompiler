@@ -225,7 +225,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Global objects whose base class has a zero-argument constructor run it through `__krc_init_globals`; `Derived global` observes `Base`'s 5.
 - Block-scope default construction runs the base-class zero-argument constructor before member initialization; a local `Derived` observes `Base`'s 5.
 - `new Derived()` also runs the base-class zero-argument constructor and starts member fields at the base offset.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 196/196 CTest.
+- Global object initialization offsets derived member fields past the base fields; `Derived global` with a base value 5 and an extra member 7 sums to 12.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 198/198 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -239,7 +240,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 196/196 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 198/198 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -499,3 +500,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T23:24:28-08:00** — Global objects now run an unnamed base-class zero-argument constructor from `__krc_init_globals`. The `Derived global` fixture observes `Base`'s 5; the link and IR checks make CTest 192/192.
 - **2026-11-10T23:38:52-08:00** — Block-scope default construction now runs an unnamed base-class zero-argument constructor before members. A local `Derived` observes `Base`'s 5; the link and IR checks make CTest 194/194.
 - **2026-11-10T23:54:25-08:00** — `new Derived()` now runs an unnamed base-class zero-argument constructor and offsets member initialization past the base fields. The fixture returns 5; the link and IR checks make CTest 196/196.
+- **2026-11-11T00:07:25-08:00** — Global object initialization now starts derived member fields after the base fields. A base value 5 plus an extra member 7 sums to 12; the link and IR checks make CTest 198/198.
