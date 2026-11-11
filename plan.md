@@ -302,6 +302,7 @@ The compile-first list is in Appendix B.
   - `sysroot/include/` — common C and C++ headers.
   - `sysroot/<target>/include/` — target-specific headers and generated `bits/` (`stdint.h`, `limits.h`, `float.h`, `stddef.h`, `stdarg.h`, `stdbool.h`, `stdalign.h`, `stdnoreturn.h`).
   - `sysroot/<target>/lib/` — prebuilt runtime objects/archives.
+- Host builds stage this tree at `build/<preset>/stage/sysroot/`; generated `bits/` are written there, not into the source tree. `--sysroot` selects an explicit tree.
 - The compiler searches its sysroot by default, then `-I`/`-isystem` paths. Host system headers MUST NOT be searched implicitly.
 - `-nostdinc` and `--sysroot` are supported.
 - Generated `bits/` headers are produced from the target descriptor, so `sizeof(long)` and `INT_MAX` cannot drift from the ABI.
@@ -548,8 +549,9 @@ IRGen lowers the typed AST to SSA:
 - `src/asm/` — assembler framework, syntax modules, encoders, relocations.
 - `src/linker/` — object reader/writer, linker core, layout scripts, image writers.
 - `src/debug/` — symbol/debug format reader/writer, dumper, shared debugger reader.
-- `src/runtime/` — common runtime, HAL, per-target stubs, sysroot.
 - `src/tools/` — `krc`, `krld`, `krsym` (optional dumper front end).
+- `targets/` — target sources compiled by `krc`: `common/runtime/`, `kr32/runtime/`, `kr16/runtime/`, `kr64/runtime/`.
+- `sysroot/` — target headers and prebuilt libraries; read by `krc`, never host-compiled.
 - `include/krc/` — public library APIs.
 - `tests/` — unit, integration, differential, conformance, golden, corpus.
 - `docs/` — specifications and ADRs.
@@ -1120,8 +1122,8 @@ All debuggers MUST use this library; no debugger parses the format directly.
 
 ### 14.1 Architecture
 
-- `src/runtime/common/` — portable C/C++ runtime, HAL interfaces, allocator, stdio, string, math helpers, startup logic.
-- `src/runtime/<target>/` — crt0, syscall stubs, soft-float/64-bit helpers, unwinder, context switch, target-specific `memcpy`/`memset` fast paths.
+- `targets/common/runtime/` — portable C/C++ runtime, HAL interfaces, allocator, stdio, string, math helpers, startup logic.
+- `targets/<target>/runtime/` — crt0, syscall stubs, soft-float/64-bit helpers, unwinder, context switch, target-specific `memcpy`/`memset` fast paths.
 - `sysroot/<target>/` — headers and prebuilt libraries.
 - The runtime is compiled by `krc` for each target; a C-only bootstrap path is available for the first bring-up.
 
@@ -1411,6 +1413,7 @@ The C++ front end and the runtime/libc port are the two largest work packages. T
 14. **Symbol format text/JSON schema.** Confirm the canonical dump is the tooling contract.
 15. **Host ARM64 CI.** Required at v1.0 or later?
 16. **Third-party test suites.** Are c-testsuite/libc++ tests acceptable as test-only dependencies, given the “own tools” goal?
+17. **KDBG portable source paths.** KDBG v1 stores physical host paths in source records. Should v1.1 add a source-root table so images built on Windows and Linux resolve the same project and sysroot paths, and what is the compatibility contract for existing v1 readers? This is unresolved and needs an ADR before the debug path work.
 
 ---
 

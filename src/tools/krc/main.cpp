@@ -30,10 +30,6 @@
 #define KRC_SYSROOT_DIR "sysroot"
 #endif
 
-#ifndef KRC_GENERATED_SYSROOT_DIR
-#define KRC_GENERATED_SYSROOT_DIR ""
-#endif
-
 namespace {
 
 void print_usage(std::ostream& out) {
@@ -57,6 +53,7 @@ void print_usage(std::ostream& out) {
         << "  -c                     Emit a relocatable KRO object\n"
         << "  -o FILE                Output path for -c\n"
         << "  -I DIR                 Add an include search directory\n"
+        << "  --sysroot DIR          Use DIR as the target sysroot\n"
         << "  -S -c -o FILE          Accepted; code generation starts at M2\n"
         << "\n"
         << "M2 provides typed SSA IR; the KR32 backend and code generation are in progress.\n";
@@ -91,6 +88,7 @@ int main(int argc, char** argv) {
     bool json_output = false;
     bool cxx_mode = false;
     std::string output_path;
+    std::string sysroot_path = KRC_SYSROOT_DIR;
 
     for (int i = 1; i < argc; ++i) {
         const std::string_view argument = argv[i];
@@ -181,6 +179,17 @@ int main(int argc, char** argv) {
             include_paths.emplace_back(std::string(argument.substr(2)));
             continue;
         }
+        if (argument == "--sysroot") {
+            if (i + 1 >= argc) {
+                return fail("--sysroot requires a directory");
+            }
+            sysroot_path = argv[++i];
+            continue;
+        }
+        if (argument.starts_with("--sysroot=") && argument.size() > 10) {
+            sysroot_path = std::string(argument.substr(10));
+            continue;
+        }
         if (argument == "-c") {
             emit_object = true;
             continue;
@@ -240,11 +249,8 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    const std::filesystem::path sysroot(KRC_SYSROOT_DIR);
+    const std::filesystem::path sysroot(sysroot_path);
     add_include_directory(include_paths, sysroot / "include");
-    const std::filesystem::path generated_sysroot(KRC_GENERATED_SYSROOT_DIR);
-    add_include_directory(include_paths,
-                          generated_sysroot / std::string(profile.name) / "include");
     add_include_directory(include_paths, sysroot / std::string(profile.name) / "include");
 
     krc::frontend::SourceManager sources;

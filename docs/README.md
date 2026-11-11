@@ -6,6 +6,8 @@ The plan is approved (2026-11-09). Specifications marked frozen are stable contr
 
 - [plan.md](../plan.md) — design contract, gates, decision log.
 - [implementation.md](../implementation.md) — live milestone tracker.
+- [tree.md](tree.md) — host/target repository boundary and build output contract.
+- [planning/source-tree-reorganization.md](planning/source-tree-reorganization.md) — source/build reorganization plan.
 - [planning/nemo-plan-review.md](planning/nemo-plan-review.md) — review findings and responses.
 
 ## Specifications

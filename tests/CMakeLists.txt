@@ -1,3 +1,7 @@
+if(NOT KRC_BUILD_TARGET_RUNTIME)
+    message(FATAL_ERROR "KRC_BUILD_TESTS requires KRC_BUILD_TARGET_RUNTIME")
+endif()
+
 add_executable(krc_tests
     unit/main.cpp
     unit/test_source_manager.cpp
@@ -31,6 +35,11 @@ krc_apply_sanitizers(krc_tests)
 
 add_test(NAME krc_tests COMMAND krc_tests)
 
+add_test(NAME krc_tree_boundary
+    COMMAND ${CMAKE_COMMAND}
+            -DSOURCE=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/cmake/CheckTreeBoundary.cmake)
+
 if(TARGET krc)
     add_test(NAME krc_version COMMAND $<TARGET_FILE:krc> --version)
     set_tests_properties(krc_version PROPERTIES PASS_REGULAR_EXPRESSION "krc 0\\.1\\.0")
@@ -59,12 +68,12 @@ if(TARGET krc)
     add_test(NAME krc_kr16_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c"
-                -o "${CMAKE_CURRENT_BINARY_DIR}/kr16_sum.kex")
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_sum.kex")
 
     add_test(NAME krc_kr16_hello_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_hello.c"
-                -o "${CMAKE_CURRENT_BINARY_DIR}/kr16_hello.kex")
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_hello.kex")
 
     add_test(NAME krc_unknown_option COMMAND $<TARGET_FILE:krc> --no-such-option)
     set_tests_properties(krc_unknown_option PROPERTIES WILL_FAIL TRUE)
@@ -75,6 +84,10 @@ if(TARGET krc)
 
     add_test(NAME krc_c_syntax_includes
         COMMAND $<TARGET_FILE:krc> -fsyntax-only
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/includes.c")
+
+    add_test(NAME krc_sysroot_override
+        COMMAND $<TARGET_FILE:krc> --sysroot "${KRC_STAGE_SYSROOT}" -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/includes.c")
 
     add_test(NAME krc_c_syntax_stdint
@@ -114,15 +127,15 @@ if(TARGET krc)
     add_test(NAME krc_c_object
         COMMAND $<TARGET_FILE:krc> -c
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c"
-                -o "${CMAKE_CURRENT_BINARY_DIR}/hello.kro")
+                -o "${KRC_TEST_OUTPUT_DIR}/hello.kro")
 
     add_test(NAME krc_link_hello
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/hello_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/hello_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_puts
@@ -130,9 +143,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/puts.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/puts_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/puts_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_printf_lengths
@@ -140,9 +153,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/printf_lengths.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/printf_lengths_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/printf_lengths_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_printf_width
@@ -150,9 +163,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/printf_width.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/printf_width_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/printf_width_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_printf_string_width
@@ -160,9 +173,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/printf_string_width.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/printf_string_width_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/printf_string_width_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_printf_integer_precision
@@ -170,9 +183,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/printf_integer_precision.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/printf_integer_precision_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/printf_integer_precision_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_printf_star
@@ -180,9 +193,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/printf_star.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/printf_star_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/printf_star_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_strings
@@ -190,9 +203,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_strings.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_strings_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_strings_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_logical_truth
@@ -200,8 +213,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/logical_truth.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/logical_truth_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/logical_truth_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_sort
@@ -209,9 +222,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_sort.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_sort_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_sort_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_args5
@@ -219,9 +232,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/args5.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/args5_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/args5_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_sprintf
@@ -229,9 +242,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_sprintf.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_sprintf_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_sprintf_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_snprintf
@@ -239,9 +252,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_snprintf.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_snprintf_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_snprintf_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_convert
@@ -249,9 +262,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_convert.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_convert_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_convert_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_destructor
@@ -259,9 +272,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_destructor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_destructor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_destructor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_func_name
@@ -269,8 +282,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/func_name.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/func_name_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/func_name_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_func_name_method
@@ -278,9 +291,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/func_name_method.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/func_name_method_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/func_name_method_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_string_concat
@@ -288,9 +301,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/string_concat.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/string_concat_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/string_concat_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_default_member
@@ -298,8 +311,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/default_member.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/default_member_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/default_member_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_default_member_plain
@@ -307,8 +320,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/default_member_plain.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/default_member_plain_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/default_member_plain_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_default_member_polymorphic
@@ -316,9 +329,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/default_member_polymorphic.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/default_member_polymorphic_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/default_member_polymorphic_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_tokenize
@@ -326,9 +339,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_tokenize.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_tokenize_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_tokenize_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_string_array_init
@@ -336,9 +349,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/string_array_init.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/string_array_init_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/string_array_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_string_array
@@ -346,9 +359,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_string_array.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_string_array_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_string_array_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_struct_init
@@ -356,8 +369,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_struct_init.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_struct_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_struct_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_array_init
@@ -365,8 +378,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_array_init.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_array_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_array_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_pointer_init
@@ -374,9 +387,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_pointer_init.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_pointer_init_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_pointer_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_aggregate_init
@@ -384,8 +397,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_aggregate_init.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_aggregate_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_aggregate_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_compound_literal
@@ -393,8 +406,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/compound_literal.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/compound_literal_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/compound_literal_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_math
@@ -402,9 +415,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_math.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_math_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_math_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_conditional_types
@@ -412,9 +425,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/conditional_types.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/conditional_types_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/conditional_types_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_memory
@@ -422,9 +435,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_memory.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_memory_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_memory_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_template_call
@@ -432,8 +445,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/template_call.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/template_call_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/template_call_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_new_default_member
@@ -441,9 +454,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/new_default_member.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/new_default_member_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/new_default_member_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_new_array_default_member
@@ -451,9 +464,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/new_array_default_member.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/new_array_default_member_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/new_array_default_member_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_new_with_args
@@ -461,9 +474,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/new_with_args.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/new_with_args_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/new_with_args_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_member_default_ctor
@@ -471,8 +484,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/member_default_ctor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/member_default_ctor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/member_default_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_new_member_default_ctor
@@ -480,9 +493,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/new_member_default_ctor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/new_member_default_ctor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/new_member_default_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_member_default_ctor
@@ -490,8 +503,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_member_default_ctor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_member_default_ctor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_member_default_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_member_dtor
@@ -499,9 +512,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_member_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_member_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_member_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_global_member_dtor_ir
@@ -515,9 +528,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/local_member_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/local_member_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/local_member_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_local_member_dtor_ir
@@ -531,9 +544,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/delete_member_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/delete_member_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/delete_member_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_delete_member_dtor_ir
@@ -547,9 +560,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/delete_array_member_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/delete_array_member_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/delete_array_member_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_delete_array_member_dtor_ir
@@ -563,9 +576,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_strtod.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_strtod_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_strtod_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_libc_atof
@@ -573,9 +586,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/libc_atof.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/libc_atof_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/libc_atof_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_ctor_member_default
@@ -583,8 +596,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/ctor_member_default.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/ctor_member_default_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/ctor_member_default_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_ctor_member_default_ir
@@ -598,8 +611,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/ctor_base_default.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/ctor_base_default_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/ctor_base_default_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_ctor_base_default_ir
@@ -613,9 +626,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/derived_dtor_base.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/derived_dtor_base_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/derived_dtor_base_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_derived_dtor_base_ir
@@ -629,9 +642,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_derived_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_derived_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_derived_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_global_derived_dtor_ir
@@ -645,9 +658,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/local_derived_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/local_derived_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/local_derived_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_local_derived_dtor_ir
@@ -661,9 +674,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/delete_derived_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/delete_derived_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/delete_derived_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_delete_derived_dtor_ir
@@ -677,9 +690,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/delete_array_derived_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/delete_array_derived_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/delete_array_derived_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_delete_array_derived_dtor_ir
@@ -693,8 +706,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_derived_ctor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_derived_ctor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_derived_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_global_derived_ctor_ir
@@ -708,8 +721,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/local_derived_ctor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/local_derived_ctor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/local_derived_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_local_derived_ctor_ir
@@ -723,9 +736,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/new_derived_ctor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/new_derived_ctor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/new_derived_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_new_derived_ctor_ir
@@ -739,8 +752,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_derived_member.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_derived_member_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_derived_member_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_global_derived_member_ir
@@ -754,8 +767,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/generic_selection.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/generic_selection_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/generic_selection_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_generic_cast
@@ -763,8 +776,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/generic_cast.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/generic_cast_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/generic_cast_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_decltype_expression
@@ -772,8 +785,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/decltype_expression.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/decltype_expression_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/decltype_expression_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_printf_float_width
@@ -781,14 +794,14 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/printf_float_width.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/printf_float_width_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/printf_float_width_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_dump_symbols
         COMMAND $<TARGET_FILE:krc> --dump-symbols
-                ${CMAKE_CURRENT_BINARY_DIR}/puts_linked.k32)
+                ${KRC_TEST_OUTPUT_DIR}/puts_linked.k32)
     set_tests_properties(krc_dump_symbols PROPERTIES
         DEPENDS krc_link_puts
         PASS_REGULAR_EXPRESSION "KDBG target=")
@@ -798,8 +811,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/struct.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/struct_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/struct_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_struct_param
@@ -807,8 +820,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/struct_param.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/struct_param_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/struct_param_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_struct_return
@@ -816,8 +829,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/struct_return.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/struct_return_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/struct_return_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_local
@@ -825,8 +838,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_local.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_local_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_local_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_init
@@ -834,8 +847,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_init.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_object
@@ -843,8 +856,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_object.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_object_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_object_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_object_arg
@@ -852,8 +865,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_object_arg.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_object_arg_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_object_arg_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_object
@@ -861,8 +874,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_object.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_object_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_object_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_global_destructor
@@ -870,8 +883,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_destructor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_destructor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_destructor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_global_destructor_ir
@@ -885,8 +898,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/global_init.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/global_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/global_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_varargs
@@ -894,9 +907,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/varargs.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/varargs_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/varargs_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_mainentry
@@ -904,9 +917,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/mainentry.c
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/mainentry_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/mainentry_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_functionptr
@@ -914,8 +927,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/functionptr.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/functionptr_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/functionptr_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_aggregate
@@ -923,8 +936,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/aggregate.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/aggregate_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/aggregate_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_floats
@@ -932,8 +945,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/floats.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/floats_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/floats_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_debug_struct
@@ -941,8 +954,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_struct.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/debug_struct_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_struct_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_bitfield
@@ -950,8 +963,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/bitfield.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/bitfield_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/bitfield_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_class
@@ -959,8 +972,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/class.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/class_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/class_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_method
@@ -968,8 +981,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/method.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/method_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/method_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constructor
@@ -977,8 +990,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constructor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constructor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constructor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_newdelete
@@ -986,9 +999,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/newdelete.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/newdelete_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/newdelete_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_recursive_method
@@ -996,8 +1009,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/recursive_method.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/recursive_method_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/recursive_method_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constructor_args
@@ -1005,8 +1018,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constructor_args.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constructor_args_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constructor_args_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_balanced_tree
@@ -1014,9 +1027,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/balanced_tree.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/balanced_tree_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/balanced_tree_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_hello_cpp
@@ -1024,8 +1037,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello_cpp.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/hello_cpp_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/hello_cpp_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_destructor
@@ -1033,9 +1046,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/destructor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/destructor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/destructor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_nested_destructor
@@ -1043,9 +1056,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/nested_destructor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/nested_destructor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/nested_destructor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_new_array
@@ -1053,9 +1066,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/new_array.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/new_array_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/new_array_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_copy
@@ -1063,8 +1076,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/copy.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/copy_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/copy_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_auto_nullptr
@@ -1072,8 +1085,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/auto_nullptr.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/auto_nullptr_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/auto_nullptr_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_range_for
@@ -1081,8 +1094,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/range_for.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/range_for_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/range_for_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constexpr
@@ -1090,8 +1103,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constexpr.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constexpr_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constexpr_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_enum_class
@@ -1099,8 +1112,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/enum_class.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/enum_class_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/enum_class_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_decltype
@@ -1108,8 +1121,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/decltype.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/decltype_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/decltype_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_designated
@@ -1117,8 +1130,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/designated.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/designated_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/designated_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_nested_designated
@@ -1126,8 +1139,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/nested_designated.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/nested_designated_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/nested_designated_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_namespace
@@ -1135,8 +1148,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/namespace.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/namespace_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/namespace_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_qualified_namespace
@@ -1144,8 +1157,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/qualified_namespace.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/qualified_namespace_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/qualified_namespace_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_nested_namespace
@@ -1153,8 +1166,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/nested_namespace.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/nested_namespace_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/nested_namespace_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_default_args
@@ -1162,8 +1175,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/default_args.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/default_args_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/default_args_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_method_default
@@ -1171,8 +1184,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/method_default.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/method_default_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/method_default_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_explicit
@@ -1180,8 +1193,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/explicit.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/explicit_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/explicit_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_reference
@@ -1189,8 +1202,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/reference.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/reference_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/reference_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_reference_param
@@ -1198,8 +1211,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/reference_param.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/reference_param_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/reference_param_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_method_reference
@@ -1207,8 +1220,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/method_reference.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/method_reference_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/method_reference_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_reference_member
@@ -1216,8 +1229,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/reference_member.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/reference_member_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/reference_member_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_operator_plus
@@ -1225,8 +1238,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/operator_plus.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/operator_plus_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/operator_plus_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_free_operator
@@ -1234,8 +1247,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/free_operator.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/free_operator_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/free_operator_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_lambda
@@ -1243,8 +1256,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/lambda_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_structured
@@ -1252,8 +1265,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/structured.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/structured_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/structured_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_if_constexpr
@@ -1261,8 +1274,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/if_constexpr.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/if_constexpr_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/if_constexpr_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_template
@@ -1270,8 +1283,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/template.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/template_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/template_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_enum_alignas
@@ -1279,8 +1292,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/enum_alignas.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/enum_alignas_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/enum_alignas_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_inline_two_tu
@@ -1289,8 +1302,8 @@ if(TARGET krc)
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE1=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/inline_a.cpp
                 -DSOURCE2=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/inline_b.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/inline_two_tu_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/inline_two_tu_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkTwo.cmake)
 
     add_test(NAME krc_link_inline_class_two_tu
@@ -1299,8 +1312,8 @@ if(TARGET krc)
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE1=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/inline_class_a.cpp
                 -DSOURCE2=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/inline_class_b.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/inline_class_two_tu_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/inline_class_two_tu_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkTwo.cmake)
 
     add_test(NAME krc_link_if_constexpr_discard
@@ -1308,8 +1321,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/if_constexpr_discard.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/if_constexpr_discard_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/if_constexpr_discard_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_ctor_overloads
@@ -1317,8 +1330,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/ctor_overloads.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/ctor_overloads_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/ctor_overloads_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_copy_ctor
@@ -1326,8 +1339,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/copy_ctor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/copy_ctor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/copy_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_copy_assign
@@ -1335,8 +1348,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/copy_assign.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/copy_assign_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/copy_assign_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constexpr_array
@@ -1344,8 +1357,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constexpr_array.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constexpr_array_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constexpr_array_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constexpr_call
@@ -1353,8 +1366,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constexpr_call.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constexpr_call_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constexpr_call_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_array_objects
@@ -1362,9 +1375,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/array_objects.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/array_objects_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/array_objects_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_move_ctor
@@ -1372,8 +1385,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/move_ctor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/move_ctor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/move_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_std_move
@@ -1381,8 +1394,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/std_move.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/std_move_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/std_move_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_move_assign
@@ -1390,8 +1403,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/move_assign.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/move_assign_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/move_assign_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_placement_new
@@ -1399,8 +1412,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/placement_new.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/placement_new_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/placement_new_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_brace_init
@@ -1408,8 +1421,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/brace_init.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/brace_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/brace_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_brace_aggregate
@@ -1417,8 +1430,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/brace_aggregate.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/brace_aggregate_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/brace_aggregate_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_range_init
@@ -1426,8 +1439,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/range_init.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/range_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/range_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_structured_array
@@ -1435,8 +1448,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/structured_array.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/structured_array_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/structured_array_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_subscript_operator
@@ -1444,8 +1457,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/subscript_operator.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/subscript_operator_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/subscript_operator_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_subscript_ref
@@ -1453,8 +1466,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/subscript_ref.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/subscript_ref_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/subscript_ref_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_inherited_subscript
@@ -1462,8 +1475,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/inherited_subscript.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/inherited_subscript_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/inherited_subscript_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_inherited_call
@@ -1471,8 +1484,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/inherited_call.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/inherited_call_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/inherited_call_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_named_cast
@@ -1480,8 +1493,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/named_cast.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/named_cast_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/named_cast_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_call_operator
@@ -1489,8 +1502,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/call_operator.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/call_operator_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/call_operator_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_compound_assign
@@ -1498,8 +1511,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/compound_assign.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/compound_assign_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/compound_assign_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_member_init
@@ -1507,8 +1520,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/member_init.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/member_init_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/member_init_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_delegating_ctor
@@ -1516,8 +1529,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/delegating_ctor.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/delegating_ctor_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/delegating_ctor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_assert
@@ -1525,8 +1538,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_assert.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/static_assert_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_assert_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_auto_return
@@ -1534,8 +1547,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/auto_return.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/auto_return_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/auto_return_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_unary_operator
@@ -1543,8 +1556,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/unary_operator.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/unary_operator_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/unary_operator_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_incdec_operator
@@ -1552,8 +1565,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/incdec_operator.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/incdec_operator_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/incdec_operator_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constexpr_branch
@@ -1561,8 +1574,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constexpr_branch.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constexpr_branch_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constexpr_branch_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constexpr_loop
@@ -1570,8 +1583,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constexpr_loop.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constexpr_loop_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constexpr_loop_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constexpr_while
@@ -1579,8 +1592,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constexpr_while.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constexpr_while_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constexpr_while_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_constexpr_recursion
@@ -1588,8 +1601,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/constexpr_recursion.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/constexpr_recursion_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/constexpr_recursion_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_virtual_dispatch
@@ -1597,9 +1610,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/virtual_dispatch.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/virtual_dispatch_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/virtual_dispatch_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_virtual_dtor
@@ -1607,9 +1620,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/virtual_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/virtual_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/virtual_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_virtual_array_dtor
@@ -1617,9 +1630,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/virtual_array_dtor.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/virtual_array_dtor_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/virtual_array_dtor_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_virtual_reference
@@ -1627,9 +1640,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/virtual_reference.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/virtual_reference_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/virtual_reference_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_virtual_self
@@ -1637,9 +1650,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/virtual_self.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/virtual_self_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/virtual_self_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_pure_virtual_call
@@ -1647,9 +1660,9 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/pure_virtual_call.cpp
-                -DLIBC=${CMAKE_SOURCE_DIR}/src/runtime/kr32/libc.c
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/pure_virtual_call_linked.k32
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/pure_virtual_call_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_lambda_return
@@ -1657,8 +1670,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_return.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_return_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/lambda_return_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_lambda_capture
@@ -1666,8 +1679,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_capture.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_capture_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/lambda_capture_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_lambda_ref_capture
@@ -1675,8 +1688,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_ref_capture.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_ref_capture_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/lambda_ref_capture_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_lambda_init_capture
@@ -1684,8 +1697,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_init_capture.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_init_capture_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/lambda_init_capture_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_lambda_copy_all
@@ -1693,8 +1706,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_copy_all.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_copy_all_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/lambda_copy_all_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_lambda_ref_all
@@ -1702,8 +1715,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/lambda_ref_all.cpp
-                -DRUNTIME=${CMAKE_SOURCE_DIR}/src/runtime/kr32/crt0.s
-                -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/lambda_ref_all_linked.k32
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/lambda_ref_all_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_c_preprocess
@@ -1722,8 +1735,8 @@ if(TARGET krc)
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/struct.c
-                -DOUT1=${CMAKE_CURRENT_BINARY_DIR}/determinism1.kro
-                -DOUT2=${CMAKE_CURRENT_BINARY_DIR}/determinism2.kro
+                -DOUT1=${KRC_TEST_OUTPUT_DIR}/determinism1.kro
+                -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism2.kro
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
 
     add_test(NAME krc_determinism_kr16_image
@@ -1731,8 +1744,8 @@ if(TARGET krc)
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRC_TARGET=kr16
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c
-                -DOUT1=${CMAKE_CURRENT_BINARY_DIR}/determinism1.kex
-                -DOUT2=${CMAKE_CURRENT_BINARY_DIR}/determinism2.kex
+                -DOUT1=${KRC_TEST_OUTPUT_DIR}/determinism1.kex
+                -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism2.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
 
     krc_add_cli_determinism_test(krc)

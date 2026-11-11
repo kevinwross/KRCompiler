@@ -56,7 +56,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 ### M0 — Foundation (2–3 weeks)
 
-- [x] Create the repository tree: `include/krc/`, `src/frontend/`, `src/ir/`, `src/backend/`, `src/asm/`, `src/linker/`, `src/debug/`, `src/runtime/`, `src/tools/`, `tests/`, `sysroot/`, `tools/`, `examples/`.
+- [x] Create the repository tree: `include/krc/`, `src/frontend/`, `src/ir/`, `src/backend/`, `src/asm/`, `src/linker/`, `src/debug/`, `src/tools/`, `targets/`, `tests/`, `sysroot/`, `tools/`, `examples/`. Host compiler code stays under `src/`; target source is under `targets/`.
 - [x] Add `CMakeLists.txt`, `CMakePresets.json`, and `cmake/` with C++20, warnings-as-errors, Debug/Release, and sanitizer presets.
 - [x] Vendor doctest and add the first unit-test target.
 - [x] Add Windows and Linux CI workflows; add a Linux ASan/UBSan job. Workflow present; remote run pending because no GitHub remote is configured.
@@ -139,17 +139,17 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] `KRO` object writer/reader: header, sections, symbols, relocations, debug table, CRC.
 - [x] Freeze `docs/object.md` before the object writer. Frozen by [ADR 0005](docs/decisions/0005-kro-object-format-freeze.md).
 - [ ] `krld`: target validation, archives, weak/COMDAT, GC, relaxation, map/size, layout scripts. Target validation, symbol resolution, absolute relocation patching, KR32 image writing, KRO archive extraction, deterministic `--map`/`--print-size` output, and NAME/ADDRESS layout scripts are implemented; weak/COMDAT, GC, and relaxation remain.
-- [x] `crt0`, heap symbols, minimal libc (`putchar`, `puts`, `exit`), KR32 image writer. `src/runtime/kr32/crt0.s` and `src/runtime/kr32/libc.c` provide startup, console, `puts`, `printf` integer/string formats, and exit; the linker defines `__heap_start`/`__heap_end`/`__stack_top`/`__stack_limit`; floating-point formatting and the allocator remain.
+- [x] `crt0`, heap symbols, minimal libc (`putchar`, `puts`, `exit`), KR32 image writer. `targets/kr32/runtime/crt0.s` and `targets/kr32/runtime/libc.c` provide startup, console, `puts`, `printf` integer/string formats, and exit; the linker defines `__heap_start`/`__heap_end`/`__stack_top`/`__stack_limit`; floating-point formatting and the allocator remain.
 - [x] Gate G2b: `hello.c` and `mainentry.c` assemble, link, and run on KR32. Both pass through `krc -c` + `krld` + the KR32 VM; `hello` prints `Hello, KR32!` and exits 0, and `mainentry` prints argc/argv and exits 0.
 
 **M3 evidence update (2026-11-09T22:03:10-08:00):**
 
-- `src/runtime/kr32/crt0.s` is assembled by the in-tree assembler through `krld`; `krld` now accepts `.s` inputs alongside KRO objects.
-- `krld hello.kro src/runtime/kr32/crt0.s -o hello.k32` links and runs: output `Hello, KR32!`, exit 0.
-- `krld mainentry.kro src/runtime/kr32/crt0.s -o mainentry.k32` links and runs to exit 0; `mainentry` prints argc/argv through the integer/string `printf` path.
+- `targets/kr32/runtime/crt0.s` is assembled by the in-tree assembler through `krld`; `krld` now accepts `.s` inputs alongside KRO objects.
+- `krld hello.kro targets/kr32/runtime/crt0.s -o hello.k32` links and runs: output `Hello, KR32!`, exit 0.
+- `krld mainentry.kro targets/kr32/runtime/crt0.s -o mainentry.k32` links and runs to exit 0; `mainentry` prints argc/argv through the integer/string `printf` path.
 - Local-label and data-symbol references now emit relocations, so runtime calls such as `CALL exit` and `LEA .str` are patched when sections are placed.
 - `cmake/LinkRuntime.cmake` and `krc_link_hello`/`krc_link_puts` cover the object → link image path in CTest.
-- `src/runtime/kr32/libc.c` supplies `puts`; `krc -c puts.c` + `krc -c libc.c` + `krld` + crt0 prints `hello from puts` and exits 0. The linker defines the four heap/stack boundary symbols.
+- `targets/kr32/runtime/libc.c` supplies `puts`; `krc -c puts.c` + `krc -c libc.c` + `krld` + crt0 prints `hello from puts` and exits 0. The linker defines the four heap/stack boundary symbols.
 - `krc_tests` has 86 cases / 462 assertions; all six configurations pass 21/21 CTest.
 - The double-build determinism check now covers both a KR32 object and a KR16 `.kex`: `krc_determinism_object` and `krc_determinism_kr16_image` compile the same input twice and compare SHA-256 digests.
 
@@ -161,7 +161,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `src/linker/linker.*` merges sections, resolves local/global/weak symbols, patches absolute and PC-relative relocations, validates target/ABI/pointer width, and writes a KR32 `.k32` executable with sections, symbols, strings, and CRC32.
 - `krld objects... -o image` reads KRO files, links, and writes the K32 executable. Unit tests cover resolution, relocation patching, entry-symbol errors, KRO round-trips/CRC/determinism, and K32 header emission.
 - `krc_tests` has 86 doctest cases; all six configurations pass 20/20 CTest.
-- `src/runtime/kr32/crt0.s` provides `_start`, `putchar`, and `exit`; `src/runtime/kr32/libc.c` provides `puts` and integer/string `printf`.
+- `targets/kr32/runtime/crt0.s` provides `_start`, `putchar`, and `exit`; `targets/kr32/runtime/libc.c` provides `puts` and integer/string `printf`.
 - Remaining M3 hardening: weak/COMDAT, section GC, relaxation. `krld` extracts GNU/BSD KRO archive members, writes deterministic maps/section sizes, and honors NAME/ADDRESS layout placements.
 
 **M4 evidence (2026-11-09T22:19:21-08:00, in progress):**
@@ -171,7 +171,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - The KR32 backend computes recursive aggregate layout/alignment and lowers struct-member GEPs with field offsets.
 - `tests/fixtures/c/struct.c` links/runs on KR32 and exits 5; the unit suite covers recursive struct IR and assembly.
 - [ADR 0007](docs/decisions/0007-varargs-base-opcode.md) adds `vastart`; `stdarg.h` now defines `va_list` and real `va_start`/`va_arg`/`va_copy` macros. Integer varargs functions work end to end.
-- `src/runtime/kr32/libc.c` supplies integer/string `printf`, `puts`, a free-list `malloc`/`free`/`calloc`/`realloc`, `_heapwalk`, and string/memory routines; function pointers and indirect calls work through `CALL Rn`. `mainentry` prints `argc`/`argv`, the varargs fixture prints `6`, the function-pointer fixture exits 5, and the extracted `binarytree.c` prints its AVL tree and exits 0.
+- `targets/kr32/runtime/libc.c` supplies integer/string `printf`, `puts`, a free-list `malloc`/`free`/`calloc`/`realloc`, `_heapwalk`, and string/memory routines; function pointers and indirect calls work through `CALL Rn`. `mainentry` prints `argc`/`argv`, the varargs fixture prints `6`, the function-pointer fixture exits 5, and the extracted `binarytree.c` prints its AVL tree and exits 0.
 - `libc-test.c` runs to exit 0 with `Point size=16 y-offset=8`, `point x=7 y=3.25`, `float 3.142  exp 1.23e+04  general 0.000123`, `hex=0xff`, `heap reuse: ok`, and `heap walk=0`.
 - Full `varargs.c` runs to exit 0 printing `6`, `4`, and `7` for the integer, double, and mixed cases.
 - Floating-point lowering covers FPR parameter/return/argument handling, `FLOAD.W/.D`, `FSTORE.W/.D`, `FADD/FSUB/FMUL/FDIV`, `FEQ/FLT/FLE`, `FCVT.*`, FP comparisons, `%f/%e/%g/%x/%h`, and float→double varargs promotion.
@@ -230,7 +230,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `_Generic` also infers a cast expression's type, so `_Generic((double)integer, double:11)` selects 11.
 - `decltype(expression)` infers arithmetic types from locals, integer/float literals, casts, and binary operands; `decltype(integer + 1)` is `int` and `decltype(real * 2.0)` is `double`.
 - `printf` `%f` now honors width, left alignment, `+`, space, and zero padding; the fixture prints `[    3.50][3.50    ][   +2.3][00001.50]`.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 202/202 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 204/204 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -244,7 +244,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 202/202 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 204/204 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -320,6 +320,7 @@ Approval conditions: none.
 Tracked open questions are in `plan.md` §17.2. The decision points that affect milestones are:
 
 - Target-descriptor schema and C ABI frozen before M2/M5.
+- KDBG portable source paths and the v1.1 source-root decision before debug-path work; the current v1 writer records physical host paths and needs an ADR.
 - KR16 ABI appendix before M7.
 - EH record encoding ADR before M10.
 - `libc.c` port strategy before M9.
@@ -338,8 +339,8 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-09 21:33:13 -08:00** — Added the in-tree KR32 assembler (`src/asm/kr32_assembler.*`): label/section layout, directives, frame-memory operands, instruction parsing, local-symbol resolution, external relocations, and section byte emission. The assembler accepts the backend's `hello` and `mainentry` output; tests cover encodings, data layout, relocation offsets, and undefined symbols. `krc_tests` now has 76 cases / 378 assertions; all six configurations pass 18/18 CTest. Pattern selection, relaxation, graph-colouring allocation, and peepholes remain.
 - **2026-11-09 21:38:37 -08:00** — Added graph-colouring register allocation (`src/backend/register_allocator.*`) with per-instruction liveness, interference construction, degree-ordered colouring, and spill reporting, plus a peephole pass wired into assembly emission. Tests cover a two-colourable function, spill pressure, and identity/zero-strength removal. `krc_tests` now has 79 cases / 395 assertions; all six configurations pass 18/18 CTest. Pattern selection and relocation relaxation remain; allocation is not yet the emission path.
 - **2026-11-09 21:49:58 -08:00** — Started M3: froze KRO v1 in [ADR 0005](docs/decisions/0005-kro-object-format-freeze.md), implemented the KRO writer/reader and assembler-to-object bridge, added `krc -c`, implemented section merging/symbol resolution/relocation patching in `linker.*`, added the KR32 `.k32` executable writer, and replaced the `krld` stub with a working object linker. Object/CRC/determinism/linker/K32 tests pass; `krc_tests` has 85 cases / 449 assertions and all six configurations pass 19/19 CTest. G2b remains open pending crt0/minimal libc and correct image execution.
-- **2026-11-09T22:03:10-08:00** — Closed G2b locally: added `src/runtime/kr32/crt0.s` and `.s` input support in `krld`. `krc -c hello.c` → `krld hello.kro crt0.s` → `hello.k32` prints `Hello, KR32!` and exits 0; the same path links/runs `mainentry` to exit 0 with the printf bring-up stub. Local-label/data references now emit relocations so linked absolute addresses are patched. Added the `krc_link_hello` CTest. `krc_tests` has 86 cases / 459 assertions; all six configurations pass 20/20 CTest.
-- **2026-11-09T22:06:08-08:00** — Extended the KR32 runtime with a C `puts` (`src/runtime/kr32/libc.c`), pointer-increment IRGen support, and linker-defined heap/stack boundary symbols. `krc -c puts.c` + `krc -c libc.c` + `krld` + crt0 prints `hello from puts` and exits 0. Added `krc_link_puts`; `krc_tests` now has 86 cases / 462 assertions and all six configurations pass 21/21 CTest.
+- **2026-11-09T22:03:10-08:00** — Closed G2b locally: added `targets/kr32/runtime/crt0.s` and `.s` input support in `krld`. `krc -c hello.c` → `krld hello.kro crt0.s` → `hello.k32` prints `Hello, KR32!` and exits 0; the same path links/runs `mainentry` to exit 0 with the printf bring-up stub. Local-label/data references now emit relocations so linked absolute addresses are patched. Added the `krc_link_hello` CTest. `krc_tests` has 86 cases / 459 assertions; all six configurations pass 20/20 CTest.
+- **2026-11-09T22:06:08-08:00** — Extended the KR32 runtime with a C `puts` (`targets/kr32/runtime/libc.c`), pointer-increment IRGen support, and linker-defined heap/stack boundary symbols. `krc -c puts.c` + `krc -c libc.c` + `krld` + crt0 prints `hello from puts` and exits 0. Added `krc_link_puts`; `krc_tests` now has 86 cases / 462 assertions and all six configurations pass 21/21 CTest.
 - **2026-11-09T22:19:21-08:00** — Started M4 C core: froze recursive named aggregate construction in [ADR 0006](docs/decisions/0006-recursive-aggregate-types.md); added `struct_forward`/`complete_struct`, frontend-record mapping, `.`/`->` member access, null-pointer coercion, and struct layout/GEP backend support. A recursive `struct Node` fixture links/runs and exits 5. `krc_tests` has 87 cases / 471 assertions; all six configurations pass 22/22 CTest.
 - **2026-11-09T22:29:19-08:00** — Added integer varargs and real `printf`: [ADR 0007](docs/decisions/0007-varargs-base-opcode.md) introduces `vastart`, `stdarg.h` now expands `va_start`/`va_arg`, the backend lowers the varargs base, and `libc.c` prints `%d`/`%i`/`%u`/`%s`/`%c`/`%%`. `mainentry` now prints argc/argv, the varargs fixture prints `6`, and basic-block names are uniquified so generated control-flow labels cannot collide. All six configurations pass 24/24 CTest.
 - **2026-11-09T22:31:33-08:00** — Added `offsetof` lowering and a larger C runtime: bump allocator, `free`/`calloc`, `strlen`/`strcmp`/`strncmp`/`strcpy`/`strdup`, and `memcpy`/`memset`/`memcmp`. The extracted `binarytree.c` now compiles, links, prints its AVL tree, and exits 0. `libc-test.c` compiles but still needs `_heapwalk`, heap reuse, and floating-point formatting; G3 remains open. `krc_tests` is 87 cases / 471 assertions; all six configurations pass 24/24 CTest.
@@ -511,3 +512,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T01:01:15-08:00** — `decltype(expression)` now infers locals, literals, casts, and binary arithmetic operands in Sema and CIRGen. The fixture declares an `int` from `decltype(integer + 1)` and returns 0; CTest is 201/201.
 - **2026-11-11T01:14:59-08:00** — `decltype` now returns the built-in `double`/`float` types for floating binary operands, so `decltype(real * 2.0)` works. The fixture also asserts a double result; CTest remains 201/201.
 - **2026-11-11T01:27:43-08:00** — `printf` `%f` now applies width, left alignment, `+`, space, and zero padding through a buffered formatter. The fixture prints four padded values; CTest is 202/202.
+- **2026-11-11T02:25:26-08:00** — Completed approved phases 1–2 of the tree plan: moved KR32 runtime source to `targets/kr32/runtime`, added `targets/common/runtime`, staged the sysroot at `build/<preset>/stage/sysroot` with generated bits, moved host binaries to `host/bin`, moved test images to `stage/tests`, staged `libkrcrt.kro` and `crt0.s`, linked fixtures from the staged runtime, and added `--sysroot`, `krc_sysroot_override`, and the `krc_tree_boundary` guard. All six configurations pass 204/204 CTest; `krc_tests` remains 98 cases / 585 assertions. KDBG portable source paths remain an open item.
