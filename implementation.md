@@ -209,7 +209,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Global destruction calls class-type member destructors when the outer class has no destructor; the fixture prints `main` then `inner`.
 - Block-scope objects get a synthesized `__krc_member_dtor_<class>` cleanup, so a local `Outer` destroys its `Inner` member when the block exits.
 - `delete` of an object whose class has no own destructor calls the synthesized member destructor before freeing; `delete new Outer()` prints `inner`.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 172/172 CTest.
+- `delete[]` uses the synthesized member destructor for each element; a two-element `Outer` array prints `inner` twice.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 174/174 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -223,7 +224,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 172/172 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 174/174 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -470,3 +471,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T20:13:53-08:00** — Global destruction now calls class-type member destructors when the outer class has none. The fixture prints `main` then `inner`; a matching IR check makes CTest 168/168.
 - **2026-11-10T20:25:13-08:00** — Synthesized `__krc_member_dtor_<class>` cleanups for block-scope objects without an outer destructor. A local `Outer` prints `inner` at scope exit; the link and IR checks make CTest 170/170.
 - **2026-11-10T20:36:26-08:00** — `delete` now calls the synthesized member destructor when the class has no own destructor. `delete new Outer()` prints `inner`; the link and IR checks make CTest 172/172.
+- **2026-11-10T20:47:14-08:00** — `delete[]` now uses the synthesized member destructor for every element. A two-element `Outer` array prints `inner` twice; the link and IR checks make CTest 174/174.
