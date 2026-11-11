@@ -3863,13 +3863,24 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             malloc_function->add_parameter(size_type(), "size");
             functions_["malloc"] = malloc_function;
         }
-        const bool array = type_is_array ||
-                           (expression.children.size() > 1 &&
-                            expression.children[1] != nullptr);
+        const bool has_argument_list =
+            expression.children.size() > 1 && expression.children[1] &&
+            expression.children[1]->kind ==
+                frontend::AstKind::ExpressionStatement;
+        const bool array =
+            type_is_array ||
+            (expression.children.size() > 1 && expression.children[1] &&
+             !has_argument_list);
         ir::Value* count_value = nullptr;
         if (type_is_array) {
             count_value = module_->constant_int(
                 size_type(), static_cast<std::int64_t>(mapped_type->count));
+        }
+        std::vector<const frontend::AstNode*> constructor_arguments;
+        if (has_argument_list) {
+            for (const auto& argument : expression.children[1]->children) {
+                constructor_arguments.push_back(argument.get());
+            }
         }
         ir::Value* size = module_->constant_int(size_type(), ir_size_of(type));
         if (array) {
@@ -3912,7 +3923,8 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             }
             const auto record = ir_records_.find(type);
             if (record != ir_records_.end()) {
-                auto* constructor = select_constructor(record->second->tag, 0);
+                auto* constructor = select_constructor(
+                    record->second->tag, constructor_arguments.size());
                 const bool needs_vtable =
                     record->second && record->second->polymorphic;
                 const bool has_defaults = std::any_of(
@@ -3994,7 +4006,28 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     emit_branch(condition_block);
                     builder_.set_insert_point(end_block);
                 } else if (constructor) {
-                    builder_.create_call(constructor, {pointer}, nullptr, "new.ctor");
+                    std::vector<ir::Value*> arguments{pointer};
+                    for (std::size_t index = 0;
+                         index < constructor_arguments.size(); ++index) {
+                        if (!constructor_arguments[index]) {
+                            continue;
+                        }
+                        auto argument =
+                            emit_expression(*constructor_arguments[index]);
+                        if (!argument.value) {
+                            continue;
+                        }
+                        const auto parameter_index = index + 1;
+                        if (parameter_index <
+                            constructor->type->parameters.size()) {
+                            argument.value = promote(
+                                argument.value, argument.type,
+                                constructor->type->parameters[parameter_index]);
+                        }
+                        arguments.push_back(argument.value);
+                    }
+                    builder_.create_call(constructor, std::move(arguments),
+                                         nullptr, "new.ctor");
                 } else if (!array && has_defaults) {
                     emit_defaults(pointer);
                 }
