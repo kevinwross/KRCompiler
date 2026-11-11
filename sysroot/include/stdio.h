@@ -7,6 +7,8 @@
 typedef struct FILE FILE;
 
 #define EOF (-1)
+#define L_tmpnam 32
+#define TMP_MAX 25
 #define BUFSIZ 512
 
 FILE *__krc_stdin_stream(void);
@@ -58,6 +60,8 @@ int setbuf(FILE *stream, char *buffer);
 int fgetpos(FILE *stream, fpos_t *position);
 int fsetpos(FILE *stream, const fpos_t *position);
 FILE *freopen(const char *path, const char *mode, FILE *stream);
+FILE *tmpfile(void);
+char *tmpnam(char *buffer);
 int fflush(FILE *stream);
 
 #endif

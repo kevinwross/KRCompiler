@@ -1397,6 +1397,7 @@ struct FILE {
     int eof;
     int error;
     int pushback;
+    char temporary_path[32];
 };
 
 static struct FILE standard_input = {0, 0, 0, -1};
@@ -1469,6 +1470,7 @@ struct FILE *fopen(const char *path, const char *mode) {
     stream->eof = 0;
     stream->error = 0;
     stream->pushback = -1;
+    stream->temporary_path[0] = 0;
     return stream;
 }
 
@@ -2012,6 +2014,44 @@ struct FILE *freopen(const char *path, const char *mode,
         fclose(stream);
     }
     return fopen(path, mode);
+}
+
+static void temporary_name(char *buffer) {
+    unsigned int value = (unsigned int)sys_random();
+    char digits[8];
+    int count = 0;
+    do {
+        digits[count++] = (char)('0' + value % 10U);
+        value /= 10U;
+    } while (value != 0U);
+    buffer[0] = 'k'; buffer[1] = 'r'; buffer[2] = '3'; buffer[3] = '2';
+    buffer[4] = '_'; buffer[5] = 't'; buffer[6] = 'm'; buffer[7] = 'p'; buffer[8] = '_';
+    int position = 9;
+    while (count > 0) {
+        buffer[position++] = digits[--count];
+    }
+    buffer[position] = 0;
+}
+
+struct FILE *tmpfile(void) {
+    char path[32];
+    temporary_name(path);
+    struct FILE *stream = fopen(path, "wb+");
+    if (stream != 0) {
+        for (int index = 0; index < 32; index++) {
+            stream->temporary_path[index] = path[index];
+        }
+    }
+    return stream;
+}
+
+char *tmpnam(char *buffer) {
+    static char storage[32];
+    if (buffer == 0) {
+        buffer = storage;
+    }
+    temporary_name(buffer);
+    return buffer;
 }
 
 static long days_from_civil(long year, long month, long day) {
