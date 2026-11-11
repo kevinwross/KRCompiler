@@ -1971,6 +1971,18 @@ if(TARGET krc)
                 -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism2_linked.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckLinkDeterminism.cmake)
 
+    add_test(NAME krc_debug_paths_relative
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DIO=${CMAKE_SOURCE_DIR}/targets/kr32/runtime/fileio.s
+                -DCRT0=${KRC_STAGE_RUNTIME}/crt0.s
+                -DROOT=${CMAKE_SOURCE_DIR}
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_paths.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDebugPaths.cmake)
+
     krc_add_cli_determinism_test(krc)
 endif()
 

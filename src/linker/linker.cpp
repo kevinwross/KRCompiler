@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <span>
 #include <sstream>
@@ -477,6 +478,11 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
 }
 
 bool attach_kdbg(LinkedImage& image, std::string& error) {
+    return attach_kdbg(image, std::string{}, error);
+}
+
+bool attach_kdbg(LinkedImage& image, const std::string& source_root,
+                 std::string& error) {
     static_cast<void>(error);
     const auto debug_section =
         std::find_if(image.sections.begin(), image.sections.end(),
@@ -530,6 +536,17 @@ bool attach_kdbg(LinkedImage& image, std::string& error) {
         if (tag == "S") {
             debug::KdbgSource source;
             stream >> source.id >> source.path;
+            if (!source_root.empty()) {
+                const std::filesystem::path path(source.path);
+                const std::filesystem::path root(source_root);
+                std::error_code ec;
+                const auto relative = std::filesystem::relative(path, root, ec);
+                const auto relative_text = relative.generic_string();
+                if (!ec && !relative.empty() &&
+                    relative_text.rfind("../", 0) != 0) {
+                    source.path = relative_text;
+                }
+            }
             kdbg.sources.push_back(std::move(source));
         } else if (tag == "L") {
             std::string label;

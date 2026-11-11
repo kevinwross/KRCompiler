@@ -53,4 +53,10 @@ struct LinkedImage {
 // Builds the KDBG section from the textual `.debug_info` bridge.
 [[nodiscard]] bool attach_kdbg(LinkedImage& image, std::string& error);
 
+// Rewrites source paths under source_root to project-relative paths before
+// building KDBG. An empty root keeps the recorded paths unchanged.
+[[nodiscard]] bool attach_kdbg(LinkedImage& image,
+                               const std::string& source_root,
+                               std::string& error);
+
 }  // namespace krc::linker

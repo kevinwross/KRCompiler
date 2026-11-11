@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 236/236 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 237/237 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 236/236 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 237/237 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -324,6 +324,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 **M8 evidence (2026-11-11, in progress):**
 
 - Deterministic double-build checks cover KR32 objects, single-unit KR16 `.kex`, KR16 KRO objects, and linked KR16 images.
+- `krld --source-root=DIR` rewrites KDBG source paths under `DIR` to relative paths; `krc_debug_paths_relative` verifies hello records `tests/fixtures/c/hello.c` with no absolute root.
 
 ### M9 — v1.1 runtime/libc/host services (8–10 weeks)
 
@@ -360,7 +361,7 @@ Approval conditions: none.
 Tracked open questions are in `plan.md` §17.2. The decision points that affect milestones are:
 
 - Target-descriptor schema and C ABI frozen before M2/M5.
-- KDBG portable source paths and the v1.1 source-root decision before debug-path work; the current v1 writer records physical host paths and needs an ADR.
+- KDBG portable source paths and the v1.1 source-root decision. `krld --source-root=DIR` can emit relative KDBG paths, but the default remains absolute and the policy needs an ADR.
 - KR16 ABI appendix before M7.
 - EH record encoding ADR before M10.
 - `libc.c` port strategy before M9.
@@ -577,10 +578,10 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T10:01:08-08:00** — The object path now accepts `.s` input, with a test object from `entry.s`; `targets/kr16/runtime/crt0.s` is present but still needs external `main` relocations. All six configurations pass 228/228 CTest.
 - **2026-11-11T10:13:08-08:00** — KR16 external absolute references now emit 16-bit KRO relocations, calls lower through `MOV R0,#callee; CALL R0`, and `crt0.s` builds to an object. All six configurations pass 229/229 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:26:43-08:00** — Completed the KR16 relocatable link path under ADR 0019/D-041: every label-based MOV/LEA is relocated, `krld` links target ID 2 at `0x0100`, and the KEX writer separates load base from entry. Linked `hello.c` prints and exits 0, `sum.c` exits 55, and a two-object image exits 42. All six configurations pass 231/231 CTest.
-- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 236/236 CTest with 101 doctest cases / 615 assertions.
+- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 237/237 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:34:07-08:00** — Wrote [docs/abi-kr16.md](docs/abi-kr16.md), covering the IP16 data model, registers, frame layout, indirect calls, globals, startup, relocations, and deferred features; linked it from the docs index, README, and ABI overview.
 - **2026-11-11T10:44:52-08:00** — Added a compilable KR16 string/memory runtime, a staged `libkrcrt.kro` target, and a startup+runtime+user link fixture. Long KR16 functions now use `JMP` plus short inverted conditional branches. All six configurations pass 234/234 CTest.
-- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 236/236 CTest.
+- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 237/237 CTest.
 - **2026-11-11T10:59:33-08:00** — Added a bump allocator (`malloc`, `free`, `calloc`, `realloc`), `strdup`, `rand`/`srand`, and `strtok` to the KR16 runtime; the linked fixture exercises them and exits 3. All six configurations pass 234/234 CTest.
 - **2026-11-11T11:06:19-08:00** — Added KR32 host-service wrappers for console input and file I/O, with a linked fixture that creates and writes a file. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:11:59-08:00** — Extended the KR32 host-service wrappers with `unlink`, `rename`, `stat`, `truncate`, `getcwd`, `chdir`, `dup`, and `dup2`; the file I/O fixture now writes, renames, and unlinks. All six configurations pass 235/235 CTest.
@@ -589,3 +590,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T11:31:38-08:00** — Added a linked KR16 fixture for local, copied, nested, and array-of-struct values; it runs to exit 81. All six configurations pass 236/236 CTest.
 - **2026-11-11T11:32:42-08:00** — Documented the KR32 host-service layers, vectors, flags, errno mapping, sandbox, and KR16 status in [docs/host-services.md](docs/host-services.md), and refreshed the KR16 ABI summary and freeze checklist.
 - **2026-11-11T11:38:39-08:00** — Made KR16 `puts` emit a trailing newline and added `getchar` alongside `putchar`; linked hello now prints a newline. All six configurations pass 236/236 CTest.
+- **2026-11-11T11:48:15-08:00** — Added `krld --source-root=DIR`, which rewrites KDBG source paths under the root to `/`-separated relative paths, with a CTest verifying hello records no absolute root. All six configurations pass 237/237 CTest.

@@ -29,6 +29,7 @@ void print_usage(std::ostream& out) {
         << "  -o FILE                Output executable\n"
         << "  --map=FILE             Write a deterministic image map\n"
         << "  --layout=FILE          Place sections using NAME ADDRESS lines\n"
+        << "  --source-root=DIR      Emit debug source paths relative to DIR\n"
         << "  --print-size           Print section sizes\n"
         << "  --help                 Print this help\n";
 }
@@ -70,6 +71,7 @@ int main(int argc, char** argv) {
     std::string output;
     std::string map_path;
     std::string layout_path;
+    std::string source_root;
     bool print_size = false;
     std::vector<std::string> inputs;
 
@@ -89,6 +91,11 @@ int main(int argc, char** argv) {
                 return 1;
             }
             output = argv[++index];
+            continue;
+        }
+        if (argument.starts_with("--source-root=")) {
+            source_root =
+                std::string(argument.substr(std::string_view("--source-root=").size()));
             continue;
         }
         if (argument.starts_with("--entry=")) {
@@ -226,7 +233,7 @@ int main(int argc, char** argv) {
         std::cerr << "krld: " << error << '\n';
         return 1;
     }
-    if (!krc::linker::attach_kdbg(image, error)) {
+    if (!krc::linker::attach_kdbg(image, source_root, error)) {
         std::cerr << "krld: " << error << '\n';
         return 1;
     }

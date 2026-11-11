@@ -51,6 +51,12 @@ Strings are NUL-terminated offsets into the payload string table. Records are
 emitted deterministically: sources, lines, functions, symbols, variables, types,
 then build metadata.
 
+Source paths are copied from the `.debug_info` bridge. `krld
+--source-root=DIR` rewrites paths under `DIR` to `/`-separated paths relative to
+`DIR` before writing KDBG; paths outside `DIR` are left unchanged. Passing the
+project root keeps repository sources portable. Without the option the recorded
+paths are unchanged.
+
 ## Tooling
 
 - `krc --dump-symbols image.k32` prints canonical text.
