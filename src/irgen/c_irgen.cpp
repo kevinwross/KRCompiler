@@ -3960,6 +3960,15 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     [](const frontend::RecordMember& member) {
                         return member.default_initializer != nullptr;
                     });
+                bool has_member_ctors = false;
+                for (const auto& member : record->second->members) {
+                    if (member.type &&
+                        member.type->kind == frontend::TypeKind::Record &&
+                        member.type->record &&
+                        select_constructor(member.type->record->tag, 0)) {
+                        has_member_ctors = true;
+                    }
+                }
                 const auto emit_defaults = [&](ir::Value* target) {
                     if (record->second->polymorphic ||
                         record->second->base) {
@@ -3971,11 +3980,6 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                          ++member_index) {
                         const auto& member =
                             record->second->members[member_index];
-                        if (!member.default_initializer ||
-                            member.default_initializer->children.empty() ||
-                            !member.default_initializer->children.front()) {
-                            continue;
-                        }
                         auto* zero = module_->constant_int(int_type(), 0);
                         auto* field_index = module_->constant_int(
                             int_type(),
@@ -3985,13 +3989,46 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                             "new.default");
                         field->type = module_->types().pointer_type(
                             type->fields[member_index]);
-                        emit_initializer(
-                            *member.default_initializer->children.front(),
-                            field, type->fields[member_index]);
+                        if (member.default_initializer &&
+                            !member.default_initializer->children.empty() &&
+                            member.default_initializer->children.front()) {
+                            emit_initializer(
+                                *member.default_initializer->children.front(),
+                                field, type->fields[member_index]);
+                            continue;
+                        }
+                        if (!member.type ||
+                            member.type->kind !=
+                                frontend::TypeKind::Record ||
+                            !member.type->record) {
+                            continue;
+                        }
+                        const auto member_record =
+                            ir_records_.find(type->fields[member_index]);
+                        if (member_record == ir_records_.end() ||
+                            !member_record->second) {
+                            continue;
+                        }
+                        auto* member_constructor = select_constructor(
+                            member_record->second->tag, 0);
+                        if (!member_constructor) {
+                            continue;
+                        }
+                        auto* self = field;
+                        if (self->type !=
+                            member_constructor->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                member_constructor->type->parameters[0],
+                                {self}, "new.member.this");
+                        }
+                        builder_.create_call(member_constructor, {self},
+                                             nullptr, "new.member.ctor");
                     }
                 };
                 if (array && count_value &&
-                    (constructor || needs_vtable || has_defaults)) {
+                    (constructor || needs_vtable || has_defaults ||
+                     has_member_ctors)) {
                     auto* index = builder_.create_alloca(size_type(), 0, "new.index");
                     builder_.create_store(module_->constant_int(size_type(), 0), index);
                     auto* condition_block = current_function_->add_block("new.cond");
@@ -4019,7 +4056,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                         }
                         builder_.create_call(constructor, {self}, nullptr,
                                              "new.ctor");
-                    } else if (has_defaults) {
+                    } else if (has_defaults || has_member_ctors) {
                         emit_defaults(self);
                     }
                     emit_branch(increment_block);
@@ -4055,7 +4092,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     }
                     builder_.create_call(constructor, std::move(arguments),
                                          nullptr, "new.ctor");
-                } else if (!array && has_defaults) {
+                } else if (!array && (has_defaults || has_member_ctors)) {
                     emit_defaults(pointer);
                 }
             }

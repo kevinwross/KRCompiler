@@ -204,7 +204,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `new[]` applies those defaults to each element; a two-element `Value` array sums to 10.
 - `new T(arguments)` passes constructor arguments with promotion; `new Counter(5)` stores 5.
 - Default construction calls the zero-argument constructor of class-type members, so an `Outer` member `Inner` initializes to 5.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 164/164 CTest.
+- `new Outer()` applies the same member construction, so its `Inner` member also holds 5.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 165/165 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -218,7 +219,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 164/164 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 165/165 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -460,3 +461,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T19:16:59-08:00** — Applied default members to each `new[]` element. A two-element `Value` array sums to 10; CTest is 162/162.
 - **2026-11-10T19:29:27-08:00** — Parsed `new T(arguments)` and passed promoted constructor arguments; `new Counter(5)` returns 5. CTest is 163/163.
 - **2026-11-10T19:39:58-08:00** — Default construction now calls zero-argument constructors for class-type members. The `Outer`/`Inner` fixture observes 5; CTest is 164/164.
+- **2026-11-10T19:51:18-08:00** — Applied member construction to `new` allocations, so `new Outer()` initializes its `Inner` member. The fixture returns 5; CTest is 165/165.
