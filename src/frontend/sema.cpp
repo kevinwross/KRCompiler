@@ -1339,7 +1339,7 @@ TypePtr Sema::analyze_type_name(const AstNode& type_name) {
                 case AstKind::IntegerLiteral:
                     return int_type_;
                 case AstKind::FloatLiteral:
-                    return type_named("double");
+                    return double_type_;
                 case AstKind::CastExpression:
                     return node.children.empty() || !node.children.front()
                                ? int_type_
@@ -1352,11 +1352,11 @@ TypePtr Sema::analyze_type_name(const AstNode& type_name) {
                     const auto right = infer_decltype(*node.children[1]);
                     if ((left && left->kind == TypeKind::Double) ||
                         (right && right->kind == TypeKind::Double)) {
-                        return type_named("double");
+                        return double_type_;
                     }
                     if ((left && left->kind == TypeKind::Float) ||
                         (right && right->kind == TypeKind::Float)) {
-                        return type_named("float");
+                        return float_type_;
                     }
                     return left ? left : int_type_;
                 }
