@@ -176,7 +176,8 @@ void Kr16Backend::emit_function(std::string& out,
                    std::to_string(constant) + "\n";
             return;
         }
-        if (value->kind == ir::ValueKind::ConstantNull) {
+        if (value->kind == ir::ValueKind::ConstantNull ||
+            value->kind == ir::ValueKind::ConstantUndef) {
             out += "    MOV " + std::string(reg) + ", #0\n";
             return;
         }

@@ -37,7 +37,7 @@ A change is done when:
 | M4 C core + debug format | G3/G4 passed locally | complete locally | C core, bit-fields, debugger session, frozen KDBG v1, and dump tooling are in place; M5 C++ is next |
 | M5 C++ core | G5 passed locally | in progress | G5 runs; classes, methods, constructors, destructors, `new`/`delete`, default copy, inheritance, and static devirtualization work; general vtables, move semantics, and dynamic dispatch remain |
 | M6 C++11/14/17 | G6 | in progress | `nullptr`, `auto`/`decltype`, range-for, `constexpr`, `enum class`, and `::` qualification work; templates, lambdas, move semantics, and structured bindings remain |
-| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global arrays, and a minimal `.kex` image work; `hello.c`, `sum.c`, global-array fixtures, dynamic indexing, and a string fixture run locally; relocatable objects, the full linker, and the wider runtime remain |
+| M7 KR16 backend + C | G7 | in progress | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global arrays, and a minimal `.kex` image work; `hello.c`, `sum.c`, global-array fixtures, dynamic indexing, switch, and a string fixture run locally; relocatable objects, the full linker, and the wider runtime remain |
 | M8 v1.0 hardening | G8 | pending | — |
 | M9 v1.1 runtime/libc/host services | G9 partial | pending | — |
 | M10 v1.1 language/runtime completion | G9 | pending | — |
@@ -233,7 +233,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 213/213 CTest.
+- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 214/214 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -250,7 +250,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 213/213 CTest.
+- `krc_tests` has 99 cases / 591 assertions; all six configurations pass 214/214 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -289,6 +289,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - KR16 GEP lowers constant array/struct indices and nonzero byte offsets, and zero-initialized globals are emitted as data; `kr16_data.kex` runs to exit 6 on the KR16 VM.
 - KR16 string literals use byte loads/stores (`LDB`/`STB`), and extended `MOV` immediates are sized as two words; `kr16_string.kex` checks `"hi"` and exits 0 on the KR16 VM.
 - KR16 dynamic GEP indices scale by the element size and add to the base pointer; `kr16_index.kex` indexes a global array with a runtime variable and exits 3.
+- KR16 `switch` functions work after handling `ConstantUndef` return values; `kr16_switch.kex` returns 15 on the KR16 VM.
 - `src/backend/kr16_backend.*` emits scalar integer/pointer functions: SP-relative frame slots, parameters in `R1`–`R3`, two-operand ALU forms, loads/stores, `LEA`, comparisons, branches, calls, and `ret`. `sum.c` assembles and runs locally to exit 55.
 - [ADR 0016](docs/decisions/0016-kr16-scalar-abi.md) and D-040 freeze the M7 scalar calling convention: `R1`–`R3` arguments, `R0` return, `R4` FP, SP-relative frame.
 - [ADR 0017](docs/decisions/0017-kr16-exec-image.md) and D-041 define the minimal `.kex` image: 64-byte header, `.text` at `0x0100`, `.debug_str`, CRC32, and a generated `_start` that calls `main` and halts. `krc -c --target=kr16` writes it.
@@ -531,3 +532,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T03:45:24-08:00** — KR16 GEP now handles constant array/struct indices and nonzero offsets, and zero-initialized globals are emitted as data. The new `kr16_data.c` image runs to exit 6 on the KR16 VM; all six configurations pass 211/211 CTest.
 - **2026-11-11T04:00:59-08:00** — Fixed KR16 assembler sizing for extended `MOV` immediates and added byte `LDB`/`STB` for i8 accesses. String literals now work: `kr16_string.c` exits 0 on the KR16 VM, with a new assembler unit test; all six configurations pass 212/212 CTest.
 - **2026-11-11T04:10:22-08:00** — KR16 dynamic GEP indices now scale by element size; `values[index]` with a runtime index works, the new `kr16_index.c` image exits 3 on the KR16 VM, and all six configurations pass 213/213 CTest.
+- **2026-11-11T07:56:55-08:00** — KR16 now handles `ConstantUndef` return values, so `switch` functions lower and run; `kr16_switch.kex` returns 15 on the KR16 VM, and all six configurations pass 214/214 CTest.

@@ -90,6 +90,11 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_index.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_index.kex")
 
+    add_test(NAME krc_kr16_switch_image
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_switch.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_switch.kex")
+
     add_test(NAME krc_unknown_option COMMAND $<TARGET_FILE:krc> --no-such-option)
     set_tests_properties(krc_unknown_option PROPERTIES WILL_FAIL TRUE)
 
