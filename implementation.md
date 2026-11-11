@@ -317,7 +317,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 - [ ] Full Tier 0–2 corpus green on KR32 and Tier 0–1 on KR16.
 - [ ] Debugger parity for C and C++. Deterministic outputs are covered for KR32 objects, KR16 `.kex`, KR16 KRO objects, and KR16 linked images.
-- [ ] Finish `docs/abi.md`, `object.md`, `symbols.md`, `ir.md`, `attributes.md`, target profiles.
+- [ ] Finish `docs/abi.md`, `object.md`, `symbols.md`, `ir.md`, `attributes.md`, target profiles. The KR16 scalar ABI appendix is written in `docs/abi-kr16.md`; aggregate/varargs/extra-argument rules and the remaining documents are open.
 - [ ] Release notes and tag `v1.0`.
 - [ ] Gate G8.
 
@@ -567,3 +567,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T10:13:08-08:00** — KR16 external absolute references now emit 16-bit KRO relocations, calls lower through `MOV R0,#callee; CALL R0`, and `crt0.s` builds to an object. All six configurations pass 229/229 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:26:43-08:00** — Completed the KR16 relocatable link path under ADR 0019/D-041: every label-based MOV/LEA is relocated, `krld` links target ID 2 at `0x0100`, and the KEX writer separates load base from entry. Linked `hello.c` prints and exits 0, `sum.c` exits 55, and a two-object image exits 42. All six configurations pass 231/231 CTest.
 - **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 233/233 CTest with 101 doctest cases / 615 assertions.
+- **2026-11-11T10:34:07-08:00** — Wrote [docs/abi-kr16.md](docs/abi-kr16.md), covering the IP16 data model, registers, frame layout, indirect calls, globals, startup, relocations, and deferred features; linked it from the docs index, README, and ABI overview.

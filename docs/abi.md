@@ -1,7 +1,7 @@
 # C/C++ ABI
 
 **Status:** Draft for C++/EH; the KR32 **C ABI is frozen** by [ADR 0001](decisions/0001-kr32-c-abi-freeze.md). C++/EH ABI freeze before M5. Until the remaining sections are frozen, `plan.md` §10 is normative.
-**Targets:** KR32 (ILP32), KR16 (IP16 embedded profile), KR64 (placeholder, LP64).
+**Targets:** KR32 (ILP32), KR16 (IP16 embedded profile; scalar subset in [abi-kr16.md](abi-kr16.md)), KR64 (placeholder, LP64).
 
 ## Purpose
 

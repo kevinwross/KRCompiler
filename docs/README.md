@@ -13,6 +13,7 @@ The plan is approved (2026-11-09). Specifications marked frozen are stable contr
 ## Specifications
 
 - [abi.md](abi.md) — C/C++ ABI, data models, calling conventions, mangling, EH/RTTI.
+- [abi-kr16.md](abi-kr16.md) — KR16 IP16 scalar ABI, frame layout, and link rules.
 - [object.md](object.md) — `KRO` object/executable container.
 - [symbols.md](symbols.md) — `KDBG` symbol and debug format.
 - [ir.md](ir.md) — typed SSA intermediate representation.
