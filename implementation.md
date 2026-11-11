@@ -217,7 +217,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - A user-defined constructor calls the zero-argument constructor of its base class when the initializer list does not name it; `Derived(){}` observes `Base`'s 5.
 - Synthesized member destructors also call the base-class destructor after members; a `Derived` object prints `base` at block exit.
 - Global destruction calls the base-class destructor after the derived destructor and member destructors; a `Derived global` prints `main`, `derived`, `base`.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 183/183 CTest.
+- The KR32 libc adds `atof`, `strtof`, and `llabs`; a fixture prints `2.50 1.25 7` and exits 0.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 184/184 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -231,7 +232,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 183/183 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 184/184 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -484,3 +485,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T21:37:14-08:00** — User-defined constructors now call an unnamed base-class zero-argument constructor first. The `Derived`/`Base` fixture returns 5; the link and IR checks make CTest 179/179.
 - **2026-11-10T21:50:46-08:00** — Synthesized member destructors now call the base-class destructor after members. The `Derived`/`Base` fixture prints `base` at scope exit; the link and IR checks make CTest 181/181.
 - **2026-11-10T22:03:03-08:00** — Global destruction now calls the base-class destructor after the derived destructor and member destructors. The fixture prints `main`, `derived`, `base`; the link and IR checks make CTest 183/183.
+- **2026-11-10T22:28:52-08:00** — Added `atof`, `strtof`, and `llabs` to the KR32 libc. The fixture prints `2.50 1.25 7`; CTest is 184/184.

@@ -777,8 +777,19 @@ double strtod(const char *text, char **end) {
     return negative ? -value : value;
 }
 
-double fabs(double value) {
-    return value < 0.0 ? -value : value;
+double atof(const char *text) {
+    return strtod(text, 0);
+}
+
+float strtof(const char *text, char **end) {
+    return (float)strtod(text, end);
+}
+
+long long llabs(long long value) {
+    return value < 0 ? -value : value;
+}
+
+double fabs(double value) {    return value < 0.0 ? -value : value;
 }
 
 double floor(double value) {
