@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <time.h>
 
 int krc_errno = 0;
 
@@ -2013,3 +2014,240 @@ struct FILE *freopen(const char *path, const char *mode,
     return fopen(path, mode);
 }
 
+static long days_from_civil(long year, long month, long day) {
+    year -= month <= 2 ? 1 : 0;
+    const long era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned int year_of_era = (unsigned int)(year - era * 400);
+    const unsigned int day_of_year =
+        (153U * (unsigned int)(month + (month > 2 ? -3 : 9)) + 2U) / 5U +
+        (unsigned int)day - 1U;
+    const unsigned int day_of_era =
+        year_of_era * 365U + year_of_era / 4U - year_of_era / 100U +
+        day_of_year;
+    return era * 146097L + (long)day_of_era - 719468L;
+}
+
+static void civil_from_days(long days, long *year, long *month, long *day) {
+    days += 719468L;
+    const long era = (days >= 0 ? days : days - 146096L) / 146097L;
+    const unsigned int day_of_era = (unsigned int)(days - era * 146097L);
+    const unsigned int year_of_era =
+        (day_of_era - day_of_era / 1460U + day_of_era / 36524U -
+         day_of_era / 146096U) /
+        365U;
+    const long result_year = (long)year_of_era + era * 400L;
+    const unsigned int day_of_year =
+        day_of_era -
+        (365U * year_of_era + year_of_era / 4U - year_of_era / 100U);
+    const unsigned int month_prime = (5U * day_of_year + 2U) / 153U;
+    const unsigned int result_day =
+        day_of_year - (153U * month_prime + 2U) / 5U + 1U;
+    const unsigned int result_month =
+        month_prime + (month_prime < 10U ? 3U : (unsigned int)-9);
+    *year = result_year + (result_month <= 2U ? 1L : 0L);
+    *month = (long)result_month;
+    *day = (long)result_day;
+}
+
+static struct tm time_result;
+
+struct tm *gmtime(const time_t *value) {
+    if (value == 0) {
+        return 0;
+    }
+    long seconds = (long)*value;
+    long days = seconds / 86400L;
+    long remainder = seconds % 86400L;
+    if (remainder < 0) {
+        remainder += 86400L;
+        days--;
+    }
+    long year = 0;
+    long month = 0;
+    long day = 0;
+    civil_from_days(days, &year, &month, &day);
+    time_result.tm_sec = (int)(remainder % 60L);
+    time_result.tm_min = (int)((remainder / 60L) % 60L);
+    time_result.tm_hour = (int)(remainder / 3600L);
+    time_result.tm_mday = (int)day;
+    time_result.tm_mon = (int)month - 1;
+    time_result.tm_year = (int)year - 1900;
+    time_result.tm_wday = (int)((days + 4L) % 7L);
+    if (time_result.tm_wday < 0) {
+        time_result.tm_wday += 7;
+    }
+    time_result.tm_yday =
+        (int)(days - days_from_civil(year, 1, 1));
+    time_result.tm_isdst = 0;
+    return &time_result;
+}
+
+struct tm *localtime(const time_t *value) {
+    return gmtime(value);
+}
+
+time_t mktime(struct tm *value) {
+    if (value == 0) {
+        return -1;
+    }
+    const long days =
+        days_from_civil((long)value->tm_year + 1900L,
+                        (long)value->tm_mon + 1L, (long)value->tm_mday);
+    return (time_t)(days * 86400L + (long)value->tm_hour * 3600L +
+                    (long)value->tm_min * 60L + (long)value->tm_sec);
+}
+
+static const char *const short_months[] = {"Jan", "Feb", "Mar", "Apr",
+                                           "May", "Jun", "Jul", "Aug",
+                                           "Sep", "Oct", "Nov", "Dec"};
+static const char *const long_months[] = {
+    "January", "February", "March",     "April",   "May",      "June",
+    "July",    "August",   "September", "October", "November", "December"};
+static const char *const short_days[] = {"Sun", "Mon", "Tue", "Wed",
+                                         "Thu", "Fri", "Sat"};
+static const char *const long_days[] = {"Sunday",   "Monday", "Tuesday",
+                                        "Wednesday", "Thursday", "Friday",
+                                        "Saturday"};
+
+static void append_character(char *buffer, unsigned int size,
+                            unsigned int *used, char character) {
+    if (*used + 1 < size) {
+        buffer[(*used)++] = character;
+        buffer[*used] = 0;
+    }
+}
+
+static void append_text(char *buffer, unsigned int size, unsigned int *used,
+                        const char *text) {
+    while (*text != 0 && *used + 1 < size) {
+        buffer[(*used)++] = *text++;
+    }
+    buffer[*used] = 0;
+}
+
+static void append_number(char *buffer, unsigned int size, unsigned int *used,
+                          long value, unsigned int width, char padding) {
+    char digits[16];
+    unsigned int count = 0;
+    unsigned int magnitude =
+        value < 0 ? (unsigned int)(-value) : (unsigned int)value;
+    do {
+        digits[count++] = (char)('0' + magnitude % 10U);
+        magnitude /= 10U;
+    } while (magnitude != 0);
+    while (count < width) {
+        digits[count++] = padding;
+    }
+    if (value < 0 && *used + 1 < size) {
+        buffer[(*used)++] = '-';
+    }
+    while (count > 0 && *used + 1 < size) {
+        buffer[(*used)++] = digits[--count];
+    }
+    buffer[*used] = 0;
+}
+
+size_t strftime(char *buffer, size_t size, const char *format,
+                const struct tm *value) {
+    if (buffer == 0 || size == 0 || format == 0 || value == 0) {
+        return 0;
+    }
+    unsigned int used = 0;
+    buffer[0] = 0;
+    for (const char *cursor = format; *cursor != 0; ++cursor) {
+        if (*cursor != '%') {
+            append_character(buffer, (unsigned int)size, &used, *cursor);
+            continue;
+        }
+        ++cursor;
+        switch (*cursor) {
+        case 'Y':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_year + 1900L, 4, '0');
+            break;
+        case 'y':
+            append_number(buffer, (unsigned int)size, &used,
+                          ((long)value->tm_year + 1900L) % 100L, 2, '0');
+            break;
+        case 'm':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_mon + 1L, 2, '0');
+            break;
+        case 'd':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_mday, 2, '0');
+            break;
+        case 'e':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_mday, 2, ' ');
+            break;
+        case 'H':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_hour, 2, '0');
+            break;
+        case 'M':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_min, 2, '0');
+            break;
+        case 'S':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_sec, 2, '0');
+            break;
+        case 'j':
+            append_number(buffer, (unsigned int)size, &used,
+                          (long)value->tm_yday + 1L, 3, '0');
+            break;
+        case 'a':
+            if (value->tm_wday >= 0 && value->tm_wday < 7) {
+                append_text(buffer, (unsigned int)size, &used,
+                            short_days[value->tm_wday]);
+            }
+            break;
+        case 'A':
+            if (value->tm_wday >= 0 && value->tm_wday < 7) {
+                append_text(buffer, (unsigned int)size, &used,
+                            long_days[value->tm_wday]);
+            }
+            break;
+        case 'b':
+            if (value->tm_mon >= 0 && value->tm_mon < 12) {
+                append_text(buffer, (unsigned int)size, &used,
+                            short_months[value->tm_mon]);
+            }
+            break;
+        case 'B':
+            if (value->tm_mon >= 0 && value->tm_mon < 12) {
+                append_text(buffer, (unsigned int)size, &used,
+                            long_months[value->tm_mon]);
+            }
+            break;
+        case 'p':
+            append_text(buffer, (unsigned int)size, &used,
+                        value->tm_hour < 12 ? "AM" : "PM");
+            break;
+        case '%':
+            append_text(buffer, (unsigned int)size, &used, "%");
+            break;
+        case 0:
+            return used;
+        default:
+            append_text(buffer, (unsigned int)size, &used, "%");
+            append_character(buffer, (unsigned int)size, &used, *cursor);
+            break;
+        }
+    }
+    return used;
+}
+
+char *asctime(const struct tm *value) {
+    static char result[32];
+    if (value == 0) {
+        return 0;
+    }
+    strftime(result, sizeof(result), "%a %b %e %H:%M:%S %Y\n", value);
+    return result;
+}
+
+char *ctime(const time_t *value) {
+    return asctime(localtime(value));
+}

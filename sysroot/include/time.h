@@ -21,6 +21,13 @@ struct tm {
 };
 
 time_t time(time_t *result);
+struct tm *gmtime(const time_t *value);
+struct tm *localtime(const time_t *value);
+time_t mktime(struct tm *value);
+size_t strftime(char *buffer, size_t size, const char *format,
+                const struct tm *value);
+char *asctime(const struct tm *value);
+char *ctime(const time_t *value);
 double difftime(time_t end, time_t beginning);
 clock_t clock(void);
 
