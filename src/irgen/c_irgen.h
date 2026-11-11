@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -37,6 +38,7 @@ private:
         ir::TypePtr type = nullptr;
         bool bit_field = false;
         bool reference_member = false;
+        bool is_volatile = false;
         std::uint32_t bit_offset = 0;
         std::uint32_t bit_width = 0;
     };
@@ -150,6 +152,7 @@ private:
     std::unordered_map<const frontend::AstNode*, LambdaInfo> lambda_metadata_;
     std::unordered_map<std::string, LambdaInfo> lambda_locals_;
     std::unordered_map<std::string, ir::GlobalVariable*> globals_;
+    std::unordered_set<ir::GlobalVariable*> volatile_globals_;
     struct GlobalCtorInfo {
         ir::GlobalVariable* global = nullptr;
         const frontend::RecordInfo* record = nullptr;

@@ -1334,6 +1334,9 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
     const auto alignment = alignment_of(specifiers, frontend_type);
     auto* global = module_->add_global(name, type, has_label(specifiers, "const"), alignment);
     globals_.emplace(name, global);
+    if (frontend_type->is_volatile) {
+        volatile_globals_.insert(global);
+    }
     if (type->kind == ir::TypeKind::Struct && frontend_type->record) {
         bool has_destructor = false;
         for (auto* current = frontend_type->record.get(); current != nullptr;
@@ -3418,7 +3421,10 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
                 decay->type = module_->types().pointer_type(local->type->element);
                 return {decay, decay->type};
             }
-            return {builder_.create_load(local->type, local->address, false, 0,
+            const bool is_volatile =
+                local->frontend_type && local->frontend_type->is_volatile;
+            return {builder_.create_load(local->type, local->address,
+                                         is_volatile, 0,
                                          expression.text + ".load"),
                     local->type};
         }
@@ -3433,8 +3439,10 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
                 decay->type = module_->types().pointer_type(variable->element_type->element);
                 return {decay, decay->type};
             }
-            return {builder_.create_load(variable->element_type, variable, false, 0,
-                                         expression.text + ".load"),
+            return {builder_.create_load(
+                        variable->element_type, variable,
+                        volatile_globals_.contains(variable), 0,
+                        expression.text + ".load"),
                     variable->element_type};
         }
         if (current_class_) {
@@ -5142,11 +5150,20 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
                                                      expression.text + ".ref");
                 return {pointer, local->type->element};
             }
-            return {local->address, local->type};
+            Expression result;
+            result.value = local->address;
+            result.type = local->type;
+            result.is_volatile =
+                local->frontend_type && local->frontend_type->is_volatile;
+            return result;
         }
         const auto global = globals_.find(expression.text);
         if (global != globals_.end()) {
-            return {global->second, global->second->element_type};
+            Expression result;
+            result.value = global->second;
+            result.type = global->second->element_type;
+            result.is_volatile = volatile_globals_.contains(global->second);
+            return result;
         }
         if (current_class_) {
             bool has_member = false;
@@ -5429,7 +5446,7 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
         }
         value = builder_.create(opcode, address.type, {left, value}, "assign.op");
     }
-    builder_.create_store(value, address.value);
+    builder_.create_store(value, address.value, address.is_volatile);
     return {value, address.type};
 }
 
