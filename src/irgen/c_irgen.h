@@ -165,6 +165,10 @@ private:
     std::vector<std::pair<ir::GlobalVariable*, const frontend::RecordInfo*>>
         local_static_dtors_;
     void generate_global_constructors();
+    ir::Function* ensure_member_destructor(
+        const frontend::RecordInfo* record);
+    std::unordered_map<const frontend::RecordInfo*, ir::Function*>
+        member_destructors_;
     std::unordered_map<const frontend::RecordInfo*, ir::TypePtr> record_types_;
     std::unordered_map<const ir::Type*, const frontend::RecordInfo*> ir_records_;
     std::unordered_map<std::string, std::unordered_map<std::string, ir::Function*>>

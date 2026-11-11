@@ -99,6 +99,96 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
     return std::move(module_);
 }
 
+ir::Function* CIRGen::ensure_member_destructor(
+    const frontend::RecordInfo* record) {
+    if (!record) {
+        return nullptr;
+    }
+    const auto cached = member_destructors_.find(record);
+    if (cached != member_destructors_.end()) {
+        return cached->second;
+    }
+    const auto record_type = record_types_.find(record);
+    if (record_type == record_types_.end()) {
+        return nullptr;
+    }
+    std::vector<std::pair<std::size_t, ir::Function*>> member_destructors;
+    for (std::size_t member_index = 0;
+         member_index < record->members.size(); ++member_index) {
+        const auto& member = record->members[member_index];
+        if (!member.type || member.type->kind != frontend::TypeKind::Record ||
+            !member.type->record) {
+            continue;
+        }
+        const auto methods = class_methods_.find(member.type->record->tag);
+        if (methods == class_methods_.end()) {
+            continue;
+        }
+        const auto found =
+            methods->second.find("~" + member.type->record->tag);
+        if (found != methods->second.end()) {
+            member_destructors.emplace_back(member_index, found->second);
+        }
+    }
+    if (member_destructors.empty()) {
+        member_destructors_.emplace(record, nullptr);
+        return nullptr;
+    }
+    auto* function_type = module_->types().function_type(
+        module_->types().void_type(),
+        {module_->types().pointer_type(record_type->second)}, false);
+    auto* function = module_->add_function(
+        "__krc_member_dtor_" + record->tag, function_type,
+        ir::Linkage::Internal, false);
+    function->add_parameter(module_->types().pointer_type(record_type->second),
+                            "this");
+    const auto previous_function = current_function_;
+    const auto previous_class = current_class_;
+    auto* previous_block = builder_.insert_block();
+    const auto previous_scopes = std::move(scopes_);
+    scopes_.clear();
+    current_function_ = function;
+    current_class_ = nullptr;
+    auto* entry = function->add_block("entry");
+    builder_.reset_value_names();
+    builder_.set_insert_point(entry);
+    push_scope();
+    const auto type = record_type->second;
+    auto* this_argument = function->parameters[0].get();
+    const auto field_offset =
+        type->fields.size() - record->members.size();
+    for (auto entry_it = member_destructors.rbegin();
+         entry_it != member_destructors.rend(); ++entry_it) {
+        const auto position = field_offset + entry_it->first;
+        if (position >= type->fields.size()) {
+            continue;
+        }
+        auto* zero = module_->constant_int(int_type(), 0);
+        auto* field_index = module_->constant_int(
+            int_type(), static_cast<std::int64_t>(position));
+        auto* field = builder_.create_gep(
+            type, this_argument, {zero, field_index}, false,
+            "member.dtor.field");
+        field->type = module_->types().pointer_type(type->fields[position]);
+        auto* self = field;
+        if (self->type != entry_it->second->type->parameters[0]) {
+            self = builder_.create(
+                ir::Opcode::BitCast,
+                entry_it->second->type->parameters[0], {self},
+                "member.dtor.this");
+        }
+        builder_.create_call(entry_it->second, {self}, nullptr,
+                             "member.dtor");
+    }
+    builder_.create_ret(nullptr);
+    scopes_ = std::move(previous_scopes);
+    current_function_ = previous_function;
+    current_class_ = previous_class;
+    builder_.set_insert_point(previous_block);
+    member_destructors_.emplace(record, function);
+    return function;
+}
+
 void CIRGen::generate_global_constructors() {
     if (global_ctors_.empty() && global_initializers_.empty() &&
         local_static_dtors_.empty()) {
@@ -2610,6 +2700,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
         if (type && type->kind == ir::TypeKind::Struct) {
             const auto record = ir_records_.find(type);
             if (record != ir_records_.end()) {
+                ir::Function* cleanup = nullptr;
                 for (auto* current = record->second; current != nullptr;
                      current = current->base && current->base->record
                                    ? current->base->record.get()
@@ -2625,10 +2716,16 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                             }
                         }
                         if (destructor != methods->second.end()) {
-                            local_cleanups_.push_back({address, destructor->second});
+                            cleanup = destructor->second;
                             break;
                         }
                     }
+                }
+                if (!cleanup) {
+                    cleanup = ensure_member_destructor(record->second);
+                }
+                if (cleanup) {
+                    local_cleanups_.push_back({address, cleanup});
                 }
             }
         }
