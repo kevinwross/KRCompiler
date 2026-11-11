@@ -193,7 +193,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - Global string arrays use the same inference and emit a constant byte array; `char text[] = "hello"` reports length 5.
 - Braced global aggregate initializers run from `__krc_init_globals` before user `main`; `struct Point point = {3, 4}` returns 7.
 - Global arrays with braced initializers infer unsized lengths and initialize before `main`; `int values[] = {1,2,3}` plus a fixed four-element array returns 15.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 153/153 CTest.
+- Global pointer scalars and pointer arrays initialize from string literals before `main`; the fixture checks `name` and two array entries with `strcmp`.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 154/154 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -207,7 +208,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 153/153 CTest.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 154/154 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -438,3 +439,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-10T17:08:42-08:00** — Added global string-array initializers: the global's length is inferred from the literal and emitted as constant data. `char text[] = "hello"` measures 5; CTest is 151/151.
 - **2026-11-10T17:26:55-08:00** — Added braced global aggregate initializers: they run from `__krc_init_globals` before user `main`. `struct Point point = {3, 4}` returns 7; CTest is 152/152.
 - **2026-11-10T17:42:58-08:00** — Added global array initializers, including unsized `int values[] = {1,2,3}` length inference. The fixture sums an inferred and a fixed array to 15; CTest is 153/153.
+- **2026-11-10T17:57:53-08:00** — Verified and covered global pointer scalars and pointer arrays initialized from string literals; they run from `__krc_init_globals`. CTest is 154/154.
