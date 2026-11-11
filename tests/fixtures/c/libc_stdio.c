@@ -9,6 +9,9 @@ int main(void) {
     if (fwrite("abc", 1, 3, stream) != 3) {
         return 2;
     }
+    if (fprintf(stream, "-%d", 7) != 2) {
+        return 8;
+    }
     if (fclose(stream) != 0) {
         return 3;
     }
@@ -21,11 +24,21 @@ int main(void) {
         return 5;
     }
     buffer[3] = 0;
+    if (strcmp(buffer, "abc") != 0) {
+        return 9;
+    }
+    if (ungetc('z', stream) != 'z' || fgetc(stream) != 'z') {
+        return 10;
+    }
+    if (fgets(buffer, sizeof(buffer), stream) == 0 ||
+        strcmp(buffer, "-7") != 0) {
+        return 11;
+    }
     if (fclose(stream) != 0) {
         return 6;
     }
     if (remove("kr32_stdio_test.txt") != 0) {
         return 7;
     }
-    return strcmp(buffer, "abc");
+    return 0;
 }

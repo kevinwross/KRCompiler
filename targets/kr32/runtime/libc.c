@@ -564,6 +564,26 @@ int snprintf(char *destination, unsigned int size, const char *format, ...) {
     return result;
 }
 
+int vsnprintf(char *destination, unsigned int size, const char *format,
+              va_list arguments) {
+    char *saved_buffer = format_buffer;
+    int saved_count = format_count;
+    int saved_limit = format_limit;
+    format_buffer = destination;
+    format_count = 0;
+    format_limit = (int)size;
+    format_output(format, arguments);
+    const int result = format_count;
+    if (size > 0) {
+        const int stored = format_count < (int)size ? format_count : (int)size - 1;
+        destination[stored] = 0;
+    }
+    format_buffer = saved_buffer;
+    format_count = saved_count;
+    format_limit = saved_limit;
+    return result;
+}
+
 struct heap_header {
     unsigned int size;
     struct heap_header *next;
@@ -1300,11 +1320,12 @@ struct FILE {
     int descriptor;
     int eof;
     int error;
+    int pushback;
 };
 
-static struct FILE standard_input = {0, 0, 0};
-static struct FILE standard_output = {1, 0, 0};
-static struct FILE standard_error = {2, 0, 0};
+static struct FILE standard_input = {0, 0, 0, -1};
+static struct FILE standard_output = {1, 0, 0, -1};
+static struct FILE standard_error = {2, 0, 0, -1};
 
 struct FILE *stdin = &standard_input;
 struct FILE *stdout = &standard_output;
@@ -1371,6 +1392,7 @@ struct FILE *fopen(const char *path, const char *mode) {
     stream->descriptor = descriptor;
     stream->eof = 0;
     stream->error = 0;
+    stream->pushback = -1;
     return stream;
 }
 
@@ -1440,11 +1462,124 @@ unsigned int fwrite(const void *buffer, unsigned int size, unsigned int count,
 }
 
 int getc(struct FILE *stream) {
+    if (stream == 0) {
+        return -1;
+    }
+    if (stream->pushback >= 0) {
+        const int value = stream->pushback;
+        stream->pushback = -1;
+        return value;
+    }
     unsigned char value = 0;
     if (fread(&value, 1, 1, stream) != 1) {
         return -1;
     }
     return (int)value;
+}
+
+int ungetc(int character, struct FILE *stream) {
+    if (stream == 0 || character < 0) {
+        return -1;
+    }
+    stream->pushback = character & 0xFF;
+    stream->eof = 0;
+    return character & 0xFF;
+}
+
+int setvbuf(struct FILE *stream, char *buffer, int mode, unsigned int size) {
+    (void)stream;
+    (void)buffer;
+    (void)mode;
+    (void)size;
+    return 0;
+}
+
+char *fgets(char *buffer, int size, struct FILE *stream) {
+    if (buffer == 0 || size <= 0 || stream == 0) {
+        return 0;
+    }
+    int index = 0;
+    while (index + 1 < size) {
+        const int character = getc(stream);
+        if (character < 0) {
+            break;
+        }
+        buffer[index++] = (char)character;
+        if (character == '\n') {
+            break;
+        }
+    }
+    if (index == 0) {
+        return 0;
+    }
+    buffer[index] = 0;
+    return buffer;
+}
+
+int getline(char **line, unsigned int *capacity, struct FILE *stream) {
+    if (line == 0 || capacity == 0 || stream == 0) {
+        return -1;
+    }
+    if (*line == 0 || *capacity == 0) {
+        *capacity = 128;
+        *line = (char *)malloc(*capacity);
+        if (*line == 0) {
+            return -1;
+        }
+    }
+    unsigned int length = 0;
+    for (;;) {
+        const int character = getc(stream);
+        if (character < 0) {
+            if (length == 0) {
+                return -1;
+            }
+            break;
+        }
+        if (length + 1 >= *capacity) {
+            const unsigned int grown = *capacity * 2;
+            char *larger = (char *)realloc(*line, grown);
+            if (larger == 0) {
+                return -1;
+            }
+            *line = larger;
+            *capacity = grown;
+        }
+        (*line)[length++] = (char)character;
+        if (character == '\n') {
+            break;
+        }
+    }
+    (*line)[length] = 0;
+    return (int)length;
+}
+
+int vfprintf(struct FILE *stream, const char *format, va_list arguments) {
+    if (stream == 0 || format == 0) {
+        return -1;
+    }
+    char buffer[512];
+    const int length = vsnprintf(buffer, sizeof(buffer), format, arguments);
+    if (length < 0) {
+        return -1;
+    }
+    const unsigned int written =
+        (unsigned int)length < sizeof(buffer) ? (unsigned int)length
+                                              : sizeof(buffer) - 1;
+    fwrite(buffer, 1, written, stream);
+    return (int)written;
+}
+
+int fprintf(struct FILE *stream, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int result = vfprintf(stream, format, arguments);
+    va_end(arguments);
+    return result;
+}
+
+int vprintf(const char *format, va_list arguments) {
+    return vfprintf(stdout, format, arguments);
 }
 
 int fgetc(struct FILE *stream) {
