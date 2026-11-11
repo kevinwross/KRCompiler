@@ -980,9 +980,18 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
     if (name.empty() || globals_.find(name) != globals_.end()) {
         return;
     }
-    const auto frontend_type = sema_.declaration_type(specifiers, &declarator);
+    auto frontend_type = sema_.declaration_type(specifiers, &declarator);
     if (!frontend_type) {
         return;
+    }
+    if (frontend_type->kind == frontend::TypeKind::Array &&
+        !frontend_type->array_has_count && initializer &&
+        initializer->kind == frontend::AstKind::StringLiteral) {
+        const auto bytes = decode_string(initializer->text);
+        auto inferred = std::make_shared<frontend::Type>(*frontend_type);
+        inferred->array_count = bytes.size() + 1;
+        inferred->array_has_count = true;
+        frontend_type = inferred;
     }
     const auto type = map_type(frontend_type);
     const auto alignment = alignment_of(specifiers, frontend_type);
@@ -1030,6 +1039,20 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         }
     }
     if (!initializer) {
+        return;
+    }
+    if (type->kind == ir::TypeKind::Array && type->element &&
+        ir::is_integer(type->element) && type->element->bits == 8 &&
+        initializer->kind == frontend::AstKind::StringLiteral) {
+        const auto bytes = decode_string(initializer->text);
+        std::vector<std::uint8_t> data(type->count, 0);
+        for (std::size_t index = 0; index < data.size() &&
+                                    index < bytes.size();
+             ++index) {
+            data[index] = static_cast<std::uint8_t>(bytes[index]);
+        }
+        global->initializer =
+            module_->constant_data_array(type, std::move(data));
         return;
     }
     switch (initializer->kind) {
