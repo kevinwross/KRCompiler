@@ -2411,11 +2411,6 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                          member_index < level->members.size();
                          ++member_index) {
                         const auto& member = level->members[member_index];
-                        if (!member.default_initializer ||
-                            member.default_initializer->children.empty() ||
-                            !member.default_initializer->children.front()) {
-                            continue;
-                        }
                         const auto position = field_position + member_index;
                         if (position >= type->fields.size()) {
                             continue;
@@ -2429,9 +2424,41 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                             "default.field");
                         field->type = module_->types().pointer_type(
                             type->fields[position]);
-                        emit_initializer(
-                            *member.default_initializer->children.front(),
-                            field, type->fields[position]);
+                        if (member.default_initializer &&
+                            !member.default_initializer->children.empty() &&
+                            member.default_initializer->children.front()) {
+                            emit_initializer(
+                                *member.default_initializer->children.front(),
+                                field, type->fields[position]);
+                            continue;
+                        }
+                        if (!member.type ||
+                            member.type->kind !=
+                                frontend::TypeKind::Record ||
+                            !member.type->record) {
+                            continue;
+                        }
+                        const auto member_record =
+                            ir_records_.find(type->fields[position]);
+                        if (member_record == ir_records_.end() ||
+                            !member_record->second) {
+                            continue;
+                        }
+                        auto* member_constructor = select_constructor(
+                            member_record->second->tag, 0);
+                        if (!member_constructor) {
+                            continue;
+                        }
+                        auto* self = field;
+                        if (self->type !=
+                            member_constructor->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                member_constructor->type->parameters[0],
+                                {self}, "member.this");
+                        }
+                        builder_.create_call(member_constructor, {self},
+                                             nullptr, "member.ctor");
                     }
                 }
             }
