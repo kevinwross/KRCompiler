@@ -111,7 +111,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 
 - [x] Typed SSA IR model, builder, verifier, and textual printer.
 - [ ] Freeze `docs/ir.md` and `docs/targets/kr32.md` before implementation. `docs/ir.md` is frozen by [ADR 0003](docs/decisions/0003-ir-core-freeze.md) and extended by [ADR 0004](docs/decisions/0004-ir-data-array-and-declarations.md); the KR32 register/instruction tables and their values remain the M2 descriptor task.
-- [ ] C IRGen: scalars, aggregates, pointers, arrays, calls, varargs, `volatile`, debug locations. Scalars, pointers, arrays, calls, varargs calls, globals/string literals, returns, if/while/do/for, and break/continue are implemented; aggregates, `volatile`, debug locations, switch/goto/labels, and many conversions remain.
+- [ ] C IRGen: scalars, aggregates, pointers, arrays, calls, varargs, `volatile`, debug locations. Scalars, pointers, arrays, calls, varargs calls, globals/string literals, returns, if/while/do/for, break/continue, switch, goto, and labels are implemented; aggregates are largely implemented; `volatile`, debug locations, and some conversions remain.
 - [ ] KR32 target descriptor: data model, registers, patterns, ABI, encodings, relaxation. `src/backend/kr32_descriptor.*` has the register/ABI subset and `src/asm/kr32_encoder.*` has the base encoding subset; pattern selection, relocation/relaxation, and the remaining encodings are pending.
 - [x] Instruction selection, graph-colouring register allocation, frame layout, peepholes. The backend uses a deterministic stack-slot selection/frame baseline; `src/backend/register_allocator.*` implements liveness, interference, degree-ordered graph colouring, and spill reporting; `src/backend/peephole.*` removes identity/zero-strength operations. Register allocation is not yet wired into code emission.
 - [x] Assembly printer and shared assembler framework with the KR32 syntax/encoding module. `src/asm/kr32_assembler.*` parses the emitted subset, lays out text/data, resolves local labels, records external relocations, and emits section bytes; the object writer path remains M3.
@@ -230,7 +230,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `_Generic` also infers a cast expression's type, so `_Generic((double)integer, double:11)` selects 11.
 - `decltype(expression)` infers arithmetic types from locals, integer/float literals, casts, and binary operands; `decltype(integer + 1)` is `int` and `decltype(real * 2.0)` is `double`.
 - `printf` `%f` now honors width, left alignment, `+`, space, and zero padding; the fixture prints `[    3.50][3.50    ][   +2.3][00001.50]`.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 204/204 CTest.
+- `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 205/205 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -244,7 +245,8 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [x] Gate G4: KR32 debugger session on `binarytree.c`. DAP verifies a source breakpoint at line 183, stops at `main`, returns locals `root`/`height`, evaluates `root`, reads memory, and expands a struct fixture.
 - The backend emits `.debug_info` line/function/local/global/type records through [ADR 0008](docs/decisions/0008-debug-info-bridge.md); `krld` merges and renumbers source IDs. The KR32 GUI renders source, disassembly, registers, memory, locals/globals, and the call stack.
 - Bit-fields lower through Sema byte offsets and bit offsets: member access uses byte GEP, loads mask/sign-extend, and assignments do a shifted read-modify-write. The bit-field fixture returns 19.
-- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 204/204 CTest.
+- `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
+- `krc_tests` has 98 cases / 585 assertions; all six configurations pass 205/205 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -513,3 +515,4 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 - **2026-11-11T01:14:59-08:00** — `decltype` now returns the built-in `double`/`float` types for floating binary operands, so `decltype(real * 2.0)` works. The fixture also asserts a double result; CTest remains 201/201.
 - **2026-11-11T01:27:43-08:00** — `printf` `%f` now applies width, left alignment, `+`, space, and zero padding through a buffered formatter. The fixture prints four padded values; CTest is 202/202.
 - **2026-11-11T02:25:26-08:00** — Completed approved phases 1–2 of the tree plan: moved KR32 runtime source to `targets/kr32/runtime`, added `targets/common/runtime`, staged the sysroot at `build/<preset>/stage/sysroot` with generated bits, moved host binaries to `host/bin`, moved test images to `stage/tests`, staged `libkrcrt.kro` and `crt0.s`, linked fixtures from the staged runtime, and added `--sysroot`, `krc_sysroot_override`, and the `krc_tree_boundary` guard. All six configurations pass 204/204 CTest; `krc_tests` remains 98 cases / 585 assertions. KDBG portable source paths remain an open item.
+- **2026-11-11T02:37:53-08:00** — Implemented C `goto` and labels: labels are pre-created as blocks, forward and backward jumps branch correctly, dead statements between a jump and a label are skipped, and jumps across a live cleanup scope are rejected. The fixture returns 6; all six configurations pass 205/205 CTest.

@@ -90,6 +90,16 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> --sysroot "${KRC_STAGE_SYSROOT}" -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/includes.c")
 
+    add_test(NAME krc_link_goto
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/goto.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/goto_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_c_syntax_stdint
         COMMAND $<TARGET_FILE:krc> -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/stdint.c")

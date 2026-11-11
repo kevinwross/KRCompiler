@@ -182,6 +182,7 @@ private:
     std::vector<std::unordered_map<std::string, LocalBinding>> scopes_;
     std::vector<ir::BasicBlock*> break_targets_;
     std::vector<ir::BasicBlock*> continue_targets_;
+    std::unordered_map<std::string, ir::BasicBlock*> labels_;
     ir::Function* current_function_ = nullptr;
     ir::IRBuilder builder_;
     std::uint64_t string_counter_ = 0;

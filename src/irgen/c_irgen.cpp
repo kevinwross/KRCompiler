@@ -1819,6 +1819,27 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
         }
     }
 
+    labels_.clear();
+    std::function<void(const frontend::AstNode&)> collect_labels =
+        [&](const frontend::AstNode& node) {
+        if (node.kind == frontend::AstKind::LabelStatement &&
+            !node.text.empty()) {
+            if (labels_.contains(node.text)) {
+                error(node.location,
+                      "duplicate label '" + node.text + "'");
+            } else {
+                labels_[node.text] =
+                    function->add_block("label." + node.text);
+            }
+        }
+        for (const auto& child : node.children) {
+            if (child) {
+                collect_labels(*child);
+            }
+        }
+    };
+    collect_labels(*body);
+
     emit_statement(*body);
     if (!builder_.insert_block()->terminated()) {
         emit_cleanups();
@@ -2102,10 +2123,42 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
     case frontend::AstKind::StaticAssertDeclaration:
         break;
     case frontend::AstKind::SwitchStatement:
+    case frontend::AstKind::GotoStatement: {
+        if (!local_cleanups_.empty()) {
+            error(statement.location,
+                  "goto across an active object scope is not supported");
+            break;
+        }
+        const auto found = labels_.find(statement.text);
+        if (found == labels_.end()) {
+            error(statement.location,
+                  "goto to undefined label '" + statement.text + "'");
+            break;
+        }
+        if (!builder_.insert_block()->terminated()) {
+            emit_branch(found->second);
+        }
+        break;
+    }
+    case frontend::AstKind::LabelStatement: {
+        const auto found = labels_.find(statement.text);
+        if (found == labels_.end()) {
+            break;
+        }
+        if (builder_.insert_block() != found->second &&
+            !builder_.insert_block()->terminated()) {
+            emit_branch(found->second);
+        }
+        builder_.set_insert_point(found->second);
+        for (const auto& child : statement.children) {
+            if (child) {
+                emit_statement(*child);
+            }
+        }
+        break;
+    }
     case frontend::AstKind::CaseStatement:
     case frontend::AstKind::DefaultStatement:
-    case frontend::AstKind::GotoStatement:
-    case frontend::AstKind::LabelStatement:
         error(statement.location, "statement kind is not implemented in IRGen yet");
         break;
     default:
@@ -2180,8 +2233,24 @@ void CIRGen::emit_compound(const frontend::AstNode& compound) {
     push_scope();
     const auto mark = local_cleanups_.size();
     cleanup_marks_.push_back(mark);
+    std::function<bool(const frontend::AstNode&)> contains_label =
+        [&](const frontend::AstNode& node) {
+        if (node.kind == frontend::AstKind::LabelStatement) {
+            return true;
+        }
+        for (const auto& child : node.children) {
+            if (child && contains_label(*child)) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (const auto& child : compound.children) {
         if (child) {
+            if (builder_.insert_block()->terminated() &&
+                !contains_label(*child)) {
+                continue;
+            }
             emit_statement(*child);
         }
     }
