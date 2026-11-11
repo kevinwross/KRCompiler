@@ -290,6 +290,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - KR16 string literals use byte loads/stores (`LDB`/`STB`), and extended `MOV` immediates are sized as two words; `kr16_string.kex` checks `"hi"` and exits 0 on the KR16 VM.
 - KR16 dynamic GEP indices scale by the element size and add to the base pointer; `kr16_index.kex` indexes a global array with a runtime variable and exits 3.
 - KR16 `switch` functions work after handling `ConstantUndef` return values; `kr16_switch.kex` returns 15 on the KR16 VM.
+- Known KR16 gap: calling a function with control-flow blocks (`if`/`switch`) more than once from a loop raises VM exception 5 on the second call; straight-line callees and sequential calls work. The frame/call interaction is under investigation.
 - `src/backend/kr16_backend.*` emits scalar integer/pointer functions: SP-relative frame slots, parameters in `R1`–`R3`, two-operand ALU forms, loads/stores, `LEA`, comparisons, branches, calls, and `ret`. `sum.c` assembles and runs locally to exit 55.
 - [ADR 0016](docs/decisions/0016-kr16-scalar-abi.md) and D-040 freeze the M7 scalar calling convention: `R1`–`R3` arguments, `R0` return, `R4` FP, SP-relative frame.
 - [ADR 0017](docs/decisions/0017-kr16-exec-image.md) and D-041 define the minimal `.kex` image: 64-byte header, `.text` at `0x0100`, `.debug_str`, CRC32, and a generated `_start` that calls `main` and halts. `krc -c --target=kr16` writes it.
