@@ -49,6 +49,8 @@ int getline(char **line, size_t *size, FILE *stream);
 int getc(FILE *stream);
 int fgetc(FILE *stream);
 int fputc(int c, FILE *stream);
+int putc(int c, FILE *stream);
+int fputs(const char *s, FILE *stream);
 int ungetc(int c, FILE *stream);
 int setvbuf(FILE *stream, char *buffer, int mode, size_t size);
 int fflush(FILE *stream);

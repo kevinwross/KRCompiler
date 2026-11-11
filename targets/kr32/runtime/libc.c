@@ -1976,3 +1976,15 @@ double fmax(double left, double right) {
     return left > right ? left : right;
 }
 
+int fputs(const char *text, struct FILE *stream) {
+    const unsigned int length = strlen(text);
+    if (fwrite(text, 1, length, stream) != length) {
+        return -1;
+    }
+    return 0;
+}
+
+int putc(int character, struct FILE *stream) {
+    return fputc(character, stream);
+}
+
