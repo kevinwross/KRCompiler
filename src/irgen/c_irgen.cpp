@@ -370,6 +370,24 @@ void CIRGen::generate_global_constructors() {
                 break;
             }
         }
+        ir::Function* base_destructor = nullptr;
+        if (info.record->base &&
+            info.record->base->kind == frontend::TypeKind::Record &&
+            info.record->base->record) {
+            const auto base_methods =
+                class_methods_.find(info.record->base->record->tag);
+            if (base_methods != class_methods_.end()) {
+                const auto found = base_methods->second.find(
+                    "~" + info.record->base->record->tag);
+                if (found != base_methods->second.end()) {
+                    base_destructor = found->second;
+                }
+            }
+            if (!base_destructor) {
+                base_destructor = ensure_member_destructor(
+                    info.record->base->record.get());
+            }
+        }
         if (!destructor) {
             bool has_member_destructor = false;
             for (const auto& member : info.record->members) {
@@ -387,7 +405,7 @@ void CIRGen::generate_global_constructors() {
                     has_member_destructor = true;
                 }
             }
-            if (!has_member_destructor) {
+            if (!has_member_destructor && !base_destructor) {
                 continue;
             }
         }
@@ -457,6 +475,18 @@ void CIRGen::generate_global_constructors() {
             }
             builder_.create_call(found->second, {member_self}, nullptr,
                                  "global.member.dtor");
+        }
+        if (base_destructor) {
+            auto* base_self = static_cast<ir::Value*>(info.global);
+            if (base_self->type !=
+                base_destructor->type->parameters[0]) {
+                base_self = builder_.create(
+                    ir::Opcode::BitCast,
+                    base_destructor->type->parameters[0], {base_self},
+                    "global.base.dtor.this");
+            }
+            builder_.create_call(base_destructor, {base_self}, nullptr,
+                                 "global.base.dtor");
         }
         builder_.create_ret(nullptr);
         scopes_ = std::move(previous_scopes);
