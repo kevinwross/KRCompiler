@@ -2291,3 +2291,8 @@ char *asctime(const struct tm *value) {
 char *ctime(const time_t *value) {
     return asctime(localtime(value));
 }
+
+void __krc_assert_fail(const char *expression, const char *file, int line) {
+    fprintf(stderr, "assertion failed: %s (%s:%d)\n", expression, file, line);
+    abort();
+}
