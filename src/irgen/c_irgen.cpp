@@ -3446,7 +3446,21 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
         }
         if (frontend_type && frontend_type->is_reference) {
             if (init->children.size() > 1 && init->children[1]) {
-                auto target = emit_lvalue(*init->children[1]);
+                Expression target;
+                if (init->children[1]->kind ==
+                    frontend::AstKind::CallExpression) {
+                    auto value = emit_expression(*init->children[1]);
+                    if (value.value && value.type &&
+                        value.type->kind == ir::TypeKind::Struct) {
+                        auto* storage = builder_.create_alloca(
+                            value.type, 0, "reference.temp");
+                        builder_.create_store(value.value, storage);
+                        target.value = storage;
+                        target.type = value.type;
+                    }
+                } else {
+                    target = emit_lvalue(*init->children[1]);
+                }
                 if (target.value) {
                     if (address->type && address->type->element &&
                         target.value->type != address->type->element) {
