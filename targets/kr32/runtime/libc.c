@@ -2508,3 +2508,73 @@ char *setlocale(int category, const char *locale) {
 struct lconv *localeconv(void) {
     return &locale_info;
 }
+
+struct environment_entry {
+    char *name;
+    char *value;
+};
+
+static struct environment_entry environment_table[16];
+static int environment_count;
+
+char *getenv(const char *name) {
+    if (name == 0) {
+        return 0;
+    }
+    for (int index = 0; index < environment_count; index++) {
+        if (strcmp(environment_table[index].name, name) == 0) {
+            return environment_table[index].value;
+        }
+    }
+    return 0;
+}
+
+int setenv(const char *name, const char *value, int overwrite) {
+    if (name == 0 || value == 0 || *name == 0) {
+        return -1;
+    }
+    for (int index = 0; index < environment_count; index++) {
+        if (strcmp(environment_table[index].name, name) == 0) {
+            if (!overwrite) {
+                return 0;
+            }
+            char *copy = strdup(value);
+            if (copy == 0) {
+                return -1;
+            }
+            free(environment_table[index].value);
+            environment_table[index].value = copy;
+            return 0;
+        }
+    }
+    if (environment_count >= 16) {
+        return -1;
+    }
+    char *name_copy = strdup(name);
+    char *value_copy = strdup(value);
+    if (name_copy == 0 || value_copy == 0) {
+        free(name_copy);
+        free(value_copy);
+        return -1;
+    }
+    environment_table[environment_count].name = name_copy;
+    environment_table[environment_count].value = value_copy;
+    environment_count++;
+    return 0;
+}
+
+int unsetenv(const char *name) {
+    if (name == 0) {
+        return -1;
+    }
+    for (int index = 0; index < environment_count; index++) {
+        if (strcmp(environment_table[index].name, name) == 0) {
+            free(environment_table[index].name);
+            free(environment_table[index].value);
+            environment_count--;
+            environment_table[index] = environment_table[environment_count];
+            return 0;
+        }
+    }
+    return 0;
+}
