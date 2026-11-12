@@ -576,6 +576,13 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             saw_specifier = true;
             continue;
         }
+        if (cxx_mode_ && token.kind == TokenKind::Keyword &&
+            token.text == "thread_local") {
+            node->labels.push_back("static");
+            ++position_;
+            saw_specifier = true;
+            continue;
+        }
         if (token.kind == TokenKind::Keyword && is_decl_specifier_keyword(token.text)) {
             if (token.text == "typedef") {
                 specifiers_have_typedef_ = true;
