@@ -6485,7 +6485,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             ir::TypePtr target) -> Expression {
         if (!argument.type || !target ||
             argument.type->kind != ir::TypeKind::Struct ||
-            !ir::is_integer(target)) {
+            (!ir::is_integer(target) && !ir::is_float(target))) {
             return argument;
         }
         const auto record = ir_records_.find(argument.type);
@@ -6496,8 +6496,14 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         if (methods == class_methods_.end()) {
             return argument;
         }
-        const char* conversion =
-            target->bits == 1 ? "operator bool" : "operator int";
+        const char* conversion = nullptr;
+        if (ir::is_integer(target)) {
+            conversion =
+                target->bits == 1 ? "operator bool" : "operator int";
+        } else {
+            conversion =
+                target->bits == 64 ? "operator double" : "operator float";
+        }
         const auto method = methods->second.find(conversion);
         if (method == methods->second.end()) {
             return argument;
