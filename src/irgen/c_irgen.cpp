@@ -3854,6 +3854,50 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
             }
         }
     }
+    if (current_function_->type && current_function_->type->return_type &&
+        current_function_->type->return_type->kind == ir::TypeKind::Struct) {
+        const auto kind = statement.children.front()->kind;
+        const bool scalar = kind == frontend::AstKind::IntegerLiteral ||
+                            kind == frontend::AstKind::FloatLiteral ||
+                            kind == frontend::AstKind::CharLiteral;
+        if (scalar) {
+            const auto record =
+                ir_records_.find(current_function_->type->return_type);
+            if (record != ir_records_.end() && record->second) {
+                auto* constructor =
+                    select_constructor(record->second->tag, 1, 0);
+                if (constructor && constructor->type &&
+                    constructor->type->parameters.size() == 2) {
+                    auto value = emit_expression(*statement.children.front());
+                    if (value.value) {
+                        value.value = promote(
+                            value.value, value.type,
+                            constructor->type->parameters[1]);
+                        auto* storage = builder_.create_alloca(
+                            current_function_->type->return_type, 0,
+                            "return.temp");
+                        auto* self = storage;
+                        if (self->type !=
+                            constructor->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                constructor->type->parameters[0], {self},
+                                "return.this");
+                        }
+                        builder_.create_call(
+                            constructor, {self, value.value}, nullptr,
+                            "return.constructor");
+                        auto* loaded = builder_.create_load(
+                            current_function_->type->return_type, storage,
+                            false, 0, "return.record");
+                        emit_cleanups();
+                        builder_.create_ret(loaded);
+                        return;
+                    }
+                }
+            }
+        }
+    }
     auto value = emit_expression(*statement.children.front());
     auto* converted = promote(value.value, value.type,
                               current_function_->type ? current_function_->type->return_type
