@@ -5417,9 +5417,46 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
         }
     }
     if (operation == "&&" || operation == "||") {
-        auto truth = [&](const Expression& value) -> ir::Value* {
+        std::function<ir::Value *(const Expression &, const frontend::AstNode &)>
+            truth;
+        truth = [&](const Expression& value,
+                     const frontend::AstNode& node) -> ir::Value* {
             if (!value.value || !value.type) {
                 return nullptr;
+            }
+            if (value.type->kind == ir::TypeKind::Struct) {
+                const auto record = ir_records_.find(value.type);
+                if (record == ir_records_.end() || !record->second) {
+                    return nullptr;
+                }
+                const auto methods = class_methods_.find(record->second->tag);
+                if (methods == class_methods_.end()) {
+                    return nullptr;
+                }
+                auto method = methods->second.find("operator bool");
+                if (method == methods->second.end()) {
+                    method = methods->second.find("operator int");
+                }
+                if (method == methods->second.end()) {
+                    return nullptr;
+                }
+                auto self = emit_lvalue(node);
+                if (!self.value) {
+                    return nullptr;
+                }
+                if (self.value->type !=
+                    method->second->type->parameters[0]) {
+                    self.value = builder_.create(
+                        ir::Opcode::BitCast,
+                        method->second->type->parameters[0],
+                        {self.value}, "logical.this");
+                }
+                auto* call = builder_.create_call(
+                    method->second, {self.value},
+                    method->second->type->return_type, "logical.conversion");
+                const Expression converted{call,
+                                           method->second->type->return_type};
+                return truth(converted, node);
             }
             if (ir::is_integer(value.type) && value.type->bits == 1) {
                 return value.value;
@@ -5438,8 +5475,8 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                 ir::ICmpPredicate::Ne, value.value,
                 module_->constant_int(value.type, 0), "tobool");
         };
-        auto* left_bool = truth(left);
-        auto* right_bool = truth(right);
+        auto* left_bool = truth(left, *expression.children[0]);
+        auto* right_bool = truth(right, *expression.children[1]);
         const auto opcode = operation == "&&" ? ir::Opcode::And : ir::Opcode::Or;
         auto* value = builder_.create(opcode, module_->types().bool_type(),
                                       {left_bool, right_bool}, "logic");
