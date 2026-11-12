@@ -37,6 +37,7 @@ void *bsearch(const void *key, const void *base, size_t count, size_t size,
 char *getenv(const char *name);
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
+int atexit(void (*function)(void));
 
 void srand(unsigned int seed);
 int rand(void);

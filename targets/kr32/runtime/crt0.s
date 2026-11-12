@@ -3,8 +3,12 @@
         .text
         .global _start
         .extern main
+        .weak __krc_run_atexit
 _start:
         CALL main
+        PUSH R0
+        CALL __krc_run_atexit
+        POP R0
         HALT
 
         .global putchar
@@ -16,5 +20,12 @@ putchar:
 
         .global exit
 exit:
+        PUSH R0
+        CALL __krc_run_atexit
+        POP R0
         SYSCALL #32
         HALT
+
+; Weak default for programs linked without the C runtime.
+__krc_run_atexit:
+        RET

@@ -2578,3 +2578,21 @@ int unsetenv(const char *name) {
     }
     return 0;
 }
+
+static void (*atexit_handlers[32])(void);
+static int atexit_handler_count;
+
+int atexit(void (*function)(void)) {
+    if (function == 0 || atexit_handler_count >= 32) {
+        return -1;
+    }
+    atexit_handlers[atexit_handler_count++] = function;
+    return 0;
+}
+
+void __krc_run_atexit(void) {
+    while (atexit_handler_count > 0) {
+        atexit_handler_count--;
+        atexit_handlers[atexit_handler_count]();
+    }
+}
