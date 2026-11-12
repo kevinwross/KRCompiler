@@ -6960,7 +6960,20 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     record_type = base.type->element;
                 }
             } else {
-                base = emit_lvalue(*member.children.front());
+                if (member.children.front()->kind ==
+                    frontend::AstKind::CallExpression) {
+                    auto value = emit_expression(*member.children.front());
+                    if (value.value && value.type &&
+                        value.type->kind == ir::TypeKind::Struct) {
+                        auto* storage = builder_.create_alloca(
+                            value.type, 0, "this.temp");
+                        builder_.create_store(value.value, storage);
+                        base.value = storage;
+                        base.type = value.type;
+                    }
+                } else {
+                    base = emit_lvalue(*member.children.front());
+                }
                 record_type = base.type;
             }
             const auto source_record =
