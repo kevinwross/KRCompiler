@@ -1705,6 +1705,11 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
             node->children.push_back(
                 make_ast(AstKind::TypeName, peek().location, peek().text));
             ++position_;
+        } else if (cxx_mode_ && peek().kind == TokenKind::Keyword &&
+                   peek(1).text == "(") {
+            node->children.push_back(
+                make_ast(AstKind::TypeName, peek().location, peek().text));
+            ++position_;
         } else if (is_type_name_start()) {
             auto type = parse_type_name();
             if (type) {

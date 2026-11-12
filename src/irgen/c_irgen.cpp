@@ -6040,6 +6040,15 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     element_pointer);
             }
         }
+        if (!array && !constructor_arguments.empty() &&
+            (ir::is_integer(type) || ir::is_float(type)) &&
+            constructor_arguments.front()) {
+            auto value = emit_expression(*constructor_arguments.front());
+            if (value.value) {
+                builder_.create_store(
+                    promote(value.value, value.type, type), pointer);
+            }
+        }
         if (type->kind == ir::TypeKind::Struct) {
             if (!array) {
                 emit_vtable_init(pointer, type);
