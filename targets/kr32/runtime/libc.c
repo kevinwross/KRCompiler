@@ -2296,3 +2296,40 @@ void __krc_assert_fail(const char *expression, const char *file, int line) {
     fprintf(stderr, "assertion failed: %s (%s:%d)\n", expression, file, line);
     abort();
 }
+
+static int fold_case(int character) {
+    if (character >= 'A' && character <= 'Z') {
+        return character + ('a' - 'A');
+    }
+    return character;
+}
+
+int strcasecmp(const char *left, const char *right) {
+    while (*left != 0 && *right != 0) {
+        const int difference =
+            fold_case((unsigned char)*left) - fold_case((unsigned char)*right);
+        if (difference != 0) {
+            return difference;
+        }
+        left++;
+        right++;
+    }
+    return fold_case((unsigned char)*left) - fold_case((unsigned char)*right);
+}
+
+int strncasecmp(const char *left, const char *right, size_t count) {
+    size_t index = 0;
+    while (index < count && left[index] != 0 && right[index] != 0) {
+        const int difference = fold_case((unsigned char)left[index]) -
+                               fold_case((unsigned char)right[index]);
+        if (difference != 0) {
+            return difference;
+        }
+        index++;
+    }
+    if (index == count) {
+        return 0;
+    }
+    return fold_case((unsigned char)left[index]) -
+           fold_case((unsigned char)right[index]);
+}
