@@ -28,6 +28,7 @@ char *strrchr(const char *text, int character);
 char *strstr(const char *text, const char *needle);
 char *strtok(char *text, const char *delimiters);
 char *strtok_r(char *text, const char *delimiters, char **save);
+char *strsep(char **text, const char *delimiters);
 char *strdup(const char *text);
 char *strndup(const char *text, size_t maximum);
 char *strerror(int error);

@@ -2333,3 +2333,21 @@ int strncasecmp(const char *left, const char *right, size_t count) {
     return fold_case((unsigned char)left[index]) -
            fold_case((unsigned char)right[index]);
 }
+
+char *strsep(char **text, const char *delimiters) {
+    if (text == 0 || *text == 0) {
+        return 0;
+    }
+    char *start = *text;
+    char *cursor = start;
+    while (*cursor != 0) {
+        if (character_in_set(*cursor, delimiters)) {
+            *cursor = 0;
+            *text = cursor + 1;
+            return start;
+        }
+        cursor++;
+    }
+    *text = 0;
+    return start;
+}
