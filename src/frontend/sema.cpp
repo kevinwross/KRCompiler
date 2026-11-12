@@ -323,7 +323,7 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
             is_volatile = true;
         } else if (label == "void") {
             saw_void = true;
-        } else if (label == "_Bool") {
+        } else if (label == "_Bool" || label == "bool") {
             saw_bool = true;
         } else if (label == "char") {
             saw_char = true;

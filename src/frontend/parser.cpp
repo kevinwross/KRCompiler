@@ -30,7 +30,7 @@ bool is_qualifier(std::string_view text) {
 bool is_type_specifier(std::string_view text) {
     return text == "void" || text == "char" || text == "short" || text == "int" ||
            text == "long" || text == "float" || text == "double" || text == "signed" ||
-           text == "unsigned" || text == "_Bool" || text == "_Complex" ||
+           text == "unsigned" || text == "_Bool" || text == "bool" || text == "_Complex" ||
            text == "_Imaginary" || text == "struct" || text == "union" || text == "enum";
 }
 
