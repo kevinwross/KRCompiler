@@ -622,13 +622,26 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             continue;
         }
         if (cxx_mode_ && token.kind == TokenKind::Identifier &&
-            node->labels.empty() && node->children.empty() &&
-            peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
-            is_typedef_name(peek(2).text) && peek(2).text != token.text) {
-            node->labels.push_back(peek(2).text);
-            position_ += 3;
-            saw_specifier = true;
-            continue;
+            peek(1).is("::") && peek(2).kind == TokenKind::Identifier) {
+            std::size_t offset = 2;
+            while (peek(offset + 1).is("::") &&
+                   peek(offset + 2).kind == TokenKind::Identifier) {
+                offset += 2;
+            }
+            const auto& after = peek(offset + 1);
+            const bool type_position =
+                after.kind == TokenKind::Identifier || after.is("*") ||
+                after.is("&") || after.is("const") ||
+                after.is("volatile");
+            if (type_position &&
+                is_typedef_name(peek(offset).text) &&
+                peek(offset).text != token.text) {
+                auto qualified = peek(offset).text;
+                position_ += offset + 1;
+                node->labels.push_back(std::move(qualified));
+                saw_specifier = true;
+                continue;
+            }
         }
         if (token.kind == TokenKind::Identifier && is_typedef_name(token.text) &&
             !(cxx_mode_ && peek(1).is("::"))) {
@@ -1298,9 +1311,16 @@ bool Parser::is_declaration_start() const {
         return true;
     }
     if (cxx_mode_ && token.kind == TokenKind::Identifier &&
-        peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
-        is_typedef_name(peek(2).text) && peek(2).text != token.text) {
-        return true;
+        peek(1).is("::") && peek(2).kind == TokenKind::Identifier) {
+        std::size_t offset = 2;
+        while (peek(offset + 1).is("::") &&
+               peek(offset + 2).kind == TokenKind::Identifier) {
+            offset += 2;
+        }
+        const auto& after = peek(offset + 1);
+        return after.kind == TokenKind::Identifier || after.is("*") ||
+               after.is("&") || after.is("const") ||
+               after.is("volatile");
     }
     if (cxx_mode_ && token.kind == TokenKind::Identifier &&
         token.text == "operator") {
@@ -1709,6 +1729,20 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
             node->children.push_back(
                 make_ast(AstKind::TypeName, peek().location, peek().text));
             ++position_;
+        } else if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
+                   peek(1).is("::") &&
+                   peek(2).kind == TokenKind::Identifier) {
+            auto qualified = peek(2).text;
+            const auto type_location = peek().location;
+            position_ += 3;
+            while (check("::") &&
+                   peek(1).kind == TokenKind::Identifier) {
+                qualified = peek(1).text;
+                position_ += 2;
+            }
+            node->children.push_back(
+                make_ast(AstKind::TypeName, type_location,
+                        std::move(qualified)));
         } else if (cxx_mode_ && peek().kind == TokenKind::Keyword &&
                    peek(1).text == "(") {
             node->children.push_back(
