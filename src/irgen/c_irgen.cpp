@@ -6313,6 +6313,18 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
     if (expression.kind == frontend::AstKind::CompoundLiteral) {
         return emit_expression(expression);
     }
+    if (expression.kind == frontend::AstKind::CastExpression &&
+        !expression.children.empty() && expression.children.front()) {
+        const auto target =
+            sema_.type_from_type_name(*expression.children.front());
+        if (target && target->is_reference && target->element) {
+            auto cast = emit_cast(expression);
+            if (cast.value) {
+                return {cast.value, map_type(target->element)};
+            }
+            return {};
+        }
+    }
     if (expression.kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(expression.text)) {
             if (local->frontend_type && local->frontend_type->is_reference &&
@@ -7737,7 +7749,17 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
         !expression.children[1]) {
         return {};
     }
-    const auto target = map_type(sema_.type_from_type_name_node(*expression.children[0]));
+    const auto target_frontend =
+        sema_.type_from_type_name_node(*expression.children[0]);
+    const auto target = map_type(target_frontend);
+    if (target_frontend && target_frontend->is_reference &&
+        target_frontend->element) {
+        auto address = emit_lvalue(*expression.children[1]);
+        if (address.value) {
+            return {address.value, target};
+        }
+        return {};
+    }
     auto operand = emit_expression(*expression.children[1]);
     if (!operand.value || !target) {
         return {};
