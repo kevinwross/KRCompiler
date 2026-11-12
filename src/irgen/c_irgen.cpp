@@ -1114,6 +1114,9 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                                 : mangle_method(child->text, method_name);
             auto* function =
                 module_->add_function(mangled, ir_type, ir::Linkage::Weak, false);
+            if (has_label(*member->children[0], "static")) {
+                static_methods_.insert(function);
+            }
             function->add_parameter(module_->types().pointer_type(class_type), "this");
             const auto* function_declarator =
                 find_function_declarator(*member->children[1]);
@@ -1716,8 +1719,10 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     const auto previous_class = current_class_;
     const auto previous_destructor = in_destructor_;
     const auto previous_constructor = in_constructor_;
+    const auto previous_static_method = in_static_method_;
     const auto class_found = function_classes_.find(function);
     current_class_ = class_found == function_classes_.end() ? nullptr : class_found->second;
+    in_static_method_ = static_methods_.contains(function);
     in_destructor_ =
         function->name.starts_with("~") || function->name.ends_with("_dtor");
     const bool emitting_constructor =
@@ -2018,6 +2023,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     current_class_ = previous_class;
     in_destructor_ = previous_destructor;
     in_constructor_ = previous_constructor;
+    in_static_method_ = previous_static_method;
 }
 
 void CIRGen::emit_statement(const frontend::AstNode& statement) {
@@ -3683,6 +3689,9 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
                     local->type};
         }
         auto* global = lookup_global(expression.text);
+        if (in_static_method_ && current_class_) {
+            global = lookup_global(current_class_->tag + "::" + expression.text);
+        }
         if (global) {
             auto* variable = global;
             if (variable->element_type &&
@@ -5479,6 +5488,18 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
             result.type = global->second->element_type;
             result.is_volatile = volatile_globals_.contains(global->second);
             return result;
+        }
+        if (in_static_method_ && current_class_) {
+            const auto static_global =
+                globals_.find(current_class_->tag + "::" + expression.text);
+            if (static_global != globals_.end()) {
+                Expression result;
+                result.value = static_global->second;
+                result.type = static_global->second->element_type;
+                result.is_volatile =
+                    volatile_globals_.contains(static_global->second);
+                return result;
+            }
         }
         if (current_class_) {
             bool has_member = false;
