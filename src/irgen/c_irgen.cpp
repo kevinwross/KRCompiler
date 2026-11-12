@@ -6049,6 +6049,16 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     promote(value.value, value.type, type), pointer);
             }
         }
+        if (!array && has_argument_list && constructor_arguments.empty() &&
+            (ir::is_integer(type) || ir::is_float(type))) {
+            if (ir::is_integer(type)) {
+                builder_.create_store(module_->constant_int(type, 0),
+                                      pointer);
+            } else {
+                builder_.create_store(module_->constant_float(type, 0.0),
+                                      pointer);
+            }
+        }
         if (type->kind == ir::TypeKind::Struct) {
             if (!array) {
                 emit_vtable_init(pointer, type);
