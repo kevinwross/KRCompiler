@@ -2187,6 +2187,13 @@ static void append_number(char *buffer, unsigned int size, unsigned int *used,
     buffer[*used] = 0;
 }
 
+static void append_format(char *buffer, unsigned int size, unsigned int *used,
+                          const char *format, const struct tm *value) {
+    const unsigned int available =
+        *used < size ? size - *used : 0;
+    *used += (unsigned int)strftime(buffer + *used, available, format, value);
+}
+
 size_t strftime(char *buffer, size_t size, const char *format,
                 const struct tm *value) {
     if (buffer == 0 || size == 0 || format == 0 || value == 0) {
@@ -2264,6 +2271,22 @@ size_t strftime(char *buffer, size_t size, const char *format,
         case 'p':
             append_text(buffer, (unsigned int)size, &used,
                         value->tm_hour < 12 ? "AM" : "PM");
+            break;
+        case 'F':
+            append_format(buffer, (unsigned int)size, &used, "%Y-%m-%d", value);
+            break;
+        case 'T':
+            append_format(buffer, (unsigned int)size, &used, "%H:%M:%S", value);
+            break;
+        case 'R':
+            append_format(buffer, (unsigned int)size, &used, "%H:%M", value);
+            break;
+        case 'x':
+            append_format(buffer, (unsigned int)size, &used, "%m/%d/%y", value);
+            break;
+        case 'c':
+            append_format(buffer, (unsigned int)size, &used,
+                          "%a %b %e %H:%M:%S %Y", value);
             break;
         case '%':
             append_text(buffer, (unsigned int)size, &used, "%");
