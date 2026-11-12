@@ -1011,6 +1011,10 @@ void CIRGen::collect_declarations() {
             }
         }
         if (child->kind == frontend::AstKind::FunctionDefinition) {
+            if (child->text.find("::") != std::string::npos) {
+                collect_out_of_line_method(*child);
+                continue;
+            }
             if (child->children.size() < 3) {
                 continue;
             }
@@ -1045,6 +1049,64 @@ void CIRGen::collect_declarations() {
             }
         }
     }
+}
+
+void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
+    if (definition.children.size() < 3 || !definition.children[0] ||
+        !definition.children[1]) {
+        return;
+    }
+    const auto separator = definition.text.rfind("::");
+    if (separator == std::string::npos) {
+        return;
+    }
+    const auto class_name = definition.text.substr(0, separator);
+    const auto method_name = definition.text.substr(separator + 2);
+    const auto record_type = sema_.type_named(class_name);
+    if (!record_type || record_type->kind != frontend::TypeKind::Record ||
+        !record_type->record) {
+        return;
+    }
+    const auto frontend_type =
+        sema_.declaration_type(*definition.children[0],
+                               definition.children[1].get());
+    if (!frontend_type || frontend_type->kind != frontend::TypeKind::Function) {
+        return;
+    }
+    auto* class_type = map_record(*record_type->record);
+    std::vector<ir::TypePtr> parameters;
+    parameters.push_back(module_->types().pointer_type(class_type));
+    for (const auto& parameter : frontend_type->parameters) {
+        parameters.push_back(map_type(parameter));
+    }
+    const auto ir_type = module_->types().function_type(
+        map_type(frontend_type->return_type), std::move(parameters),
+        frontend_type->variadic);
+    auto* function = module_->add_function(
+        mangle_method(class_name, method_name), ir_type, ir::Linkage::Weak, false);
+    function->add_parameter(module_->types().pointer_type(class_type), "this");
+    const auto* function_declarator = find_function_declarator(*definition.children[1]);
+    std::size_t parameter_index = 0;
+    if (function_declarator) {
+        for (std::size_t index = 1; index < function_declarator->children.size();
+             ++index) {
+            const auto* parameter = function_declarator->children[index].get();
+            if (!parameter ||
+                parameter->kind != frontend::AstKind::ParameterDeclaration ||
+                parameter_index >= frontend_type->parameters.size()) {
+                continue;
+            }
+            function->add_parameter(
+                map_type(frontend_type->parameters[parameter_index]),
+                parameter_name(*parameter, parameter_index));
+            parameter_index++;
+        }
+    }
+    class_methods_[class_name][method_name] = function;
+    function_ast_types_[function] = frontend_type;
+    function_source_names_[function] = method_name;
+    function_classes_[function] = record_type->record.get();
+    method_bodies_.push_back({function, &definition});
 }
 
 void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {

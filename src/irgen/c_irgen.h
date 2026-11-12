@@ -51,6 +51,7 @@ private:
                         const frontend::AstNode& declarator,
                         const frontend::AstNode* initializer);
     void collect_class_methods(const frontend::AstNode& specifiers);
+    void collect_out_of_line_method(const frontend::AstNode& definition);
     void record_defaults(ir::Function* function, const frontend::AstNode& declarator);
     [[nodiscard]] ir::Function* select_constructor(const std::string& tag,
                                                    std::size_t argument_count,
