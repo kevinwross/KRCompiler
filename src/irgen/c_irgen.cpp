@@ -3458,7 +3458,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 ir::Function* cleanup =
                     ensure_member_destructor(record->second);
                 if (cleanup) {
-                    local_cleanups_.push_back({address, cleanup});
+                    local_cleanups_.push_back({address, cleanup, 1, nullptr});
                 }
             }
         }
