@@ -5467,7 +5467,20 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                 if (method == methods->second.end()) {
                     return nullptr;
                 }
-                auto self = emit_lvalue(node);
+                Expression self;
+                if (node.kind == frontend::AstKind::CallExpression) {
+                    auto record_value = emit_expression(node);
+                    if (record_value.value && record_value.type &&
+                        record_value.type->kind == ir::TypeKind::Struct) {
+                        auto* storage = builder_.create_alloca(
+                            record_value.type, 0, "logical.temp");
+                        builder_.create_store(record_value.value, storage);
+                        self.value = storage;
+                        self.type = record_value.type;
+                    }
+                } else {
+                    self = emit_lvalue(node);
+                }
                 if (!self.value) {
                     return nullptr;
                 }
