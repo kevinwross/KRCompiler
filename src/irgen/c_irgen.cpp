@@ -5948,9 +5948,22 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             functions_["malloc"] = malloc_function;
         }
         const bool has_argument_list =
-            expression.children.size() > 1 && expression.children[1] &&
+            !type_is_array && expression.children.size() > 1 &&
+            expression.children[1] &&
             expression.children[1]->kind ==
                 frontend::AstKind::ExpressionStatement;
+        const frontend::AstNode* array_initializer = nullptr;
+        if (type_is_array && expression.children.size() > 1 &&
+            expression.children[1] &&
+            expression.children[1]->kind ==
+                frontend::AstKind::ExpressionStatement) {
+            array_initializer = expression.children[1].get();
+        } else if (!type_is_array && expression.children.size() > 2 &&
+                   expression.children[2] &&
+                   expression.children[2]->kind ==
+                       frontend::AstKind::ExpressionStatement) {
+            array_initializer = expression.children[2].get();
+        }
         const bool array =
             type_is_array ||
             (expression.children.size() > 1 && expression.children[1] &&
@@ -6000,6 +6013,24 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
         } else {
             pointer = builder_.create(ir::Opcode::BitCast,
                                       module_->types().pointer_type(type), {call}, "new");
+        }
+        if (array && array_initializer) {
+            const auto& initializers = array_initializer->children;
+            for (std::size_t index = 0; index < initializers.size(); ++index) {
+                if (!initializers[index]) {
+                    continue;
+                }
+                auto element = emit_expression(*initializers[index]);
+                auto* element_pointer = builder_.create_gep(
+                    type, pointer,
+                    {module_->constant_int(size_type(),
+                                           static_cast<std::int64_t>(index))},
+                    false, "new.element");
+                element_pointer->type = module_->types().pointer_type(type);
+                builder_.create_store(
+                    promote(element.value, element.type, type),
+                    element_pointer);
+            }
         }
         if (type->kind == ir::TypeKind::Struct) {
             if (!array) {

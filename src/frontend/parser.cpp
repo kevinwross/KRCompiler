@@ -1739,6 +1739,25 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
                 node->children.push_back(std::move(count));
             }
             expect("]", "after new array bound");
+            if (cxx_mode_ && check("{")) {
+                const auto initializer_location = peek().location;
+                ++position_;
+                auto initializers =
+                    make_ast(AstKind::ExpressionStatement,
+                             initializer_location);
+                while (!check("}") && !at_end()) {
+                    auto element = parse_assignment_expression();
+                    if (element) {
+                        initializers->children.push_back(
+                            std::move(element));
+                    }
+                    if (!match(",")) {
+                        break;
+                    }
+                }
+                expect("}", "after new array initializer");
+                node->children.push_back(std::move(initializers));
+            }
         }
         return node;
     }
