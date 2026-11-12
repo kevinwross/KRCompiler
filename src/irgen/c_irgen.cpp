@@ -3860,7 +3860,8 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
         const auto kind = statement.children.front()->kind;
         const bool scalar = kind == frontend::AstKind::IntegerLiteral ||
                             kind == frontend::AstKind::FloatLiteral ||
-                            kind == frontend::AstKind::CharLiteral;
+                            kind == frontend::AstKind::CharLiteral ||
+                            kind == frontend::AstKind::StringLiteral;
         if (scalar) {
             const auto record =
                 ir_records_.find(current_function_->type->return_type);
