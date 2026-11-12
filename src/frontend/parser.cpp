@@ -278,7 +278,9 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
     auto specifiers = parse_decl_specifiers();
     if (!specifiers) {
         if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
-            peek(1).is("::") && peek(2).kind == TokenKind::Identifier) {
+            peek(1).is("::") &&
+            ((peek(2).kind == TokenKind::Identifier) ||
+             (peek(2).is("~") && peek(3).kind == TokenKind::Identifier))) {
             specifiers = make_ast(AstKind::DeclSpecifiers, peek().location);
         } else {
             error(peek(), "expected declaration specifiers");
@@ -640,11 +642,19 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
         const auto location = peek().location;
         ++position_;
         if (cxx_mode_) {
-            while (check("::") && peek(1).kind == TokenKind::Identifier) {
+            while (check("::")) {
                 ++position_;
                 name += "::";
-                name += peek().text;
-                ++position_;
+                if (check("~")) {
+                    name += "~";
+                    ++position_;
+                }
+                if (peek().kind == TokenKind::Identifier) {
+                    name += peek().text;
+                    ++position_;
+                } else {
+                    break;
+                }
             }
         }
         direct = make_ast(AstKind::Declarator, location, std::move(name));
