@@ -6524,8 +6524,43 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     const auto convert_record_argument =
         [&](Expression argument, const frontend::AstNode& node,
             ir::TypePtr target) -> Expression {
-        if (!argument.type || !target ||
-            argument.type->kind != ir::TypeKind::Struct ||
+        if (!argument.type || !target) {
+            return argument;
+        }
+        if (target->kind == ir::TypeKind::Struct &&
+            argument.type->kind != ir::TypeKind::Struct) {
+            const auto record = ir_records_.find(target);
+            if (record != ir_records_.end() && record->second) {
+                auto* constructor =
+                    select_constructor(record->second->tag, 1, 0);
+                if (constructor && constructor->type &&
+                    constructor->type->parameters.size() == 2) {
+                    auto value = emit_expression(node);
+                    if (value.value) {
+                        value.value = promote(
+                            value.value, value.type,
+                            constructor->type->parameters[1]);
+                        auto* storage = builder_.create_alloca(
+                            target, 0, "argument.temp");
+                        auto* self = storage;
+                        if (self->type !=
+                            constructor->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                constructor->type->parameters[0], {self},
+                                "argument.this");
+                        }
+                        builder_.create_call(
+                            constructor, {self, value.value}, nullptr,
+                            "argument.constructor");
+                        auto* loaded = builder_.create_load(
+                            target, storage, false, 0, "argument.record");
+                        return {loaded, target};
+                    }
+                }
+            }
+        }
+        if (argument.type->kind != ir::TypeKind::Struct ||
             (!ir::is_integer(target) && !ir::is_float(target))) {
             return argument;
         }
