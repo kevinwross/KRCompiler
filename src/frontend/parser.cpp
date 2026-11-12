@@ -211,6 +211,12 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
         if (peek().kind == TokenKind::Identifier) {
             ++position_;
         }
+        while (check("::")) {
+            ++position_;
+            if (peek().kind == TokenKind::Identifier) {
+                ++position_;
+            }
+        }
         if (match("=")) {
             if (peek().kind == TokenKind::Identifier) {
                 ++position_;
