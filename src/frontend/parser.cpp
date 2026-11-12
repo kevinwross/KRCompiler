@@ -1717,6 +1717,22 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
         }
         if (match("(")) {
             node->children.push_back(parse_argument_list());
+        } else if (cxx_mode_ && check("{")) {
+            const auto arguments_location = peek().location;
+            ++position_;
+            auto arguments =
+                make_ast(AstKind::ExpressionStatement, arguments_location);
+            while (!check("}") && !at_end()) {
+                auto argument = parse_assignment_expression();
+                if (argument) {
+                    arguments->children.push_back(std::move(argument));
+                }
+                if (!match(",")) {
+                    break;
+                }
+            }
+            expect("}", "after braced new arguments");
+            node->children.push_back(std::move(arguments));
         } else if (match("[")) {
             auto count = parse_assignment_expression();
             if (count) {
