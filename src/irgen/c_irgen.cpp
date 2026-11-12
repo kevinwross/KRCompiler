@@ -6965,12 +6965,20 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
         return {operand.value, target};
     }
     if (operand.type->kind == ir::TypeKind::Struct &&
-        target->kind == ir::TypeKind::Integer && target->bits == 1) {
+        target->kind == ir::TypeKind::Integer) {
+        const char* conversion = target->bits == 1
+                                     ? "operator bool"
+                                     : (target->bits == 32 && target->is_signed
+                                            ? "operator int"
+                                            : nullptr);
+        if (conversion == nullptr) {
+            // Other conversion-operator targets stay unsupported.
+        } else {
         const auto record = ir_records_.find(operand.type);
         if (record != ir_records_.end() && record->second) {
             const auto methods = class_methods_.find(record->second->tag);
             if (methods != class_methods_.end()) {
-                const auto method = methods->second.find("operator bool");
+                const auto method = methods->second.find(conversion);
                 if (method != methods->second.end()) {
                     auto self = emit_lvalue(*expression.children[1]);
                     if (self.value) {
@@ -6983,11 +6991,12 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
                         }
                         auto* call = builder_.create_call(
                             method->second, {self.value},
-                            method->second->type->return_type, "cast.bool");
+                            method->second->type->return_type, "cast.conversion");
                         return {call, method->second->type->return_type};
                     }
                 }
             }
+        }
         }
     }
     ir::Opcode opcode = ir::Opcode::BitCast;
