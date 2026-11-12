@@ -205,9 +205,15 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
         }
         return block;
     }
+    if (cxx_mode_ && check("inline") && peek(1).text == "namespace") {
+        ++position_;
+    }
     if (cxx_mode_ && check("namespace")) {
         const auto location = peek().location;
         ++position_;
+        if (check("inline")) {
+            ++position_;
+        }
         if (peek().kind == TokenKind::Identifier) {
             ++position_;
         }
