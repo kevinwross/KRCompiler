@@ -4243,6 +4243,59 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
     if (current_function_->type && current_function_->type->return_type &&
         (ir::is_integer(current_function_->type->return_type) ||
          ir::is_float(current_function_->type->return_type)) &&
+        statement.children.front()->kind ==
+            frontend::AstKind::CallExpression) {
+        auto value = emit_expression(*statement.children.front());
+        if (value.value && value.type &&
+            value.type->kind == ir::TypeKind::Struct) {
+            auto* storage = builder_.create_alloca(value.type, 0,
+                                                       "return.temp");
+            builder_.create_store(value.value, storage);
+            const auto record = ir_records_.find(value.type);
+            if (record != ir_records_.end() && record->second) {
+                const auto methods =
+                    class_methods_.find(record->second->tag);
+                if (methods != class_methods_.end()) {
+                    const auto& return_type =
+                        current_function_->type->return_type;
+                    const char* conversion = nullptr;
+                    if (ir::is_integer(return_type)) {
+                        conversion = return_type->bits == 1
+                                         ? "operator bool"
+                                         : "operator int";
+                    } else {
+                        conversion = return_type->bits == 64
+                                         ? "operator double"
+                                         : "operator float";
+                    }
+                    const auto method = methods->second.find(conversion);
+                    if (method != methods->second.end()) {
+                        auto* self = storage;
+                        if (self->type !=
+                            method->second->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self}, "return.this");
+                        }
+                        auto* call = builder_.create_call(
+                            method->second, {self},
+                            method->second->type->return_type,
+                            "return.conversion");
+                        auto* converted = promote(
+                            call, method->second->type->return_type,
+                            return_type);
+                        emit_cleanups();
+                        builder_.create_ret(converted);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    if (current_function_->type && current_function_->type->return_type &&
+        (ir::is_integer(current_function_->type->return_type) ||
+         ir::is_float(current_function_->type->return_type)) &&
         statement.children.front()->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(statement.children.front()->text)) {
             if (local->frontend_type &&
