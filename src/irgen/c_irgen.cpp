@@ -1082,8 +1082,14 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
     const auto ir_type = module_->types().function_type(
         map_type(frontend_type->return_type), std::move(parameters),
         frontend_type->variadic);
-    auto* function = module_->add_function(
-        mangle_method(class_name, method_name), ir_type, ir::Linkage::Weak, false);
+    const bool is_constructor = method_name == class_name;
+    const auto parameter_count = frontend_type->parameters.size();
+    const std::string mangled =
+        is_constructor
+            ? class_name + "_ctor_" + std::to_string(parameter_count) + "_value"
+            : mangle_method(class_name, method_name);
+    auto* function = module_->add_function(mangled, ir_type, ir::Linkage::Weak,
+                                           false);
     function->add_parameter(module_->types().pointer_type(class_type), "this");
     const auto* function_declarator = find_function_declarator(*definition.children[1]);
     std::size_t parameter_index = 0;
@@ -1102,7 +1108,14 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
             parameter_index++;
         }
     }
-    class_methods_[class_name][method_name] = function;
+    const auto method_key =
+        is_constructor
+            ? method_name + "#" + std::to_string(parameter_count) + "#value"
+            : method_name;
+    class_methods_[class_name][method_key] = function;
+    if (is_constructor) {
+        class_constructors_[class_name].push_back(function);
+    }
     function_ast_types_[function] = frontend_type;
     function_source_names_[function] = method_name;
     function_classes_[function] = record_type->record.get();

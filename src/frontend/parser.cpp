@@ -277,8 +277,13 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
 
     auto specifiers = parse_decl_specifiers();
     if (!specifiers) {
-        error(peek(), "expected declaration specifiers");
-        return nullptr;
+        if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
+            peek(1).is("::") && peek(2).kind == TokenKind::Identifier) {
+            specifiers = make_ast(AstKind::DeclSpecifiers, peek().location);
+        } else {
+            error(peek(), "expected declaration specifiers");
+            return nullptr;
+        }
     }
 
     if (cxx_mode_ && check("[")) {
@@ -569,7 +574,7 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
         }
         if (cxx_mode_ && token.kind == TokenKind::Identifier &&
             peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
-            is_typedef_name(peek(2).text)) {
+            is_typedef_name(peek(2).text) && peek(2).text != token.text) {
             node->labels.push_back(peek(2).text);
             position_ += 3;
             saw_specifier = true;
@@ -1188,7 +1193,7 @@ bool Parser::is_declaration_start() const {
     }
     if (cxx_mode_ && token.kind == TokenKind::Identifier &&
         peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
-        is_typedef_name(peek(2).text)) {
+        is_typedef_name(peek(2).text) && peek(2).text != token.text) {
         return true;
     }
     if (cxx_mode_ && token.kind == TokenKind::Identifier && peek(1).is("::")) {

@@ -431,6 +431,9 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
     }
 
     if (!base) {
+        if (specifiers.labels.empty() && specifiers.children.empty()) {
+            return void_type_;
+        }
         if (std::find(specifiers.labels.begin(), specifiers.labels.end(), "auto") ==
             specifiers.labels.end()) {
             error(specifiers.location, "declaration requires a type specifier");
