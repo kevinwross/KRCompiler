@@ -2839,7 +2839,16 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
         auto frontend_type = sema_.declaration_type(specifiers, declarator);
         if (has_label(specifiers, "auto") && init->children.size() > 1 &&
             init->children[1]) {
-            frontend_type = sema_.expression_type(*init->children[1]);
+            bool inferred_from_local = false;
+            if (init->children[1]->kind == frontend::AstKind::Identifier) {
+                if (auto* local = lookup_local(init->children[1]->text)) {
+                    frontend_type = local->frontend_type;
+                    inferred_from_local = true;
+                }
+            }
+            if (!inferred_from_local) {
+                frontend_type = sema_.expression_type(*init->children[1]);
+            }
         }
         std::function<frontend::TypePtr(const frontend::AstNode&)>
             infer_decltype;
