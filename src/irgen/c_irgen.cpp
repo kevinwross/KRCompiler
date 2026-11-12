@@ -5663,7 +5663,10 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 const auto methods =
                     class_methods_.find(local->frontend_type->record->tag);
                 if (methods != class_methods_.end()) {
-                    const auto method = methods->second.find("operator bool");
+                    auto method = methods->second.find("operator bool");
+                    if (method == methods->second.end()) {
+                        method = methods->second.find("operator int");
+                    }
                     if (method != methods->second.end()) {
                         auto self = emit_lvalue(*expression.children.front());
                         if (self.value) {
