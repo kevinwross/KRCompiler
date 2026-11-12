@@ -1406,7 +1406,7 @@ if(TARGET krc)
                 -DKRLD=$<TARGET_FILE:krld>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_local.c
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
-                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_local_linked.k32
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_local_object_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_static_init
@@ -3060,6 +3060,16 @@ if(TARGET krc)
                 -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/new_member_array_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_link_static_local_object
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_local_object.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/static_local_object_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_delete_null
