@@ -1703,6 +1703,21 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         TypePtr callee_type;
         const auto* callee = expression.children[0].get();
         if (callee->kind == AstKind::Identifier &&
+            (callee->text == "std::min" ||
+             callee->text == "std::max")) {
+            const auto& arguments = expression.children[1]->children;
+            if (arguments.empty() || !arguments.front()) {
+                return int_type_;
+            }
+            auto first = analyze_expression(*arguments.front());
+            for (std::size_t index = 1; index < arguments.size(); ++index) {
+                if (arguments[index]) {
+                    analyze_expression(*arguments[index]);
+                }
+            }
+            return first;
+        }
+        if (callee->kind == AstKind::Identifier &&
             callee->text == "std::swap") {
             for (const auto& argument : expression.children[1]->children) {
                 if (argument) {

@@ -7191,6 +7191,40 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         return {};
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier &&
+        (expression.children[0]->text == "std::min" ||
+         expression.children[0]->text == "std::max")) {
+        const auto& arguments = expression.children[1]->children;
+        if (arguments.size() < 2 || !arguments[0] || !arguments[1]) {
+            return {};
+        }
+        auto left = emit_expression(*arguments[0]);
+        auto right = emit_expression(*arguments[1]);
+        if (!left.value || !right.value || !left.type ||
+            !ir::is_integer(left.type)) {
+            return {};
+        }
+        const bool minimum =
+            expression.children[0]->text == "std::min";
+        auto* condition = builder_.create_icmp(
+            minimum ? ir::ICmpPredicate::Slt : ir::ICmpPredicate::Sgt,
+            left.value, right.value, "minmax.compare");
+        auto* storage = builder_.create_alloca(left.type, 0, "minmax.temp");
+        auto* then_block = current_function_->add_block("minmax.then");
+        auto* else_block = current_function_->add_block("minmax.else");
+        auto* end_block = current_function_->add_block("minmax.end");
+        builder_.create_cond_br(condition, then_block, else_block);
+        builder_.set_insert_point(then_block);
+        builder_.create_store(left.value, storage);
+        builder_.create_br(end_block);
+        builder_.set_insert_point(else_block);
+        builder_.create_store(right.value, storage);
+        builder_.create_br(end_block);
+        builder_.set_insert_point(end_block);
+        auto* loaded =
+            builder_.create_load(left.type, storage, false, 0, "minmax.value");
+        return {loaded, left.type};
+    }
+    if (expression.children[0]->kind == frontend::AstKind::Identifier &&
         expression.children[0]->text == "std::swap") {
         const auto& arguments = expression.children[1]->children;
         if (arguments.size() < 2 || !arguments[0] || !arguments[1]) {
