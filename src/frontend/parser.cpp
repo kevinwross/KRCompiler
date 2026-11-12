@@ -294,6 +294,10 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
         return parse_static_assert();
     }
 
+    if (cxx_mode_ && check("extern") &&
+        peek(1).kind == TokenKind::String) {
+        position_ += 2;
+    }
     auto specifiers = parse_decl_specifiers();
     if (!specifiers) {
         if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
