@@ -1342,13 +1342,19 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
             parameter_index++;
         }
     }
+    const bool is_incdec = method_name == "operator++" ||
+                           method_name == "operator--";
     const auto method_key =
         is_constructor
             ? method_name + "#" + std::to_string(parameter_count) + "#value"
-            : method_name;
+            : is_incdec
+                  ? method_name + "#" + std::to_string(parameter_count)
+                  : method_name;
     class_methods_[record_name][method_key] = function;
     if (is_constructor) {
         class_constructors_[record_name].push_back(function);
+    } else if (is_incdec) {
+        class_incdec_[record_name].push_back(function);
     }
     function_ast_types_[function] = frontend_type;
     function_source_names_[function] = method_name;
@@ -3890,6 +3896,15 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                 }
             }
         }
+        if (initializer.kind == frontend::AstKind::PostfixExpression ||
+            initializer.kind == frontend::AstKind::CallExpression) {
+            auto value = emit_expression(initializer);
+            if (value.value && value.type &&
+                value.type->kind == ir::TypeKind::Struct) {
+                builder_.create_store(value.value, address);
+                return;
+            }
+        }
         auto source = emit_lvalue(initializer);
         if (source.value && source.type && source.type->kind == ir::TypeKind::Struct) {
             emit_copy(address, source.value, type);
@@ -4510,8 +4525,16 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
                     const auto methods =
                         class_methods_.find(local->frontend_type->record->tag);
                     if (methods != class_methods_.end()) {
-                        const auto method =
+                        auto method =
                             methods->second.find("operator" + expression.text + "#1");
+                        if (method == methods->second.end()) {
+                            method = methods->second.find(
+                                "operator" + expression.text);
+                        }
+                        if (method == methods->second.end()) {
+                            method = methods->second.find(
+                                "operator" + expression.text + "#0");
+                        }
                         if (method != methods->second.end()) {
                             auto self = emit_lvalue(*expression.children.front());
                             if (self.value) {
