@@ -2596,3 +2596,22 @@ void __krc_run_atexit(void) {
         atexit_handlers[atexit_handler_count]();
     }
 }
+
+static void (*quick_exit_handlers[16])(void);
+static int quick_exit_handler_count;
+
+int at_quick_exit(void (*function)(void)) {
+    if (function == 0 || quick_exit_handler_count >= 16) {
+        return -1;
+    }
+    quick_exit_handlers[quick_exit_handler_count++] = function;
+    return 0;
+}
+
+void quick_exit(int status) {
+    while (quick_exit_handler_count > 0) {
+        quick_exit_handler_count--;
+        quick_exit_handlers[quick_exit_handler_count]();
+    }
+    _Exit(status);
+}
