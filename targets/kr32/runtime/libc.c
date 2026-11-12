@@ -2397,3 +2397,24 @@ int dprintf(int descriptor, const char *format, ...) {
     va_end(arguments);
     return result;
 }
+
+struct FILE *fdopen(int descriptor, const char *mode) {
+    (void)mode;
+    if (descriptor < 0) {
+        return 0;
+    }
+    struct FILE *stream = (struct FILE *)malloc(sizeof(struct FILE));
+    if (stream == 0) {
+        return 0;
+    }
+    stream->descriptor = descriptor;
+    stream->eof = 0;
+    stream->error = 0;
+    stream->pushback = -1;
+    stream->temporary_path[0] = 0;
+    return stream;
+}
+
+int fileno(struct FILE *stream) {
+    return stream == 0 ? -1 : stream->descriptor;
+}

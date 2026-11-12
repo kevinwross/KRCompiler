@@ -64,6 +64,8 @@ int fgetpos(FILE *stream, fpos_t *position);
 int fsetpos(FILE *stream, const fpos_t *position);
 FILE *freopen(const char *path, const char *mode, FILE *stream);
 FILE *tmpfile(void);
+FILE *fdopen(int descriptor, const char *mode);
+int fileno(FILE *stream);
 char *tmpnam(char *buffer);
 int fflush(FILE *stream);
 
