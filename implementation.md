@@ -367,7 +367,10 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - [ ] Table-driven exceptions and unwinding; RTTI/`dynamic_cast`/`typeid`.
 - [ ] Variadic templates and fold expressions.
 - [ ] Dynamic `thread_local` initialization/destruction.
-- [ ] `memory`, `tuple`, `functional`, `array`.\n\n**M10 evidence (in progress):**\n
+- [ ] `memory`, `tuple`, `functional`, `array`.
+
+**M10 evidence (in progress):**
+
 - Static data members: `static int S::value` definitions parse and mangle to a global, and `S::value` reads/writes resolve from function scope. A linked fixture sets 9 and returns 9.
 - Out-of-line member definitions such as `int S::get() { ... }` attach to the class method table and are callable through an instance. Linked fixtures return 7 and 3 for an argument-taking method. Out-of-line constructors (`S::S(int) : value(input) {}`) register in the constructor table; a linked fixture returns 3. - Delegating constructors (`S() : S(7) {}`) run the target constructor; a linked fixture returns 7.
 - Out-of-line method bodies with member access skip redundant Sema body analysis and use IRGen class context; a linked fixture returns 7.
@@ -383,6 +386,15 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `static constexpr` members, `decltype` copies, and `using` type aliases are covered by linked fixtures returning 7.
 - In-class static initialization (`static const int value = 7` and `inline static int value = 7`) creates the class-qualified global and a Sema symbol. A linked fixture returns 12.
 - Static member functions: `S::get()` resolves through the class method table and passes a null receiver. Unqualified references to class static data inside a static method resolve to the class-qualified global. Linked fixtures return 7.
+- Range-for over arrays supports reference, `auto`, and `auto &` loop variables; linked fixtures return 6, 7, 7, and 9.
+- `decltype(variable)` and `decltype(expression)` declarations infer their types; linked fixtures return 7 and 8.
+- C++ `alignof` queries the alignment in expressions and `static_assert`; a linked fixture returns 0.
+- Friend functions and friend classes parse and can read granting-class members; linked fixtures return 7.
+- A `mutable` counter incremented in a `const` method is observable afterwards; a linked fixture returns 1.
+- Move construction and move assignment selected by `static_cast<S &&>` transfer values; linked fixtures return 7.
+- Pure virtual functions, pure virtual destructors, and dispatch through a base pointer work; linked fixtures return 7.
+- `extern "C"` declarations and linkage blocks parse; linked fixtures return 7.
+- `reinterpret_cast` round-trips pointers through `void *`, `switch` selects `enum class` cases, and `if constexpr (false)` takes the else branch; linked fixtures return 7.
 - [ ] Full KR32 `libc.c`/`kr32os` and KR16 runtime integration.
 - [ ] Tag `v1.1`; Gate G9.
 
@@ -1414,3 +1426,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-12T03:21:06-08:00** — Covered a pure virtual base with an `override` implementation, returning 7. Windows debug CTest is 400/400.
 - **2026-11-12T03:24:19-08:00** — Covered dispatch through a base pointer to an abstract base, returning 7. Windows debug CTest is 401/401.
 - **2026-11-12T03:34:09-08:00** — Parsed pure virtual destructor declarations and covered delete through a base pointer, returning 7. Windows debug CTest is 402/402.
+- **2026-11-12T03:34:45-08:00** — Refreshed the M10 evidence list with range-for, decltype, alignof, friends, mutable, move semantics, pure virtuals, extern C, reinterpret_cast, enum switch, and if constexpr coverage. Windows debug CTest remains 402/402.
