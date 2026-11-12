@@ -1813,3 +1813,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-12T10:58:26-08:00** — Parsed `thread_local` as static storage and compiled the `../kr32` TLS example, which exposed the open 64-bit division gap. A linked fixture returns 7. Windows debug CTest is 459/459.
 - **2026-11-12T11:03:07-08:00** — Accepted `thread_local` at block scope as a static local and covered it, returning 7. Windows debug CTest is 460/460.
 - **2026-11-12T10:12:07-08:00** — Refreshed the M10 evidence list for temporary materialization, braced/placement `new`, and the supported `std` utilities. Documentation only; Windows debug CTest remains 456/456.
+- **2026-11-12T11:15:37-08:00** — Added `handoff.md` with machine-transfer state, build and gate procedure, completed surfaces, open M8/M9/M10 work, known correctness limits, corpus status, and traps. Documentation only; the 11:03 gate remains 460/460.
