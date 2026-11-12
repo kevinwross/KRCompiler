@@ -6479,6 +6479,56 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             }
         }
     }
+    if ((expression.text == "-" || expression.text == "~") &&
+        !expression.children.empty() &&
+        expression.children.front() &&
+        expression.children.front()->kind ==
+            frontend::AstKind::CallExpression) {
+        auto record_value = emit_expression(*expression.children.front());
+        if (record_value.value && record_value.type &&
+            record_value.type->kind == ir::TypeKind::Struct) {
+            auto* storage = builder_.create_alloca(record_value.type, 0,
+                                                       "unary.temp");
+            builder_.create_store(record_value.value, storage);
+            const auto record = ir_records_.find(record_value.type);
+            if (record != ir_records_.end() && record->second) {
+                const auto methods =
+                    class_methods_.find(record->second->tag);
+                if (methods != class_methods_.end()) {
+                    auto method = methods->second.find("operator int");
+                    if (method == methods->second.end()) {
+                        method = methods->second.find("operator bool");
+                    }
+                    if (method != methods->second.end()) {
+                        auto* self = storage;
+                        if (self->type !=
+                            method->second->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self}, "unary.this");
+                        }
+                        auto* call = builder_.create_call(
+                            method->second, {self},
+                            method->second->type->return_type,
+                            "unary.conversion");
+                        if (expression.text == "-") {
+                            auto* zero = module_->constant_int(
+                                method->second->type->return_type, 0);
+                            auto* value = builder_.create_sub(
+                                zero, call, "negate");
+                            return {value, value->type};
+                        }
+                        auto* mask = module_->constant_int(
+                            method->second->type->return_type, -1);
+                        auto* value = builder_.create(
+                            ir::Opcode::Xor, call->type, {call, mask}, "bitnot");
+                        return {value, value->type};
+                    }
+                }
+            }
+        }
+    }
     if (expression.text == "!" && !expression.children.empty() &&
         expression.children.front() &&
         expression.children.front()->kind ==
