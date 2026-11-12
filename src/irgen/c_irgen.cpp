@@ -754,6 +754,77 @@ void CIRGen::generate_global_constructors() {
         for (std::size_t member_index = info.record->members.size();
              member_index > 0; --member_index) {
             const auto& member = info.record->members[member_index - 1];
+            if (member.type &&
+                member.type->kind == frontend::TypeKind::Array &&
+                member.type->element && member.type->element->record) {
+                const auto position = field_offset + member_index - 1;
+                if (position >= type->fields.size()) {
+                    continue;
+                }
+                const auto element_methods = class_methods_.find(
+                    member.type->element->record->tag);
+                if (element_methods == class_methods_.end()) {
+                    continue;
+                }
+                const auto found = element_methods->second.find(
+                    "~" + member.type->element->record->tag);
+                if (found == element_methods->second.end()) {
+                    continue;
+                }
+                auto* zero = module_->constant_int(int_type(), 0);
+                auto* field_index = module_->constant_int(
+                    int_type(), static_cast<std::int64_t>(position));
+                auto* field = builder_.create_gep(
+                    type, info.global, {zero, field_index}, false,
+                    "global.member.dtor.field");
+                field->type = module_->types().pointer_type(
+                    type->fields[position]);
+                auto* index_slot = builder_.create_alloca(
+                    int_type(), 0, "global.member.dtor.index");
+                builder_.create_store(
+                    module_->constant_int(int_type(), 0), index_slot);
+                auto* condition = current_function_->add_block(
+                    "global.member.dtor.cond");
+                auto* body = current_function_->add_block(
+                    "global.member.dtor.body");
+                auto* done = current_function_->add_block(
+                    "global.member.dtor.done");
+                emit_branch(condition);
+                builder_.set_insert_point(condition);
+                auto* index = builder_.create_load(
+                    int_type(), index_slot, false, 0,
+                    "global.member.dtor.index.load");
+                auto* limit = module_->constant_int(
+                    int_type(),
+                    static_cast<std::int64_t>(type->fields[position]->count));
+                auto* compare = builder_.create_icmp(
+                    ir::ICmpPredicate::Ult, index, limit,
+                    "global.member.dtor.cmp");
+                builder_.create_cond_br(compare, body, done);
+                builder_.set_insert_point(body);
+                auto* element = builder_.create_gep(
+                    type->fields[position], field, {zero, index}, false,
+                    "global.member.dtor.element");
+                element->type = module_->types().pointer_type(
+                    type->fields[position]->element);
+                auto* member_self = element;
+                if (member_self->type !=
+                    found->second->type->parameters[0]) {
+                    member_self = builder_.create(
+                        ir::Opcode::BitCast,
+                        found->second->type->parameters[0], {member_self},
+                        "global.member.dtor.this");
+                }
+                builder_.create_call(found->second, {member_self}, nullptr,
+                                     "global.member.dtor");
+                auto* next = builder_.create_add(
+                    index, module_->constant_int(int_type(), 1),
+                    "global.member.dtor.next");
+                builder_.create_store(next, index_slot);
+                emit_branch(condition);
+                builder_.set_insert_point(done);
+                continue;
+            }
             if (!member.type ||
                 member.type->kind != frontend::TypeKind::Record ||
                 !member.type->record) {
