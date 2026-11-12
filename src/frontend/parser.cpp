@@ -567,6 +567,14 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             saw_specifier = true;
             continue;
         }
+        if (cxx_mode_ && token.kind == TokenKind::Identifier &&
+            peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
+            is_typedef_name(peek(2).text)) {
+            node->labels.push_back(peek(2).text);
+            position_ += 3;
+            saw_specifier = true;
+            continue;
+        }
         if (token.kind == TokenKind::Identifier && is_typedef_name(token.text) &&
             !(cxx_mode_ && peek(1).is("::"))) {
             node->labels.push_back(token.text);
@@ -1176,6 +1184,11 @@ bool Parser::is_declaration_start() const {
     }
     if (cxx_mode_ && token.kind == TokenKind::Keyword &&
         (token.text == "namespace" || token.text == "using")) {
+        return true;
+    }
+    if (cxx_mode_ && token.kind == TokenKind::Identifier &&
+        peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
+        is_typedef_name(peek(2).text)) {
         return true;
     }
     if (cxx_mode_ && token.kind == TokenKind::Identifier && peek(1).is("::")) {
