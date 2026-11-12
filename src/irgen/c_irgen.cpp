@@ -5592,6 +5592,54 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                                       {left_bool, right_bool}, "logic");
         return {value, module_->types().bool_type()};
     }
+    if (operation == "==" || operation == "!=" || operation == "<" ||
+        operation == ">" || operation == "<=" || operation == ">=") {
+        auto convert_record = [&](Expression& value,
+                                const frontend::AstNode& node) {
+            if (!value.value || !value.type ||
+                value.type->kind != ir::TypeKind::Struct) {
+                return;
+            }
+            const auto record = ir_records_.find(value.type);
+            if (record == ir_records_.end() || !record->second) {
+                return;
+            }
+            const auto methods = class_methods_.find(record->second->tag);
+            if (methods == class_methods_.end()) {
+                return;
+            }
+            auto method = methods->second.find("operator int");
+            if (method == methods->second.end()) {
+                method = methods->second.find("operator bool");
+            }
+            if (method == methods->second.end()) {
+                return;
+            }
+            auto* storage = builder_.create_alloca(value.type, 0,
+                                                       "compare.temp");
+            builder_.create_store(value.value, storage);
+            auto* self = storage;
+            if (self->type != method->second->type->parameters[0]) {
+                self = builder_.create(
+                    ir::Opcode::BitCast,
+                    method->second->type->parameters[0], {self},
+                    "compare.this");
+            }
+            auto* call = builder_.create_call(
+                method->second, {self},
+                method->second->type->return_type, "compare.conversion");
+            value.value = call;
+            value.type = method->second->type->return_type;
+            static_cast<void>(node);
+        };
+        if (ir::is_integer(left.type) && right.type &&
+            right.type->kind == ir::TypeKind::Struct) {
+            convert_record(right, *expression.children[1]);
+        } else if (ir::is_integer(right.type) && left.type &&
+                   left.type->kind == ir::TypeKind::Struct) {
+            convert_record(left, *expression.children[0]);
+        }
+    }
     if (operation == "==" || operation == "!=" || operation == "<" || operation == ">" ||
         operation == "<=" || operation == ">=") {
         if (ir::is_float(left.type) && ir::is_float(right.type)) {
