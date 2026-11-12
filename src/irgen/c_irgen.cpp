@@ -48,6 +48,10 @@ std::string mangle_method(std::string_view tag, std::string_view name) {
                 suffix += "call";
             } else if (character == '[') {
                 suffix += "index";
+            } else if ((character >= 'a' && character <= 'z') ||
+                       (character >= 'A' && character <= 'Z') ||
+                       (character >= '0' && character <= '9')) {
+                suffix += character;
             }
         }
         return std::string(tag) + "_op_" + suffix;

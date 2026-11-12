@@ -636,6 +636,10 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
         } else if (peek().kind == TokenKind::Punctuator) {
             name += peek().text;
             ++position_;
+        } else if (peek().kind == TokenKind::Keyword &&
+                   is_type_specifier(peek().text)) {
+            name += " " + peek().text;
+            ++position_;
         }
         direct = make_ast(AstKind::Declarator, location, std::move(name));
     } else if (peek().kind == TokenKind::Identifier) {
@@ -664,6 +668,10 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
                         position_ += 2;
                     } else if (peek().kind == TokenKind::Punctuator) {
                         name += peek().text;
+                        ++position_;
+                    } else if (peek().kind == TokenKind::Keyword &&
+                               is_type_specifier(peek().text)) {
+                        name += " " + peek().text;
                         ++position_;
                     }
                 } else {
@@ -1219,6 +1227,10 @@ bool Parser::is_declaration_start() const {
     if (cxx_mode_ && token.kind == TokenKind::Identifier &&
         peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
         is_typedef_name(peek(2).text) && peek(2).text != token.text) {
+        return true;
+    }
+    if (cxx_mode_ && token.kind == TokenKind::Identifier &&
+        token.text == "operator") {
         return true;
     }
     if (cxx_mode_ && token.kind == TokenKind::Identifier && peek(1).is("::")) {
