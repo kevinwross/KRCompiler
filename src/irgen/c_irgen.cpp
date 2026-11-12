@@ -6113,6 +6113,44 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             }
         }
     }
+    if (expression.children[0]->kind == frontend::AstKind::Identifier &&
+        expression.children[0]->text.find("::") != std::string::npos) {
+        const auto separator = expression.children[0]->text.rfind("::");
+        const auto class_name = expression.children[0]->text.substr(0, separator);
+        const auto method_name = expression.children[0]->text.substr(separator + 2);
+        const auto methods = class_methods_.find(class_name);
+        if (methods != class_methods_.end()) {
+            const auto found = methods->second.find(method_name);
+            if (found != methods->second.end() && found->second &&
+                !found->second->type->parameters.empty()) {
+                ir::Function* method = found->second;
+                std::vector<ir::Value*> arguments;
+                arguments.push_back(
+                    module_->constant_null(method->type->parameters[0]));
+                const auto& argument_nodes = expression.children[1]->children;
+                for (std::size_t index = 0; index < argument_nodes.size(); ++index) {
+                    if (!argument_nodes[index]) {
+                        continue;
+                    }
+                    auto argument = emit_expression(*argument_nodes[index]);
+                    if (!argument.value) {
+                        return {};
+                    }
+                    const auto parameter_index = index + 1;
+                    if (parameter_index < method->type->parameters.size()) {
+                        argument.value = promote(
+                            argument.value, argument.type,
+                            method->type->parameters[parameter_index]);
+                    }
+                    arguments.push_back(argument.value);
+                }
+                auto* call = builder_.create_call(
+                    method, std::move(arguments), method->type->return_type,
+                    "static.method.call");
+                return {call, method->type->return_type};
+            }
+        }
+    }
     auto callee = emit_expression(*expression.children[0]);
     ir::Function* direct_function = nullptr;
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {

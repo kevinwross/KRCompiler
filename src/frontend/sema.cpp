@@ -1693,6 +1693,25 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             return reference;
         }
         if (callee->kind == AstKind::Identifier) {
+            if (cxx_mode_ && callee->text.find("::") != std::string::npos) {
+                const auto separator = callee->text.rfind("::");
+                const auto class_name = callee->text.substr(0, separator);
+                const auto method_name = callee->text.substr(separator + 2);
+                auto* tag = lookup_tag(class_name);
+                if (tag && tag->type && tag->type->kind == TypeKind::Record &&
+                    tag->type->record) {
+                    for (const auto& method : tag->type->record->methods) {
+                        if (method.name == method_name && method.type) {
+                            for (const auto& argument : expression.children[1]->children) {
+                                if (argument) {
+                                    analyze_expression(*argument);
+                                }
+                            }
+                            return method.type->return_type;
+                        }
+                    }
+                }
+            }
             auto* symbol = lookup_ordinary(callee->text);
             if (symbol && symbol->type && symbol->type->kind == TypeKind::Record &&
                 symbol->type->record) {
