@@ -871,7 +871,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
         return parse_declaration();
     }
     const auto location = peek().location;
-    if (peek().text == "explicit") {
+    std::vector<std::string> leading_specifiers;
+    while (check("explicit") || check("constexpr") || check("inline")) {
+        leading_specifiers.push_back(peek().text);
         ++position_;
     }
     if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
@@ -945,6 +947,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
         peek().text == current_class_name_ && peek(1).text == "(") {
         auto specifiers = make_ast(AstKind::DeclSpecifiers, peek().location);
         specifiers->labels.push_back("void");
+        for (const auto& label : leading_specifiers) {
+            specifiers->labels.push_back(label);
+        }
         auto declarator = parse_declarator(false);
         if (!declarator) {
             return nullptr;

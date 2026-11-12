@@ -236,7 +236,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 367/367 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 368/368 CTest.
 
 ### M4 — C core + debug format (complete locally)
 
@@ -253,7 +253,7 @@ Gate definitions are in `plan.md` §5.7. A gate belongs to the milestone that ca
 - `goto` and labels lower through pre-created label blocks; forward and backward jumps work, forward dead code is skipped, and jumping across a live C++ cleanup scope is rejected.
 - `switch` lowers to an ordered comparison chain with case blocks, default, fallthrough, and `break`; the fixture checks all four forms.
 - Direct `volatile` local and global loads, stores, scalar initialization stores, and object members accessed with `.` or a direct pointer identifier set the IR flag; qualifiers through complex pointer and reference expressions are not fully propagated.
-- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 367/367 CTest.
+- `krc_tests` has 101 cases / 615 assertions; all six configurations pass 368/368 CTest.
 
 ### M5 — C++ core (8–10 weeks)
 
@@ -1084,10 +1084,10 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-11T10:01:08-08:00** — The object path now accepts `.s` input, with a test object from `entry.s`; `targets/kr16/runtime/crt0.s` is present but still needs external `main` relocations. All six configurations pass 228/228 CTest.
 - **2026-11-11T10:13:08-08:00** — KR16 external absolute references now emit 16-bit KRO relocations, calls lower through `MOV R0,#callee; CALL R0`, and `crt0.s` builds to an object. All six configurations pass 229/229 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:26:43-08:00** — Completed the KR16 relocatable link path under ADR 0019/D-041: every label-based MOV/LEA is relocated, `krld` links target ID 2 at `0x0100`, and the KEX writer separates load base from entry. Linked `hello.c` prints and exits 0, `sum.c` exits 55, and a two-object image exits 42. All six configurations pass 231/231 CTest.
-- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 367/367 CTest with 101 doctest cases / 615 assertions.
+- **2026-11-11T10:32:54-08:00** — Added deterministic double-build checks for KR16 KRO objects and linked KR16 images. All four determinism checks pass; all six configurations pass 368/368 CTest with 101 doctest cases / 615 assertions.
 - **2026-11-11T10:34:07-08:00** — Wrote [docs/abi-kr16.md](docs/abi-kr16.md), covering the IP16 data model, registers, frame layout, indirect calls, globals, startup, relocations, and deferred features; linked it from the docs index, README, and ABI overview.
 - **2026-11-11T10:44:52-08:00** — Added a compilable KR16 string/memory runtime, a staged `libkrcrt.kro` target, and a startup+runtime+user link fixture. Long KR16 functions now use `JMP` plus short inverted conditional branches. All six configurations pass 234/234 CTest.
-- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 367/367 CTest.
+- **2026-11-11T10:54:05-08:00** — Expanded the KR16 runtime with `strncpy`, `strncat`, `strchr`, `strrchr`, `strstr`, `atoi`, `strtol`, `strtoul`, `abs`, and `putchar`; fixed KR16 frame allocation so array/record locals reserve their full size. The linked runtime fixture exits 3; all six configurations pass 368/368 CTest.
 - **2026-11-11T10:59:33-08:00** — Added a bump allocator (`malloc`, `free`, `calloc`, `realloc`), `strdup`, `rand`/`srand`, and `strtok` to the KR16 runtime; the linked fixture exercises them and exits 3. All six configurations pass 234/234 CTest.
 - **2026-11-11T11:06:19-08:00** — Added KR32 host-service wrappers for console input and file I/O, with a linked fixture that creates and writes a file. All six configurations pass 235/235 CTest.
 - **2026-11-11T11:11:59-08:00** — Extended the KR32 host-service wrappers with `unlink`, `rename`, `stat`, `truncate`, `getcwd`, `chdir`, `dup`, and `dup2`; the file I/O fixture now writes, renames, and unlinks. All six configurations pass 235/235 CTest.
@@ -1099,11 +1099,11 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-11T11:48:15-08:00** — Added `krld --source-root=DIR`, which rewrites KDBG source paths under the root to `/`-separated relative paths, with a CTest verifying hello records no absolute root. All six configurations pass 237/237 CTest.
 - **2026-11-11T11:49:57-08:00** — Recorded the KDBG path decision in ADR 0020, marked the plan open item resolved, and made the normal runtime link helper emit project-relative source paths. All six configurations pass 237/237 CTest.
 - **2026-11-11T12:02:05-08:00** — Added `ll` length parsing to `printf` and widened integer formatting to 64 bits; a linked fixture prints `-123 456 1c8`. All six configurations pass 238/238 CTest.
-- **2026-11-11T12:13:10-08:00** — Fixed virtual destruction through a base pointer: the vtable destructor slot now targets the complete member-destructor wrapper, so `delete Base*` prints `derived` then `base`. Added a linked fixture; all six configurations pass 367/367 CTest.
+- **2026-11-11T12:13:10-08:00** — Fixed virtual destruction through a base pointer: the vtable destructor slot now targets the complete member-destructor wrapper, so `delete Base*` prints `derived` then `base`. Added a linked fixture; all six configurations pass 368/368 CTest.
 - **2026-11-11T12:26:57-08:00** — Virtual calls inside a destructor now bind statically to the current class; a linked fixture confirms `Base::~Base` calling `report()` prints the base implementation. All six configurations pass 240/240 CTest.
-- **2026-11-11T12:40:30-08:00** — Restricted base/member default initialization emission to constructors, fixing duplicate base construction from destructors and ordinary methods, and bound virtual calls in constructors to the current class. A linked fixture prints `base ctor` then `base f`; all six configurations pass 367/367 CTest.
-- **2026-11-11T12:52:35-08:00** — Narrowed constructor/destructor virtual-call binding to receivers that are `this`, so calls on other objects still dispatch dynamically. A destructor fixture through a global base pointer now prints `value=9`; all six configurations pass 367/367 CTest.
-- **2026-11-11T13:32:04-08:00** — Synthesized implicit default constructors for classes with base/member constructors or polymorphism, so stack and `new` construction call base and member constructors exactly once. Added a linked counter fixture; all six configurations pass 367/367 CTest.
+- **2026-11-11T12:40:30-08:00** — Restricted base/member default initialization emission to constructors, fixing duplicate base construction from destructors and ordinary methods, and bound virtual calls in constructors to the current class. A linked fixture prints `base ctor` then `base f`; all six configurations pass 368/368 CTest.
+- **2026-11-11T12:52:35-08:00** — Narrowed constructor/destructor virtual-call binding to receivers that are `this`, so calls on other objects still dispatch dynamically. A destructor fixture through a global base pointer now prints `value=9`; all six configurations pass 368/368 CTest.
+- **2026-11-11T13:32:04-08:00** — Synthesized implicit default constructors for classes with base/member constructors or polymorphism, so stack and `new` construction call base and member constructors exactly once. Added a linked counter fixture; all six configurations pass 368/368 CTest.
 - **2026-11-11T13:40:20-08:00** — Registered C++ `struct` tags as class names for construction syntax, so `Box box(7)` parses as a constructor-initialized declaration. Added a linked fixture returning 7; tier-2 builds pass 244/244.
 - **2026-11-11T14:03:28-08:00** — Made `delete`/`delete[]` on null skip destruction and freeing, and replaced KR32 ICmp name-based labels with a per-function counter to avoid duplicate labels across repeated comparisons. Added a linked null-delete fixture; debug CTest is 245/245.
 - **2026-11-11T14:05:23-08:00** — Added KR32 `strerror` for the runtime errno values and a linked fixture covering `ENOENT`, `EINVAL`, and an unknown code. Debug CTest is 246/246.
@@ -1220,3 +1220,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-11T23:54:14-08:00** — Constructed array members for `new Outer[2]`, with a linked fixture returning 7. Windows debug CTest is 365/365.
 - **2026-11-11T23:57:13-08:00** — Covered a `using Base::method;` declaration in a derived class, returning 7. Windows debug CTest is 366/366.
 - **2026-11-12T00:05:37-08:00** — Covered an inherited constructor through `using B::B;`, with a linked fixture returning 7. Windows debug CTest is 367/367.
+- **2026-11-12T00:09:00-08:00** — Parsed `constexpr`/`inline` constructor specifiers and covered a `constexpr` global object, returning 7. Windows debug CTest is 368/368.
