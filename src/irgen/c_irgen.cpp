@@ -239,22 +239,37 @@ ir::Function* CIRGen::ensure_member_destructor(
     if (record_type == record_types_.end()) {
         return nullptr;
     }
-    std::vector<std::pair<std::size_t, ir::Function*>> member_destructors;
+    struct MemberDestructor {
+        std::size_t position = 0;
+        ir::Function* function = nullptr;
+        std::uint64_t count = 1;
+    };
+    std::vector<MemberDestructor> member_destructors;
     for (std::size_t member_index = 0;
          member_index < record->members.size(); ++member_index) {
         const auto& member = record->members[member_index];
-        if (!member.type || member.type->kind != frontend::TypeKind::Record ||
-            !member.type->record) {
+        const frontend::TypePtr record_type_of_member =
+            member.type && member.type->kind == frontend::TypeKind::Array
+                ? member.type->element
+                : member.type;
+        if (!record_type_of_member ||
+            record_type_of_member->kind != frontend::TypeKind::Record ||
+            !record_type_of_member->record) {
             continue;
         }
-        const auto methods = class_methods_.find(member.type->record->tag);
+        const auto methods =
+            class_methods_.find(record_type_of_member->record->tag);
         if (methods == class_methods_.end()) {
             continue;
         }
         const auto found =
-            methods->second.find("~" + member.type->record->tag);
+            methods->second.find("~" + record_type_of_member->record->tag);
         if (found != methods->second.end()) {
-            member_destructors.emplace_back(member_index, found->second);
+            const std::uint64_t count =
+                member.type->kind == frontend::TypeKind::Array
+                    ? member.type->array_count
+                    : 1;
+            member_destructors.push_back({member_index, found->second, count});
         }
     }
     ir::Function* base_destructor = nullptr;
@@ -326,7 +341,7 @@ ir::Function* CIRGen::ensure_member_destructor(
         type->fields.size() - record->members.size();
     for (auto entry_it = member_destructors.rbegin();
          entry_it != member_destructors.rend(); ++entry_it) {
-        const auto position = field_offset + entry_it->first;
+        const auto position = field_offset + entry_it->position;
         if (position >= type->fields.size()) {
             continue;
         }
@@ -337,15 +352,51 @@ ir::Function* CIRGen::ensure_member_destructor(
             type, this_argument, {zero, field_index}, false,
             "member.dtor.field");
         field->type = module_->types().pointer_type(type->fields[position]);
-        auto* self = field;
-        if (self->type != entry_it->second->type->parameters[0]) {
-            self = builder_.create(
-                ir::Opcode::BitCast,
-                entry_it->second->type->parameters[0], {self},
-                "member.dtor.this");
+        const auto call_member_destructor =
+            [&](ir::Value* address) {
+                auto* self = address;
+                if (self->type !=
+                    entry_it->function->type->parameters[0]) {
+                    self = builder_.create(
+                        ir::Opcode::BitCast,
+                        entry_it->function->type->parameters[0], {self},
+                        "member.dtor.this");
+                }
+                builder_.create_call(entry_it->function, {self}, nullptr,
+                                     "member.dtor");
+            };
+        if (entry_it->count <= 1) {
+            call_member_destructor(field);
+            continue;
         }
-        builder_.create_call(entry_it->second, {self}, nullptr,
-                             "member.dtor");
+        auto* index_slot =
+            builder_.create_alloca(int_type(), 0, "member.dtor.index");
+        builder_.create_store(module_->constant_int(int_type(), 0),
+                              index_slot);
+        auto* condition = current_function_->add_block("member.dtor.cond");
+        auto* body = current_function_->add_block("member.dtor.body");
+        auto* done = current_function_->add_block("member.dtor.done");
+        emit_branch(condition);
+        builder_.set_insert_point(condition);
+        auto* index = builder_.create_load(int_type(), index_slot, false, 0,
+                                           "member.dtor.index.load");
+        auto* limit = module_->constant_int(
+            int_type(), static_cast<std::int64_t>(entry_it->count));
+        auto* compare = builder_.create_icmp(ir::ICmpPredicate::Ult, index,
+                                             limit, "member.dtor.cmp");
+        builder_.create_cond_br(compare, body, done);
+        builder_.set_insert_point(body);
+        auto* element = builder_.create_gep(
+            type->fields[position], field, {zero, index}, false,
+            "member.dtor.element");
+        element->type = module_->types().pointer_type(
+            type->fields[position]->element);
+        call_member_destructor(element);
+        auto* next = builder_.create_add(
+            index, module_->constant_int(int_type(), 1), "member.dtor.next");
+        builder_.create_store(next, index_slot);
+        emit_branch(condition);
+        builder_.set_insert_point(done);
     }
     if (base_destructor) {
         auto* self = static_cast<ir::Value*>(this_argument);
