@@ -575,6 +575,7 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             continue;
         }
         if (cxx_mode_ && token.kind == TokenKind::Identifier &&
+            node->labels.empty() && node->children.empty() &&
             peek(1).is("::") && peek(2).kind == TokenKind::Identifier &&
             is_typedef_name(peek(2).text) && peek(2).text != token.text) {
             node->labels.push_back(peek(2).text);
