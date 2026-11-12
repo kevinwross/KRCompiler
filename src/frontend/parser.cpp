@@ -560,6 +560,13 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             saw_specifier = true;
             continue;
         }
+        if (cxx_mode_ && token.kind == TokenKind::Identifier &&
+            (token.text == "mutable" || token.text == "explicit")) {
+            node->labels.push_back(token.text);
+            ++position_;
+            saw_specifier = true;
+            continue;
+        }
         if (token.kind == TokenKind::Identifier && is_typedef_name(token.text) &&
             !(cxx_mode_ && peek(1).is("::"))) {
             node->labels.push_back(token.text);
@@ -717,6 +724,16 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
             }
             expect(")", "after parameter list");
             direct = std::move(function);
+            continue;
+        }
+        if (cxx_mode_ &&
+            (check("const") || check("volatile") || check("noexcept") ||
+             check("override") || check("final") || check("&") || check("&&"))) {
+            const bool is_noexcept = check("noexcept");
+            ++position_;
+            if (is_noexcept && check("(")) {
+                skip_balanced_parens();
+            }
             continue;
         }
         break;
