@@ -5862,7 +5862,7 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
             result.is_volatile = volatile_globals_.contains(global->second);
             return result;
         }
-        if (in_static_method_ && current_class_) {
+        if (current_class_) {
             const auto static_global =
                 globals_.find(current_class_->tag + "::" + expression.text);
             if (static_global != globals_.end()) {
