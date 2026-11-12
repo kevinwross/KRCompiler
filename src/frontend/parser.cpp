@@ -990,6 +990,12 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
             definition->children.push_back(parse_compound_statement());
             return definition;
         }
+        if (match("=")) {
+            if (peek().kind == TokenKind::Integer || check("default") ||
+                check("delete")) {
+                ++position_;
+            }
+        }
         expect(";", "after destructor declaration");
         auto member = make_ast(AstKind::MemberDeclaration, location);
         member->children.push_back(std::move(specifiers));
