@@ -1043,9 +1043,17 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         for (std::size_t index = 0; index < fixed; ++index) {
             const auto* argument = instruction.operands[index + 1];
             if (argument->type && ir::is_float(argument->type)) {
-                load_fp(out, function, layout, argument, "F" + std::to_string(fp_index++));
-            } else if (argument->type &&
-                       argument->type->kind == ir::TypeKind::Struct) {
+                load_fp(out, function, layout, argument,
+                        "F" + std::to_string(fp_index++));
+            }
+        }
+        for (std::size_t index = 0; index < fixed; ++index) {
+            const auto* argument = instruction.operands[index + 1];
+            if (argument->type && ir::is_float(argument->type)) {
+                continue;
+            }
+            if (argument->type &&
+                argument->type->kind == ir::TypeKind::Struct) {
                 const auto slot = layout.slots.find(argument);
                 std::string size_error;
                 const auto size = size_of(argument->type, size_error);

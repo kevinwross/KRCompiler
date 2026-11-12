@@ -2892,6 +2892,36 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/unqualified_static_member_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_float_constructor
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/float_constructor.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/float_constructor_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_link_double_constructor
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/double_constructor.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/double_constructor_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_link_converting_float
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/converting_float.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/converting_float_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_link_delete_null
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
