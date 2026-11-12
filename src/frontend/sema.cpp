@@ -1703,6 +1703,15 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         TypePtr callee_type;
         const auto* callee = expression.children[0].get();
         if (callee->kind == AstKind::Identifier &&
+            callee->text == "std::swap") {
+            for (const auto& argument : expression.children[1]->children) {
+                if (argument) {
+                    analyze_expression(*argument);
+                }
+            }
+            return void_type_;
+        }
+        if (callee->kind == AstKind::Identifier &&
             (callee->text == "std::move" ||
              callee->text == "std::forward")) {
             const auto& arguments = expression.children[1]->children;

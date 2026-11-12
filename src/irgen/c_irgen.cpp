@@ -7191,6 +7191,25 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         return {};
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier &&
+        expression.children[0]->text == "std::swap") {
+        const auto& arguments = expression.children[1]->children;
+        if (arguments.size() < 2 || !arguments[0] || !arguments[1]) {
+            return {};
+        }
+        auto left = emit_lvalue(*arguments[0]);
+        auto right = emit_lvalue(*arguments[1]);
+        if (!left.value || !right.value || !left.type || !right.type) {
+            return {};
+        }
+        auto* left_value =
+            builder_.create_load(left.type, left.value, false, 0, "swap.left");
+        auto* right_value =
+            builder_.create_load(right.type, right.value, false, 0, "swap.right");
+        builder_.create_store(right_value, left.value);
+        builder_.create_store(left_value, right.value);
+        return {nullptr, module_->types().void_type()};
+    }
+    if (expression.children[0]->kind == frontend::AstKind::Identifier &&
         (expression.children[0]->text == "std::move" ||
          expression.children[0]->text == "std::forward")) {
         const auto& arguments = expression.children[1]->children;
