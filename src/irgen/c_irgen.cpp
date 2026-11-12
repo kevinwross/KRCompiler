@@ -5686,6 +5686,58 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
         auto* value = builder_.create_icmp(predicate, left.value, right.value, "cmp");
         return {value, value->type};
     }
+    const bool arithmetic = operation == "+" || operation == "-" ||
+                          operation == "*" || operation == "/" ||
+                          operation == "%" || operation == "<<" ||
+                          operation == ">>" || operation == "&" ||
+                          operation == "|" || operation == "^";
+    if (arithmetic && left_record != right_record) {
+        Expression& converted = left_record ? left : right;
+        const frontend::AstNode& node =
+            left_record ? *expression.children[0] : *expression.children[1];
+        const ir::TypePtr target = left_record ? right.type : left.type;
+        if (target && (ir::is_integer(target) || ir::is_float(target))) {
+            const auto record = ir_records_.find(converted.type);
+            if (record != ir_records_.end() && record->second) {
+                const auto methods =
+                    class_methods_.find(record->second->tag);
+                if (methods != class_methods_.end()) {
+                    const char* conversion = nullptr;
+                    if (ir::is_integer(target)) {
+                        conversion = target->bits == 1 ? "operator bool"
+                                                      : "operator int";
+                    } else {
+                        conversion = target->bits == 64
+                                         ? "operator double"
+                                         : "operator float";
+                    }
+                    const auto method =
+                        methods->second.find(conversion);
+                    if (method != methods->second.end()) {
+                        auto* storage = builder_.create_alloca(
+                            converted.type, 0, "arith.temp");
+                        builder_.create_store(converted.value, storage);
+                        auto* self = storage;
+                        if (self->type !=
+                            method->second->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self}, "arith.this");
+                        }
+                        auto* call = builder_.create_call(
+                            method->second, {self},
+                            method->second->type->return_type,
+                            "arith.conversion");
+                        converted.value = call;
+                        converted.type =
+                            method->second->type->return_type;
+                        static_cast<void>(node);
+                    }
+                }
+            }
+        }
+    }
     if (operation == "-" && ir::is_pointer(left.type) &&
         ir::is_pointer(right.type)) {
         auto* left_integer = builder_.create(
