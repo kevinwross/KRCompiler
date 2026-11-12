@@ -1594,7 +1594,8 @@ char *fgets(char *buffer, int size, struct FILE *stream) {
     return buffer;
 }
 
-int getline(char **line, unsigned int *capacity, struct FILE *stream) {
+int getdelim(char **line, unsigned int *capacity, int delimiter,
+             struct FILE *stream) {
     if (line == 0 || capacity == 0 || stream == 0) {
         return -1;
     }
@@ -1624,12 +1625,16 @@ int getline(char **line, unsigned int *capacity, struct FILE *stream) {
             *capacity = grown;
         }
         (*line)[length++] = (char)character;
-        if (character == '\n') {
+        if (character == delimiter) {
             break;
         }
     }
     (*line)[length] = 0;
     return (int)length;
+}
+
+int getline(char **line, unsigned int *capacity, struct FILE *stream) {
+    return getdelim(line, capacity, '\n', stream);
 }
 
 int vfprintf(struct FILE *stream, const char *format, va_list arguments) {

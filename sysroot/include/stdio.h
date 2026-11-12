@@ -50,6 +50,7 @@ int fseek(FILE *stream, long offset, int origin);
 long ftell(FILE *stream);
 char *fgets(char *buffer, int size, FILE *stream);
 int getline(char **line, size_t *size, FILE *stream);
+int getdelim(char **line, size_t *size, int delimiter, FILE *stream);
 int getc(FILE *stream);
 int fgetc(FILE *stream);
 int fputc(int c, FILE *stream);
