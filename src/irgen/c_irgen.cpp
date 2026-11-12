@@ -6964,6 +6964,32 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
     if (ir::same_type(operand.type, target)) {
         return {operand.value, target};
     }
+    if (operand.type->kind == ir::TypeKind::Struct &&
+        target->kind == ir::TypeKind::Integer && target->bits == 1) {
+        const auto record = ir_records_.find(operand.type);
+        if (record != ir_records_.end() && record->second) {
+            const auto methods = class_methods_.find(record->second->tag);
+            if (methods != class_methods_.end()) {
+                const auto method = methods->second.find("operator bool");
+                if (method != methods->second.end()) {
+                    auto self = emit_lvalue(*expression.children[1]);
+                    if (self.value) {
+                        if (self.value->type !=
+                            method->second->type->parameters[0]) {
+                            self.value = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self.value}, "cast.this");
+                        }
+                        auto* call = builder_.create_call(
+                            method->second, {self.value},
+                            method->second->type->return_type, "cast.bool");
+                        return {call, method->second->type->return_type};
+                    }
+                }
+            }
+        }
+    }
     ir::Opcode opcode = ir::Opcode::BitCast;
     if (ir::is_integer(operand.type) && ir::is_integer(target)) {
         if (operand.type->bits == target->bits) {
