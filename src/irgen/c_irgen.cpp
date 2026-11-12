@@ -6020,13 +6020,21 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 if (!initializers[index]) {
                     continue;
                 }
-                auto element = emit_expression(*initializers[index]);
                 auto* element_pointer = builder_.create_gep(
                     type, pointer,
                     {module_->constant_int(size_type(),
                                            static_cast<std::int64_t>(index))},
                     false, "new.element");
                 element_pointer->type = module_->types().pointer_type(type);
+                if (initializers[index]->kind ==
+                    frontend::AstKind::InitializerList) {
+                    if (type->kind == ir::TypeKind::Struct) {
+                        emit_initializer(*initializers[index],
+                                         element_pointer, type);
+                    }
+                    continue;
+                }
+                auto element = emit_expression(*initializers[index]);
                 builder_.create_store(
                     promote(element.value, element.type, type),
                     element_pointer);
