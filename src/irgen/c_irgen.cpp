@@ -5463,7 +5463,12 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
     if (!left.value || !right.value) {
         return {};
     }
-    if (ir::is_float(left.type) || ir::is_float(right.type)) {
+    const bool left_record =
+        left.type && left.type->kind == ir::TypeKind::Struct;
+    const bool right_record =
+        right.type && right.type->kind == ir::TypeKind::Struct;
+    if (!left_record && !right_record &&
+        (ir::is_float(left.type) || ir::is_float(right.type))) {
         ir::TypePtr common = left.type;
         if (!ir::is_float(common) || (right.type && right.type->bits > common->bits)) {
             common = right.type;
@@ -5595,7 +5600,8 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
     if (operation == "==" || operation == "!=" || operation == "<" ||
         operation == ">" || operation == "<=" || operation == ">=") {
         auto convert_record = [&](Expression& value,
-                                const frontend::AstNode& node) {
+                                const frontend::AstNode& node,
+                                ir::TypePtr target) {
             if (!value.value || !value.type ||
                 value.type->kind != ir::TypeKind::Struct) {
                 return;
@@ -5608,10 +5614,15 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
             if (methods == class_methods_.end()) {
                 return;
             }
-            auto method = methods->second.find("operator int");
-            if (method == methods->second.end()) {
-                method = methods->second.find("operator bool");
+            const char* conversion = nullptr;
+            if (ir::is_integer(target)) {
+                conversion =
+                    target->bits == 1 ? "operator bool" : "operator int";
+            } else {
+                conversion =
+                    target->bits == 64 ? "operator double" : "operator float";
             }
+            const auto method = methods->second.find(conversion);
             if (method == methods->second.end()) {
                 return;
             }
@@ -5632,12 +5643,13 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
             value.type = method->second->type->return_type;
             static_cast<void>(node);
         };
-        if (ir::is_integer(left.type) && right.type &&
-            right.type->kind == ir::TypeKind::Struct) {
-            convert_record(right, *expression.children[1]);
-        } else if (ir::is_integer(right.type) && left.type &&
-                   left.type->kind == ir::TypeKind::Struct) {
-            convert_record(left, *expression.children[0]);
+        if ((ir::is_integer(left.type) || ir::is_float(left.type)) &&
+            right.type && right.type->kind == ir::TypeKind::Struct) {
+            convert_record(right, *expression.children[1], left.type);
+        } else if ((ir::is_integer(right.type) ||
+                    ir::is_float(right.type)) &&
+                   left.type && left.type->kind == ir::TypeKind::Struct) {
+            convert_record(left, *expression.children[0], right.type);
         }
     }
     if (operation == "==" || operation == "!=" || operation == "<" || operation == ">" ||
