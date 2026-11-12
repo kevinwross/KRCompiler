@@ -3407,8 +3407,8 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
         initializer.kind == frontend::AstKind::Identifier
             ? lookup_local(initializer.text)
             : nullptr;
-    if (type && ir::is_integer(type) && conversion_local &&
-        conversion_local->frontend_type &&
+    if (type && (ir::is_integer(type) || ir::is_float(type)) &&
+        conversion_local && conversion_local->frontend_type &&
         conversion_local->frontend_type->kind == frontend::TypeKind::Record) {
         auto source = emit_lvalue(initializer);
         if (source.value && source.type &&
@@ -3417,8 +3417,14 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
             if (record != ir_records_.end() && record->second) {
                 const auto methods = class_methods_.find(record->second->tag);
                 if (methods != class_methods_.end()) {
-                    const char* conversion =
-                        type->bits == 1 ? "operator bool" : "operator int";
+                    const char* conversion = nullptr;
+                    if (ir::is_integer(type)) {
+                        conversion =
+                            type->bits == 1 ? "operator bool" : "operator int";
+                    } else {
+                        conversion = type->bits == 64 ? "operator double"
+                                                      : "operator float";
+                    }
                     const auto method = methods->second.find(conversion);
                     if (method != methods->second.end()) {
                         auto self = source;
