@@ -2284,6 +2284,25 @@ size_t strftime(char *buffer, size_t size, const char *format,
         case 'z':
             append_text(buffer, (unsigned int)size, &used, "+0000");
             break;
+        case 'C':
+            append_number(buffer, (unsigned int)size, &used,
+                          ((long)value->tm_year + 1900L) / 100L, 2, '0');
+            break;
+        case 'D':
+            append_format(buffer, (unsigned int)size, &used, "%m/%d/%y", value);
+            break;
+        case 'h':
+            if (value->tm_mon >= 0 && value->tm_mon < 12) {
+                append_text(buffer, (unsigned int)size, &used,
+                            short_months[value->tm_mon]);
+            }
+            break;
+        case 'n':
+            append_character(buffer, (unsigned int)size, &used, '\n');
+            break;
+        case 't':
+            append_character(buffer, (unsigned int)size, &used, '\t');
+            break;
         case 'F':
             append_format(buffer, (unsigned int)size, &used, "%Y-%m-%d", value);
             break;
