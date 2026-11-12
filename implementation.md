@@ -396,6 +396,9 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - Pure virtual functions, pure virtual destructors, and dispatch through a base pointer work; linked fixtures return 7.
 - `extern "C"` declarations and linkage blocks parse; linked fixtures return 7.
 - `reinterpret_cast` round-trips pointers through `void *`, `switch` selects `enum class` cases, and `if constexpr (false)` takes the else branch; linked fixtures return 7.
+- Returned temporaries materialize for member access, method calls, conversions, conditions, `&&`/`||`, `!`/`-`, arithmetic, comparisons, assignments, arguments, return values, `switch`, and reference binding; linked fixtures return 7 or 8.
+- Braced `new` arrays initialize scalar and record elements, empty and partial initializers zero the remainder, deduced bounds are supported, scalar allocations initialize or value-initialize, and placement `new` selects a constructor; linked fixtures return 0, 1, 3, 4, 6, 7, or 8.
+- `std::move`, `std::forward`, `std::swap`, `std::min`, and `std::max` work for the supported scalar and record types; linked fixtures return 7, 37, or 453-style sums.
 - `static_cast<int &>` and `const_cast<int &>` yield mutable references to the underlying object; linked fixtures return 7.
 - `sizeof(record)` is usable in `static_assert` and expressions; a linked fixture returns 7.
 - Logical `&&`/`||` convert record operands through `operator bool`; linked fixtures return 7.
@@ -1772,3 +1775,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-12T09:55:22-08:00** — Extended `std::min` and `std::max` to doubles and covered `std::min(1.5, 0.5)`, returning 7. Windows debug CTest is 454/454.
 - **2026-11-12T09:59:34-08:00** — Covered default construction of a braced class array, returning 7. Windows debug CTest is 455/455.
 - **2026-11-12T10:12:07-08:00** — Selected the constructor for placement new and covered `new (storage) S(7)`, returning 7. Windows debug CTest is 456/456.
+- **2026-11-12T10:12:07-08:00** — Refreshed the M10 evidence list for temporary materialization, braced/placement `new`, and the supported `std` utilities. Documentation only; Windows debug CTest remains 456/456.
