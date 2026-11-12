@@ -2663,6 +2663,42 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
             break;
         }
         auto condition = emit_expression(*statement.children[0]);
+        if (condition.value && condition.type &&
+            condition.type->kind == ir::TypeKind::Struct &&
+            statement.children[0]->kind ==
+                frontend::AstKind::CallExpression) {
+            auto* storage = builder_.create_alloca(condition.type, 0,
+                                                       "switch.temp");
+            builder_.create_store(condition.value, storage);
+            const auto record = ir_records_.find(condition.type);
+            if (record != ir_records_.end() && record->second) {
+                const auto methods =
+                    class_methods_.find(record->second->tag);
+                if (methods != class_methods_.end()) {
+                    auto method = methods->second.find("operator int");
+                    if (method == methods->second.end()) {
+                        method = methods->second.find("operator bool");
+                    }
+                    if (method != methods->second.end()) {
+                        auto* self = storage;
+                        if (self->type !=
+                            method->second->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self}, "switch.this");
+                        }
+                        auto* call = builder_.create_call(
+                            method->second, {self},
+                            method->second->type->return_type,
+                            "switch.conversion");
+                        condition.value = call;
+                        condition.type =
+                            method->second->type->return_type;
+                    }
+                }
+            }
+        }
         if (!condition.value || !ir::is_integer(condition.type)) {
             error(statement.location, "switch condition must be an integer");
             break;
