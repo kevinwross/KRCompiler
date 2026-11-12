@@ -10,10 +10,9 @@ int main() {
     S yes(1);
     S no(0);
     if (yes) {
-        if (no) {
-            return 1;
+        if (!no) {
+            return 0;
         }
-        return 0;
     }
     return 1;
 }

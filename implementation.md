@@ -955,3 +955,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-11T19:21:10-08:00** — Covered `bool` functions and `true`/`false` conditionals, returning 0. Windows debug CTest is 314/314.
 - **2026-11-11T19:30:19-08:00** — Covered `bool` logical operators and literals, returning 0. Windows debug CTest is 315/315.
 - **2026-11-11T19:35:15-08:00** — Supported `operator bool` conversion in conditions, with a linked fixture returning 0. Windows debug CTest is 316/316.
+- **2026-11-11T19:41:39-08:00** — Applied `operator bool` to unary `!` on a record, with the linked conversion fixture still returning 0. Windows debug CTest is 316/316.

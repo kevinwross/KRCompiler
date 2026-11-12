@@ -5561,6 +5561,42 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             }
         }
     }
+    if (expression.text == "!" && !expression.children.empty() &&
+        expression.children.front() &&
+        expression.children.front()->kind == frontend::AstKind::Identifier) {
+        if (auto* local = lookup_local(expression.children.front()->text)) {
+            if (local->frontend_type &&
+                local->frontend_type->kind == frontend::TypeKind::Record &&
+                local->frontend_type->record) {
+                const auto methods =
+                    class_methods_.find(local->frontend_type->record->tag);
+                if (methods != class_methods_.end()) {
+                    const auto method = methods->second.find("operator bool");
+                    if (method != methods->second.end()) {
+                        auto self = emit_lvalue(*expression.children.front());
+                        if (self.value) {
+                            if (self.value->type !=
+                                method->second->type->parameters[0]) {
+                                self.value = builder_.create(
+                                    ir::Opcode::BitCast,
+                                    method->second->type->parameters[0],
+                                    {self.value}, "not.this");
+                            }
+                            auto* call = builder_.create_call(
+                                method->second, {self.value},
+                                method->second->type->return_type,
+                                "not.bool");
+                            auto* zero = module_->constant_int(
+                                method->second->type->return_type, 0);
+                            auto* value = builder_.create_icmp(
+                                ir::ICmpPredicate::Eq, call, zero, "not");
+                            return {value, value->type};
+                        }
+                    }
+                }
+            }
+        }
+    }
     auto operand = emit_expression(*expression.children.front());
     if (!operand.value) {
         return {};
