@@ -2495,7 +2495,10 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         push_scope();
         const auto element_type =
             sema_.declaration_type(*statement.children[0], statement.children[1].get());
-        const auto element_ir = map_type(element_type);
+        const bool bound_by_reference =
+            element_type && element_type->is_reference;
+        const auto element_ir = map_type(
+            bound_by_reference ? element_type->element : element_type);
         std::uint64_t count = 0;
         Expression range;
         if (statement.children[2]->kind == frontend::AstKind::InitializerList) {
@@ -2540,8 +2543,17 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
             return;
         }
         const auto value_name = declarator_name(*statement.children[1]);
-        auto* value_address = builder_.create_alloca(element_ir, 0, value_name + ".range");
-        declare_local(value_name, LocalBinding{value_address, element_ir, element_type});
+        auto* value_address = builder_.create_alloca(
+            bound_by_reference ? module_->types().pointer_type(element_ir)
+                               : element_ir,
+            0, value_name + ".range");
+        declare_local(
+            value_name,
+            LocalBinding{value_address,
+                         bound_by_reference
+                             ? module_->types().pointer_type(element_ir)
+                             : element_ir,
+                         element_type});
         auto* index = builder_.create_alloca(int_type(), 0, "range.index");
         builder_.create_store(module_->constant_int(int_type(), 0), index);
 
@@ -2561,8 +2573,13 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         auto* element = builder_.create_gep(element_ir, range.value, {index_value}, false,
                                             "range.element");
         element->type = module_->types().pointer_type(element_ir);
-        auto* loaded = builder_.create_load(element_ir, element, false, 0, "range.load");
-        builder_.create_store(loaded, value_address);
+        if (bound_by_reference) {
+            builder_.create_store(element, value_address);
+        } else {
+            auto* loaded =
+                builder_.create_load(element_ir, element, false, 0, "range.load");
+            builder_.create_store(loaded, value_address);
+        }
         break_targets_.push_back(end_block);
         continue_targets_.push_back(increment_block);
         emit_statement(*statement.children[3]);
