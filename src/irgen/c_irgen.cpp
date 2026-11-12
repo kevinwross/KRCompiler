@@ -6754,6 +6754,48 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
         builder_.create_store(updated, address.value);
         return {updated, address.type};
     }
+    if (address.type && (ir::is_integer(address.type) ||
+                          ir::is_float(address.type)) &&
+        right.value && right.type &&
+        right.type->kind == ir::TypeKind::Struct &&
+        expression.children[1]->kind ==
+            frontend::AstKind::CallExpression) {
+        auto* storage = builder_.create_alloca(right.type, 0,
+                                                   "assign.temp");
+        builder_.create_store(right.value, storage);
+        const auto record = ir_records_.find(right.type);
+        if (record != ir_records_.end() && record->second) {
+            const auto methods = class_methods_.find(record->second->tag);
+            if (methods != class_methods_.end()) {
+                const char* conversion = nullptr;
+                if (ir::is_integer(address.type)) {
+                    conversion = address.type->bits == 1 ? "operator bool"
+                                                         : "operator int";
+                } else {
+                    conversion = address.type->bits == 64
+                                     ? "operator double"
+                                     : "operator float";
+                }
+                const auto method = methods->second.find(conversion);
+                if (method != methods->second.end()) {
+                    auto* self = storage;
+                    if (self->type !=
+                        method->second->type->parameters[0]) {
+                        self = builder_.create(
+                            ir::Opcode::BitCast,
+                            method->second->type->parameters[0], {self},
+                            "assign.this");
+                    }
+                    auto* call = builder_.create_call(
+                        method->second, {self},
+                        method->second->type->return_type,
+                        "assign.conversion");
+                    right.value = call;
+                    right.type = method->second->type->return_type;
+                }
+            }
+        }
+    }
     auto* value = promote(right.value, right.type, address.type);
     if (expression.text != "=") {
         auto* left = builder_.create_load(address.type, address.value, false, 0, "assign.old");
