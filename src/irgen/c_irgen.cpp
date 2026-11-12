@@ -4615,6 +4615,20 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                ir::is_pointer(right.type)) {
         left.value = promote(left.value, left.type, right.type);
         left.type = right.type;
+    } else if ((operation == "==" || operation == "!=") &&
+               ir::is_pointer(left.type) && ir::is_pointer(right.type) &&
+               left.type != right.type && left.type->element &&
+               right.type->element) {
+        if (left.type->element->kind == ir::TypeKind::Void &&
+            right.type->element->kind != ir::TypeKind::Void) {
+            left.value = builder_.create(ir::Opcode::BitCast, right.type,
+                                         {left.value}, "pointer.compare");
+            left.type = right.type;
+        } else {
+            right.value = builder_.create(ir::Opcode::BitCast, left.type,
+                                          {right.value}, "pointer.compare");
+            right.type = left.type;
+        }
     }
     if (operation == "&&" || operation == "||") {
         auto truth = [&](const Expression& value) -> ir::Value* {
