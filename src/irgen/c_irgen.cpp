@@ -3070,6 +3070,57 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                     }
                 }
             }
+            if (type->kind == ir::TypeKind::Array && type->element &&
+                type->element->kind == ir::TypeKind::Struct &&
+                type->count > 0) {
+                const auto record = ir_records_.find(type->element);
+                if (record != ir_records_.end() && record->second) {
+                    auto* constructor =
+                        select_constructor(record->second->tag, 0);
+                    if (constructor) {
+                        auto* guard = module_->add_global(
+                            "__static_array_guard_" + std::to_string(id),
+                            module_->types().int_type(8), false, 0);
+                        guard->initializer = module_->constant_int(
+                            module_->types().int_type(8), 0);
+                        auto* guard_value = builder_.create_load(
+                            module_->types().int_type(8), guard, false, 0,
+                            "static.array.guard");
+                        auto* zero = module_->constant_int(
+                            module_->types().int_type(8), 0);
+                        auto* condition = builder_.create_icmp(
+                            ir::ICmpPredicate::Eq, guard_value, zero,
+                            "static.array.cmp");
+                        auto* init_block = current_function_->add_block(
+                            "static.array.init." + std::to_string(id));
+                        auto* end_block = current_function_->add_block(
+                            "static.array.end." + std::to_string(id));
+                        builder_.create_cond_br(condition, init_block,
+                                                end_block);
+                        builder_.set_insert_point(init_block);
+                        builder_.create_store(
+                            module_->constant_int(
+                                module_->types().int_type(8), 1),
+                            guard);
+                        for (std::uint64_t element_position = 0;
+                             element_position < type->count;
+                             ++element_position) {
+                            auto* element_index = module_->constant_int(
+                                int_type(),
+                                static_cast<std::int64_t>(element_position));
+                            auto* element = builder_.create_gep(
+                                type, global, {zero, element_index}, false,
+                                "static.array.element");
+                            element->type =
+                                module_->types().pointer_type(type->element);
+                            builder_.create_call(constructor, {element},
+                                                 nullptr, "static.array.ctor");
+                        }
+                        emit_branch(end_block);
+                        builder_.set_insert_point(end_block);
+                    }
+                }
+            }
             declare_local(name, LocalBinding{global, type, frontend_type});
         }
         return;
