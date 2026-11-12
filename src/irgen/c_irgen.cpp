@@ -4277,6 +4277,18 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
     if (current_function_->type && current_function_->type->return_type &&
         current_function_->type->return_type->kind == ir::TypeKind::Struct) {
         const auto kind = statement.children.front()->kind;
+        if (kind == frontend::AstKind::InitializerList) {
+            auto* storage = builder_.create_alloca(
+                current_function_->type->return_type, 0, "return.temp");
+            emit_initializer(*statement.children.front(), storage,
+                             current_function_->type->return_type);
+            auto* loaded = builder_.create_load(
+                current_function_->type->return_type, storage, false, 0,
+                "return.record");
+            emit_cleanups();
+            builder_.create_ret(loaded);
+            return;
+        }
         const bool scalar = kind == frontend::AstKind::IntegerLiteral ||
                             kind == frontend::AstKind::FloatLiteral ||
                             kind == frontend::AstKind::CharLiteral ||
