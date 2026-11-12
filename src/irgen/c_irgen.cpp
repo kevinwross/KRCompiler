@@ -3403,6 +3403,46 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
         emit_initializer(*initializer.children[1], address, type);
         return;
     }
+    auto* conversion_local =
+        initializer.kind == frontend::AstKind::Identifier
+            ? lookup_local(initializer.text)
+            : nullptr;
+    if (type && ir::is_integer(type) && conversion_local &&
+        conversion_local->frontend_type &&
+        conversion_local->frontend_type->kind == frontend::TypeKind::Record) {
+        auto source = emit_lvalue(initializer);
+        if (source.value && source.type &&
+            source.type->kind == ir::TypeKind::Struct) {
+            const auto record = ir_records_.find(source.type);
+            if (record != ir_records_.end() && record->second) {
+                const auto methods = class_methods_.find(record->second->tag);
+                if (methods != class_methods_.end()) {
+                    const char* conversion =
+                        type->bits == 1 ? "operator bool" : "operator int";
+                    const auto method = methods->second.find(conversion);
+                    if (method != methods->second.end()) {
+                        auto self = source;
+                        if (self.value->type !=
+                            method->second->type->parameters[0]) {
+                            self.value = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self.value}, "init.this");
+                        }
+                        auto* call = builder_.create_call(
+                            method->second, {self.value},
+                            method->second->type->return_type,
+                            "init.conversion");
+                        auto* converted =
+                            promote(call, method->second->type->return_type, type);
+                        builder_.create_store(converted, address);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     if (type && type->kind == ir::TypeKind::Array && type->element &&
         ir::is_integer(type->element) && type->element->bits == 8 &&
         initializer.kind == frontend::AstKind::StringLiteral) {
