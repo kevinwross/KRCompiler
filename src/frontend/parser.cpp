@@ -297,6 +297,29 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
     if (cxx_mode_ && check("extern") &&
         peek(1).kind == TokenKind::String) {
         position_ += 2;
+        if (check("{")) {
+            ++position_;
+            auto block = make_ast(AstKind::TranslationUnit, peek().location);
+            while (!check("}") && !at_end()) {
+                auto declaration = parse_external_declaration();
+                if (declaration) {
+                    if (declaration->kind == AstKind::TranslationUnit) {
+                        for (auto& child : declaration->children) {
+                            block->children.push_back(std::move(child));
+                        }
+                    } else {
+                        block->children.push_back(std::move(declaration));
+                    }
+                } else {
+                    synchronize();
+                    if (!at_end()) {
+                        ++position_;
+                    }
+                }
+            }
+            expect("}", "after linkage block");
+            return block;
+        }
     }
     auto specifiers = parse_decl_specifiers();
     if (!specifiers) {
