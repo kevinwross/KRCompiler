@@ -7616,8 +7616,25 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 reference_parameter = true;
             }
         }
-        auto argument = reference_parameter ? emit_lvalue(*argument_nodes[index])
-                                            : emit_expression(*argument_nodes[index]);
+        Expression argument;
+        if (reference_parameter) {
+            if (argument_nodes[index]->kind ==
+                frontend::AstKind::CallExpression) {
+                auto value = emit_expression(*argument_nodes[index]);
+                if (value.value && value.type &&
+                    value.type->kind == ir::TypeKind::Struct) {
+                    auto* storage = builder_.create_alloca(
+                        value.type, 0, "argument.reference");
+                    builder_.create_store(value.value, storage);
+                    argument.value = storage;
+                    argument.type = value.type;
+                }
+            } else {
+                argument = emit_lvalue(*argument_nodes[index]);
+            }
+        } else {
+            argument = emit_expression(*argument_nodes[index]);
+        }
         if (!argument.value) {
             return {};
         }
