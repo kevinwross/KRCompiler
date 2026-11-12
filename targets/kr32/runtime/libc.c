@@ -2374,3 +2374,21 @@ char *strsep(char **text, const char *delimiters) {
     *text = 0;
     return start;
 }
+
+int vdprintf(int descriptor, const char *format, va_list arguments) {
+    char buffer[1024];
+    const int length = vsnprintf(buffer, sizeof(buffer), format, arguments);
+    if (length < 0) {
+        return -1;
+    }
+    const int count = length < (int)sizeof(buffer) ? length : (int)sizeof(buffer);
+    return write(descriptor, buffer, count);
+}
+
+int dprintf(int descriptor, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int result = vdprintf(descriptor, format, arguments);
+    va_end(arguments);
+    return result;
+}

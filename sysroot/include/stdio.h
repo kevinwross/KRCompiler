@@ -25,6 +25,8 @@ int sprintf(char *buffer, const char *format, ...);
 int snprintf(char *buffer, size_t size, const char *format, ...);
 int vprintf(const char *format, va_list args);
 int vfprintf(FILE *stream, const char *format, va_list args);
+int dprintf(int descriptor, const char *format, ...);
+int vdprintf(int descriptor, const char *format, va_list args);
 int vsnprintf(char *buffer, size_t size, const char *format, va_list args);
 
 int scanf(const char *format, ...);
