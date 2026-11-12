@@ -3766,6 +3766,47 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
             return;
         }
     }
+    if (current_function_->type && current_function_->type->return_type &&
+        ir::is_integer(current_function_->type->return_type) &&
+        statement.children.front()->kind == frontend::AstKind::Identifier) {
+        if (auto* local = lookup_local(statement.children.front()->text)) {
+            if (local->frontend_type &&
+                local->frontend_type->kind == frontend::TypeKind::Record &&
+                local->frontend_type->record) {
+                const auto methods =
+                    class_methods_.find(local->frontend_type->record->tag);
+                if (methods != class_methods_.end()) {
+                    const char* conversion =
+                        current_function_->type->return_type->bits == 1
+                            ? "operator bool"
+                            : "operator int";
+                    const auto method = methods->second.find(conversion);
+                    if (method != methods->second.end()) {
+                        auto self = emit_lvalue(*statement.children.front());
+                        if (self.value) {
+                            if (self.value->type !=
+                                method->second->type->parameters[0]) {
+                                self.value = builder_.create(
+                                    ir::Opcode::BitCast,
+                                    method->second->type->parameters[0],
+                                    {self.value}, "return.this");
+                            }
+                            auto* call = builder_.create_call(
+                                method->second, {self.value},
+                                method->second->type->return_type,
+                                "return.conversion");
+                            auto* converted = promote(
+                                call, method->second->type->return_type,
+                                current_function_->type->return_type);
+                            emit_cleanups();
+                            builder_.create_ret(converted);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
     auto value = emit_expression(*statement.children.front());
     auto* converted = promote(value.value, value.type,
                               current_function_->type ? current_function_->type->return_type
