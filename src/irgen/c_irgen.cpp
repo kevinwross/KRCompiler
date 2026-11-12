@@ -3474,7 +3474,8 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
         const bool scalar_initializer =
             initializer.kind == frontend::AstKind::IntegerLiteral ||
             initializer.kind == frontend::AstKind::FloatLiteral ||
-            initializer.kind == frontend::AstKind::CharLiteral;
+            initializer.kind == frontend::AstKind::CharLiteral ||
+            initializer.kind == frontend::AstKind::StringLiteral;
         if (scalar_initializer) {
             const auto record = ir_records_.find(type);
             if (record != ir_records_.end() && record->second) {
