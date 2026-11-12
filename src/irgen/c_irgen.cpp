@@ -3817,10 +3817,27 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
         initializer.kind == frontend::AstKind::Identifier
             ? lookup_local(initializer.text)
             : nullptr;
+    const bool conversion_call =
+        initializer.kind == frontend::AstKind::CallExpression;
     if (type && (ir::is_integer(type) || ir::is_float(type)) &&
-        conversion_local && conversion_local->frontend_type &&
-        conversion_local->frontend_type->kind == frontend::TypeKind::Record) {
-        auto source = emit_lvalue(initializer);
+        (conversion_call ||
+         (conversion_local && conversion_local->frontend_type &&
+          conversion_local->frontend_type->kind ==
+              frontend::TypeKind::Record))) {
+        Expression source;
+        if (conversion_call) {
+            auto value = emit_expression(initializer);
+            if (value.value && value.type &&
+                value.type->kind == ir::TypeKind::Struct) {
+                auto* storage = builder_.create_alloca(
+                    value.type, 0, "init.temp");
+                builder_.create_store(value.value, storage);
+                source.value = storage;
+                source.type = value.type;
+            }
+        } else {
+            source = emit_lvalue(initializer);
+        }
         if (source.value && source.type &&
             source.type->kind == ir::TypeKind::Struct) {
             const auto record = ir_records_.find(source.type);
