@@ -5894,7 +5894,16 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
         if (type->kind == ir::TypeKind::Struct) {
             const auto record = ir_records_.find(type);
             if (record != ir_records_.end()) {
-                auto* constructor = select_constructor(record->second->tag, 0);
+                std::size_t argument_count = 0;
+                if (expression.children.size() > 2 &&
+                    expression.children[2] &&
+                    expression.children[2]->kind ==
+                        frontend::AstKind::ExpressionStatement) {
+                    argument_count =
+                        expression.children[2]->children.size();
+                }
+                auto* constructor = select_constructor(
+                    record->second->tag, argument_count);
                 if (constructor) {
                     std::vector<ir::Value*> arguments{pointer};
                     if (expression.children.size() > 2 &&

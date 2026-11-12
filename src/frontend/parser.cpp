@@ -1688,7 +1688,11 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
                 placement->children.push_back(std::move(address));
             }
             expect(")", "after placement address");
-            if (is_type_name_start()) {
+            if (peek().kind == TokenKind::Identifier && peek(1).text == "(") {
+                placement->children.push_back(
+                    make_ast(AstKind::TypeName, peek().location, peek().text));
+                ++position_;
+            } else if (is_type_name_start()) {
                 placement->children.push_back(parse_type_name());
             } else if (peek().kind == TokenKind::Identifier) {
                 placement->children.push_back(
