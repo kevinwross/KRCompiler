@@ -131,6 +131,12 @@ ir::Function* CIRGen::ensure_default_constructor(
             ensure_default_constructor(member.type->record.get()) != nullptr) {
             needs_construction = true;
         }
+        if (member.type && member.type->kind == frontend::TypeKind::Array &&
+            member.type->element && member.type->element->record &&
+            ensure_default_constructor(member.type->element->record.get()) !=
+                nullptr) {
+            needs_construction = true;
+        }
         if (member.default_initializer) {
             needs_construction = true;
         }
@@ -201,6 +207,36 @@ ir::Function* CIRGen::ensure_default_constructor(
             member.default_initializer->children.front()) {
             emit_initializer(*member.default_initializer->children.front(), field,
                              type->fields[field_position]);
+        } else if (member.type &&
+                   member.type->kind == frontend::TypeKind::Array &&
+                   member.type->element && member.type->element->record) {
+            auto* element_constructor = ensure_default_constructor(
+                member.type->element->record.get());
+            if (element_constructor) {
+                for (std::uint64_t element_position = 0;
+                     element_position < type->fields[field_position]->count;
+                     ++element_position) {
+                    auto* element_index = module_->constant_int(
+                        int_type(),
+                        static_cast<std::int64_t>(element_position));
+                    auto* element = builder_.create_gep(
+                        type->fields[field_position], field,
+                        {zero, element_index}, false,
+                        "implicit.member.element");
+                    element->type = module_->types().pointer_type(
+                        type->fields[field_position]->element);
+                    auto* member_self = element;
+                    if (member_self->type !=
+                        element_constructor->type->parameters[0]) {
+                        member_self = builder_.create(
+                            ir::Opcode::BitCast,
+                            element_constructor->type->parameters[0],
+                            {member_self}, "implicit.member.this");
+                    }
+                    builder_.create_call(element_constructor, {member_self},
+                                         nullptr, "implicit.member.ctor");
+                }
+            }
         } else if (constructor) {
             auto* member_self = field;
             if (member_self->type != constructor->type->parameters[0]) {
@@ -495,6 +531,49 @@ void CIRGen::generate_global_constructors() {
                         type->fields[position]);
                     continue;
                 }
+                if (member.type &&
+                    member.type->kind == frontend::TypeKind::Array &&
+                    member.type->element && member.type->element->record) {
+                    const auto element_record = ir_records_.find(
+                        type->fields[position]->element);
+                    if (element_record != ir_records_.end() &&
+                        element_record->second) {
+                        auto* element_constructor = select_constructor(
+                            element_record->second->tag, 0);
+                        if (element_constructor) {
+                            for (std::uint64_t element_position = 0;
+                                 element_position <
+                                 type->fields[position]->count;
+                                 ++element_position) {
+                                auto* element_index = module_->constant_int(
+                                    int_type(),
+                                    static_cast<std::int64_t>(
+                                        element_position));
+                                auto* element = builder_.create_gep(
+                                    type->fields[position], field,
+                                    {zero, element_index}, false,
+                                    "global.member.ctor.element");
+                                element->type =
+                                    module_->types().pointer_type(
+                                        type->fields[position]->element);
+                                auto* self = element;
+                                if (self->type !=
+                                    element_constructor->type
+                                        ->parameters[0]) {
+                                    self = builder_.create(
+                                        ir::Opcode::BitCast,
+                                        element_constructor->type
+                                            ->parameters[0],
+                                        {self}, "global.member.ctor.this");
+                                }
+                                builder_.create_call(
+                                    element_constructor, {self}, nullptr,
+                                    "global.member.ctor");
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if (!member.type ||
                     member.type->kind != frontend::TypeKind::Record ||
                     !member.type->record) {
@@ -615,6 +694,19 @@ void CIRGen::generate_global_constructors() {
         if (!destructor) {
             bool has_member_destructor = false;
             for (const auto& member : info.record->members) {
+                if (member.type &&
+                    member.type->kind == frontend::TypeKind::Array &&
+                    member.type->element && member.type->element->record) {
+                    const auto element_methods = class_methods_.find(
+                        member.type->element->record->tag);
+                    if (element_methods != class_methods_.end() &&
+                        element_methods->second.find(
+                            "~" + member.type->element->record->tag) !=
+                            element_methods->second.end()) {
+                        has_member_destructor = true;
+                    }
+                    continue;
+                }
                 if (!member.type ||
                     member.type->kind != frontend::TypeKind::Record ||
                     !member.type->record) {
@@ -1692,6 +1784,12 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
                 member.type->kind == frontend::TypeKind::Record &&
                 member.type->record &&
                 select_constructor(member.type->record->tag, 0)) {
+                has_member_initialization = true;
+            }
+            if (member.type &&
+                member.type->kind == frontend::TypeKind::Array &&
+                member.type->element && member.type->element->record &&
+                select_constructor(member.type->element->record->tag, 0)) {
                 has_member_initialization = true;
             }
         }
