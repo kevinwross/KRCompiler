@@ -1314,6 +1314,10 @@ bool Parser::is_declaration_start() const {
         return true;
     }
     if (cxx_mode_ && token.kind == TokenKind::Keyword &&
+        token.text == "thread_local") {
+        return true;
+    }
+    if (cxx_mode_ && token.kind == TokenKind::Keyword &&
         (token.text == "namespace" || token.text == "using")) {
         return true;
     }
