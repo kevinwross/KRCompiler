@@ -405,6 +405,16 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-12T01:11:01-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 378/378
+windows-msvc-release  PASS 378/378
+linux-gcc-debug       PASS 378/378
+linux-gcc-release     PASS 378/378
+not verified: native Linux x64, Linux ARM64
+```
+
 ### 2026-11-12T00:58:31-08:00 — host gate (Windows)
 
 ```text
