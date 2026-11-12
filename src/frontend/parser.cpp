@@ -650,11 +650,25 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
                     name += "~";
                     ++position_;
                 }
-                if (peek().kind == TokenKind::Identifier) {
+                if (peek().kind != TokenKind::Identifier) {
+                    break;
+                }
+                if (peek().text == "operator") {
+                    name += "operator";
+                    ++position_;
+                    if (check("[") && peek(1).is("]")) {
+                        name += "[]";
+                        position_ += 2;
+                    } else if (check("(") && peek(1).is(")")) {
+                        name += "()";
+                        position_ += 2;
+                    } else if (peek().kind == TokenKind::Punctuator) {
+                        name += peek().text;
+                        ++position_;
+                    }
+                } else {
                     name += peek().text;
                     ++position_;
-                } else {
-                    break;
                 }
             }
         }
