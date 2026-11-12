@@ -1062,6 +1062,22 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
         auto* class_type = map_record(*record);
         auto& methods = class_methods_[child->text];
         for (const auto& member : child->children) {
+            if (member && member->kind == frontend::AstKind::MemberDeclaration &&
+                member->children.size() >= 2 && member->children[0] &&
+                member->children[1] &&
+                has_label(*member->children[0], "static") &&
+                member->children.size() >= 3 && member->children[2] &&
+                !member->children[2]->children.empty() &&
+                member->children[2]->children.front()) {
+                frontend::AstNode declarator;
+                declarator.kind = frontend::AstKind::Declarator;
+                declarator.location = member->children[1]->location;
+                declarator.text =
+                    child->text + "::" +
+                    declarator_name(*member->children[1]);
+                collect_global(*member->children[0], declarator,
+                               member->children[2]->children.front().get());
+            }
             if (!member || member->kind != frontend::AstKind::FunctionDefinition ||
                 member->children.size() < 3 || !member->children[0] ||
                 !member->children[1]) {
@@ -1481,7 +1497,8 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
         globals_.emplace(name, global);
     }
     global->external = external;
-    global->internal = has_label(specifiers, "static");
+    global->internal = has_label(specifiers, "static") &&
+                       name.find("::") == std::string::npos;
     global_frontend_types_[global] = frontend_type;
     if (frontend_type->is_volatile) {
         volatile_globals_.insert(global);

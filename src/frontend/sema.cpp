@@ -630,6 +630,22 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             record.methods.push_back({name, type, is_virtual, is_pure});
             continue;
         }
+        if (is_static) {
+            bool has_initializer = false;
+            for (const auto& member_child : member.children) {
+                if (member_child &&
+                    member_child->kind == AstKind::DefaultMemberInitializer) {
+                    has_initializer = true;
+                    break;
+                }
+            }
+            if (has_initializer) {
+                scopes_.front().ordinary[record.tag + "::" + name] =
+                    Symbol{SymbolKind::Variable, record.tag + "::" + name, type,
+                           child->location, true, 0};
+            }
+            continue;
+        }
         for (const auto& existing : record.members) {
             if (existing.name == name) {
                 error(child->location, "duplicate member '" + name + "'");
