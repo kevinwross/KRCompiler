@@ -6015,6 +6015,42 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                       module_->types().pointer_type(type), {call}, "new");
         }
         if (array && array_initializer) {
+            auto* memset_function =
+                functions_.find("memset") != functions_.end()
+                    ? functions_["memset"]
+                    : nullptr;
+            if (!memset_function) {
+                auto* function_type = module_->types().function_type(
+                    module_->types().pointer_type(
+                        module_->types().void_type()),
+                    {module_->types().pointer_type(
+                         module_->types().void_type()),
+                     int_type(), size_type()},
+                    false);
+                memset_function = module_->add_function(
+                    "memset", function_type, ir::Linkage::External, true);
+                memset_function->add_parameter(
+                    module_->types().pointer_type(
+                        module_->types().void_type()),
+                    "destination");
+                memset_function->add_parameter(int_type(), "value");
+                memset_function->add_parameter(size_type(), "size");
+                functions_["memset"] = memset_function;
+            }
+            auto* bytes = builder_.create_mul(
+                module_->constant_int(size_type(), ir_size_of(type)),
+                count_value, "new.init.size");
+            auto* destination = builder_.create(
+                ir::Opcode::BitCast,
+                module_->types().pointer_type(
+                    module_->types().void_type()),
+                {pointer}, "new.init.bytes");
+            builder_.create_call(memset_function,
+                                  {destination,
+                                   module_->constant_int(int_type(), 0),
+                                   bytes},
+                                  memset_function->type->return_type,
+                                  "new.init.clear");
             const auto& initializers = array_initializer->children;
             for (std::size_t index = 0; index < initializers.size(); ++index) {
                 if (!initializers[index]) {
