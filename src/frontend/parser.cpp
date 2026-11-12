@@ -874,6 +874,10 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
     if (peek().text == "explicit") {
         ++position_;
     }
+    if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
+        peek().text == "operator") {
+        return parse_declaration();
+    }
     bool is_virtual = false;
     if (peek().kind == TokenKind::Identifier && peek().text == "virtual") {
         is_virtual = true;
