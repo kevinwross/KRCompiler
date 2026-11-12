@@ -1941,6 +1941,27 @@ std::unique_ptr<AstNode> Parser::parse_postfix_expression() {
             expression = std::move(node);
             continue;
         }
+        if (cxx_mode_ && check("{") &&
+            expression->kind == AstKind::Identifier) {
+            const auto location = peek().location;
+            ++position_;
+            auto arguments = make_ast(AstKind::ExpressionStatement, location);
+            while (!check("}") && !at_end()) {
+                auto argument = parse_assignment_expression();
+                if (argument) {
+                    arguments->children.push_back(std::move(argument));
+                }
+                if (!match(",")) {
+                    break;
+                }
+            }
+            expect("}", "after braced argument list");
+            auto node = make_ast(AstKind::CallExpression, expression->location);
+            node->children.push_back(std::move(expression));
+            node->children.push_back(std::move(arguments));
+            expression = std::move(node);
+            continue;
+        }
         break;
     }
     return expression;
