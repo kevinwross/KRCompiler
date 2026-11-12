@@ -3773,7 +3773,8 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
         }
     }
     if (current_function_->type && current_function_->type->return_type &&
-        ir::is_integer(current_function_->type->return_type) &&
+        (ir::is_integer(current_function_->type->return_type) ||
+         ir::is_float(current_function_->type->return_type)) &&
         statement.children.front()->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(statement.children.front()->text)) {
             if (local->frontend_type &&
@@ -3782,10 +3783,19 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                 const auto methods =
                     class_methods_.find(local->frontend_type->record->tag);
                 if (methods != class_methods_.end()) {
-                    const char* conversion =
-                        current_function_->type->return_type->bits == 1
-                            ? "operator bool"
-                            : "operator int";
+                    const char* conversion = nullptr;
+                    if (ir::is_integer(
+                            current_function_->type->return_type)) {
+                        conversion =
+                            current_function_->type->return_type->bits == 1
+                                ? "operator bool"
+                                : "operator int";
+                    } else {
+                        conversion =
+                            current_function_->type->return_type->bits == 64
+                                ? "operator double"
+                                : "operator float";
+                    }
                     const auto method = methods->second.find(conversion);
                     if (method != methods->second.end()) {
                         auto self = emit_lvalue(*statement.children.front());
