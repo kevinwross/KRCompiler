@@ -2605,17 +2605,55 @@ void CIRGen::emit_cleanups_to(std::size_t mark) {
     while (local_cleanups_.size() > mark) {
         const auto cleanup = local_cleanups_.back();
         local_cleanups_.pop_back();
-        if (!cleanup.first || !cleanup.second ||
-            cleanup.second->type->parameters.empty()) {
+        if (!cleanup.address || !cleanup.destructor ||
+            cleanup.destructor->type->parameters.empty()) {
             continue;
         }
-        auto* address = cleanup.first;
-        if (address->type != cleanup.second->type->parameters[0]) {
-            address = builder_.create(
-                ir::Opcode::BitCast, cleanup.second->type->parameters[0], {address},
-                "dtor.this");
+        if (cleanup.count <= 1 || !cleanup.element) {
+            auto* address = cleanup.address;
+            if (address->type != cleanup.destructor->type->parameters[0]) {
+                address = builder_.create(
+                    ir::Opcode::BitCast,
+                    cleanup.destructor->type->parameters[0], {address},
+                    "dtor.this");
+            }
+            builder_.create_call(cleanup.destructor, {address}, nullptr,
+                                 "dtor.call");
+            continue;
         }
-        builder_.create_call(cleanup.second, {address}, nullptr, "dtor.call");
+        auto* index_slot = builder_.create_alloca(int_type(), 0, "dtor.index");
+        builder_.create_store(module_->constant_int(int_type(), 0), index_slot);
+        auto* condition = current_function_->add_block("dtor.cond");
+        auto* body = current_function_->add_block("dtor.body");
+        auto* done = current_function_->add_block("dtor.done");
+        emit_branch(condition);
+        builder_.set_insert_point(condition);
+        auto* index = builder_.create_load(int_type(), index_slot, false, 0,
+                                           "dtor.index.load");
+        auto* limit = module_->constant_int(
+            int_type(), static_cast<std::int64_t>(cleanup.count));
+        auto* compare = builder_.create_icmp(ir::ICmpPredicate::Ult, index,
+                                             limit, "dtor.cmp");
+        builder_.create_cond_br(compare, body, done);
+        builder_.set_insert_point(body);
+        auto* zero = module_->constant_int(int_type(), 0);
+        auto* element = builder_.create_gep(
+            cleanup.address->type->element, cleanup.address, {zero, index},
+            false, "dtor.element");
+        element->type = module_->types().pointer_type(cleanup.element);
+        auto* address = element;
+        if (address->type != cleanup.destructor->type->parameters[0]) {
+            address = builder_.create(
+                ir::Opcode::BitCast, cleanup.destructor->type->parameters[0],
+                {address}, "dtor.this");
+        }
+        builder_.create_call(cleanup.destructor, {address}, nullptr,
+                             "dtor.call");
+        auto* next = builder_.create_add(
+            index, module_->constant_int(int_type(), 1), "dtor.next");
+        builder_.create_store(next, index_slot);
+        emit_branch(condition);
+        builder_.set_insert_point(done);
     }
 }
 
@@ -3077,6 +3115,37 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             builder_.create_alloca(type, alignment_of(specifiers, frontend_type),
                                    name + ".addr");
         declare_local(name, LocalBinding{address, type, frontend_type});
+        if (type && type->kind == ir::TypeKind::Array &&
+            type->element && type->element->kind == ir::TypeKind::Struct &&
+            type->count > 0 && init->children.size() <= 1) {
+            const auto record = ir_records_.find(type->element);
+            if (record != ir_records_.end() && record->second) {
+                auto* constructor =
+                    select_constructor(record->second->tag, 0, 0);
+                if (constructor) {
+                    for (std::uint64_t element_position = 0;
+                         element_position < type->count;
+                         ++element_position) {
+                        auto* zero = module_->constant_int(int_type(), 0);
+                        auto* element_index = module_->constant_int(
+                            int_type(),
+                            static_cast<std::int64_t>(element_position));
+                        auto* element = builder_.create_gep(
+                            type, address, {zero, element_index}, false,
+                            "array.element");
+                        element->type =
+                            module_->types().pointer_type(type->element);
+                        builder_.create_call(constructor, {element}, nullptr,
+                                             "array.constructor");
+                    }
+                }
+                auto* destructor = ensure_member_destructor(record->second);
+                if (destructor) {
+                    local_cleanups_.push_back(
+                        {address, destructor, type->count, type->element});
+                }
+            }
+        }
         if (frontend_type && frontend_type->kind == frontend::TypeKind::Record &&
             frontend_type->record && frontend_type->record->polymorphic) {
             emit_vtable_init(address, type);

@@ -186,8 +186,13 @@ private:
     std::unordered_map<const ir::Function*, const frontend::RecordInfo*> function_classes_;
     std::unordered_set<const ir::Function*> static_methods_;
     std::vector<std::pair<ir::Function*, const frontend::AstNode*>> method_bodies_;
-    std::vector<std::pair<ir::Value*, ir::Function*>> local_cleanups_;
-    std::vector<std::size_t> cleanup_marks_;
+    struct LocalCleanup {
+        ir::Value* address = nullptr;
+        ir::Function* destructor = nullptr;
+        std::uint64_t count = 1;
+        ir::TypePtr element;
+    };
+    std::vector<LocalCleanup> local_cleanups_;    std::vector<std::size_t> cleanup_marks_;
     const frontend::RecordInfo* current_class_ = nullptr;
     bool in_static_method_ = false;
     bool in_destructor_ = false;
