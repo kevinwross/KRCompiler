@@ -54,8 +54,8 @@ public:
         }
         return analyze_expression(expression);
     }
-    [[nodiscard]] TypePtr type_named(std::string_view name) {
-        if (auto* symbol = lookup_tag(name)) {
+    [[nodiscard]] TypePtr bool_type() const { return bool_type_; }
+    [[nodiscard]] TypePtr type_named(std::string_view name) {        if (auto* symbol = lookup_tag(name)) {
             return symbol->type;
         }
         if (auto* symbol = lookup_ordinary(name)) {

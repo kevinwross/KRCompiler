@@ -1076,11 +1076,22 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
         !record_type->record) {
         return;
     }
-    const auto frontend_type =
+    auto frontend_type =
         sema_.declaration_type(*definition.children[0],
                                definition.children[1].get());
     if (!frontend_type || frontend_type->kind != frontend::TypeKind::Function) {
         return;
+    }
+    if (method_name.starts_with("operator ")) {
+        const auto conversion =
+            method_name.substr(9) == "bool"
+                ? sema_.bool_type()
+                : sema_.type_named(method_name.substr(9));
+        if (conversion) {
+            auto adjusted = std::make_shared<frontend::Type>(*frontend_type);
+            adjusted->return_type = conversion;
+            frontend_type = adjusted;
+        }
     }
     auto* class_type = map_record(*record_type->record);
     std::vector<ir::TypePtr> parameters;
@@ -1177,10 +1188,22 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                  methods.contains(method_name))) {
                 continue;
             }
-            const auto frontend_type =
+            auto frontend_type =
                 sema_.declaration_type(*member->children[0], member->children[1].get());
             if (!frontend_type || frontend_type->kind != frontend::TypeKind::Function) {
                 continue;
+            }
+            if (method_name.starts_with("operator ")) {
+                const auto conversion =
+                    method_name.substr(9) == "bool"
+                        ? sema_.bool_type()
+                        : sema_.type_named(method_name.substr(9));
+                if (conversion) {
+                    auto adjusted =
+                        std::make_shared<frontend::Type>(*frontend_type);
+                    adjusted->return_type = conversion;
+                    frontend_type = adjusted;
+                }
             }
             const auto parameter_count = frontend_type->parameters.size();
             const auto first_parameter =
@@ -3718,6 +3741,31 @@ ir::Value* CIRGen::emit_condition(const frontend::AstNode& expression) {
     }
     if (ir::is_integer(value.type) && value.type->bits == 1) {
         return value.value;
+    }
+    if (value.type->kind == ir::TypeKind::Struct) {
+        const auto record = ir_records_.find(value.type);
+        if (record != ir_records_.end() && record->second) {
+            const auto methods = class_methods_.find(record->second->tag);
+            if (methods != class_methods_.end()) {
+                const auto method = methods->second.find("operator bool");
+                if (method != methods->second.end() && method->second) {
+                    auto self = emit_lvalue(expression);
+                    if (self.value) {
+                        if (self.value->type !=
+                            method->second->type->parameters[0]) {
+                            self.value = builder_.create(
+                                ir::Opcode::BitCast,
+                                method->second->type->parameters[0],
+                                {self.value}, "tobool.this");
+                        }
+                        auto* call = builder_.create_call(
+                            method->second, {self.value},
+                            method->second->type->return_type, "tobool.call");
+                        return call;
+                    }
+                }
+            }
+        }
     }
     if (ir::is_pointer(value.type)) {
         return builder_.create_icmp(ir::ICmpPredicate::Ne, value.value,

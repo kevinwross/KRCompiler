@@ -278,9 +278,10 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
     auto specifiers = parse_decl_specifiers();
     if (!specifiers) {
         if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
-            peek(1).is("::") &&
-            ((peek(2).kind == TokenKind::Identifier) ||
-             (peek(2).is("~") && peek(3).kind == TokenKind::Identifier))) {
+            (peek().text == "operator" ||
+             (peek(1).is("::") &&
+              ((peek(2).kind == TokenKind::Identifier) ||
+               (peek(2).is("~") && peek(3).kind == TokenKind::Identifier))))) {
             specifiers = make_ast(AstKind::DeclSpecifiers, peek().location);
         } else {
             error(peek(), "expected declaration specifiers");
@@ -865,6 +866,10 @@ std::unique_ptr<AstNode> Parser::parse_struct_specifier(bool is_union) {
 }
 
 std::unique_ptr<AstNode> Parser::parse_member_declaration() {
+    if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
+        peek().text == "operator") {
+        return parse_declaration();
+    }
     const auto location = peek().location;
     if (peek().text == "explicit") {
         ++position_;
