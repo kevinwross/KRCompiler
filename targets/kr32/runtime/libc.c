@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <time.h>
+#include <locale.h>
 
 int krc_errno = 0;
 
@@ -2454,4 +2455,31 @@ int strerror_r(int error, char *buffer, unsigned int size) {
     }
     buffer[index] = 0;
     return 0;
+}
+
+static char locale_empty[] = "";
+static char locale_dot[] = ".";
+static char locale_c[] = "C";
+
+static struct lconv locale_info = {
+    locale_dot, locale_empty, locale_empty, locale_empty, locale_empty,
+    locale_dot, locale_empty, locale_empty, locale_empty, locale_empty,
+    (char)127, (char)127, (char)127, (char)127, (char)127, (char)127,
+    (char)127, (char)127, (char)127, (char)127, (char)127, (char)127,
+    (char)127, (char)127
+};
+
+char *setlocale(int category, const char *locale) {
+    (void)category;
+    if (locale == 0) {
+        return locale_c;
+    }
+    if (locale[0] == 0 || (locale[0] == 'C' && locale[1] == 0)) {
+        return locale_c;
+    }
+    return 0;
+}
+
+struct lconv *localeconv(void) {
+    return &locale_info;
 }
