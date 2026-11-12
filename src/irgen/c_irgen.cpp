@@ -3885,6 +3885,10 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                 builder_.create_store(value.value, storage);
                 source.value = storage;
                 source.type = value.type;
+            } else if (value.value) {
+                builder_.create_store(
+                    promote(value.value, value.type, type), address);
+                return;
             }
         } else {
             source = emit_lvalue(initializer);
