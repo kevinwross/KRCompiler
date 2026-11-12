@@ -3471,6 +3471,37 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
     }
     if (type && type->kind == ir::TypeKind::Struct &&
         initializer.kind != frontend::AstKind::InitializerList) {
+        const bool scalar_initializer =
+            initializer.kind == frontend::AstKind::IntegerLiteral ||
+            initializer.kind == frontend::AstKind::FloatLiteral ||
+            initializer.kind == frontend::AstKind::CharLiteral;
+        if (scalar_initializer) {
+            const auto record = ir_records_.find(type);
+            if (record != ir_records_.end() && record->second) {
+                auto* constructor =
+                    select_constructor(record->second->tag, 1, 0);
+                if (constructor && constructor->type &&
+                    constructor->type->parameters.size() == 2) {
+                    auto argument = emit_expression(initializer);
+                    if (argument.value) {
+                        argument.value = promote(
+                            argument.value, argument.type,
+                            constructor->type->parameters[1]);
+                        auto* self = address;
+                        if (self->type != constructor->type->parameters[0]) {
+                            self = builder_.create(
+                                ir::Opcode::BitCast,
+                                constructor->type->parameters[0], {self},
+                                "init.this");
+                        }
+                        builder_.create_call(
+                            constructor, {self, argument.value}, nullptr,
+                            "init.constructor");
+                        return;
+                    }
+                }
+            }
+        }
         auto source = emit_lvalue(initializer);
         if (source.value && source.type && source.type->kind == ir::TypeKind::Struct) {
             emit_copy(address, source.value, type);
