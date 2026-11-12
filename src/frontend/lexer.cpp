@@ -8,7 +8,7 @@ namespace krc::frontend {
 
 namespace {
 
-constexpr std::array<std::string_view, 62> kKeywords{
+constexpr std::array<std::string_view, 63> kKeywords{
     "auto",       "break",      "case",       "char",        "class",
     "const",      "constexpr",  "continue",   "default",     "delete",
     "do",         "double",     "else",       "new",         "enum",       "extern",     "float",      "for",         "goto",
@@ -20,7 +20,7 @@ constexpr std::array<std::string_view, 62> kKeywords{
     "_Imaginary", "_Noreturn",  "_Static_assert", "_Thread_local", "__attribute__",
     "__declspec", "__inline",   "__restrict", "__asm__",     "__extension__",
     "typeof",     "__typeof__", "namespace",  "using",       "explicit",
-    "noexcept",   "final",       "bool",
+    "noexcept",   "final",       "bool",      "alignof",
 };
 
 bool is_identifier_start(char c) {

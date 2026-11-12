@@ -1719,7 +1719,7 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
         node->children.push_back(std::move(operand));
         return node;
     }
-    if (check("sizeof") || check("_Alignof")) {
+    if (check("sizeof") || check("_Alignof") || check("alignof")) {
         const bool is_sizeof = check("sizeof");
         ++position_;
         auto node = make_ast(is_sizeof ? AstKind::SizeofExpression : AstKind::AlignofExpression,
