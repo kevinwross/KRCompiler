@@ -4359,7 +4359,22 @@ ir::Value* CIRGen::emit_condition(const frontend::AstNode& expression) {
                     from_integer = method != methods->second.end();
                 }
                 if (method != methods->second.end() && method->second) {
-                    auto self = emit_lvalue(expression);
+                    Expression self;
+                    if (expression.kind ==
+                        frontend::AstKind::CallExpression) {
+                        auto record_value = emit_expression(expression);
+                        if (record_value.value && record_value.type &&
+                            record_value.type->kind ==
+                                ir::TypeKind::Struct) {
+                            auto* storage = builder_.create_alloca(
+                                record_value.type, 0, "tobool.temp");
+                            builder_.create_store(record_value.value, storage);
+                            self.value = storage;
+                            self.type = record_value.type;
+                        }
+                    } else {
+                        self = emit_lvalue(expression);
+                    }
                     if (self.value) {
                         if (self.value->type !=
                             method->second->type->parameters[0]) {
