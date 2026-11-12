@@ -3252,6 +3252,11 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/using_namespace_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_cxx_static_assert_fail
+        COMMAND $<TARGET_FILE:krc> -fsyntax-only
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_assert_fail.cpp")
+    set_tests_properties(krc_cxx_static_assert_fail PROPERTIES WILL_FAIL TRUE)
+
     add_test(NAME krc_link_delete_null
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
