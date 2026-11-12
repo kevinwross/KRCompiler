@@ -34,5 +34,6 @@ char *strsep(char **text, const char *delimiters);
 char *strdup(const char *text);
 char *strndup(const char *text, size_t maximum);
 char *strerror(int error);
+int strerror_r(int error, char *buffer, size_t size);
 
 #endif

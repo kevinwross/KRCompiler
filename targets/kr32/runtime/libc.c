@@ -2441,3 +2441,17 @@ void *memmem(const void *haystack, unsigned int haystack_length,
     }
     return 0;
 }
+
+int strerror_r(int error, char *buffer, unsigned int size) {
+    if (buffer == 0 || size == 0) {
+        return -1;
+    }
+    const char *message = strerror(error);
+    unsigned int index = 0;
+    while (message[index] != 0 && index + 1 < size) {
+        buffer[index] = message[index];
+        index++;
+    }
+    buffer[index] = 0;
+    return 0;
+}
