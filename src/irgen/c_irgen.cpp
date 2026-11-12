@@ -6460,6 +6460,42 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     }
     std::vector<ir::Value*> arguments;
     const auto& argument_nodes = expression.children[1]->children;
+    const auto convert_record_argument =
+        [&](Expression argument, const frontend::AstNode& node,
+            ir::TypePtr target) -> Expression {
+        if (!argument.type || !target ||
+            argument.type->kind != ir::TypeKind::Struct ||
+            !ir::is_integer(target)) {
+            return argument;
+        }
+        const auto record = ir_records_.find(argument.type);
+        if (record == ir_records_.end() || !record->second) {
+            return argument;
+        }
+        const auto methods = class_methods_.find(record->second->tag);
+        if (methods == class_methods_.end()) {
+            return argument;
+        }
+        const char* conversion =
+            target->bits == 1 ? "operator bool" : "operator int";
+        const auto method = methods->second.find(conversion);
+        if (method == methods->second.end()) {
+            return argument;
+        }
+        auto self = emit_lvalue(node);
+        if (!self.value) {
+            return argument;
+        }
+        if (self.value->type != method->second->type->parameters[0]) {
+            self.value = builder_.create(
+                ir::Opcode::BitCast, method->second->type->parameters[0],
+                {self.value}, "argument.this");
+        }
+        auto* call = builder_.create_call(
+            method->second, {self.value}, method->second->type->return_type,
+            "argument.conversion");
+        return {call, method->second->type->return_type};
+    };
     for (std::size_t index = 0; index < argument_nodes.size(); ++index) {
         if (!argument_nodes[index]) {
             continue;
@@ -6483,6 +6519,8 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             argument.type = argument.value->type;
         }
         if (index < function_type->parameters.size()) {
+            argument = convert_record_argument(argument, *argument_nodes[index],
+                                               function_type->parameters[index]);
             argument.value = promote(argument.value, argument.type,
                                      function_type->parameters[index]);
             argument.type = function_type->parameters[index];
