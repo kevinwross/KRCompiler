@@ -1702,7 +1702,9 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         }
         TypePtr callee_type;
         const auto* callee = expression.children[0].get();
-        if (callee->kind == AstKind::Identifier && callee->text == "std::move") {
+        if (callee->kind == AstKind::Identifier &&
+            (callee->text == "std::move" ||
+             callee->text == "std::forward")) {
             const auto& arguments = expression.children[1]->children;
             if (arguments.empty() || !arguments.front()) {
                 return int_type_;

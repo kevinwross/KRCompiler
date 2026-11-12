@@ -22,7 +22,8 @@ bool is_move_call(const frontend::AstNode& node) {
     return node.kind == frontend::AstKind::CallExpression && !node.children.empty() &&
            node.children.front() &&
            node.children.front()->kind == frontend::AstKind::Identifier &&
-           node.children.front()->text == "std::move" && node.children.size() > 1 &&
+           (node.children.front()->text == "std::move" ||
+            node.children.front()->text == "std::forward") && node.children.size() > 1 &&
            node.children[1];
 }
 
@@ -7190,7 +7191,8 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         return {};
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier &&
-        expression.children[0]->text == "std::move") {
+        (expression.children[0]->text == "std::move" ||
+         expression.children[0]->text == "std::forward")) {
         const auto& arguments = expression.children[1]->children;
         if (arguments.empty() || !arguments.front()) {
             return {};
