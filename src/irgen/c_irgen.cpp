@@ -7319,7 +7319,16 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         if (method == methods->second.end()) {
             return argument;
         }
-        auto self = emit_lvalue(node);
+        Expression self;
+        if (node.kind == frontend::AstKind::CallExpression) {
+            auto* storage = builder_.create_alloca(argument.type, 0,
+                                                       "argument.temp");
+            builder_.create_store(argument.value, storage);
+            self.value = storage;
+            self.type = argument.type;
+        } else {
+            self = emit_lvalue(node);
+        }
         if (!self.value) {
             return argument;
         }
