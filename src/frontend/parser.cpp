@@ -823,6 +823,10 @@ std::unique_ptr<AstNode> Parser::parse_struct_specifier(bool is_union) {
         ++position_;
     }
     skip_attributes();
+    if (cxx_mode_ && check("final")) {
+        node->labels.push_back("final");
+        ++position_;
+    }
     if (match(":")) {
         if (peek().kind == TokenKind::Identifier &&
             (peek().text == "public" || peek().text == "private" ||
