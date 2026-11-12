@@ -7098,12 +7098,24 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
         return {operand.value, target};
     }
     if (operand.type->kind == ir::TypeKind::Struct &&
-        target->kind == ir::TypeKind::Integer) {
-        const char* conversion = target->bits == 1
-                                     ? "operator bool"
-                                     : (target->bits == 32 && target->is_signed
-                                            ? "operator int"
-                                            : nullptr);
+        (ir::is_integer(target) || ir::is_float(target))) {
+        const char* conversion = nullptr;
+        if (ir::is_integer(target)) {
+            if (target->bits == 1) {
+                conversion = "operator bool";
+            } else if (target->bits == 8) {
+                conversion = "operator char";
+            } else if (target->bits == 16) {
+                conversion = "operator short";
+            } else if (target->bits == 32) {
+                conversion = "operator int";
+            } else if (target->bits == 64) {
+                conversion = "operator long";
+            }
+        } else {
+            conversion =
+                target->bits == 64 ? "operator double" : "operator float";
+        }
         if (conversion == nullptr) {
             // Other conversion-operator targets stay unsupported.
         } else {

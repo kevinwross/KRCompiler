@@ -62,6 +62,21 @@ public:
         if (name == "int") {
             return int_type_;
         }
+        if (name == "char") {
+            return char_type_;
+        }
+        if (name == "short") {
+            return short_type_;
+        }
+        if (name == "long") {
+            return long_type_;
+        }
+        if (name == "float") {
+            return float_type_;
+        }
+        if (name == "double") {
+            return double_type_;
+        }
         if (auto* symbol = lookup_tag(name)) {
             return symbol->type;
         }
