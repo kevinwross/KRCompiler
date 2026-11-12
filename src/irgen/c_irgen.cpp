@@ -7331,7 +7331,20 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
             source_record = source->second;
         }
     } else {
-        base = emit_lvalue(*expression.children.front());
+        if (expression.children.front()->kind ==
+            frontend::AstKind::CallExpression) {
+            auto value = emit_expression(*expression.children.front());
+            if (value.value && value.type &&
+                value.type->kind == ir::TypeKind::Struct) {
+                auto* storage =
+                    builder_.create_alloca(value.type, 0, "member.temp");
+                builder_.create_store(value.value, storage);
+                base.value = storage;
+                base.type = value.type;
+            }
+        } else {
+            base = emit_lvalue(*expression.children.front());
+        }
         if (!base.value || !base.type || base.type->kind != ir::TypeKind::Struct) {
             error(expression.location, "member access on a non-record value");
             return {};
