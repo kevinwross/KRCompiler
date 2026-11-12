@@ -7873,7 +7873,22 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
             if (methods != class_methods_.end()) {
                 const auto method = methods->second.find(conversion);
                 if (method != methods->second.end()) {
-                    auto self = emit_lvalue(*expression.children[1]);
+                    Expression self;
+                    if (expression.children[1]->kind ==
+                        frontend::AstKind::CallExpression) {
+                        auto value =
+                            emit_expression(*expression.children[1]);
+                        if (value.value && value.type &&
+                            value.type->kind == ir::TypeKind::Struct) {
+                            auto* storage = builder_.create_alloca(
+                                value.type, 0, "cast.temp");
+                            builder_.create_store(value.value, storage);
+                            self.value = storage;
+                            self.type = value.type;
+                        }
+                    } else {
+                        self = emit_lvalue(*expression.children[1]);
+                    }
                     if (self.value) {
                         if (self.value->type !=
                             method->second->type->parameters[0]) {
