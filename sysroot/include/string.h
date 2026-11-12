@@ -26,6 +26,8 @@ char *strpbrk(const char *text, const char *accept);
 char *strchr(const char *text, int character);
 char *strrchr(const char *text, int character);
 char *strstr(const char *text, const char *needle);
+void *memmem(const void *haystack, size_t haystack_length,
+             const void *needle, size_t needle_length);
 char *strtok(char *text, const char *delimiters);
 char *strtok_r(char *text, const char *delimiters, char **save);
 char *strsep(char **text, const char *delimiters);

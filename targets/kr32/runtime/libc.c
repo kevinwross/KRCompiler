@@ -2418,3 +2418,26 @@ struct FILE *fdopen(int descriptor, const char *mode) {
 int fileno(struct FILE *stream) {
     return stream == 0 ? -1 : stream->descriptor;
 }
+
+void *memmem(const void *haystack, unsigned int haystack_length,
+             const void *needle, unsigned int needle_length) {
+    const unsigned char *hay = (const unsigned char *)haystack;
+    const unsigned char *pin = (const unsigned char *)needle;
+    if (needle_length == 0) {
+        return (void *)haystack;
+    }
+    if (haystack_length < needle_length) {
+        return 0;
+    }
+    for (unsigned int index = 0; index + needle_length <= haystack_length;
+         index++) {
+        unsigned int offset = 0;
+        while (offset < needle_length && hay[index + offset] == pin[offset]) {
+            offset++;
+        }
+        if (offset == needle_length) {
+            return (void *)(hay + index);
+        }
+    }
+    return 0;
+}
