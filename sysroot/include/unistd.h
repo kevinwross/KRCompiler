@@ -16,5 +16,9 @@ int seek(int descriptor, int offset, int whence);
 int unlink(const char *path);
 int getcwd(char *buffer, int capacity);
 int chdir(const char *path);
+int dup(int descriptor);
+int dup2(int source, int target);
+int truncate(const char *path, int length);
+int stat(const char *path, void *buffer, int capacity);
 
 #endif
