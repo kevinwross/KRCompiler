@@ -1133,7 +1133,9 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     if (const auto* function = find_function_declarator(*declarator)) {
         analyze_parameters(*function);
     }
-    analyze_compound(*body);
+    if (name.find("::") == std::string::npos) {
+        analyze_compound(*body);
+    }
     pop_scope();
     if (auto_return_active_ && auto_return_type_ && type->return_type) {
         auto updated = std::make_shared<Type>(*type);
