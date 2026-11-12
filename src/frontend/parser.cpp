@@ -789,6 +789,9 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
                 function->labels.emplace_back("prototype");
             }
             expect(")", "after parameter list");
+            if (cxx_mode_ && match("->")) {
+                static_cast<void>(parse_type_name());
+            }
             direct = std::move(function);
             continue;
         }
