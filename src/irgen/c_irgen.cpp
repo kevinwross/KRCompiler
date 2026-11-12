@@ -7199,15 +7199,25 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         }
         auto left = emit_expression(*arguments[0]);
         auto right = emit_expression(*arguments[1]);
-        if (!left.value || !right.value || !left.type ||
-            !ir::is_integer(left.type)) {
+        if (!left.value || !right.value || !left.type) {
             return {};
         }
         const bool minimum =
             expression.children[0]->text == "std::min";
-        auto* condition = builder_.create_icmp(
-            minimum ? ir::ICmpPredicate::Slt : ir::ICmpPredicate::Sgt,
-            left.value, right.value, "minmax.compare");
+        ir::Value* condition = nullptr;
+        if (ir::is_integer(left.type)) {
+            condition = builder_.create_icmp(
+                minimum ? ir::ICmpPredicate::Slt
+                        : ir::ICmpPredicate::Sgt,
+                left.value, right.value, "minmax.compare");
+        } else if (ir::is_float(left.type)) {
+            condition = builder_.create_fcmp(
+                minimum ? ir::FCmpPredicate::Olt
+                        : ir::FCmpPredicate::Ogt,
+                left.value, right.value, "minmax.compare");
+        } else {
+            return {};
+        }
         auto* storage = builder_.create_alloca(left.type, 0, "minmax.temp");
         auto* then_block = current_function_->add_block("minmax.then");
         auto* else_block = current_function_->add_block("minmax.else");
