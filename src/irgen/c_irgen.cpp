@@ -6178,6 +6178,49 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         }
         return {argument.value, module_->types().pointer_type(argument.type)};
     }
+    if (expression.children[0]->kind == frontend::AstKind::Identifier &&
+        !lookup_local(expression.children[0]->text) &&
+        !functions_.contains(expression.children[0]->text)) {
+        const auto named = sema_.type_named(expression.children[0]->text);
+        if (named && named->kind == frontend::TypeKind::Record) {
+            const auto type = map_type(named);
+            const auto record = ir_records_.find(type);
+            if (record != ir_records_.end() && record->second) {
+                const auto& argument_nodes = expression.children[1]->children;
+                auto* constructor = select_constructor(
+                    record->second->tag, argument_nodes.size(), 0);
+                if (!constructor) {
+                    error(expression.location,
+                          "constructor-initialized class has no constructor");
+                    return {};
+                }
+                auto* storage =
+                    builder_.create_alloca(type, 0, "temporary.record");
+                std::vector<ir::Value*> arguments{storage};
+                for (std::size_t index = 0; index < argument_nodes.size();
+                     ++index) {
+                    if (!argument_nodes[index]) {
+                        continue;
+                    }
+                    auto argument = emit_expression(*argument_nodes[index]);
+                    if (!argument.value) {
+                        return {};
+                    }
+                    if (index + 1 < constructor->type->parameters.size()) {
+                        argument.value = promote(
+                            argument.value, argument.type,
+                            constructor->type->parameters[index + 1]);
+                    }
+                    arguments.push_back(argument.value);
+                }
+                builder_.create_call(constructor, std::move(arguments), nullptr,
+                                     "temporary.constructor");
+                auto* loaded = builder_.create_load(
+                    type, storage, false, 0, "temporary.value");
+                return {loaded, type};
+            }
+        }
+    }
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {
         const auto lambda = lambda_locals_.find(expression.children[0]->text);
         if (lambda != lambda_locals_.end()) {

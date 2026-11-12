@@ -1751,9 +1751,17 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                         }
                     }
                 }
+                if (symbol->kind == SymbolKind::RecordTag ||
+                    symbol->kind == SymbolKind::Typedef) {
+                    for (const auto& argument : expression.children[1]->children) {
+                        if (argument) {
+                            analyze_expression(*argument);
+                        }
+                    }
+                    return symbol->type;
+                }
                 error(expression.location, "called object has no operator()");
-                return int_type_;
-            }
+                return int_type_;            }
             if (!symbol && callee->text == "__builtin_expect") {
                 callee_type = function_of(long_type_, {long_type_, long_type_}, false, true);
             } else if (!symbol && callee->text == "__builtin_constant_p") {
