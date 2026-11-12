@@ -3828,7 +3828,12 @@ ir::Value* CIRGen::emit_condition(const frontend::AstNode& expression) {
         if (record != ir_records_.end() && record->second) {
             const auto methods = class_methods_.find(record->second->tag);
             if (methods != class_methods_.end()) {
-                const auto method = methods->second.find("operator bool");
+                auto method = methods->second.find("operator bool");
+                bool from_integer = false;
+                if (method == methods->second.end()) {
+                    method = methods->second.find("operator int");
+                    from_integer = method != methods->second.end();
+                }
                 if (method != methods->second.end() && method->second) {
                     auto self = emit_lvalue(expression);
                     if (self.value) {
@@ -3842,6 +3847,12 @@ ir::Value* CIRGen::emit_condition(const frontend::AstNode& expression) {
                         auto* call = builder_.create_call(
                             method->second, {self.value},
                             method->second->type->return_type, "tobool.call");
+                        if (from_integer) {
+                            auto* zero = module_->constant_int(
+                                method->second->type->return_type, 0);
+                            return builder_.create_icmp(
+                                ir::ICmpPredicate::Ne, call, zero, "tobool.int");
+                        }
                         return call;
                     }
                 }
