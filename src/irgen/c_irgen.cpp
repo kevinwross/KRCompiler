@@ -1463,9 +1463,16 @@ void CIRGen::collect_global(const frontend::AstNode& specifiers,
     }
     const auto type = map_type(frontend_type);
     const auto alignment = alignment_of(specifiers, frontend_type);
+    std::string symbol_name = name;
+    for (std::size_t separator = symbol_name.find("::");
+         separator != std::string::npos;
+         separator = symbol_name.find("::", separator)) {
+        symbol_name.replace(separator, 2, "__");
+    }
     auto* global = existing != globals_.end()
                        ? existing->second
-                       : module_->add_global(name, type, has_label(specifiers, "const"),
+                       : module_->add_global(symbol_name, type,
+                                             has_label(specifiers, "const"),
                                              alignment);
     if (existing == globals_.end()) {
         globals_.emplace(name, global);

@@ -560,7 +560,8 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             saw_specifier = true;
             continue;
         }
-        if (token.kind == TokenKind::Identifier && is_typedef_name(token.text)) {
+        if (token.kind == TokenKind::Identifier && is_typedef_name(token.text) &&
+            !(cxx_mode_ && peek(1).is("::"))) {
             node->labels.push_back(token.text);
             ++position_;
             saw_specifier = true;
@@ -615,8 +616,18 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
         }
         direct = make_ast(AstKind::Declarator, location, std::move(name));
     } else if (peek().kind == TokenKind::Identifier) {
-        direct = make_ast(AstKind::Declarator, peek().location, peek().text);
+        std::string name = peek().text;
+        const auto location = peek().location;
         ++position_;
+        if (cxx_mode_) {
+            while (check("::") && peek(1).kind == TokenKind::Identifier) {
+                ++position_;
+                name += "::";
+                name += peek().text;
+                ++position_;
+            }
+        }
+        direct = make_ast(AstKind::Declarator, location, std::move(name));
     } else if (match("(")) {
         direct = parse_declarator(allow_abstract);
         expect(")", "after parenthesized declarator");
@@ -1149,6 +1160,9 @@ bool Parser::is_declaration_start() const {
     if (cxx_mode_ && token.kind == TokenKind::Keyword &&
         (token.text == "namespace" || token.text == "using")) {
         return true;
+    }
+    if (cxx_mode_ && token.kind == TokenKind::Identifier && peek(1).is("::")) {
+        return false;
     }
     if (token.kind == TokenKind::Identifier && is_typedef_name(token.text)) {
         return true;
