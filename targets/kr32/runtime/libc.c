@@ -2278,6 +2278,12 @@ size_t strftime(char *buffer, size_t size, const char *format,
             append_text(buffer, (unsigned int)size, &used,
                         value->tm_hour < 12 ? "AM" : "PM");
             break;
+        case 'Z':
+            append_text(buffer, (unsigned int)size, &used, "UTC");
+            break;
+        case 'z':
+            append_text(buffer, (unsigned int)size, &used, "+0000");
+            break;
         case 'F':
             append_format(buffer, (unsigned int)size, &used, "%Y-%m-%d", value);
             break;
