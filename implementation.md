@@ -456,6 +456,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - `std::move(first)` selects the move constructor and the move assignment operator, `std::forward<S>(first)` preserves the rvalue, `std::swap(left, right)` exchanges two scalars or two records, and `std::min`/`std::max` select an integer or a double; linked fixtures return 7 or 37.
 - A braced array of class objects (`new S[2]{}`) runs each default constructor; a linked fixture returns 7.
 - An aggregate larger than eight bytes travels by value as a hidden pointer to a caller-owned copy, so a 20-byte struct, a 12-byte struct with a `double` member, and a 24-byte FP-only struct all pass as parameters and the callee works on its own copy; `krc_link_aggregate_arguments` and the executed `krc_run_aggregate_arguments` require exit 42, and the fixture clobbers a parameter and then reads the caller's object to prove the copy is separate.
+- An aggregate read out of an object is a value: a member (`holder.value`), an array element (`array[0]`), a dereference (`*pointer`), or a global all load as aggregates and can be passed by value, copied, or read again; `krc_link_aggregate_values` and the executed `krc_run_aggregate_values` require exit 42.
 - Placement construction (`new (storage) S(7)`) selects the matching constructor; a linked fixture returns 7.
 - A call initializer is evaluated exactly once (`int x = bump()`); a linked fixture returns 7.
 - A namespace-qualified type name (`ns::S object`, `new ns::S`) parses in declarations and allocations; a linked fixture returns 10.
@@ -490,6 +491,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T12:21:35-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 525/525
+windows-msvc-release  PASS 525/525
+linux-gcc-debug       PASS 510/510
+linux-gcc-release     PASS 510/510
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifteen tests fewer: the executed tests need a runnable
+KR32 VM and are not registered where the default is a Windows binary. This gate
+covers aggregate values read out of objects (members, array elements,
+dereferences, globals). Clean configure and build of all four presets; no
+warnings in any log.
 
 ### 2026-11-13T12:06:00-08:00 — host gate (Windows)
 
@@ -2599,3 +2616,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T12:05:19-08:00** — The lowering is in IRGen, not the backend: `map_function_type` turns a memory-class aggregate parameter into a hidden pointer, the prologue copies the pointed-to object into the parameter's frame slot, and every call site materializes the argument value in a temporary and passes its address. That keeps the backend unchanged — it still passes one word — and gives the callee its own copy, which is what the ABI promises and what the fixture checks by clobbering a parameter and reading the caller's object afterwards.
 - **2026-11-13T12:05:19-08:00** — The classification is one predicate used in both places, so the signature and the argument adaptation cannot disagree: an aggregate is memory class when it exceeds 8 bytes, except an FP-only aggregate up to 16 bytes, which stays in two FPRs.
 - **2026-11-13T12:05:19-08:00** — Two defects came out of the fixture. The parser treated a record-returning function whose first parameter is a record (`Large pass_through(Large value)`) as a constructor-initialized declaration, because the disambiguation looked only for keywords inside the parentheses; it now also rejects a class or typedef name. And five code paths added IR parameters from `map_type` directly rather than through the new classification, so the declared type and the parameter disagreed until each one used the same predicate. An aggregate *member* used as a value (`sum(holder.value)`) is still rejected with `aggregate member load is not implemented yet`; the fixture reads the members instead and the diagnostic stays documented. Windows debug CTest is 523/523.
+- **2026-11-13T12:21:11-08:00** — Implemented aggregate reads out of an object, the diagnostic that was left behind by the aggregate-argument work. A member, an array element, a pointer dereference, and a global of aggregate type all produce a value now, so `sum(holder.value)`, `sum(array[i])`, and `sum(*pointer)` compile and run.
+- **2026-11-13T12:21:11-08:00** — The IR already had the shape for it and the backend already emitted the copy: a `load` of a struct type copies the object into the value's frame slot, which was implemented but unreachable because the member path refused aggregates before building the load. No backend change was needed.
+- **2026-11-13T12:21:11-08:00** — `krc_link_aggregate_values` and the executed `krc_run_aggregate_values` cover a member read, a copy of a member that stays separate, array elements, a dereference, a global (including a write through a member), a member of a member, and passing such a value straight to a call; the fixture requires exit 42 and Windows debug CTest is 525/525.
