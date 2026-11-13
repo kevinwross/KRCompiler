@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <stdlib.h>
 #include <time.h>
 #include <locale.h>
 
@@ -745,6 +746,21 @@ int snprintf(char *destination, unsigned int size, const char *format, ...) {
     return result;
 }
 
+int vsprintf(char *destination, const char *format, va_list arguments) {
+    char *saved_buffer = format_buffer;
+    int saved_count = format_count;
+    int saved_limit = format_limit;
+    format_buffer = destination;
+    format_count = 0;
+    format_limit = -1;
+    format_output(format, arguments);
+    destination[format_count] = 0;
+    const int result = format_count;
+    format_buffer = saved_buffer;
+    format_count = saved_count;
+    format_limit = saved_limit;
+    return result;
+}
 int vsnprintf(char *destination, unsigned int size, const char *format,
               va_list arguments) {
     char *saved_buffer = format_buffer;
@@ -1189,6 +1205,11 @@ double strtod(const char *text, char **end) {
     return negative ? -value : value;
 }
 
+long double strtold(const char *text, char **end) {
+    /* long double is 64-bit IEEE on this target, so the double parse is exact
+     * for every value either type can represent. */
+    return (long double)strtod(text, end);
+}
 double atof(const char *text) {
     return strtod(text, 0);
 }
@@ -1231,6 +1252,26 @@ double sqrt(double value) {
     return estimate;
 }
 
+div_t div(int numerator, int denominator) {
+    div_t result;
+    result.quot = numerator / denominator;
+    result.rem = numerator % denominator;
+    return result;
+}
+
+ldiv_t ldiv(long numerator, long denominator) {
+    ldiv_t result;
+    result.quot = numerator / denominator;
+    result.rem = numerator % denominator;
+    return result;
+}
+
+lldiv_t lldiv(long long numerator, long long denominator) {
+    lldiv_t result;
+    result.quot = numerator / denominator;
+    result.rem = numerator % denominator;
+    return result;
+}
 int abs(int value) {
     return value < 0 ? -value : value;
 }
@@ -1718,6 +1759,20 @@ struct FILE *fopen(const char *path, const char *mode) {
     return stream;
 }
 
+int feof(struct FILE *stream) {
+    return stream != 0 && stream->eof != 0;
+}
+
+int ferror(struct FILE *stream) {
+    return stream != 0 && stream->error != 0;
+}
+
+void clearerr(struct FILE *stream) {
+    if (stream != 0) {
+        stream->eof = 0;
+        stream->error = 0;
+    }
+}
 int fclose(struct FILE *stream) {
     if (stream == 0 || stream == stdin || stream == stdout || stream == stderr) {
         return 0;

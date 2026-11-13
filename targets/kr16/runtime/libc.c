@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <stdlib.h>
 
 unsigned int strlen(const char *text) {
     unsigned int length = 0;
@@ -211,7 +212,6 @@ unsigned long strtoul(const char *text, char **end, int base) {
 int atoi(const char *text) {
     return (int)strtol(text, 0, 10);
 }
-
 int abs(int value) {
     return value < 0 ? -value : value;
 }
@@ -557,14 +557,10 @@ static void format_text(const char *text, int width, int precision,
     }
 }
 
-int vsnprintf(char *buffer, unsigned int size, const char *format,
-              va_list arguments) {
-    char *saved_buffer = format_buffer;
-    const int saved_count = format_count;
-    const int saved_limit = format_limit;
-    format_buffer = buffer;
-    format_count = 0;
-    format_limit = size > 0u ? (int)size : 0;
+/* Formats into the sink the caller installed: ormat_buffer names the
+ * buffer (null for the console) and ormat_limit bounds the write, with a
+ * negative limit meaning unbounded. */
+static int format_arguments(const char *format, va_list arguments) {
 
     while (*format != 0) {
         if (*format != '%') {
@@ -695,11 +691,27 @@ int vsnprintf(char *buffer, unsigned int size, const char *format,
             format_count < format_limit - 1 ? format_count : format_limit - 1;
         format_buffer[terminator] = 0;
     }
-    const int written = format_count;
+    return format_count < 0 ? 0 : format_count;
+}
+
+int vsnprintf(char *buffer, unsigned int size, const char *format,
+              va_list arguments) {
+    char *saved_buffer = format_buffer;
+    const int saved_count = format_count;
+    const int saved_limit = format_limit;
+    format_buffer = buffer;
+    format_count = 0;
+    format_limit = size > 0x7FFFu ? 0x7FFF : (int)size;
+    const int written = format_arguments(format, arguments);
+    if (format_buffer && format_limit > 0) {
+        const int terminator =
+            format_count < format_limit - 1 ? format_count : format_limit - 1;
+        format_buffer[terminator] = 0;
+    }
     format_buffer = saved_buffer;
     format_count = saved_count;
     format_limit = saved_limit;
-    return written < 0 ? 0 : written;
+    return written;
 }
 
 int snprintf(char *buffer, unsigned int size, const char *format, ...) {
@@ -710,10 +722,24 @@ int snprintf(char *buffer, unsigned int size, const char *format, ...) {
     return written;
 }
 
+int vsprintf(char *buffer, const char *format, va_list arguments) {
+    char *saved_buffer = format_buffer;
+    const int saved_count = format_count;
+    const int saved_limit = format_limit;
+    format_buffer = buffer;
+    format_count = 0;
+    format_limit = -1;
+    const int written = format_arguments(format, arguments);
+    buffer[format_count] = 0;
+    format_buffer = saved_buffer;
+    format_count = saved_count;
+    format_limit = saved_limit;
+    return written;
+}
 int sprintf(char *buffer, const char *format, ...) {
     va_list arguments;
     va_start(arguments, format);
-    const int written = vsnprintf(buffer, 0xFFFFu, format, arguments);
+    const int written = vsprintf(buffer, format, arguments);
     va_end(arguments);
     return written;
 }

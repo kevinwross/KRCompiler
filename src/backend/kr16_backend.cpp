@@ -502,6 +502,16 @@ void Kr16Backend::emit_function(std::string& out,
             case ir::Opcode::Ret:
                 if (!instruction->operands.empty() &&
                     instruction->operands[0]) {
+                    // An aggregate return has no register form on this
+                    // profile; rejecting it beats storing a truncated value.
+                    if (instruction->operands[0]->type &&
+                        (instruction->operands[0]->type->kind ==
+                             ir::TypeKind::Struct ||
+                         instruction->operands[0]->type->kind ==
+                             ir::TypeKind::Union)) {
+                        error = "KR16 aggregate returns are not implemented";
+                        return;
+                    }
                     load(instruction->operands[0], "R0");
                 }
                 out += "    JMP .L" + function.name + ".ret\n";

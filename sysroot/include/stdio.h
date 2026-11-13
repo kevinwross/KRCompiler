@@ -7,6 +7,9 @@
 typedef struct FILE FILE;
 
 #define EOF (-1)
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
 #define L_tmpnam 32
 #define TMP_MAX 25
 #define BUFSIZ 512
@@ -28,6 +31,7 @@ int vfprintf(FILE *stream, const char *format, va_list args);
 int dprintf(int descriptor, const char *format, ...);
 int vdprintf(int descriptor, const char *format, va_list args);
 int vsnprintf(char *buffer, size_t size, const char *format, va_list args);
+int vsprintf(char *buffer, const char *format, va_list args);
 
 int scanf(const char *format, ...);
 int fscanf(FILE *stream, const char *format, ...);
@@ -68,6 +72,9 @@ FILE *fdopen(int descriptor, const char *mode);
 int fileno(FILE *stream);
 char *tmpnam(char *buffer);
 int fflush(FILE *stream);
+int feof(FILE *stream);
+int ferror(FILE *stream);
+void clearerr(FILE *stream);
 
 /* Host service: shows the platform's open-file dialog and writes the chosen
    path into buffer. Returns the length written, or -1 when cancelled. */

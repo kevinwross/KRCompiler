@@ -23,11 +23,35 @@ unsigned long strtoul(const char *text, char **end, int base);
 int abs(int value);
 long labs(long value);
 
+/* This profile returns aggregates in registers, which IP16 cannot do, so the
+ * struct-returning division helpers are absent there. */
+#ifndef __kr16__
+typedef struct div_t {
+    int quot;
+    int rem;
+} div_t;
+
+typedef struct ldiv_t {
+    long quot;
+    long rem;
+} ldiv_t;
+
+typedef struct lldiv_t {
+    long long quot;
+    long long rem;
+} lldiv_t;
+
+div_t div(int numerator, int denominator);
+ldiv_t ldiv(long numerator, long denominator);
+lldiv_t lldiv(long long numerator, long long denominator);
+#endif
+
 /* The IP16 profile has no 64-bit integer or floating-point type, so those
  * declarations are absent there and using the type is diagnosed. */
 #ifndef __kr16__
 double atof(const char *text);
 double strtod(const char *text, char **end);
+long double strtold(const char *text, char **end);
 long long atoll(const char *text);
 long long strtoll(const char *text, char **end, int base);
 unsigned long long strtoull(const char *text, char **end, int base);

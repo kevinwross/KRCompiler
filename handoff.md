@@ -291,6 +291,16 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - Exception state is a single global; the VM is single-threaded for the
   supported subset.
 
+## KR16 host services
+
+The sibling VM implements only `SYS_VERSION`; every other `SYS #n` service is
+reserved and returns `ENOSYS`. KR16 file I/O therefore cannot be implemented
+from this repository — the plan's "Integrate KR16 `resources/fileio.c`" item
+waits on that VM work, and the M9 checklist says so.
+
+KR16 also has no aggregate return convention: the backend rejects one with
+`KR16 aggregate returns are not implemented` rather than storing a truncated
+value in `R0`, so `<stdlib.h>` omits `div`/`ldiv`/`lldiv` on that profile.
 ## KR16 heap
 
 The linker now reports KR16's memory limits: `__heap_start` is the first byte
