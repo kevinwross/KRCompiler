@@ -328,7 +328,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 **M8 evidence (2026-11-11, in progress):**
 
 - Deterministic double-build checks cover KR32 objects, single-unit KR16 `.kex`, KR16 KRO objects, and linked KR16 images.
-- Executed tests run a linked image under a KR32 VM and compare its exit status, so a defect that only appears when generated code runs is caught by CTest. `krc_run_longlong_arith` and `krc_run_longlong_conditional` expect exit 0. The VM path is the `KRC_KR32_VM` cache variable, defaulting to the sibling checkout when present; without it the run tests are not registered, so the suite still passes where `../kr32` is absent. Asking for a deliberately wrong status fails with `expected exit 3, got 0`, so the check is not vacuous.
+- Executed tests run a linked image under a KR32 VM and compare its exit status, and optionally its output, so a defect that only appears when generated code runs is caught by CTest. `krc_run_longlong_arith` and `krc_run_longlong_conditional` expect exit 0; `krc_run_printf_long_long` also expects the text `-123 456 1c8`, because a truncated conversion still exits 0. The VM path is the `KRC_KR32_VM` cache variable, adopted automatically on a Windows host when the sibling checkout is present; without it the run tests are not registered, so the suite still passes where `../kr32` is absent. Asking for a deliberately wrong status fails with `expected exit 3, got 0` and a wrong output with `expected output matching ...`, so the checks are not vacuous.
 - [ADR 0020](docs/decisions/0020-kdbg-source-path-policy.md) keeps KDBG v1 and defines `krld --source-root=DIR`; the runtime link helper passes the project root, and `krc_debug_paths_relative` verifies hello records `tests/fixtures/c/hello.c` with no absolute root.
 - Corpus measured under the VM (`../kr32/examples`, `krc -c` then `krld` with `libkrcrt.kro`, `fileio.s`, `crt0.s`): 13 of 15 examples compile, link, and run. Exit codes as each program returns them: `hello.c` 0, `strings.c` 0, `types.c` 0, `varargs.c` 0, `libc-test.c` 0, `floats.c` 0, `fileio.c` 0, `mainentry.c` 0, `cxx_libc.cpp` 0, `hello.cpp` 42 (`point.sum()`), `cxx_tls.cpp` 42 (the `long long` division's expected value). Two known blockers still fail to compile: `FileOpen.cpp` on `implicit declaration of function 'sys_open_dialog'`, and `matrix.cpp` on `expression is not an lvalue` at line 66.
 - **Two corpus programs halt with a wrong status and no printed tree:** `binarytree.c` exits 115 and `balanced-tree.cpp` exits 36, although both `main`s end in `return 0` and the emitted assembly ends `MOV R0, #0` before `JMP .Lmain.ret`. Narrowed to the AVL balance path:
@@ -473,996 +473,996 @@ Most recent first.
 
 ### 2026-11-12T23:53:00-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 474/474
 windows-msvc-release  PASS 474/474
 linux-gcc-debug       PASS 472/472
 linux-gcc-release     PASS 472/472
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 The Linux rows register two tests fewer: the executed tests need a runnable
 KR32 VM and are not registered where the default is a Windows binary.
 
 ### 2026-11-12T23:33:47-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 472/472
 windows-msvc-release  PASS 472/472
 linux-gcc-debug       PASS 472/472
 linux-gcc-release     PASS 472/472
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T23:15:09-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 471/471
 windows-msvc-release  PASS 471/471
 linux-gcc-debug       PASS 471/471
 linux-gcc-release     PASS 471/471
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T23:01:20-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 470/470
 windows-msvc-release  PASS 470/470
 linux-gcc-debug       PASS 470/470
 linux-gcc-release     PASS 470/470
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T22:45:20-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 469/469
 windows-msvc-release  PASS 469/469
 linux-gcc-debug       PASS 469/469
 linux-gcc-release     PASS 469/469
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T22:19:16-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 468/468
 windows-msvc-release  PASS 468/468
 linux-gcc-debug       PASS 468/468
 linux-gcc-release     PASS 468/468
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T21:53:45-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 465/465
 windows-msvc-release  PASS 465/465
 linux-gcc-debug       PASS 465/465
 linux-gcc-release     PASS 465/465
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T11:03:14-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 460/460
 windows-msvc-release  PASS 460/460
 linux-gcc-debug       PASS 460/460
 linux-gcc-release     PASS 460/460
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T10:47:11-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 458/458
 windows-msvc-release  PASS 458/458
 linux-gcc-debug       PASS 458/458
 linux-gcc-release     PASS 458/458
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T10:12:35-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 456/456
 windows-msvc-release  PASS 456/456
 linux-gcc-debug       PASS 456/456
 linux-gcc-release     PASS 456/456
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T09:59:48-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 455/455
 windows-msvc-release  PASS 455/455
 linux-gcc-debug       PASS 455/455
 linux-gcc-release     PASS 455/455
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T09:43:53-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 453/453
 windows-msvc-release  PASS 453/453
 linux-gcc-debug       PASS 453/453
 linux-gcc-release     PASS 453/453
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T09:27:42-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 451/451
 windows-msvc-release  PASS 451/451
 linux-gcc-debug       PASS 451/451
 linux-gcc-release     PASS 451/451
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T09:11:20-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 449/449
 windows-msvc-release  PASS 449/449
 linux-gcc-debug       PASS 449/449
 linux-gcc-release     PASS 449/449
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T08:55:59-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 447/447
 windows-msvc-release  PASS 447/447
 linux-gcc-debug       PASS 447/447
 linux-gcc-release     PASS 447/447
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T08:39:49-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 445/445
 windows-msvc-release  PASS 445/445
 linux-gcc-debug       PASS 445/445
 linux-gcc-release     PASS 445/445
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T08:23:36-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 443/443
 windows-msvc-release  PASS 443/443
 linux-gcc-debug       PASS 443/443
 linux-gcc-release     PASS 443/443
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T08:08:47-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 441/441
 windows-msvc-release  PASS 441/441
 linux-gcc-debug       PASS 441/441
 linux-gcc-release     PASS 441/441
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T07:52:53-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 439/439
 windows-msvc-release  PASS 439/439
 linux-gcc-debug       PASS 439/439
 linux-gcc-release     PASS 439/439
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T07:38:44-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 437/437
 windows-msvc-release  PASS 437/437
 linux-gcc-debug       PASS 437/437
 linux-gcc-release     PASS 437/437
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T07:24:02-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 435/435
 windows-msvc-release  PASS 435/435
 linux-gcc-debug       PASS 435/435
 linux-gcc-release     PASS 435/435
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T07:08:19-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 433/433
 windows-msvc-release  PASS 433/433
 linux-gcc-debug       PASS 433/433
 linux-gcc-release     PASS 433/433
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T06:52:25-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 431/431
 windows-msvc-release  PASS 431/431
 linux-gcc-debug       PASS 431/431
 linux-gcc-release     PASS 431/431
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T06:36:40-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 429/429
 windows-msvc-release  PASS 429/429
 linux-gcc-debug       PASS 429/429
 linux-gcc-release     PASS 429/429
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T06:20:33-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 427/427
 windows-msvc-release  PASS 427/427
 linux-gcc-debug       PASS 427/427
 linux-gcc-release     PASS 427/427
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T06:05:05-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 425/425
 windows-msvc-release  PASS 425/425
 linux-gcc-debug       PASS 425/425
 linux-gcc-release     PASS 425/425
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T05:50:18-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 423/423
 windows-msvc-release  PASS 423/423
 linux-gcc-debug       PASS 423/423
 linux-gcc-release     PASS 423/423
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T05:36:20-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 421/421
 windows-msvc-release  PASS 421/421
 linux-gcc-debug       PASS 421/421
 linux-gcc-release     PASS 421/421
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T05:22:14-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 419/419
 windows-msvc-release  PASS 419/419
 linux-gcc-debug       PASS 419/419
 linux-gcc-release     PASS 419/419
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T05:08:16-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 417/417
 windows-msvc-release  PASS 417/417
 linux-gcc-debug       PASS 417/417
 linux-gcc-release     PASS 417/417
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T04:54:01-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 415/415
 windows-msvc-release  PASS 415/415
 linux-gcc-debug       PASS 415/415
 linux-gcc-release     PASS 415/415
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T04:36:31-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 412/412
 windows-msvc-release  PASS 412/412
 linux-gcc-debug       PASS 412/412
 linux-gcc-release     PASS 412/412
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T04:19:10-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 410/410
 windows-msvc-release  PASS 410/410
 linux-gcc-debug       PASS 410/410
 linux-gcc-release     PASS 410/410
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T04:01:29-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 407/407
 windows-msvc-release  PASS 407/407
 linux-gcc-debug       PASS 407/407
 linux-gcc-release     PASS 407/407
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T03:48:19-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 405/405
 windows-msvc-release  PASS 405/405
 linux-gcc-debug       PASS 405/405
 linux-gcc-release     PASS 405/405
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T03:34:56-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 402/402
 windows-msvc-release  PASS 402/402
 linux-gcc-debug       PASS 402/402
 linux-gcc-release     PASS 402/402
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T03:24:37-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 401/401
 windows-msvc-release  PASS 401/401
 linux-gcc-debug       PASS 401/401
 linux-gcc-release     PASS 401/401
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T03:11:59-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 399/399
 windows-msvc-release  PASS 399/399
 linux-gcc-debug       PASS 399/399
 linux-gcc-release     PASS 399/399
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T02:58:17-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 397/397
 windows-msvc-release  PASS 397/397
 linux-gcc-debug       PASS 397/397
 linux-gcc-release     PASS 397/397
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T02:42:44-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 394/394
 windows-msvc-release  PASS 394/394
 linux-gcc-debug       PASS 394/394
 linux-gcc-release     PASS 394/394
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T02:30:38-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 392/392
 windows-msvc-release  PASS 392/392
 linux-gcc-debug       PASS 392/392
 linux-gcc-release     PASS 392/392
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T02:17:59-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 390/390
 windows-msvc-release  PASS 390/390
 linux-gcc-debug       PASS 390/390
 linux-gcc-release     PASS 390/390
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T02:05:53-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 387/387
 windows-msvc-release  PASS 387/387
 linux-gcc-debug       PASS 387/387
 linux-gcc-release     PASS 387/387
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T01:52:35-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 385/385
 windows-msvc-release  PASS 385/385
 linux-gcc-debug       PASS 385/385
 linux-gcc-release     PASS 385/385
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T01:39:26-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 383/383
 windows-msvc-release  PASS 383/383
 linux-gcc-debug       PASS 383/383
 linux-gcc-release     PASS 383/383
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T01:23:45-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 380/380
 windows-msvc-release  PASS 380/380
 linux-gcc-debug       PASS 380/380
 linux-gcc-release     PASS 380/380
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T01:11:01-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 378/378
 windows-msvc-release  PASS 378/378
 linux-gcc-debug       PASS 378/378
 linux-gcc-release     PASS 378/378
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T00:58:31-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 376/376
 windows-msvc-release  PASS 376/376
 linux-gcc-debug       PASS 376/376
 linux-gcc-release     PASS 376/376
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T00:45:31-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 374/374
 windows-msvc-release  PASS 374/374
 linux-gcc-debug       PASS 374/374
 linux-gcc-release     PASS 374/374
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T00:33:44-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 372/372
 windows-msvc-release  PASS 372/372
 linux-gcc-debug       PASS 372/372
 linux-gcc-release     PASS 372/372
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T00:21:09-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 370/370
 windows-msvc-release  PASS 370/370
 linux-gcc-debug       PASS 370/370
 linux-gcc-release     PASS 370/370
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-12T00:09:14-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 368/368
 windows-msvc-release  PASS 368/368
 linux-gcc-debug       PASS 368/368
 linux-gcc-release     PASS 368/368
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T23:57:27-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 366/366
 windows-msvc-release  PASS 366/366
 linux-gcc-debug       PASS 366/366
 linux-gcc-release     PASS 366/366
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T23:46:10-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 364/364
 windows-msvc-release  PASS 364/364
 linux-gcc-debug       PASS 364/364
 linux-gcc-release     PASS 364/364
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T23:34:10-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 362/362
 windows-msvc-release  PASS 362/362
 linux-gcc-debug       PASS 362/362
 linux-gcc-release     PASS 362/362
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T23:22:11-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 360/360
 windows-msvc-release  PASS 360/360
 linux-gcc-debug       PASS 360/360
 linux-gcc-release     PASS 360/360
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T23:11:03-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 358/358
 windows-msvc-release  PASS 358/358
 linux-gcc-debug       PASS 358/358
 linux-gcc-release     PASS 358/358
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T22:58:20-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 356/356
 windows-msvc-release  PASS 356/356
 linux-gcc-debug       PASS 356/356
 linux-gcc-release     PASS 356/356
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T22:45:46-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 354/354
 windows-msvc-release  PASS 354/354
 linux-gcc-debug       PASS 354/354
 linux-gcc-release     PASS 354/354
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T22:30:49-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 351/351
 windows-msvc-release  PASS 351/351
 linux-gcc-debug       PASS 351/351
 linux-gcc-release     PASS 351/351
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T22:18:23-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 348/348
 windows-msvc-release  PASS 348/348
 linux-gcc-debug       PASS 348/348
 linux-gcc-release     PASS 348/348
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T22:06:31-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 345/345
 windows-msvc-release  PASS 345/345
 linux-gcc-debug       PASS 345/345
 linux-gcc-release     PASS 345/345
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T21:53:02-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 341/341
 windows-msvc-release  PASS 341/341
 linux-gcc-debug       PASS 341/341
 linux-gcc-release     PASS 341/341
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T21:41:54-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 339/339
 windows-msvc-release  PASS 339/339
 linux-gcc-debug       PASS 339/339
 linux-gcc-release     PASS 339/339
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T21:30:52-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 336/336
 windows-msvc-release  PASS 336/336
 linux-gcc-debug       PASS 336/336
 linux-gcc-release     PASS 336/336
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T21:19:22-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 333/333
 windows-msvc-release  PASS 333/333
 linux-gcc-debug       PASS 333/333
 linux-gcc-release     PASS 333/333
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T21:07:40-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 331/331
 windows-msvc-release  PASS 331/331
 linux-gcc-debug       PASS 331/331
 linux-gcc-release     PASS 331/331
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T20:56:30-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 329/329
 windows-msvc-release  PASS 329/329
 linux-gcc-debug       PASS 329/329
 linux-gcc-release     PASS 329/329
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T20:45:22-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 327/327
 windows-msvc-release  PASS 327/327
 linux-gcc-debug       PASS 327/327
 linux-gcc-release     PASS 327/327
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T20:33:57-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 325/325
 windows-msvc-release  PASS 325/325
 linux-gcc-debug       PASS 325/325
 linux-gcc-release     PASS 325/325
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T20:22:53-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 323/323
 windows-msvc-release  PASS 323/323
 linux-gcc-debug       PASS 323/323
 linux-gcc-release     PASS 323/323
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T20:11:47-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 321/321
 windows-msvc-release  PASS 321/321
 linux-gcc-debug       PASS 321/321
 linux-gcc-release     PASS 321/321
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T19:57:26-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 319/319
 windows-msvc-release  PASS 319/319
 linux-gcc-debug       PASS 319/319
 linux-gcc-release     PASS 319/319
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T19:46:41-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 317/317
 windows-msvc-release  PASS 317/317
 linux-gcc-debug       PASS 317/317
 linux-gcc-release     PASS 317/317
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T19:35:29-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 316/316
 windows-msvc-release  PASS 316/316
 linux-gcc-debug       PASS 316/316
 linux-gcc-release     PASS 316/316
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T19:21:25-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 314/314
 windows-msvc-release  PASS 314/314
 linux-gcc-debug       PASS 314/314
 linux-gcc-release     PASS 314/314
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T19:10:45-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 312/312
 windows-msvc-release  PASS 312/312
 linux-gcc-debug       PASS 312/312
 linux-gcc-release     PASS 312/312
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T19:01:20-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 310/310
 windows-msvc-release  PASS 310/310
 linux-gcc-debug       PASS 310/310
 linux-gcc-release     PASS 310/310
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T18:52:00-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 308/308
 windows-msvc-release  PASS 308/308
 linux-gcc-debug       PASS 308/308
 linux-gcc-release     PASS 308/308
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T18:38:56-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 304/304
 windows-msvc-release  PASS 304/304
 linux-gcc-debug       PASS 304/304
 linux-gcc-release     PASS 304/304
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T18:29:28-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 302/302
 windows-msvc-release  PASS 302/302
 linux-gcc-debug       PASS 302/302
 linux-gcc-release     PASS 302/302
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T18:17:14-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 299/299
 windows-msvc-release  PASS 299/299
 linux-gcc-debug       PASS 299/299
 linux-gcc-release     PASS 299/299
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T18:03:40-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 296/296
 windows-msvc-release  PASS 296/296
 linux-gcc-debug       PASS 296/296
 linux-gcc-release     PASS 296/296
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T17:53:38-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 294/294
 windows-msvc-release  PASS 294/294
 linux-gcc-debug       PASS 294/294
 linux-gcc-release     PASS 294/294
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T17:44:09-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 292/292
 windows-msvc-release  PASS 292/292
 linux-gcc-debug       PASS 292/292
 linux-gcc-release     PASS 292/292
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T17:34:11-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 288/288
 windows-msvc-release  PASS 288/288
 linux-gcc-debug       PASS 288/288
 linux-gcc-release     PASS 288/288
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T17:17:04-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 285/285
 windows-msvc-release  PASS 285/285
 linux-gcc-debug       PASS 285/285
 linux-gcc-release     PASS 285/285
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T17:03:33-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 282/282
 windows-msvc-release  PASS 282/282
 linux-gcc-debug       PASS 282/282
 linux-gcc-release     PASS 282/282
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T16:48:33-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 279/279
 windows-msvc-release  PASS 279/279
 linux-gcc-debug       PASS 279/279
 linux-gcc-release     PASS 279/279
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T16:34:39-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 276/276
 windows-msvc-release  PASS 276/276
 linux-gcc-debug       PASS 276/276
 linux-gcc-release     PASS 276/276
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T16:23:26-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 273/273
 windows-msvc-release  PASS 273/273
 linux-gcc-debug       PASS 273/273
 linux-gcc-release     PASS 273/273
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T16:10:27-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 270/270
 windows-msvc-release  PASS 270/270
 linux-gcc-debug       PASS 270/270
 linux-gcc-release     PASS 270/270
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T15:58:52-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 268/268
 windows-msvc-release  PASS 268/268
 linux-gcc-debug       PASS 268/268
 linux-gcc-release     PASS 268/268
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T15:41:13-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 264/264
 windows-msvc-release  PASS 264/264
 linux-gcc-debug       PASS 264/264
 linux-gcc-release     PASS 264/264
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T15:26:20-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 261/261
 windows-msvc-release  PASS 261/261
 linux-gcc-debug       PASS 261/261
 linux-gcc-release     PASS 261/261
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T15:12:44-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 256/256
 windows-msvc-release  PASS 256/256
 linux-gcc-debug       PASS 256/256
 linux-gcc-release     PASS 256/256
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T14:53:09-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 250/250
 windows-msvc-release  PASS 250/250
 linux-gcc-debug       PASS 250/250
 linux-gcc-release     PASS 250/250
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T14:41:16-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 248/248
 windows-msvc-release  PASS 248/248
 linux-gcc-debug       PASS 248/248
 linux-gcc-release     PASS 248/248
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ### 2026-11-11T14:17:51-08:00 — host gate (Windows)
 
-```text
+``text
 windows-msvc-debug    PASS 247/247
 windows-msvc-release  PASS 247/247
 linux-gcc-debug       PASS 247/247
 linux-gcc-release     PASS 247/247
 not verified: native Linux x64, Linux ARM64
-```
+``
 
 ## 6. Running log
 
@@ -1920,3 +1920,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-12T23:55:00-08:00** — Bisected the corpus tree failure to the AVL balance path. Reduced copies of `binarytree.c` at 20 inserts print correctly and exit 0; 22, 24, 26, 28, and 30 print no tree and return garbage statuses. Replacing `return balance_node(root);` with `return root;` makes all of them behave correctly, since the plain BST is then detected as unbalanced and the program prints its message and exits 1. Ruled out along the way: heap exhaustion (134 MB arena), a hand-written 26-node AVL tree of the same shape (works), and the print/recursion/exit paths. The fault is in `balance_node` and its rotations for particular shapes.
 - **2026-11-13T00:05:00-08:00** — Characterized the corpus tree failure as corrupted control flow rather than a bad value. A 22-insert copy stops after four right descents even when the node name is replaced by a string literal, and `check_balanced` completes before printing, so the tree validates; the VM's halt PC disassembles as zeroed padding between sections, meaning execution left the function. A stand-alone recursive printer of the same shape runs to depth 7 and exits 0, so the remaining suspect is the recursive frame sequence (`PUSH R7`/`ADJSP`/`POP R7`/`RET`) with a variadic call in between. Recorded as a known defect with `bt20`/`bt22` reproducers instead of a fourth round on it.
 - **2026-11-12T23:52:10-08:00** — Added executed tests: `cmake/RunKr32Image.cmake` runs a linked image under the KR32 VM and compares its exit status, registered for `longlong_arith` and `longlong_conditional` when `KRC_KR32_VM` resolves. A link-only test cannot see a wrong result in generated code, which is how a truncated 64-bit cast survived the suite; asking for a deliberately wrong status fails with `expected exit 3, got 0`, so the check is not vacuous. Windows debug CTest is 474/474. Also recorded that the corpus tree defect is not frame size: `print_tree` reserves 168 bytes, so six levels cannot overflow the stack, and `bt20`/`bt22` share identical code.
+- **2026-11-13T00:01:39-08:00** — Extended the executed tests to compare program output, not only the exit status: `krc_run_printf_long_long` asserts the text `-123 456 1c8`, which fails if the 64-bit conversion regresses to the low word that a link-only test accepted. Verified the check bites by asking for the old truncated value. Windows debug CTest is 475/475.

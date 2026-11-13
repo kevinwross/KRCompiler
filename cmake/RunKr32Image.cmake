@@ -5,7 +5,8 @@
 # suite. When no VM is configured the caller does not register these tests.
 #
 # Required: VM, IMAGE, EXPECT_EXIT
-# Optional: MAX_STEPS (default 20000000)
+# Optional: MAX_STEPS (default 20000000), EXPECT_OUTPUT (a regular expression
+#           matched against stdout; newlines became '|' before matching)
 
 if(NOT DEFINED VM OR NOT DEFINED IMAGE OR NOT DEFINED EXPECT_EXIT)
     message(FATAL_ERROR "VM, IMAGE, and EXPECT_EXIT are required")
@@ -29,4 +30,14 @@ execute_process(
 if(NOT result EQUAL EXPECT_EXIT)
     message(FATAL_ERROR
         "expected exit ${EXPECT_EXIT}, got ${result}\n${output}${error}")
+endif()
+
+# A program can print the wrong value and still exit 0, which is how a
+# truncated 64-bit conversion survived a link-only test.
+if(DEFINED EXPECT_OUTPUT AND NOT EXPECT_OUTPUT STREQUAL "")
+    string(REPLACE "\n" "|" flattened "${output}")
+    if(NOT flattened MATCHES "${EXPECT_OUTPUT}")
+        message(FATAL_ERROR
+            "expected output matching '${EXPECT_OUTPUT}', got: ${flattened}")
+    endif()
 endif()

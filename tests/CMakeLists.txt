@@ -393,6 +393,18 @@ if(TARGET krc)
             set_tests_properties(krc_run_${run_fixture} PROPERTIES
                 DEPENDS krc_link_${run_fixture})
         endforeach()
+
+        # The 64-bit conversion path: a wrong value still exits 0, so the
+        # expected output is part of the check.
+        add_test(NAME krc_run_printf_long_long
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/printf_long_long_linked.k32
+                    -DEXPECT_EXIT=0
+                    "-DEXPECT_OUTPUT=-123 456 1c8"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_printf_long_long PROPERTIES
+            DEPENDS krc_link_printf_long_long)
     endif()
 
     add_test(NAME krc_link_printf_width
