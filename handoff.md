@@ -145,10 +145,11 @@ value in `implementation.md`. Do not claim a runtime result from CTest alone.
 - `../kr32/examples/FileOpen.cpp` is blocked on `sys_open_dialog`, which is not
   declared or implemented.
 - Some C++ diagnostics remain permissive: a deleted constructor or destructor
-  used at a construction site is accepted, friend classes are parsed but not
-  recorded, `const` correctness is not enforced, and in-class member bodies are
-  never analysed by Sema. Out-of-line member bodies now have class scope and
-  `this`, so they are checked.
+  used at a construction site is accepted, `const` correctness is not enforced,
+  and in-class member bodies are never analysed by Sema. Out-of-line member
+  bodies have class scope and `this`, so they are checked, and access control
+  covers free functions, member bodies, derived classes, friends, and friend
+  classes.
 
 ## Corpus notes
 
@@ -200,8 +201,8 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
    64-bit lowering is missing.
 2. Pick one coherent M10 or M8/M9 item and implement it end-to-end with a linked
    fixture; prefer closing a named gap over adding more same-shape tests.
-3. High-value candidates: matrix/host intrinsics, KR16 libc/file I/O, `friend`
-   class recording, `const` correctness, or the first slice of
+3. High-value candidates: matrix/host intrinsics, KR16 libc/file I/O, an
+   in-class member body pass, `const` correctness, or the first slice of
    exceptions/RTTI/templates.
 4. Run the host gate and record it before pushing; a matrix-green change stays
    local until then.
