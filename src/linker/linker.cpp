@@ -616,6 +616,42 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
     section.alignment = 1;
     section.data = bytes;
     section.size = bytes.size();
+
+    // The debugger reports source paths from .debug_info, so that section has
+    // to carry the same root-relative paths this function just wrote into
+    // .kdbg. Its records are NUL-separated text; only the S records change.
+    std::string rewritten;
+    {
+        const auto& text = debug_section->data;
+        std::size_t start = 0;
+        while (start < text.size()) {
+            std::size_t end = start;
+            while (end < text.size() && text[end] != 0) {
+                ++end;
+            }
+            std::string record(
+                reinterpret_cast<const char*>(text.data() + start), end - start);
+            if (record.rfind("S ", 0) == 0) {
+                const auto id_end = record.find(' ', 2);
+                if (id_end != std::string::npos) {
+                    const auto id = static_cast<std::uint32_t>(
+                        std::stoul(record.substr(2, id_end - 2)));
+                    for (const auto& source : kdbg.sources) {
+                        if (source.id == id) {
+                            record = record.substr(0, id_end + 1) + source.path;
+                            break;
+                        }
+                    }
+                }
+            }
+            rewritten += record;
+            rewritten.push_back('\0');
+            start = end + 1;
+        }
+    }
+    if (!rewritten.empty()) {
+        debug_section->data.assign(rewritten.begin(), rewritten.end());
+    }
     image.sections.push_back(std::move(section));
     return true;
 }
