@@ -4253,6 +4253,23 @@ if(TARGET krc)
                 "-DEXPECT=call to non-const member function"
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
 
+    add_test(NAME krc_cxx_abstract_instantiation
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/abstract_instantiation.cpp
+                "-DEXPECT=cannot instantiate abstract class"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
+    add_test(NAME krc_link_abstract_derived
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/abstract_derived_instantiation.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/abstract_derived_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_cxx_final_class_derivation
         COMMAND ${CMAKE_COMMAND}
                 -DEXE=$<TARGET_FILE:krc>

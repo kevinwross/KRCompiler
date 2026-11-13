@@ -30,6 +30,42 @@ std::uint64_t round_up(std::uint64_t value, std::uint64_t alignment) {
 
 // A declarator nests its pieces, so a qualifier recorded on the function part
 // is not visible on the outermost node.
+// A record is abstract until every pure virtual member it inherits is overridden
+// by a non-pure one; an object of such a type can never be created.
+bool record_is_abstract(const RecordInfo& record) {
+    std::vector<std::string> still_pure;
+    for (const auto* level = &record; level != nullptr;
+         level = level->base && level->base->kind == TypeKind::Record &&
+                         level->base->record
+                     ? level->base->record.get()
+                     : nullptr) {
+        for (const auto& method : level->methods) {
+            if (method.is_pure &&
+                std::find(still_pure.begin(), still_pure.end(), method.name) ==
+                    still_pure.end()) {
+                still_pure.push_back(method.name);
+            }
+        }
+    }
+    // A non-pure member anywhere in the chain overrides the pure one, whichever
+    // level declared it.
+    for (const auto* level = &record; level != nullptr;
+         level = level->base && level->base->kind == TypeKind::Record &&
+                         level->base->record
+                     ? level->base->record.get()
+                     : nullptr) {
+        for (const auto& method : level->methods) {
+            if (!method.is_pure) {
+                const auto found =
+                    std::find(still_pure.begin(), still_pure.end(), method.name);
+                if (found != still_pure.end()) {
+                    still_pure.erase(found);
+                }
+            }
+        }
+    }
+    return !still_pure.empty();
+}
 bool declarator_has_label(const AstNode& declarator, const std::string& label) {
     if (std::find(declarator.labels.begin(), declarator.labels.end(), label) !=
         declarator.labels.end()) {
@@ -1249,6 +1285,11 @@ void Sema::analyze_declaration(const AstNode& declaration) {
             declaration_base = analyze_initializer(*init->children[1], nullptr);
         }
         auto type = build_declarator_type(*declarator, declaration_base);
+        if (!is_typedef && type && type->kind == TypeKind::Record && type->record &&
+            record_is_abstract(*type->record)) {
+            error(declarator->location,
+                  "cannot instantiate abstract class '" + type->record->tag + "'");
+        }
         const auto name = declarator_name(*declarator);
         if (name.empty()) {
             error(declarator->location, "declaration has no name");
@@ -1303,6 +1344,11 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     bool is_static = false;
     auto base = base_type_from_specifiers(*specifiers, is_typedef, is_extern, is_static);
     auto type = build_declarator_type(*declarator, base);
+        if (!is_typedef && type && type->kind == TypeKind::Record && type->record &&
+            record_is_abstract(*type->record)) {
+            error(declarator->location,
+                  "cannot instantiate abstract class '" + type->record->tag + "'");
+        }
     const auto name = declarator_name(*declarator);
     if (!type || type->kind != TypeKind::Function) {
         error(declarator->location,
