@@ -40,6 +40,19 @@ if(NOT KRC_KR32_VM AND WIN32)
     endif()
 endif()
 
+# The KR16 VM comes from the sibling checkout the same way. Its `vm` command
+# takes an image and reports the program's exit status, so one runner script
+# covers both targets.
+set(KRC_KR16_VM "" CACHE FILEPATH "Path to a kr16 VM binary for the executed tests")
+if(NOT KRC_KR16_VM AND WIN32)
+    set(_krc_default_kr16_vm
+        "${CMAKE_CURRENT_SOURCE_DIR}/../kr16/build/shell-debug/kr16.exe")
+    if(EXISTS "${_krc_default_kr16_vm}")
+        set(KRC_KR16_VM "${_krc_default_kr16_vm}" CACHE FILEPATH
+            "Path to a kr16 VM binary for the executed tests" FORCE)
+    endif()
+endif()
+
 add_library(krc_core STATIC
     src/asm/kro_writer.cpp
     src/asm/kr32_assembler.cpp

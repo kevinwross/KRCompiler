@@ -114,7 +114,7 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 - The Linux presets use the Ninja generator, so `ninja` must exist on the Linux host. A WSL image may ship without it; configuring `linux-gcc-debug` then fails on the missing generator, which is a provisioning gap rather than a broken preset.
 - MSVC on Windows and GCC/Clang on Linux, both with warnings as errors. Sanitizers (ASan/UBSan) are configured on Linux only.
 - doctest is vendored for tests — do not replace it with a fetched framework.
-- The executed tests run a linked image under a KR32 VM and check its exit status and, where it is meaningful, its output, which a link-only test cannot do. The VM path comes from the `KRC_KR32_VM` cache variable; on a Windows host only, it defaults to `../kr32/build/windows-msvc/Debug/kr32.exe` when that file exists. The run tests are not registered otherwise, so a host without a runnable VM still passes.
+- The executed tests run a linked image under a VM and check its exit status and, where it is meaningful, its output, which a link-only test cannot do. Two cache variables name the binaries: `KRC_KR32_VM` defaults to `../kr32/build/windows-msvc/Debug/kr32.exe`, and `KRC_KR16_VM` defaults to `../kr16/build/shell-debug/kr16.exe`, both on a Windows host only and only when that file exists. The run tests are not registered otherwise, so a host without a runnable VM still passes.
 - Current milestone state lives in `implementation.md`; read it before starting work. Do not restate it here.
 - Sibling repositories `../kr32` and `../kr16` are **read-only inputs** (their docs, corpus and conventions are cited throughout `plan.md`). Never edit them from here.
 

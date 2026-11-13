@@ -169,6 +169,186 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_runtime.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
 
+    # The executed KR16 tests report the program's exit status from the sibling
+    # VM; a host without a runnable VM registers none of them, as for KR32.
+    if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+        add_test(NAME krc_run_kr16_linked
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_linked.kex
+                    -DEXPECT_EXIT=49
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_linked PROPERTIES
+            DEPENDS krc_kr16_link_objects)
+
+        add_test(NAME krc_run_kr16_multi
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_multi.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_multi PROPERTIES
+            DEPENDS krc_kr16_link_multi)
+
+        add_test(NAME krc_run_kr16_extern
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_extern.kex
+                    -DEXPECT_EXIT=7
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_extern PROPERTIES
+            DEPENDS krc_kr16_link_extern)
+
+        add_test(NAME krc_run_kr16_struct_local
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_struct_local.kex
+                    -DEXPECT_EXIT=81
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_struct_local PROPERTIES
+            DEPENDS krc_kr16_link_struct_local)
+
+        add_test(NAME krc_run_kr16_runtime
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_runtime.kex
+                    -DEXPECT_EXIT=3
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_runtime PROPERTIES
+            DEPENDS krc_kr16_link_runtime)
+
+        # The single-unit images cover codegen shapes the linked fixtures do
+        # not: globals with initializers, an index, a switch, a call in a loop,
+        # shifts, a pointer write, a function pointer, pointer difference,
+        # bit-fields, and a two-dimensional array.
+        add_test(NAME krc_run_kr16_hello
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_hello.kex
+                    -DEXPECT_EXIT=0
+                    "-DEXPECT_OUTPUT=Hello, KR16!"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_hello PROPERTIES
+            DEPENDS krc_kr16_hello_image)
+
+        add_test(NAME krc_run_kr16_data
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_data.kex
+                    -DEXPECT_EXIT=6
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_data PROPERTIES
+            DEPENDS krc_kr16_data_image)
+
+        add_test(NAME krc_run_kr16_string
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_string.kex
+                    -DEXPECT_EXIT=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_string PROPERTIES
+            DEPENDS krc_kr16_string_image)
+
+        add_test(NAME krc_run_kr16_index
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_index.kex
+                    -DEXPECT_EXIT=3
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_index PROPERTIES
+            DEPENDS krc_kr16_index_image)
+
+        add_test(NAME krc_run_kr16_switch
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_switch.kex
+                    -DEXPECT_EXIT=15
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_switch PROPERTIES
+            DEPENDS krc_kr16_switch_image)
+
+        add_test(NAME krc_run_kr16_call_loop
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_call_loop.kex
+                    -DEXPECT_EXIT=15
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_call_loop PROPERTIES
+            DEPENDS krc_kr16_call_loop_image)
+
+        add_test(NAME krc_run_kr16_shift
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_shift.kex
+                    -DEXPECT_EXIT=32
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_shift PROPERTIES
+            DEPENDS krc_kr16_shift_image)
+
+        add_test(NAME krc_run_kr16_pointer
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_pointer.kex
+                    -DEXPECT_EXIT=7
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_pointer PROPERTIES
+            DEPENDS krc_kr16_pointer_image)
+
+        add_test(NAME krc_run_kr16_matrix
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_matrix.kex
+                    -DEXPECT_EXIT=3
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_matrix PROPERTIES
+            DEPENDS krc_kr16_matrix_image)
+
+        add_test(NAME krc_run_kr16_fnptr
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_fnptr.kex
+                    -DEXPECT_EXIT=5
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_fnptr PROPERTIES
+            DEPENDS krc_kr16_fnptr_image)
+
+        add_test(NAME krc_run_kr16_ptrdiff
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_ptrdiff.kex
+                    -DEXPECT_EXIT=3
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_ptrdiff PROPERTIES
+            DEPENDS krc_kr16_ptrdiff_image)
+
+        add_test(NAME krc_run_kr16_bits
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_bits.kex
+                    -DEXPECT_EXIT=22
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_bits PROPERTIES
+            DEPENDS krc_kr16_bits_image)
+
+        add_test(NAME krc_run_kr16_bits_designated
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_bits_designated.kex
+                    -DEXPECT_EXIT=22
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_bits_designated PROPERTIES
+            DEPENDS krc_kr16_bits_designated_image)
+
+        add_test(NAME krc_run_kr16_bits_nested
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_bits_nested.kex
+                    -DEXPECT_EXIT=22
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_bits_nested PROPERTIES
+            DEPENDS krc_kr16_bits_nested_image)
+    endif()
+
     add_test(NAME krc_kr16_shift_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_shift.c"

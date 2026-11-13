@@ -291,6 +291,14 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - Exception state is a single global; the VM is single-threaded for the
   supported subset.
 
+## KR16 execution
+
+`KRC_KR16_VM` points at `../kr16/build/shell-debug/kr16.exe` on a Windows
+host; when it exists, nineteen `krc_run_kr16_*` tests execute the linked and
+single-unit images and check their exit status. The VM reports the program's
+exit status as its own, so `cmake/RunKr16Image.cmake` mirrors the KR32 runner
+with `--max-cycles` instead of `--max-steps`.
+
 ## Known gaps in the matrix support
 
 - Aggregates larger than 8 bytes travel by value as a pointer to a copy the
