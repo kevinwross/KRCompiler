@@ -285,6 +285,8 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - More than three scalar arguments work on KR16 ([ADR 0028](docs/decisions/0028-kr16-stack-arguments.md)): the first three travel in `R1`-`R3` and the rest are pushed last-first in two-byte slots, so the fourth ends at the lowest address and the callee reads argument `n >= 4` at `[R4 + 4 + 2 * (n - 4)]`. The fixture covers five and seven arguments, a call nested in a five-argument call, narrow arguments in stack positions, locals alongside stack arguments, a loop, recursion, and an indirect call with four parameters; `krc_run_kr16_arguments` requires exit 42.
 - Variadic calls work on KR16 ([ADR 0029](docs/decisions/0029-kr16-variadic-calls.md)): every argument, named and variable, is pushed in two-byte slots, so a_start is R4 + 4 + 2 * N and a_arg advances two bytes under __kr16__. The fixture covers a variable count of zero to five, named parameters beyond the register bank, a promoted char argument, consecutive calls, and a call through a variadic function pointer; `krc_run_kr16_variadic` requires exit 42.
 - The KR16 runtime formats output: `printf`, `snprintf`, `sprintf`, and `vsnprintf` share one engine over a console or bounded-buffer sink. Every conversion is integer or string because the profile has neither `long long` nor floating point, and length modifiers are accepted and ignored because every scalar occupies one 16-bit slot. `krc_run_kr16_printf` requires exit 42 and checks thirteen formatted strings with `strcmp` plus one console line through `EXPECT_OUTPUT`.
+- A tagged type defined inside its own typedef (`typedef struct Node { struct Node *next; } Node;`, and the enum and union forms) is accepted: the specifier records itself as the definition, so the second analysis a typedef declaration performs is not a redefinition. The KR16 runtime needed the form for its heap blocks, and `tests/fixtures/c/typedef_tags.c` covers it on both targets.
+- The KR16 heap is a first-fit free list over `__heap_start`..`__heap_end`, with splitting, forward and backward merging, a `realloc` that copies only the bytes it owns, and a `calloc` that detects a multiplicative overflow. The linker's synthetic symbols are target-aware, so IP16 reports `0xF000`/`0xE000` rather than KR32's window. `krc_run_kr16_heap` requires exit 42.
 - A type the IP16 profile cannot represent is rejected where it is named, as `'<type>' is not supported by the kr16 profile` (plan.md §4.3), instead of being lowered to a zero-width integer or to `f32`/`f64`: `krc_kr16_long_long_rejected` covers `long long` and `krc_kr16_float_rejected` covers `float`, `double`, and `long double`, and the same sources still compile for KR32. `<stdlib.h>`, `<math.h>`, and `<time.h>` omit their 64-bit and floating-point declarations under `__kr16__`, so including them stays usable on the profile.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
@@ -494,6 +496,30 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T13:55:29-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 556/556
+windows-msvc-release  PASS 556/556
+linux-gcc-debug       PASS 516/516
+linux-gcc-release     PASS 516/516
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty tests fewer: the executed tests need a runnable VM
+and are not registered where none is configured, and the twenty-three KR16 run
+tests need the KR16 VM a Linux host does not have. This gate covers the typedef
+tag fix, the pointer-offset type fix, and the KR16 heap.
+
+Two toolchain effects shaped this gate, both recorded in `AGENTS.local.md`.
+GCC 15 in this WSL image segfaults inside its own garbage collector
+(`internal compiler error: Segmentation fault` in standard headers), so the
+Linux rows ran with `ulimit -s unlimited`, at `-j2`, and one after the other.
+Running all four presets at once also produced a transient `krld` access
+violation in the Windows debug tests, which passed 556/556 on an immediate
+re-run of the suite with the machine otherwise idle; nothing in the linker
+changed for it.
 
 ### 2026-11-13T13:27:44-08:00 — host gate (Windows)
 
@@ -2698,3 +2724,8 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T13:27:21-08:00** — Ported the formatted-output family to the KR16 runtime: `printf`, `snprintf`, `sprintf`, and `vsnprintf` share one format engine whose sink is either the console (`putchar`) or a bounded buffer. The profile has no `long long` and no floating point, so every conversion is integer or string and every length modifier is accepted and ignored — `int`, `long`, `size_t`, and pointers are one 16-bit slot. Supported conversions are `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, `%p`, and `%%`, with `#`, `0`, `-`, `+`, space, `*` width, precision, and `*` precision.
 - **2026-11-13T13:27:21-08:00** — Two defects in my own first cut: `vsnprintf` returned the caller's saved count instead of the number written, and the alternate-form prefix emitted `0x` for octal instead of `0` (so `%#o` of 8 produced `0x10`). Both were caught by the fixture's string comparisons rather than by a link test, which is why the fixture compares buffers with `strcmp` instead of only printing.
 - **2026-11-13T13:27:21-08:00** — `tests/fixtures/c/kr16_printf.c` checks thirteen formatted strings — decimal with padding, sign flags, and zero fill; hex upper/lower with `#`; octal with `#`; an unsigned wrap to 65535; precision and `*` width; characters; string padding and precision; `%p`; `%%`; a truncated `snprintf` that reports the full length and still terminates; and `sprintf` — then prints one console line that the runner checks with `EXPECT_OUTPUT`. `krc_run_kr16_printf` requires exit 42.
+- **2026-11-13T13:46:26-08:00** — Found and fixed a front-end bug that rejected a ubiquitous C idiom: `typedef struct Node { struct Node *next; int value; } Node;` failed with "redefinition of struct Node", and the same form failed for enums and unions. The specifier is analyzed twice when a typedef declaration reaches its declarator, so `RecordInfo`/`EnumInfo` now record the specifier that completed them and a second analysis of the same node is not treated as a redefinition. Forward declarations, separate typedefs, and the untagged form were already fine; only the combined form was broken.
+- **2026-11-13T13:46:26-08:00** — Fixed a second bug the heap exposed: `bytes - sizeof(int)` failed the IR verifier on KR16 with "integer binary operation has mismatched types" because the pointer-offset path negated the operand without converting it, so an unsigned `sizeof` operand and a signed zero disagreed. The offset is now promoted to the index type, matching the compound-assignment path that already did this.
+- **2026-11-13T13:46:26-08:00** — Made the linker's synthetic symbols target-aware. It defined `__stack_top`/`__stack_limit` from KR32's 0x08000000 window even for IP16 objects, which is outside a 16-bit address space; KR16 now gets `0xF000`/`0xE000`, and `__heap_start` (first byte past the image) is usable on both targets.
+- **2026-11-13T13:46:26-08:00** — Replaced the KR16 bump allocator with a first-fit free list over `__heap_start`..`__heap_end`: block headers carry the payload size, a forward link, and a free flag; `malloc` splits a block when the remainder can hold a header and an aligned pair; `free` merges with a free neighbour in both directions; `realloc` shrinks by splitting, grows by moving only the bytes it owns (the old version read past the block), and `calloc` detects a multiplicative overflow. The backward merge was added because freeing blocks in address order left them unmerged and a later large allocation failed.
+- **2026-11-13T13:46:26-08:00** — `tests/fixtures/c/typedef_tags.c` covers the typedef'd struct/enum/union forms and `sizeof`-based backward pointer offsets on both targets, and `tests/fixtures/c/kr16_heap.c` covers reuse, splitting, forward and backward merging, `calloc` zeroing and overflow, `realloc` grow and shrink preserving contents, exhaustion and recovery, and `free(0)`; both require exit 42. Windows debug CTest is 556/556.
