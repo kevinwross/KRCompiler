@@ -92,6 +92,10 @@ private:
 [[nodiscard]] bool is_float(TypePtr type);
 [[nodiscard]] bool is_pointer(TypePtr type);
 [[nodiscard]] bool is_void(TypePtr type);
+// True when `type` holds `lanes` f32 values, either as that many fields or as
+// one array field of that extent — the two shapes a float vector (vec4) and a
+// 4x4 float matrix (mat4) lower to.
+[[nodiscard]] bool is_float_lane_record(TypePtr type, std::size_t lanes);
 [[nodiscard]] std::string type_to_string(TypePtr type);
 
 enum class Linkage {
@@ -205,7 +209,27 @@ enum class Opcode {
     Invoke,
     LandingPad,
     Resume,
+    Intrinsic,
 };
+
+// Target hooks for operations with no portable instruction form. The IR names
+// the operation, not the target: a backend that does not implement one rejects
+// it, and a target that lacks the capability refuses it before lowering.
+enum class Intrinsic {
+    None,
+    // 4x4 float matrix operations over a row-major 64-byte tile, each taking
+    // pointers to its operands.
+    MatrixMultiply,          // (ptr<mat4>, ptr<mat4>) -> mat4
+    MatrixMultiplyAdd,       // (ptr<mat4>, ptr<mat4>, ptr<mat4>) -> mat4
+    MatrixTranspose,         // (ptr<mat4>) -> mat4
+    MatrixVectorTransform,   // (ptr<mat4>, ptr<vec4>) -> vec4
+    VectorDot,               // (ptr<vec4>, ptr<vec4>) -> f32
+    TransformPush,           // (ptr<mat4>) -> void
+    TransformPop,            // (ptr<mat4>) -> void
+    TransformDrop,           // () -> void
+};
+
+[[nodiscard]] std::string_view intrinsic_name(Intrinsic intrinsic);
 
 enum class ICmpPredicate {
     Eq,
@@ -258,6 +282,9 @@ struct Instruction final : Value {
     bool inbounds = false;
     TypePtr allocated_type = nullptr;
     TypePtr source_type = nullptr;
+    // Set only when opcode is Opcode::Intrinsic; names the operation the
+    // backend must lower.
+    Intrinsic intrinsic = Intrinsic::None;
     std::vector<unsigned> aggregate_indices;
     DebugLocation debug;
 };
@@ -370,6 +397,8 @@ public:
                             bool inbounds = false, std::string name = {});
     Instruction* create_call(Value* callee, std::vector<Value*> arguments,
                              TypePtr result_type = nullptr, std::string name = {});
+    Instruction* create_intrinsic(Intrinsic intrinsic, TypePtr result_type,
+                                  std::vector<Value*> arguments, std::string name = {});
     Instruction* create_br(BasicBlock* destination);
     Instruction* create_cond_br(Value* condition, BasicBlock* when_true, BasicBlock* when_false);
     Instruction* create_switch(Value* condition, BasicBlock* default_destination);

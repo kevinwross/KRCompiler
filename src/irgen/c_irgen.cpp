@@ -27,6 +27,72 @@ bool is_move_call(const frontend::AstNode& node) {
            node.children[1];
 }
 
+// True when `type` is a pointer to a record holding `lanes` f32 values, the
+// shape a mat4 (16 lanes) or vec4 (4 lanes) lowers to.
+bool points_to_float_lane_record(ir::TypePtr type, std::size_t lanes) {
+    return type && type->kind == ir::TypeKind::Pointer &&
+           ir::is_float_lane_record(type->element, lanes);
+}
+
+// Maps a declared function to the tile intrinsic it names. Matching is by
+// symbol and signature, so a user function that happens to share one of the
+// kr32::matrix names keeps its own body and stays an ordinary call.
+ir::Intrinsic matrix_intrinsic(const ir::Function& function) {
+    if (!function.type || function.type->kind != ir::TypeKind::Function ||
+        !function.declaration) {
+        return ir::Intrinsic::None;
+    }
+    const auto& parameters = function.type->parameters;
+    const auto& result = function.type->return_type;
+    const auto& name = function.name;
+    if (name == "matrix_mul") {
+        if (parameters.size() == 2 && points_to_float_lane_record(parameters[0], 16) &&
+            points_to_float_lane_record(parameters[1], 16) &&
+            ir::is_float_lane_record(result, 16)) {
+            return ir::Intrinsic::MatrixMultiply;
+        }
+    } else if (name == "matrix_mul_add") {
+        if (parameters.size() == 3 && points_to_float_lane_record(parameters[0], 16) &&
+            points_to_float_lane_record(parameters[1], 16) &&
+            points_to_float_lane_record(parameters[2], 16) &&
+            ir::is_float_lane_record(result, 16)) {
+            return ir::Intrinsic::MatrixMultiplyAdd;
+        }
+    } else if (name == "transpose") {
+        if (parameters.size() == 1 && points_to_float_lane_record(parameters[0], 16) &&
+            ir::is_float_lane_record(result, 16)) {
+            return ir::Intrinsic::MatrixTranspose;
+        }
+    } else if (name == "transform") {
+        if (parameters.size() == 2 && points_to_float_lane_record(parameters[0], 16) &&
+            points_to_float_lane_record(parameters[1], 4) &&
+            ir::is_float_lane_record(result, 4)) {
+            return ir::Intrinsic::MatrixVectorTransform;
+        }
+    } else if (name == "dot") {
+        if (parameters.size() == 2 && points_to_float_lane_record(parameters[0], 4) &&
+            points_to_float_lane_record(parameters[1], 4) && ir::is_float(result) &&
+            result->bits == 32) {
+            return ir::Intrinsic::VectorDot;
+        }
+    } else if (name == "push") {
+        if (parameters.size() == 1 && points_to_float_lane_record(parameters[0], 16) &&
+            ir::is_void(result)) {
+            return ir::Intrinsic::TransformPush;
+        }
+    } else if (name == "pop") {
+        if (parameters.size() == 1 && points_to_float_lane_record(parameters[0], 16) &&
+            ir::is_void(result)) {
+            return ir::Intrinsic::TransformPop;
+        }
+    } else if (name == "drop") {
+        if (parameters.empty() && ir::is_void(result)) {
+            return ir::Intrinsic::TransformDrop;
+        }
+    }
+    return ir::Intrinsic::None;
+}
+
 std::string mangle_method(std::string_view tag, std::string_view name) {
     if (name.starts_with("operator")) {
         std::string suffix;
@@ -7220,6 +7286,35 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
     return {value, address.type};
 }
 
+CIRGen::Expression CIRGen::emit_matrix_intrinsic(const frontend::AstNode& expression,
+                                                 const ir::Function& callee,
+                                                 ir::Intrinsic intrinsic) {
+    if (!profile_.has_matrix) {
+        error(expression.location, "matrix intrinsics are not supported for target '" +
+                                       std::string(profile_.name) + "'");
+        return {};
+    }
+    if (expression.children.size() < 2 || !expression.children[1]) {
+        return {};
+    }
+    std::vector<ir::Value*> arguments;
+    for (const auto& node : expression.children[1]->children) {
+        if (!node) {
+            continue;
+        }
+        auto argument = emit_lvalue(*node);
+        if (!argument.value) {
+            error(node->location, "matrix intrinsic argument is not an lvalue");
+            return {};
+        }
+        arguments.push_back(argument.value);
+    }
+    const auto result_type = callee.type ? callee.type->return_type : nullptr;
+    auto* call = builder_.create_intrinsic(intrinsic, result_type, std::move(arguments),
+                                           "intrinsic");
+    return {call, result_type};
+}
+
 CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     if (expression.children.size() < 2 || !expression.children[0] ||
         !expression.children[1]) {
@@ -7724,14 +7819,24 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             }
         }
     }
-    auto callee = emit_expression(*expression.children[0]);
+    // A direct callee is resolved before its expression is lowered: the
+    // expression form would emit a function-pointer bitcast the call does not
+    // use, and a tile intrinsic must not reference the symbol it replaces.
     ir::Function* direct_function = nullptr;
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {
-        auto* direct = lookup_function(expression.children[0]->text);
-        if (direct) {
-            callee = {direct, direct->type};
-            direct_function = direct;
+        direct_function = lookup_function(expression.children[0]->text);
+    }
+    if (direct_function) {
+        const auto intrinsic = matrix_intrinsic(*direct_function);
+        if (intrinsic != ir::Intrinsic::None) {
+            return emit_matrix_intrinsic(expression, *direct_function, intrinsic);
         }
+    }
+    Expression callee;
+    if (direct_function) {
+        callee = {direct_function, direct_function->type};
+    } else {
+        callee = emit_expression(*expression.children[0]);
     }
     if (!callee.value) {
         return {};

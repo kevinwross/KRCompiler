@@ -64,6 +64,23 @@ enum class Opcode : std::uint8_t {
     PopR = 0x4E,
     PushFP = 0x4F,
     PopFP = 0x0A,
+    Wrsp = 0x4C,
+    MLoad = 0x52,
+    MStore = 0x53,
+    MEscape = 0x61,
+};
+
+// Function codes carried in the immediate field of the 0x61 M escape,
+// docs/isa-v1.md §7. Tile loads and stores do not use this group.
+enum class MatrixFunction : std::uint8_t {
+    Mul = 0x000,
+    MulAdd = 0x001,
+    Vector = 0x002,
+    Transpose = 0x003,
+    Dot = 0x004,
+    Push = 0x005,
+    Pop = 0x006,
+    Drop = 0x007,
 };
 
 // Addressing modes from docs/isa-v1.md §3.

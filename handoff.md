@@ -11,10 +11,10 @@ Written 2026-11-12 for continuation on another machine. Read this together with
   under `## Gate verification`. That section owns them; restating them here is how
   a handoff starts disagreeing with the tracker.
 - This is a Windows/MSVC checkout. `build/` is untracked.
-- The corpus is measured, not assumed: 14 of 15 examples build and 13 run
-  with the status their `main` returns. The two that do not are `matrix.cpp`,
-  which needs the matrix intrinsics, and `FileOpen.cpp`, which builds and links
-  but blocks on an interactive host dialog if run.
+- The corpus is measured, not assumed: 15 of 15 examples build and link, and the
+  14 that do not wait on an interactive host dialog run with the status their
+  `main` returns. `FileOpen.cpp` links but blocks on the host file dialog if
+  run, so exclude it from a loop.
 - The Linux presets need Ninja in WSL; see `AGENTS.local.md`, Environment assumptions.
 ## Objective and policy
 
@@ -83,7 +83,11 @@ tree supports:
   temporary materialization across many expression contexts.
 - 64-bit integers on KR32 are a low/high word pair with inline arithmetic and
   division through runtime helpers ([ADR 0023](docs/decisions/0023-kr32-64-bit-integers.md));
-  the fixture links, its runtime exit code is unobserved.
+  `krc_run_longlong_arith` and `krc_run_printf_long_long` execute it.
+- The `kr32::matrix` surface lowers to tile instructions and a by-value
+  aggregate above 8 bytes returns through the destination pointer in `R4`
+  ([ADR 0024](docs/decisions/0024-kr32-tile-intrinsics.md)); the transform stack
+  is set up by `crt0.s`. `krc_run_matrix_intrinsics` requires exit 42.
 - A call to a deleted member function is rejected, and access to a non-public
   member from a free function is rejected unless it is a friend.
 - The const and inheritance markers are enforced rather than parsed:
@@ -129,7 +133,9 @@ value in `implementation.md`. Do not claim a runtime result from CTest alone.
 
 ### M8
 
-- Full Tier 0–2 corpus green on KR32 and Tier 0–1 on KR16 is not established.
+- The KR32 corpus is green: 15 of 15 examples build and link, and the 14
+  non-interactive ones run with the status their `main` returns. Tier 0–1 on
+  KR16 is not established.
 - Debugger parity for C and C++ is not fully demonstrated.
 - Release notes and tag `v1.0` are not done.
 
@@ -158,26 +164,33 @@ The sibling corpus carries two blocks of its own:
 ## Corpus notes
 
 Measured by compiling with `krc -c`, linking with `libkrcrt.kro`, `fileio.s`
-and `crt0.s`, and running each image under `..\kr32`'s VM: **14 of 15 examples
-build, and 13 of those run with the status their `main` returns.** Those thirteen
-are `hello.c`, `strings.c`, `types.c`, `varargs.c`, `libc-test.c`, `floats.c`,
-`fileio.c`, `mainentry.c` (all 0), `hello.cpp` (42), `cxx_libc.cpp` (0),
-`cxx_tls.cpp` (42, the value its `long long` division is meant to produce),
-`binarytree.c` and `balanced-tree.cpp` (0 each, since the heap-base fix).
+and `crt0.s`, and running each image under `..\kr32`'s VM: **15 of 15 examples
+build and link, and the 14 that do not wait on a host dialog run with the status
+their `main` returns.** Those fourteen are `hello.c`, `strings.c`, `types.c`,
+`varargs.c`, `libc-test.c`, `floats.c`, `fileio.c`, `mainentry.c` (all 0),
+`hello.cpp` and `matrix.cpp` (42 each), `cxx_libc.cpp` (0), `cxx_tls.cpp` (42,
+the value its `long long` division is meant to produce), and `binarytree.c` and
+`balanced-tree.cpp` (0 each, since the heap-base fix).
 
-Not green, and why:
+Two earlier blockers have closed, and the reasons matter if they reappear:
 
-- `binarytree.c` and `balanced-tree.cpp` ran but halted with wrong statuses
-  until the heap base was fixed: `malloc` started at `0x00020000`, inside
-  `.text` for a large program, so allocations overwrote the code that was
-  about to run. `HEAP_BEGIN` is now `0x00100000`, both print their trees and
-  exit 0, and `krc_run_heap_above_code` regresses it by allocating a large
-  block and then calling a function defined after the allocation.
-- `matrix.cpp` builds but does not link: `transform` is a compiler intrinsic
-  in the sibling front end, lowering to MLOAD, MMUL, MVEC, MTRANS and MSTORE
-  tile instructions. Implementing them is a capability, not a fix.
-- `FileOpen.cpp` builds and links since the `sys_open_dialog` host service was
-  added to `targets/kr32/runtime/fileio.s` and declared in `sysroot/include/stdio.h`.
+- `binarytree.c` and `balanced-tree.cpp` halted with wrong statuses until the
+  heap base was fixed: `malloc` started at `0x00020000`, inside `.text` for a
+  large program, so allocations overwrote the code that was about to run.
+  `HEAP_BEGIN` is now `0x00100000`, and `krc_run_heap_above_code` regresses it
+  by allocating a large block and then calling a function defined after it.
+- `matrix.cpp` failed at link on the tile intrinsics, and once they existed, on
+  the 64-byte `mat4` return. Both are implemented
+  ([ADR 0024](docs/decisions/0024-kr32-tile-intrinsics.md)):
+  the `kr32::matrix` calls lower to `MLOAD`/`MMUL`/`MMAC`/`MTRANS`/`MVEC`/`VDOT`
+  and the transform stack, and a by-value aggregate above 8 bytes returns
+  through the destination pointer in `R4`. `krc_run_matrix_intrinsics` requires
+  exit 42.
+
+One corpus example is interactive by design: `FileOpen.cpp` builds and links
+since the `sys_open_dialog` host service was added to
+`targets/kr32/runtime/fileio.s` and declared in `sysroot/include/stdio.h`, but
+its run waits for the host file dialog instead of returning.
 
 Compile, link and run pattern used:
 
@@ -228,17 +241,31 @@ its run waits for the host file dialog instead of returning.
   confirm `master` equals `origin/master`, then push.
 ## Suggested next actions
 
-1. Matrix intrinsics, if the corpus matters next: `matrix.cpp` is the last
-   example that builds and does not link, and it needs MLOAD, MMUL, MVEC,
-   MTRANS and MSTORE plus the float support behind them. The other remaining
-   corpus example, `FileOpen.cpp`, is complete — it waits on an interactive
-   dialog by design and must not be run in a loop.
-2. Then RTTI: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
-   plan §10.4. The executed-test harness can verify it end to end.
-3. Remaining backlog: the rest of deleted constructors — a deleted default
-   constructor and a deleted copy case are refused already — RTTI, exceptions,
-   variadic templates, dynamic TLS, the `std` containers, KR16 libc/file I/O,
-   and matrix/host intrinsics.
+1. RTTI next: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
+   plan §10.4. The executed-test harness can verify it end to end, and the
+   intrinsic path added for the tile operations is the precedent for a target
+   hook that has no portable instruction.
+2. Then table-driven exceptions and unwinding — the largest remaining M10 hole,
+   and one that needs its ADR (the EH descriptor encoding) before code.
+3. Remaining backlog: variadic templates and fold expressions, per-thread
+   dynamic TLS, the `std` containers (`memory`, `tuple`, `functional`,
+   `array`), KR16 libc/file I/O, and the broader host-service ABI.
+
+Matrix intrinsics are done: `matrix.cpp` links and runs to 42, so the corpus has
+no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
+
+## Known gaps in the new matrix support
+
+- Aggregates larger than 8 bytes still cannot be *passed* by value; the ABI
+  passes them as a pointer to a caller-owned copy, and the backend emits
+  `; aggregate argument unavailable`. Only returns are implemented.
+- An FP-only aggregate of 9–16 bytes returns through `R4` rather than `F0`/`F1`.
+- `vec4` and `mat4` are laid out with 4-byte alignment; the reference ABI
+  documents 16. Tile transfers need only 4, so the code is correct, but a
+  future change must match the documented alignment or amend `docs/abi.md`.
+- The transform stack is a fixed 64 KiB region between the program stack and the
+  heap; a deeply nested tile save could exhaust it, and nothing checks.
+
 ## Goal recommendation
 
 Keep the objective **“Proceed with implementation of M0 thru M10.”** If the new

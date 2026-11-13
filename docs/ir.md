@@ -79,6 +79,8 @@ SSA and aggregates: `phi`, `select`, `extractvalue`, `insertvalue`.
 
 Calls: `call` has a callee operand (function or function pointer), arguments, and an explicit result type. Variadic calls name the fixed signature and pass the remaining arguments in order. `sret` is expressed by an explicit pointer argument, not a hidden IR convention.
 
+Intrinsics: `intrinsic` names a target operation that has no portable instruction form ([ADR 0024](decisions/0024-kr32-tile-intrinsics.md)). The operation is named by an `Intrinsic` value, not by the target, and the operands are the operation's arguments. The implemented set is `matrix.multiply`, `matrix.multiply_add`, `matrix.transpose`, `matrix.transform`, `vector.dot`, `transform.push`, `transform.pop`, and `transform.drop`, all taking record pointers. A value-returning intrinsic carries its result type — a 4x4 `f32` tile, a 4-lane `f32` vector, or `f32` — and a stack operation produces `void`. A backend that does not implement an operation rejects it; a target whose profile lacks the capability refuses it before lowering.
+
 Reserved for v1.1 and rejected by the v1.0 verifier: `invoke`, `landingpad`, `resume`, and target exception intrinsics.
 
 ## Memory and effects
@@ -106,6 +108,7 @@ Every instruction may carry `{file, line, column}`. Variables are represented in
 9. `ret` matches the function return type; `br` targets exist; `condbr` condition is `i1`.
 10. Reserved v1.1 opcodes are rejected in v1.0.
 11. Named structs are complete before use; recursive references go through pointers.
+12. An `intrinsic` names an implemented operation, has that operation's operand count, takes record pointers, and produces the type the operation returns. A record operand or result of a matrix or vector operation holds the matching count of `f32` lanes, either as that many fields or as one array field of that extent.
 
 Verifier failures abort code generation with a compiler-bug diagnostic; a malformed module never reaches a backend.
 

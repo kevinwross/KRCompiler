@@ -116,6 +116,49 @@ bool parse_fp_register(std::string_view text, std::uint8_t& reg) {
     return true;
 }
 
+bool parse_tile(std::string_view text, std::uint8_t& reg) {
+    if (text.size() < 2 || (text[0] != 'T' && text[0] != 't')) {
+        return false;
+    }
+    int value = 0;
+    for (std::size_t index = 1; index < text.size(); ++index) {
+        if (!std::isdigit(static_cast<unsigned char>(text[index]))) {
+            return false;
+        }
+        value = value * 10 + (text[index] - '0');
+    }
+    if (value < 0 || value > 15) {
+        return false;
+    }
+    reg = static_cast<std::uint8_t>(value);
+    return true;
+}
+
+// The 0x61 M escape group: one mnemonic per matrix/transform function,
+// docs/isa-v1.md §7.
+std::optional<MatrixFunction> matrix_function(std::string_view mnemonic) {
+    if (mnemonic == "MMUL") return MatrixFunction::Mul;
+    if (mnemonic == "MMAC") return MatrixFunction::MulAdd;
+    if (mnemonic == "MVEC") return MatrixFunction::Vector;
+    if (mnemonic == "MTRANS") return MatrixFunction::Transpose;
+    if (mnemonic == "VDOT") return MatrixFunction::Dot;
+    if (mnemonic == "MPUSH") return MatrixFunction::Push;
+    if (mnemonic == "MPOP") return MatrixFunction::Pop;
+    if (mnemonic == "MDROP") return MatrixFunction::Drop;
+    return std::nullopt;
+}
+
+// The 0x52/0x53 tile transfer group. `L` selects the 16-byte vector form;
+// MLOAD/MSTORE with L clear transfer a 64-byte tile.
+bool is_tile_transfer(std::string_view mnemonic) {
+    return mnemonic == "MLOAD" || mnemonic == "MSTORE" || mnemonic == "VLOAD" ||
+           mnemonic == "VSTORE";
+}
+
+bool is_tile_operation(std::string_view mnemonic) {
+    return matrix_function(mnemonic).has_value() || is_tile_transfer(mnemonic);
+}
+
 std::optional<std::uint32_t> fp_function(std::string_view mnemonic) {
     if (mnemonic == "FADD.S") return 0x000;
     if (mnemonic == "FSUB.S") return 0x001;
@@ -292,6 +335,90 @@ bool instruction_layout(const Item& item, bool& extension, std::string& error) {
     };
 
     const auto& mnemonic = parsed.mnemonic;
+    if (matrix_function(mnemonic)) {
+        if (mnemonic == "MDROP") {
+            if (!operands.empty()) {
+                error = "MDROP takes no operands";
+                return false;
+            }
+            return true;
+        }
+        if (mnemonic == "MPUSH" || mnemonic == "MPOP") {
+            std::uint8_t tile = 0;
+            if (operands.size() != 1 || !parse_tile(operands[0], tile)) {
+                error = "expected a tile register";
+                return false;
+            }
+            return true;
+        }
+        // MTRANS reads one tile; the multiply forms read two. VDOT writes a
+        // floating-point register and reads two tiles.
+        const std::size_t reads_two = mnemonic == "MMUL" || mnemonic == "MMAC" ||
+                                      mnemonic == "MVEC" || mnemonic == "VDOT";
+        if (operands.size() != (reads_two ? 3 : 2)) {
+            error = reads_two ? "expected Td, Ta, Tb" : "expected Td, Ta";
+            return false;
+        }
+        std::uint8_t destination = 0;
+        if (reads_two && mnemonic == "VDOT") {
+            if (!parse_fp_register(operands[0], destination)) {
+                error = "expected a floating-point register";
+                return false;
+            }
+        } else if (!parse_tile(operands[0], destination)) {
+            error = "expected a tile register";
+            return false;
+        }
+        std::uint8_t source = 0;
+        if (!parse_tile(operands[1], source)) {
+            error = "expected a tile register";
+            return false;
+        }
+        std::uint8_t third = 0;
+        if (reads_two && !parse_tile(operands[2], third)) {
+            error = "expected a tile register";
+            return false;
+        }
+        return true;
+    }
+    if (is_tile_transfer(mnemonic)) {
+        if (operands.size() < 2 || operands.size() > 3) {
+            error = "expected Td, [addr], optional #stride";
+            return false;
+        }
+        std::uint8_t tile = 0;
+        if (!parse_tile(operands[0], tile)) {
+            error = "expected a tile register";
+            return false;
+        }
+        MemoryOperand memory;
+        if (!has_memory(1, memory)) {
+            error = "invalid memory operand";
+            return false;
+        }
+        if (operands.size() == 3) {
+            // Only the 64-byte form has a strided variant, and its extension
+            // word carries the row stride.
+            if (mnemonic == "VLOAD" || mnemonic == "VSTORE") {
+                error = "strided VLOAD/VSTORE is reserved";
+                return false;
+            }
+            std::int64_t stride = 0;
+            if (!parse_integer(operands[2], stride)) {
+                error = "invalid row stride";
+                return false;
+            }
+            if (memory.displacement != 0 || memory.has_symbol) {
+                error = "strided MLOAD/MSTORE requires a zero displacement";
+                return false;
+            }
+            extension = true;
+            return true;
+        }
+        extension = memory.has_symbol ||
+                    (memory.mode >= 3 && !fits_inline(memory.displacement));
+        return true;
+    }
     if (mnemonic == "FLOAD.W" || mnemonic == "FLOAD.D" || mnemonic == "FSTORE.W" ||
         mnemonic == "FSTORE.D") {
         if (operands.size() != 2) {
@@ -389,6 +516,14 @@ bool instruction_layout(const Item& item, bool& extension, std::string& error) {
         return true;
     }
     if ((mnemonic == "PUSH" || mnemonic == "POP") && operands.size() == 1) {
+        return true;
+    }
+    if (mnemonic == "WRSP" && operands.size() == 1) {
+        std::uint8_t reg = 0;
+        if (!parse_register(operands[0], reg)) {
+            error = "WRSP expects a register";
+            return false;
+        }
         return true;
     }
     if (mnemonic == "ADJSP" && operands.size() == 1) {
@@ -784,6 +919,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
             mnemonic != "HALT" && mnemonic != "ADJSP" && mnemonic != "JMP" &&
             mnemonic != "CALL" && mnemonic != "SYSCALL" &&
             condition_for(mnemonic) == std::nullopt && !fp_function(mnemonic) &&
+            !is_tile_operation(mnemonic) &&
             mnemonic.rfind("FLOAD", 0) != 0 && mnemonic.rfind("FSTORE", 0) != 0) {
             error = "line " + std::to_string(item.line) + ": expected a destination register";
             return false;
@@ -791,7 +927,72 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
 
         std::optional<EncodedInstruction> encoded;
 
-        if (mnemonic == "FLOAD.W" || mnemonic == "FLOAD.D" || mnemonic == "FSTORE.W" ||
+        if (matrix_function(mnemonic)) {
+            const auto function =
+                static_cast<std::int32_t>(*matrix_function(mnemonic));
+            std::uint8_t destination = 0;
+            std::uint8_t left = 0;
+            std::uint8_t right = 0;
+            if (mnemonic == "MDROP") {
+                encoded = encode_or_fail(Opcode::MEscape, 0, 0, 0, false, function,
+                                         false, 0);
+            } else if (mnemonic == "MPUSH" || mnemonic == "MPOP") {
+                parse_tile(operands[0], destination);
+                encoded = encode_or_fail(Opcode::MEscape, destination, 0, 0, false,
+                                         function, false, 0);
+            } else {
+                if (mnemonic == "VDOT") {
+                    parse_fp_register(operands[0], destination);
+                } else {
+                    parse_tile(operands[0], destination);
+                }
+                parse_tile(operands[1], left);
+                if (operands.size() > 2) {
+                    parse_tile(operands[2], right);
+                }
+                encoded = encode_or_fail(Opcode::MEscape, destination, left, right,
+                                         false, function, false, 0);
+            }
+        } else if (is_tile_transfer(mnemonic)) {
+            std::uint8_t tile = 0;
+            parse_tile(operands[0], tile);
+            MemoryOperand memory;
+            if (!parse_memory(operands[1], memory, error)) {
+                error = "line " + std::to_string(item.line) + ": " + error;
+                return false;
+            }
+            std::uint32_t extension_word = static_cast<std::uint32_t>(memory.displacement);
+            bool extension = memory.has_symbol ||
+                             (memory.mode >= 3 && !fits_inline(memory.displacement));
+            if (memory.has_symbol) {
+                bool external = false;
+                std::uint32_t address = 0;
+                if (!resolve_symbol(memory.symbol, address, external, error)) {
+                    return false;
+                }
+                extension_word = address;
+                static_cast<void>(external);
+                result.relocations.push_back(
+                    {static_cast<std::uint32_t>(item.offset + 4), memory.symbol});
+            }
+            if (operands.size() == 3) {
+                std::int64_t stride = 0;
+                if (!parse_integer(operands[2], stride)) {
+                    error = "line " + std::to_string(item.line) + ": invalid row stride";
+                    return false;
+                }
+                extension = true;
+                extension_word = static_cast<std::uint32_t>(stride);
+            }
+            const bool vector = mnemonic == "VLOAD" || mnemonic == "VSTORE";
+            const auto opcode = (mnemonic == "MLOAD" || mnemonic == "VLOAD")
+                                    ? Opcode::MLoad
+                                    : Opcode::MStore;
+            encoded = encode_or_fail(opcode, tile,
+                                     static_cast<std::uint8_t>(memory.base),
+                                     static_cast<std::uint8_t>(memory.mode), vector,
+                                     memory.displacement, extension, extension_word);
+        } else if (mnemonic == "FLOAD.W" || mnemonic == "FLOAD.D" || mnemonic == "FSTORE.W" ||
             mnemonic == "FSTORE.D") {
             std::uint8_t fp_register = 0;
             if (!parse_fp_register(operands[0], fp_register)) {
@@ -902,6 +1103,8 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
             }
             encoded = encode_or_fail(mnemonic == "PUSH" ? Opcode::Push : Opcode::Pop, reg, 0, 0,
                                      false, 0, false, 0);
+        } else if (mnemonic == "WRSP") {
+            encoded = encode_or_fail(Opcode::Wrsp, rd, 0, 0, false, 0, false, 0);
         } else if (mnemonic == "JMP" || mnemonic == "CALL" || condition_for(mnemonic)) {
             bool external = false;
             std::uint32_t address = 0;

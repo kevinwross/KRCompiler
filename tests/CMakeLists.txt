@@ -229,6 +229,18 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/matrix_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    # The fixture only declares the kr32::matrix functions; it links solely
+    # because each call lowers to a tile intrinsic.
+    add_test(NAME krc_link_matrix_intrinsics
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/matrix_intrinsics.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/matrix_intrinsics_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_unknown_option COMMAND $<TARGET_FILE:krc> --no-such-option)
     set_tests_properties(krc_unknown_option PROPERTIES WILL_FAIL TRUE)
 
@@ -475,6 +487,17 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_logical_not_pointer PROPERTIES
             DEPENDS krc_link_logical_not_pointer)
+
+        # A wrong tile result still links and exits 0 only if the fixture's
+        # own checks pass; 42 is exact rather than arbitrary.
+        add_test(NAME krc_run_matrix_intrinsics
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/matrix_intrinsics_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_matrix_intrinsics PROPERTIES
+            DEPENDS krc_link_matrix_intrinsics)
     endif()
 
     add_test(NAME krc_link_printf_width

@@ -180,6 +180,18 @@ std::uint64_t Kr32Backend::align_of(ir::TypePtr type) const {
     return 1;
 }
 
+// A memory-class aggregate return is copied to a caller-owned destination
+// supplied in R4, which does not consume an argument register:
+// docs/abi.md, KR32.
+bool Kr32Backend::is_memory_class_return(ir::TypePtr type) const {
+    if (!type || (type->kind != ir::TypeKind::Struct && type->kind != ir::TypeKind::Union)) {
+        return false;
+    }
+    std::string error;
+    const auto size = size_of(type, error);
+    return error.empty() && size > 8;
+}
+
 std::string Kr32Backend::block_label(const ir::Function& function,
                                      const ir::BasicBlock& block) const {
     return ".L" + function.name + "." + block.name;
@@ -245,6 +257,12 @@ Kr32Backend::FrameLayout Kr32Backend::layout_function(const ir::Function& functi
     std::uint32_t offset = layout.outgoing_size;
     layout.float_temp = offset;
     offset += 8;
+    if (is_memory_class_return(function.type ? function.type->return_type : nullptr)) {
+        offset = static_cast<std::uint32_t>(round_up(offset, 4));
+        layout.return_pointer = offset;
+        layout.has_return_pointer = true;
+        offset += 4;
+    }
     for (const auto& parameter : function.parameters) {
         const auto alignment = static_cast<std::uint32_t>(align_of(parameter->type));
         offset = static_cast<std::uint32_t>(round_up(offset, alignment));
@@ -742,6 +760,85 @@ void Kr32Backend::store_fp(std::string& out, const ir::Function& function,
            std::to_string(*slot) + "]\n";
 }
 
+void Kr32Backend::emit_intrinsic(std::string& out, const ir::Function& function,
+                                 const FrameLayout& layout,
+                                 const ir::Instruction& instruction) const {
+    // Each intrinsic takes record pointers and leaves a tile in T0. The tile
+    // file is caller-saved, an intrinsic is an expression temporary, and the
+    // sources are read before the destination is written, so a fixed T0-T3
+    // assignment is enough and no tile allocation is required.
+    const auto trace_argument = [&](std::size_t index, std::string_view reg) {
+        load_value(out, function, layout, instruction.operands[index], reg);
+    };
+    const auto load_tile = [&](std::size_t index, std::string_view tile,
+                               std::string_view opcode) {
+        trace_argument(index, "R0");
+        out += "        " + std::string(opcode) + " " + std::string(tile) + ", [R0]\n";
+    };
+    const auto store_result = [&](std::string_view tile, std::string_view opcode) {
+        const auto slot = layout.slots.find(&instruction);
+        if (slot == layout.slots.end()) {
+            out += "        HALT ; intrinsic result has no frame slot\n";
+            return;
+        }
+        out += "        LEA R1, [R7 + " + std::to_string(slot->second) + "]\n";
+        out += "        " + std::string(opcode) + " " + std::string(tile) + ", [R1]\n";
+    };
+
+    switch (instruction.intrinsic) {
+    case ir::Intrinsic::MatrixMultiply:
+        load_tile(0, "T1", "MLOAD");
+        load_tile(1, "T2", "MLOAD");
+        out += "        MMUL T0, T1, T2\n";
+        store_result("T0", "MSTORE");
+        break;
+    case ir::Intrinsic::MatrixMultiplyAdd:
+        load_tile(2, "T0", "MLOAD");
+        load_tile(0, "T1", "MLOAD");
+        load_tile(1, "T2", "MLOAD");
+        out += "        MMAC T0, T1, T2\n";
+        store_result("T0", "MSTORE");
+        break;
+    case ir::Intrinsic::MatrixTranspose:
+        load_tile(0, "T1", "MLOAD");
+        out += "        MTRANS T0, T1\n";
+        store_result("T0", "MSTORE");
+        break;
+    case ir::Intrinsic::MatrixVectorTransform:
+        // MVEC leaves the product in column 0, so the result is transposed
+        // back into the row-major vector the caller sees and stored as four
+        // floats.
+        load_tile(0, "T1", "MLOAD");
+        load_tile(1, "T2", "VLOAD");
+        out += "        MTRANS T3, T2\n";
+        out += "        MVEC T0, T1, T3\n";
+        out += "        MTRANS T3, T0\n";
+        store_result("T3", "VSTORE");
+        break;
+    case ir::Intrinsic::VectorDot:
+        load_tile(0, "T0", "MLOAD");
+        load_tile(1, "T1", "VLOAD");
+        out += "        VDOT F0, T0, T1\n";
+        store_fp(out, function, layout, instruction, "F0");
+        break;
+    case ir::Intrinsic::TransformPush:
+        load_tile(0, "T0", "MLOAD");
+        out += "        MPUSH T0\n";
+        break;
+    case ir::Intrinsic::TransformPop:
+        out += "        MPOP T0\n";
+        trace_argument(0, "R1");
+        out += "        MSTORE T0, [R1]\n";
+        break;
+    case ir::Intrinsic::TransformDrop:
+        out += "        MDROP\n";
+        break;
+    case ir::Intrinsic::None:
+        out += "        HALT ; unnamed intrinsic\n";
+        break;
+    }
+}
+
 std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     std::string out = "; KR32 assembly generated by krc\n";
     debug_info_.clear();
@@ -837,6 +934,9 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     out += "        PUSH R7\n";
     out += "        ADJSP #-" + std::to_string(layout.frame_size) + "\n";
     out += "        LEA R7, [SP]\n";
+    if (layout.has_return_pointer) {
+        out += "        STORE R4, [R7 + " + std::to_string(layout.return_pointer) + "]\n";
+    }
 
     std::size_t debug_label_counter = 0;
     std::size_t integer_parameter = 0;
@@ -1321,15 +1421,32 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 const auto slot = layout.slots.find(value);
                 std::string size_error;
                 const auto size = size_of(value->type, size_error);
-                const auto words = (size + 3) / 4;
-                if (!size_error.empty() || slot == layout.slots.end() ||
-                    words > 2) {
+                if (!size_error.empty() || slot == layout.slots.end()) {
                     out += "        ; aggregate return unavailable\n";
+                } else if (is_memory_class_return(value->type)) {
+                    if (!layout.has_return_pointer) {
+                        out += "        HALT ; memory-class return has no destination\n";
+                    } else {
+                        out += "        LOAD R1, [R7 + " +
+                               std::to_string(layout.return_pointer) + "]\n";
+                        for (std::uint64_t return_offset = 0; return_offset < size;
+                             return_offset += 4) {
+                            out += "        LOAD R0, [R7 + " +
+                                   std::to_string(slot->second + return_offset) + "]\n";
+                            out += "        STORE R0, [R1 + " +
+                                   std::to_string(return_offset) + "]\n";
+                        }
+                    }
                 } else {
-                    for (std::uint64_t word = 0; word < words; ++word) {
-                        out += "        LOAD " +
-                               std::string(register_name(word)) + ", [R7 + " +
-                               std::to_string(slot->second + word * 4) + "]\n";
+                    const auto words = (size + 3) / 4;
+                    if (words > 2) {
+                        out += "        ; aggregate return unavailable\n";
+                    } else {
+                        for (std::uint64_t word = 0; word < words; ++word) {
+                            out += "        LOAD " +
+                                   std::string(register_name(word)) + ", [R7 + " +
+                                   std::to_string(slot->second + word * 4) + "]\n";
+                        }
                     }
                 }
             } else {
@@ -1466,13 +1583,31 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 }
             }
         }
+        bool memory_return = false;
+        std::uint32_t return_destination = 0;
+        if (instruction.type && instruction.type->kind == ir::TypeKind::Struct &&
+            is_memory_class_return(instruction.type)) {
+            const auto slot = layout.slots.find(&instruction);
+            if (slot != layout.slots.end()) {
+                memory_return = true;
+                return_destination = slot->second;
+            }
+        }
         if (instruction.operands[0]->kind == ir::ValueKind::Function) {
+            if (memory_return) {
+                out += "        LEA R4, [R7 + " + std::to_string(return_destination) +
+                       "]\n";
+            }
             out += "        CALL " + instruction.operands[0]->name + "\n";
         } else {
-            load_value(out, function, layout, instruction.operands[0], "R4");
-            out += "        CALL R4\n";
+            load_value(out, function, layout, instruction.operands[0], "R5");
+            if (memory_return) {
+                out += "        LEA R4, [R7 + " + std::to_string(return_destination) +
+                       "]\n";
+            }
+            out += "        CALL R5\n";
         }
-        if (instruction.type && !ir::is_void(instruction.type)) {
+        if (!memory_return && instruction.type && !ir::is_void(instruction.type)) {
             if (ir::is_float(instruction.type)) {
                 store_fp(out, function, layout, instruction, "F0");
             } else if (instruction.type->kind == ir::TypeKind::Struct) {
@@ -1496,6 +1631,9 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         }
         break;
     }
+    case ir::Opcode::Intrinsic:
+        emit_intrinsic(out, function, layout, instruction);
+        break;
     case ir::Opcode::FPTrunc:
         load_fp(out, function, layout, instruction.operands[0], "F0");
         out += "        FCVT.S.D F0, F0\n";

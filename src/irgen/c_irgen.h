@@ -100,6 +100,9 @@ private:
     [[nodiscard]] Expression emit_unary(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_assignment(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_call(const frontend::AstNode& expression);
+    [[nodiscard]] Expression emit_matrix_intrinsic(const frontend::AstNode& expression,
+                                                   const ir::Function& callee,
+                                                   ir::Intrinsic intrinsic);
     [[nodiscard]] Expression emit_subscript(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_member(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_member_lvalue(const frontend::AstNode& expression);

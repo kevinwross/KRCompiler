@@ -350,6 +350,29 @@ bool is_float(TypePtr type) { return type && type->kind == TypeKind::Float; }
 bool is_pointer(TypePtr type) { return type && type->kind == TypeKind::Pointer; }
 bool is_void(TypePtr type) { return type && type->kind == TypeKind::Void; }
 
+bool is_float_lane_record(TypePtr type, std::size_t lanes) {
+    if (!type || type->kind != TypeKind::Struct) {
+        return false;
+    }
+    const auto is_lane = [](TypePtr field) {
+        return field && is_float(field) && field->bits == 32;
+    };
+    if (type->fields.size() == 1 && type->fields[0] &&
+        type->fields[0]->kind == TypeKind::Array && is_lane(type->fields[0]->element) &&
+        type->fields[0]->count == lanes) {
+        return true;
+    }
+    if (type->fields.size() != lanes) {
+        return false;
+    }
+    for (const auto& field : type->fields) {
+        if (!is_lane(field)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 namespace {
 
 bool is_i1_type(TypePtr type) { return is_integer(type) && type->bits == 1; }
@@ -514,8 +537,34 @@ std::string_view opcode_name(Opcode opcode) {
         return "landingpad";
     case Opcode::Resume:
         return "resume";
+    case Opcode::Intrinsic:
+        return "intrinsic";
     }
     return "unknown";
+}
+
+std::string_view intrinsic_name(Intrinsic intrinsic) {
+    switch (intrinsic) {
+    case Intrinsic::None:
+        return "none";
+    case Intrinsic::MatrixMultiply:
+        return "matrix.multiply";
+    case Intrinsic::MatrixMultiplyAdd:
+        return "matrix.multiply_add";
+    case Intrinsic::MatrixTranspose:
+        return "matrix.transpose";
+    case Intrinsic::MatrixVectorTransform:
+        return "matrix.transform";
+    case Intrinsic::VectorDot:
+        return "vector.dot";
+    case Intrinsic::TransformPush:
+        return "transform.push";
+    case Intrinsic::TransformPop:
+        return "transform.pop";
+    case Intrinsic::TransformDrop:
+        return "transform.drop";
+    }
+    return "none";
 }
 
 std::string_view icmp_predicate_name(ICmpPredicate predicate) {
@@ -867,6 +916,15 @@ Instruction* IRBuilder::create_call(Value* callee, std::vector<Value*> arguments
     return create(Opcode::Call, result_type, std::move(operands), std::move(name));
 }
 
+Instruction* IRBuilder::create_intrinsic(Intrinsic intrinsic, TypePtr result_type,
+                                         std::vector<Value*> arguments, std::string name) {
+    auto* instruction =
+        create(Opcode::Intrinsic, std::move(result_type), std::move(arguments),
+               std::move(name));
+    instruction->intrinsic = intrinsic;
+    return instruction;
+}
+
 Instruction* IRBuilder::create_br(BasicBlock* destination) {
     auto* instruction = create(Opcode::Br, types_.void_type(), {});
     instruction->successors.push_back(destination);
@@ -1075,6 +1133,20 @@ void print_instruction(std::ostream& out, const Instruction& instruction) {
         out << '(';
         for (std::size_t index = 1; index < instruction.operands.size(); ++index) {
             if (index != 1) {
+                out << ", ";
+            }
+            if (operand(index) && operand(index)->type) {
+                out << type_to_string(operand(index)->type) << ' ';
+            }
+            print_operand(index);
+        }
+        out << ')';
+        break;
+    case Opcode::Intrinsic:
+        out << "intrinsic " << type_to_string(instruction.type) << ' '
+            << intrinsic_name(instruction.intrinsic) << '(';
+        for (std::size_t index = 0; index < instruction.operands.size(); ++index) {
+            if (index != 0) {
                 out << ", ";
             }
             if (operand(index) && operand(index)->type) {
@@ -1805,6 +1877,75 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                     }
                     if (!same_type(instruction.type, callee_type->return_type)) {
                         return function_fail("call result type mismatch");
+                    }
+                    break;
+                }
+                case Opcode::Intrinsic: {
+                    if (!check_operand_types()) {
+                        return false;
+                    }
+                    const auto is_matrix = [](TypePtr type) {
+                        return is_float_lane_record(type, 16);
+                    };
+                    const auto is_vector = [](TypePtr type) {
+                        return is_float_lane_record(type, 4);
+                    };
+                    std::size_t expected = 0;
+                    switch (instruction.intrinsic) {
+                    case Intrinsic::MatrixMultiply:
+                    case Intrinsic::MatrixMultiplyAdd:
+                        expected = instruction.intrinsic == Intrinsic::MatrixMultiply ? 2 : 3;
+                        if (!is_matrix(instruction.type)) {
+                            return function_fail("matrix multiply must produce a 4x4 tile");
+                        }
+                        break;
+                    case Intrinsic::MatrixTranspose:
+                    case Intrinsic::TransformPush:
+                    case Intrinsic::TransformPop:
+                        expected = 1;
+                        if (instruction.intrinsic == Intrinsic::MatrixTranspose &&
+                            !is_matrix(instruction.type)) {
+                            return function_fail("matrix transpose must produce a 4x4 tile");
+                        }
+                        if (instruction.intrinsic != Intrinsic::MatrixTranspose &&
+                            !is_void(instruction.type)) {
+                            return function_fail("transform stack operation must be void");
+                        }
+                        break;
+                    case Intrinsic::MatrixVectorTransform:
+                        expected = 2;
+                        if (!is_vector(instruction.type)) {
+                            return function_fail("matrix transform must produce a 4-lane vector");
+                        }
+                        break;
+                    case Intrinsic::VectorDot:
+                        expected = 2;
+                        if (!is_float(instruction.type) || instruction.type->bits != 32) {
+                            return function_fail("vector dot must produce f32");
+                        }
+                        break;
+                    case Intrinsic::TransformDrop:
+                        expected = 0;
+                        if (!is_void(instruction.type)) {
+                            return function_fail("transform drop must be void");
+                        }
+                        break;
+                    case Intrinsic::None:
+                        return function_fail("intrinsic is not named");
+                    }
+                    if (operands.size() != expected) {
+                        return function_fail("intrinsic '" +
+                                             std::string(intrinsic_name(instruction.intrinsic)) +
+                                             "' has the wrong operand count");
+                    }
+                    for (const auto* value : operands) {
+                        if (!value || !is_pointer(value->type) || !value->type->element ||
+                            value->type->element->kind != TypeKind::Struct) {
+                            return function_fail(
+                                "intrinsic '" +
+                                std::string(intrinsic_name(instruction.intrinsic)) +
+                                "' expects record pointers");
+                        }
                     }
                     break;
                 }

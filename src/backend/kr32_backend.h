@@ -26,6 +26,9 @@ private:
         std::unordered_map<const ir::Instruction*, std::uint32_t> alloca_offsets;
         std::uint32_t outgoing_size = 0;
         std::uint32_t float_temp = 0;
+        // Where the incoming memory-class return destination (R4) is saved.
+        std::uint32_t return_pointer = 0;
+        bool has_return_pointer = false;
         std::uint32_t frame_size = 0;
     };
 
@@ -35,6 +38,9 @@ private:
         std::string& error) const;
     [[nodiscard]] std::uint64_t size_of(ir::TypePtr type, std::string& error) const;
     [[nodiscard]] std::uint64_t align_of(ir::TypePtr type) const;
+    // True for an aggregate returned through the hidden destination pointer in
+    // R4 rather than in registers.
+    [[nodiscard]] bool is_memory_class_return(ir::TypePtr type) const;
     void emit_function(std::string& out, const ir::Function& function,
                        const FrameLayout& layout) const;
     void emit_instruction(std::string& out, const ir::Function& function,
@@ -66,6 +72,10 @@ private:
     void store_value(std::string& out, const ir::Function& function,
                      const FrameLayout& layout, const ir::Instruction& instruction,
                      std::string_view reg) const;
+    // Lowers an Opcode::Intrinsic to the KR32 tile and transform-stack
+    // instructions it names.
+    void emit_intrinsic(std::string& out, const ir::Function& function,
+                        const FrameLayout& layout, const ir::Instruction& instruction) const;
     [[nodiscard]] std::string block_label(const ir::Function& function,
                                           const ir::BasicBlock& block) const;
     [[nodiscard]] std::string escape_string(const std::vector<std::uint8_t>& bytes) const;

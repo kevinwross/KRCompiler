@@ -47,6 +47,31 @@ TEST_CASE("KR32 encoder reproduces the golden instruction words") {
     CHECK(encode_or_fail(Opcode::PopR, 0, 0, 0, false, 0).words[0] == 0x9C000000u);
     CHECK(encode_or_fail(Opcode::PushFP, 0, 0, 0, false, 0).words[0] == 0x9E000000u);
     CHECK(encode_or_fail(Opcode::PopFP, 0, 0, 0, false, 0).words[0] == 0x14000000u);
+    CHECK(encode_or_fail(Opcode::Wrsp, 3, 0, 0, false, 0).words[0] == 0x98600000u);
+}
+
+TEST_CASE("KR32 encoder reproduces the golden tile instruction words") {
+    // docs/isa-v1.md §7 gives MMUL T1, T2, T3 as 0xC224_6000.
+    CHECK(encode_or_fail(Opcode::MEscape, 1, 2, 3, false, 0).words[0] == 0xC2246000u);
+    CHECK(encode_or_fail(Opcode::MEscape, 0, 1, 2, false, 0x002).words[0] == 0xC2024002u);
+    CHECK(encode_or_fail(Opcode::MEscape, 0, 1, 0, false, 0x003).words[0] == 0xC2020003u);
+    CHECK(encode_or_fail(Opcode::MEscape, 0, 0, 1, false, 0x004).words[0] == 0xC2002004u);
+    CHECK(encode_or_fail(Opcode::MEscape, 2, 0, 0, false, 0x005).words[0] == 0xC2400005u);
+    CHECK(encode_or_fail(Opcode::MEscape, 1, 0, 0, false, 0x006).words[0] == 0xC2200006u);
+    CHECK(encode_or_fail(Opcode::MEscape, 0, 0, 0, false, 0x007).words[0] == 0xC2000007u);
+
+    // Tile transfer: Td in Rd, base in Rs1, addressing mode in 16..13, and
+    // L = 1 selects the 16-byte vector form.
+    CHECK(encode_or_fail(Opcode::MLoad, 1, 2, 2, false, 0).words[0] == 0xA4244000u);
+    CHECK(encode_or_fail(Opcode::MLoad, 1, 2, 2, true, 0).words[0] == 0xA4244800u);
+    CHECK(encode_or_fail(Opcode::MStore, 0, 3, 2, false, 0).words[0] == 0xA6064000u);
+
+    // A strided MLOAD carries the row stride in the extension word and clears
+    // the inline displacement.
+    const auto strided = encode_or_fail(Opcode::MLoad, 1, 2, 2, false, 0, true, 64);
+    CHECK(strided.count == 2);
+    CHECK(strided.words[0] == 0xA4245000u);
+    CHECK(strided.words[1] == 64u);
 }
 
 TEST_CASE("KR32 encoder emits and validates extension words") {

@@ -3,8 +3,15 @@
         .text
         .global _start
         .extern main
+        .extern __stack_limit
         .weak __krc_run_atexit
 _start:
+        ; Tile saves use the transform stack, which grows down from the stack
+        ; limit into the 64 KiB between the program stack and the heap. TSP is
+        ; zero at reset, and MPUSH faults below 64, so it must be set before any
+        ; matrix code runs.
+        LEA R1, [__stack_limit]
+        WRSP R1
         CALL main
         PUSH R0
         CALL __krc_run_atexit
