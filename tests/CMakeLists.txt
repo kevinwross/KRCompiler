@@ -430,6 +430,24 @@ if(TARGET krc)
             DEPENDS krc_link_printf_long_long)
     endif()
 
+        add_test(NAME krc_run_const_member_read
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/const_member_read_linked.k32
+                    -DEXPECT_EXIT=7
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_const_member_read PROPERTIES
+            DEPENDS krc_link_const_member_read)
+
+        add_test(NAME krc_run_const_mutable_member
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/const_mutable_member_linked.k32
+                    -DEXPECT_EXIT=5
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_const_mutable_member PROPERTIES
+            DEPENDS krc_link_const_mutable_member)
+
     add_test(NAME krc_link_printf_width
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
