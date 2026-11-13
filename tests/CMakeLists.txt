@@ -446,7 +446,6 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_const_mutable_member PROPERTIES
             DEPENDS krc_link_const_mutable_member)
-    endif()
 
         add_test(NAME krc_run_inherit_member_arith
             COMMAND ${CMAKE_COMMAND}
@@ -456,6 +455,7 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_inherit_member_arith PROPERTIES
             DEPENDS krc_link_inherit_member_arith)
+    endif()
 
     add_test(NAME krc_link_printf_width
         COMMAND ${CMAKE_COMMAND}
@@ -4511,3 +4511,4 @@ if(TARGET krld)
     add_test(NAME krld_version COMMAND $<TARGET_FILE:krld> --version)
     set_tests_properties(krld_version PROPERTIES PASS_REGULAR_EXPRESSION "krld 0\\.1\\.0")
 endif()
+
