@@ -522,7 +522,10 @@ int main(int argc, char** argv) {
                                     }
                                 }
                             }
-                            if (emit_object) {
+                            // An object built from a failed code generation must
+                            // not reach disk: a build that ignores the exit
+                            // status would otherwise link and run it.
+                            if (emit_object && !diagnostics.has_errors()) {
                                 krc::asmkr32::AssemblyResult assembled;
                                 std::string assemble_error;
                                 if (!krc::asmkr32::assemble(*assembly, assembled,
