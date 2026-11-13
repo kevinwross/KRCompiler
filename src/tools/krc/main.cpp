@@ -53,12 +53,12 @@ void print_usage(std::ostream& out) {
         << "  -S                     Emit KR32 assembly to stdout, or to -o FILE\n"
         << "  -c                     Emit a relocatable KRO object\n"
         << "  --emit-object          Write a KR16 KRO object instead of .kex\n"
-        << "  -o FILE                Output path for -c\n"
+        << "  -o FILE                Output path for -S or -c\n"
         << "  -I DIR                 Add an include search directory\n"
         << "  --sysroot DIR          Use DIR as the target sysroot\n"
-        << "  -S -c -o FILE          Accepted; code generation starts at M2\n"
         << "\n"
-        << "M2 provides typed SSA IR; the KR32 backend and code generation are in progress.\n";
+        << "KR32 code generation is complete for the implemented C and C++ subset;\n"
+        << "KR16 compiles C to a .kex image or a KRO object, and KR64 has no backend.\n";
 }
 
 int fail(std::string_view message) {
