@@ -1033,18 +1033,23 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
             make_ast(AstKind::Declarator, location, current_class_name_));
         expect("(", "after the constructor name");
         if (!check(")")) {
-            // Parameters are skipped; only whether any were written matters for
-            // the default-construction check that reads this marker.
+            // Parameters are skipped, but how many were written decides which
+            // constructor a later construction matches.
             constructor_declarator->labels.push_back("constructor-args");
             std::size_t depth = 1;
+            std::size_t arity = 1;
             while (!at_end() && depth > 0) {
                 if (check("(")) {
                     ++depth;
                 } else if (check(")")) {
                     --depth;
+                } else if (depth == 1 && check(",")) {
+                    ++arity;
                 }
                 ++position_;
             }
+            constructor_declarator->labels.push_back("constructor-arity:" +
+                                                     std::to_string(arity));
         } else {
             expect(")", "after the constructor parameter list");
         }

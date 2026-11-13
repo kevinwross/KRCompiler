@@ -861,10 +861,16 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             entry.is_final = is_final;
             entry.location = member.location;
             entry.access = access;
-            // Only the default constructor is tracked, so a deleted constructor
-            // that takes arguments cannot be mistaken for it.
-            if (name == record.tag && declarator_has_label(*child, "constructor-args")) {
-                continue;
+            // A constructor is registered under its own name plus its arity, so
+            // a construction matches the constructor it would actually call.
+            if (name == record.tag) {
+                std::string arity_label = "constructor-arity:";
+                for (const auto& label : child->labels) {
+                    if (label.rfind(arity_label, 0) == 0) {
+                        entry.name = record.tag + "#" + label.substr(arity_label.size());
+                        break;
+                    }
+                }
             }
             record.methods.push_back(std::move(entry));
             continue;
@@ -1340,6 +1346,19 @@ void Sema::analyze_declaration(const AstNode& declaration) {
         if (has_initializer) {
             if (init->children[1] &&
                 init->children[1]->kind == AstKind::ExpressionStatement) {
+                // `T x(a, b)` calls the constructor whose arity matches, so a
+                // deleted one of that arity is refused here.
+                if (type && type->kind == TypeKind::Record && type->record) {
+                    const auto key = type->record->tag + "#" +
+                                     std::to_string(init->children[1]->children.size());
+                    for (const auto& constructor : type->record->methods) {
+                        if (constructor.name == key && constructor.is_deleted) {
+                            error(declarator->location,
+                                  "call to deleted constructor '" +
+                                      type->record->tag + "::" + type->record->tag + "'");
+                        }
+                    }
+                }
                 for (const auto& argument : init->children[1]->children) {
                     if (argument) {
                         static_cast<void>(analyze_expression(*argument));

@@ -4273,6 +4273,13 @@ if(TARGET krc)
                 "-DEXPECT=call to non-const member function"
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
 
+    add_test(NAME krc_cxx_deleted_constructor_call
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/deleted_constructor_call.cpp
+                "-DEXPECT=call to deleted constructor"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
     add_test(NAME krc_cxx_deleted_default_constructor
         COMMAND ${CMAKE_COMMAND}
                 -DEXE=$<TARGET_FILE:krc>
