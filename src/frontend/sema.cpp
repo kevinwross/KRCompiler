@@ -474,12 +474,26 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
         }
         base = int_type_;
     }
-    // plan.md §4.3: a profile without a 64-bit integer type must say so rather
-    // than lower `long long` to a zero-width type. A typedef carries the
-    // diagnostic from its own declaration.
-    if (!typedef_type && base->kind == TypeKind::LongLong && profile_.long_long_bits == 0) {
-        error(specifiers.location, std::string("'long long' is not supported by the ") +
-                                       std::string(profile_.name) + " profile");
+    // plan.md §4.3: a type a profile cannot represent is diagnosed where it is
+    // named, rather than lowered to something meaningless — `long long` became
+    // a zero-width type and `float`/`double` reached the IR on a profile with
+    // no FPU. A typedef carries the diagnostic from its own declaration.
+    if (!typedef_type) {
+        const char* unsupported = nullptr;
+        if (base->kind == TypeKind::LongLong && profile_.long_long_bits == 0) {
+            unsupported = "long long";
+        } else if (base->kind == TypeKind::Float && profile_.float_bits == 0) {
+            unsupported = "float";
+        } else if (base->kind == TypeKind::Double && profile_.double_bits == 0) {
+            unsupported = "double";
+        } else if (base->kind == TypeKind::LongDouble && profile_.long_double_bits == 0) {
+            unsupported = "long double";
+        }
+        if (unsupported != nullptr) {
+            error(specifiers.location, std::string("'") + unsupported +
+                                           "' is not supported by the " +
+                                           std::string(profile_.name) + " profile");
+        }
     }
     if (is_const || is_volatile) {
         base = qualify(base, is_const, is_volatile);

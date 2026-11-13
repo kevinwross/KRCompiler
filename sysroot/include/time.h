@@ -28,7 +28,10 @@ size_t strftime(char *buffer, size_t size, const char *format,
                 const struct tm *value);
 char *asctime(const struct tm *value);
 char *ctime(const time_t *value);
+/* The IP16 profile has no floating-point type. */
+#ifndef __kr16__
 double difftime(time_t end, time_t beginning);
+#endif
 clock_t clock(void);
 
 #endif
