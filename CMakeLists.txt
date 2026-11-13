@@ -27,6 +27,19 @@ option(KRC_BUILD_TESTS "Build the KRCompiler test suite" ON)
 option(KRC_BUILD_TOOLS "Build krc, krld, and the fixture extractor" ON)
 option(KRC_BUILD_TARGET_RUNTIME "Build target runtime objects with krc" ON)
 
+# Executed tests need a KR32 VM. The sibling checkout provides a Windows build,
+# so the default is adopted only on a Windows host and only when that file
+# exists: a WSL or Linux host must point KRC_KR32_VM at a binary it can run,
+# and an empty value registers no run tests, which keeps such a host green.
+set(KRC_KR32_VM "" CACHE FILEPATH "Path to a kr32 VM binary for the executed tests")
+if(NOT KRC_KR32_VM AND WIN32)
+    set(_krc_default_vm "${CMAKE_CURRENT_SOURCE_DIR}/../kr32/build/windows-msvc/Debug/kr32.exe")
+    if(EXISTS "${_krc_default_vm}")
+        set(KRC_KR32_VM "${_krc_default_vm}" CACHE FILEPATH
+            "Path to a kr32 VM binary for the executed tests" FORCE)
+    endif()
+endif()
+
 add_library(krc_core STATIC
     src/asm/kro_writer.cpp
     src/asm/kr32_assembler.cpp

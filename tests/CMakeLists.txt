@@ -380,6 +380,21 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/longlong_arith_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    # Executed checks, registered only when a VM was configured for this
+    # machine. A link-only test cannot see a wrong result in generated code.
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        foreach(run_fixture longlong_arith longlong_conditional)
+            add_test(NAME krc_run_${run_fixture}
+                COMMAND ${CMAKE_COMMAND}
+                        -DVM=${KRC_KR32_VM}
+                        -DIMAGE=${KRC_TEST_OUTPUT_DIR}/${run_fixture}_linked.k32
+                        -DEXPECT_EXIT=0
+                        -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+            set_tests_properties(krc_run_${run_fixture} PROPERTIES
+                DEPENDS krc_link_${run_fixture})
+        endforeach()
+    endif()
+
     add_test(NAME krc_link_printf_width
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
