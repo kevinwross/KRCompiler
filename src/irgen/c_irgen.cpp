@@ -6978,6 +6978,17 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
     if (expression.kind == frontend::AstKind::MemberExpression) {
         return emit_member_lvalue(expression);
     }
+    if (expression.kind == frontend::AstKind::CallExpression) {
+        // A call has no address of its own. Callers that need one for a value
+        // it returns, such as an assignment operator's source, get a temporary.
+        auto value = emit_expression(expression);
+        if (value.value && value.type) {
+            auto* storage = builder_.create_alloca(value.type, 0, "call.temp");
+            builder_.create_store(value.value, storage);
+            return {storage, value.type};
+        }
+        return {};
+    }
     error(expression.location, "expression is not an lvalue");
     return {};
 }
