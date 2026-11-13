@@ -228,24 +228,17 @@ its run waits for the host file dialog instead of returning.
   confirm `master` equals `origin/master`, then push.
 ## Suggested next actions
 
-1. Give the corpus tree defect one static attempt, but not by diffing assembly:
-   `kr32.exe build` accepts a C file and emits only an image — it has no assembly
-   output, so the reference cannot be diffed textually. Read the reference
-   compiler's frame conventions in `../kr32/src/cc` instead, or bisect
-   behaviourally on the reference build. Seven rounds of probing krc alone
-   produced no fix; something has to constrain the search. If it does not
-   converge quickly, escalate it as a known wrong-code defect and move on.
-   Already ruled out: the program compiles cleanly with the current
-   compiler, and fixing `!` on a pointer — which was a real IRGen defect
-   with a six-line reproducer — did not change its behaviour.
+1. Matrix intrinsics, if the corpus matters next: `matrix.cpp` is the last
+   example that builds and does not link, and it needs MLOAD, MMUL, MVEC,
+   MTRANS and MSTORE plus the float support behind them. The other remaining
+   corpus example, `FileOpen.cpp`, is complete — it waits on an interactive
+   dialog by design and must not be run in a loop.
 2. Then RTTI: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
    plan §10.4. The executed-test harness can verify it end to end.
-3. Remaining backlog: the corpus tree wrong-code defect recorded in
-   `implementation.md`, the rest of deleted constructors — a deleted default
-   constructor is refused already, while `S(int) = delete` still permits
-   `S object;` and `S x(5);` goes unchecked — RTTI, exceptions, variadic
-   templates, dynamic TLS, the `std` containers, KR16 libc/file I/O, and
-   matrix/host intrinsics.
+3. Remaining backlog: the rest of deleted constructors — a deleted default
+   constructor and a deleted copy case are refused already — RTTI, exceptions,
+   variadic templates, dynamic TLS, the `std` containers, KR16 libc/file I/O,
+   and matrix/host intrinsics.
 ## Goal recommendation
 
 Keep the objective **“Proceed with implementation of M0 thru M10.”** If the new
