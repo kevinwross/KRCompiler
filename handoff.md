@@ -230,6 +230,9 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
    behaviourally on the reference build. Seven rounds of probing krc alone
    produced no fix; something has to constrain the search. If it does not
    converge quickly, escalate it as a known wrong-code defect and move on.
+   Already ruled out: the program compiles cleanly with the current
+   compiler, and fixing `!` on a pointer — which was a real IRGen defect
+   with a six-line reproducer — did not change its behaviour.
 2. Then RTTI: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
    plan §10.4. The executed-test harness can verify it end to end.
 3. Remaining backlog: the corpus tree wrong-code defect recorded in
@@ -244,3 +247,4 @@ Keep the objective **“Proceed with implementation of M0 thru M10.”** If the 
 session supports persisted goals, create that goal with a 3000-round cap. Do not
 mark it complete while M8/M9/M10 items above are open, and do not treat the
 previous `blocked` state as a technical blocker — it meant “paused by user.”
+
