@@ -1243,16 +1243,65 @@ ir::TypePtr CIRGen::map_record(const frontend::RecordInfo& record) {
     return forward;
 }
 
-ir::TypePtr CIRGen::map_function_type(frontend::TypePtr type) {    if (!type || type->kind != frontend::TypeKind::Function || !type->return_type) {
+ir::TypePtr CIRGen::map_function_type(frontend::TypePtr type) {
+    if (!type || type->kind != frontend::TypeKind::Function || !type->return_type) {
         return nullptr;
     }
     std::vector<ir::TypePtr> parameters;
     parameters.reserve(type->parameters.size());
     for (const auto& parameter : type->parameters) {
-        parameters.push_back(map_type(parameter));
+        const auto mapped = map_type(parameter);
+        // A memory-class aggregate parameter is a hidden pointer to a copy the
+        // caller owns; the callee copies it into its own frame slot.
+        parameters.push_back(is_memory_class_argument(mapped)
+                                 ? module_->types().pointer_type(mapped)
+                                 : mapped);
     }
     return module_->types().function_type(map_type(type->return_type), std::move(parameters),
                                          type->variadic);
+}
+
+bool CIRGen::is_memory_class_argument(ir::TypePtr type) const {
+    if (!type || (type->kind != ir::TypeKind::Struct && type->kind != ir::TypeKind::Union)) {
+        return false;
+    }
+    const auto size = ir_size_of(type);
+    if (size > 16) {
+        return true;
+    }
+    if (size <= 8) {
+        return false;
+    }
+    // Whether the aggregate is FP-only decides between two FPRs and memory.
+    bool fp_only = !type->fields.empty();
+    for (const auto& field : type->fields) {
+        if (!field || field->kind != ir::TypeKind::Float) {
+            fp_only = false;
+            break;
+        }
+    }
+    return !fp_only;
+}
+
+ir::TypePtr CIRGen::parameter_ir_type(ir::TypePtr mapped) const {
+    if (is_memory_class_argument(mapped)) {
+        return module_->types().pointer_type(mapped);
+    }
+    return mapped;
+}
+
+ir::TypePtr CIRGen::call_signature(ir::Value* callee) const {
+    if (!callee || !callee->type) {
+        return nullptr;
+    }
+    if (callee->type->kind == ir::TypeKind::Function) {
+        return callee->type;
+    }
+    if (callee->type->kind == ir::TypeKind::Pointer && callee->type->element &&
+        callee->type->element->kind == ir::TypeKind::Function) {
+        return callee->type->element;
+    }
+    return nullptr;
 }
 
 bool CIRGen::has_label(const frontend::AstNode& specifiers, std::string_view label) const {
@@ -1394,7 +1443,7 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
     std::vector<ir::TypePtr> parameters;
     parameters.push_back(module_->types().pointer_type(class_type));
     for (const auto& parameter : frontend_type->parameters) {
-        parameters.push_back(map_type(parameter));
+        parameters.push_back(parameter_ir_type(map_type(parameter)));
     }
     const auto ir_type = module_->types().function_type(
         map_type(frontend_type->return_type), std::move(parameters),
@@ -1420,7 +1469,7 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
                 continue;
             }
             function->add_parameter(
-                map_type(frontend_type->parameters[parameter_index]),
+                parameter_ir_type(map_type(frontend_type->parameters[parameter_index])),
                 parameter_name(*parameter, parameter_index));
             parameter_index++;
         }
@@ -1523,7 +1572,7 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             std::vector<ir::TypePtr> parameters;
             parameters.push_back(module_->types().pointer_type(class_type));
             for (const auto& parameter : frontend_type->parameters) {
-                parameters.push_back(map_type(parameter));
+                parameters.push_back(parameter_ir_type(map_type(parameter)));
             }
             const auto ir_type = module_->types().function_type(
                 map_type(frontend_type->return_type), std::move(parameters),
@@ -1557,7 +1606,7 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                         continue;
                     }
                     function->add_parameter(
-                        map_type(frontend_type->parameters[parameter_index]),
+                        parameter_ir_type(map_type(frontend_type->parameters[parameter_index])),
                         parameter_name(*parameter, parameter_index));
                     parameter_index++;
                 }
@@ -1594,7 +1643,7 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             std::vector<ir::TypePtr> parameters{
                 module_->types().pointer_type(class_type)};
             for (const auto& parameter : method.type->parameters) {
-                parameters.push_back(map_type(parameter));
+                parameters.push_back(parameter_ir_type(map_type(parameter)));
             }
             const auto ir_type = module_->types().function_type(
                 map_type(method.type->return_type), std::move(parameters),
@@ -1608,7 +1657,7 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             for (std::size_t index = 0;
                  index < method.type->parameters.size(); ++index) {
                 function->add_parameter(
-                    map_type(method.type->parameters[index]),
+                    parameter_ir_type(map_type(method.type->parameters[index])),
                     "parameter" + std::to_string(index));
             }
             function_ast_types_[function] = method.type;
@@ -1835,7 +1884,8 @@ void CIRGen::collect_function(const frontend::AstNode& specifiers,
             if (parameter_index >= frontend_type->parameters.size()) {
                 break;
             }
-            const auto parameter_type = map_type(frontend_type->parameters[parameter_index]);
+            const auto parameter_type =
+                parameter_ir_type(map_type(frontend_type->parameters[parameter_index]));
             const auto parameter_text = parameter_name(*parameter, parameter_index);
             if (parameter_index < function->parameters.size()) {
                 function->parameters[parameter_index]->name = parameter_text;
@@ -1848,7 +1898,7 @@ void CIRGen::collect_function(const frontend::AstNode& specifiers,
     }
     for (; parameter_index < frontend_type->parameters.size(); ++parameter_index) {
         if (parameter_index >= function->parameters.size()) {
-            function->add_parameter(map_type(frontend_type->parameters[parameter_index]),
+            function->add_parameter(parameter_ir_type(map_type(frontend_type->parameters[parameter_index])),
                                     "arg" + std::to_string(parameter_index));
         }
     }
@@ -2181,8 +2231,6 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
 
     for (std::size_t index = 0; index < function->parameters.size(); ++index) {
         const auto& parameter = function->parameters[index];
-        auto* address = builder_.create_alloca(parameter->type, 0, parameter->name + ".addr");
-        builder_.create_store(parameter.get(), address);
         frontend::TypePtr parameter_type;
         if (frontend_function_type &&
             frontend_function_type->kind == frontend::TypeKind::Function) {
@@ -2193,8 +2241,21 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                 }
             }
         }
+        // A memory-class aggregate arrives as a pointer to the caller's copy;
+        // the callee works on its own copy, as the ABI allows it to modify it.
+        const bool indirect =
+            parameter_type && parameter_type->kind == frontend::TypeKind::Record &&
+            parameter->type && parameter->type->kind == ir::TypeKind::Pointer &&
+            parameter->type->element;
+        auto* storage_type = indirect ? parameter->type->element : parameter->type;
+        auto* address = builder_.create_alloca(storage_type, 0, parameter->name + ".addr");
+        if (indirect) {
+            emit_copy(address, parameter.get(), storage_type);
+        } else {
+            builder_.create_store(parameter.get(), address);
+        }
         declare_local(parameter->name,
-                      LocalBinding{address, parameter->type, parameter_type});
+                      LocalBinding{address, storage_type, parameter_type});
     }
 
     std::unordered_set<std::string> explicit_member_initializers;
@@ -5126,7 +5187,7 @@ CIRGen::Expression CIRGen::emit_lambda(const frontend::AstNode& expression) {
         std::vector<ir::TypePtr> parameters{
             module_->types().pointer_type(closure_type)};
         for (const auto& parameter : lambda_type->element->parameters) {
-            parameters.push_back(map_type(parameter));
+            parameters.push_back(parameter_ir_type(map_type(parameter)));
         }
         const auto function_type = module_->types().function_type(
             map_type(lambda_type->element->return_type), parameters, false);
@@ -5167,7 +5228,7 @@ CIRGen::Expression CIRGen::emit_lambda(const frontend::AstNode& expression) {
                     continue;
                 }
                 function->add_parameter(
-                    map_type(lambda_type->element->parameters[parameter_index]),
+                    parameter_ir_type(map_type(lambda_type->element->parameters[parameter_index])),
                     parameter_name(*parameter, parameter_index));
                 auto* parameter_address = builder_.create_alloca(
                     function->parameters[parameter_index + 1]->type, 0,
@@ -5313,7 +5374,7 @@ CIRGen::Expression CIRGen::emit_lambda(const frontend::AstNode& expression) {
                 continue;
             }
             function->add_parameter(
-                map_type(lambda_type->element->parameters[parameter_index]),
+                parameter_ir_type(map_type(lambda_type->element->parameters[parameter_index])),
                 parameter_name(*parameter, parameter_index));
             ++parameter_index;
         }
@@ -8934,6 +8995,27 @@ ir::Instruction* CIRGen::create_call_instruction(ir::Value* callee,
                                                  std::vector<ir::Value*> arguments,
                                                  ir::TypePtr result_type,
                                                  const std::string& name) {
+    // A memory-class aggregate argument travels as a pointer to a caller-owned
+    // copy, so the argument value is materialized and its address passed.
+    if (const auto signature = call_signature(callee)) {
+        const auto count = std::min(arguments.size(), signature->parameters.size());
+        for (std::size_t index = 0; index < count; ++index) {
+            auto* parameter = signature->parameters[index];
+            auto* argument = arguments[index];
+            if (!parameter || !argument || parameter->kind != ir::TypeKind::Pointer ||
+                !parameter->element || parameter->element->kind != ir::TypeKind::Struct ||
+                !argument->type || argument->type->kind != ir::TypeKind::Struct) {
+                continue;
+            }
+            auto* copy = builder_.create_alloca(argument->type, 0, "argument.copy");
+            builder_.create_store(argument, copy);
+            arguments[index] =
+                copy->type == parameter
+                    ? static_cast<ir::Value*>(copy)
+                    : builder_.create(ir::Opcode::BitCast, parameter, {copy},
+                                      "argument.pointer");
+        }
+    }
     if (!owned_landing_pad(current_landing_pad_) || !current_function_ ||
         !builder_.insert_block()) {
         return builder_.create_call(callee, std::move(arguments), result_type, name);

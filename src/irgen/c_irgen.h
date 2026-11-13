@@ -94,6 +94,15 @@ private:
                                              std::vector<ir::Value*> arguments,
                                              ir::TypePtr result_type,
                                              const std::string& name);
+    // An aggregate larger than eight bytes (or an FP-only aggregate larger than
+    // sixteen) is memory class: it travels as a pointer to a caller-owned copy
+    // (docs/abi.md, KR32 aggregate convention).
+    [[nodiscard]] bool is_memory_class_argument(ir::TypePtr type) const;
+    // The function type of a direct or indirect callee, or null.
+    [[nodiscard]] ir::TypePtr call_signature(ir::Value* callee) const;
+    // The IR parameter type: a memory-class aggregate parameter becomes a
+    // hidden pointer, matching what map_function_type put in the signature.
+    [[nodiscard]] ir::TypePtr parameter_ir_type(ir::TypePtr mapped) const;
     // An external runtime entry point, declared on first use.
     ir::Function* ensure_runtime_function(std::string_view name, ir::TypePtr result,
                                           const std::vector<ir::TypePtr>& parameters);

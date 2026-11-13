@@ -370,9 +370,13 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
         return declaration;
     }
 
+    // A record-typed name followed by `(` is a constructor-initialized
+    // declaration unless the parenthesis opens a parameter declaration, which
+    // is the case when its first token names a type.
     if (peek().kind == TokenKind::Identifier && peek(1).text == "(" &&
         peek(2).kind != TokenKind::Keyword && peek(2).kind != TokenKind::Eof &&
-        peek(2).text != ")" &&
+        peek(2).text != ")" && !class_names_.contains(peek(2).text) &&
+        !typedef_names_.contains(peek(2).text) &&
         std::any_of(specifiers->labels.begin(), specifiers->labels.end(),
                     [&](const std::string& label) {
                         return class_names_.contains(label);
