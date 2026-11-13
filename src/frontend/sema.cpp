@@ -1376,13 +1376,18 @@ void Sema::analyze_declaration(const AstNode& declaration) {
                 // The initializer's own type decides whether this is a copy of a
                 // record or a conversion into one; the initializer analysis below
                 // reports the target type, so ask the expression directly.
-                // A literal or a named value converts; other initializer nodes have
-                // their own path and must not be analysed here.
+                // A literal or a named value converts; so does a single-element braced
+                // list in copy-list initialisation. Designated initialisers are a
+                // different node and are left alone.
                 const bool scalar_initializer =
                     init->children[1]->kind == AstKind::IntegerLiteral ||
                     init->children[1]->kind == AstKind::Identifier;
+                const bool list_initializer =
+                    init->children[1]->kind == AstKind::InitializerList &&
+                    init->children[1]->children.size() == 1;
                 const bool converts = type && type->kind == TypeKind::Record &&
-                                      type->record && scalar_initializer;
+                                      type->record &&
+                                      (scalar_initializer || list_initializer);
                 if (converts) {
                     const auto key = type->record->tag + "#1";
                     for (const auto& constructor : type->record->methods) {
