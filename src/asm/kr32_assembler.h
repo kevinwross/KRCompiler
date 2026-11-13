@@ -19,6 +19,9 @@ struct AssembledSymbol {
 struct AssembledRelocation {
     std::uint32_t offset = 0;
     std::string symbol;
+    // 0 for .text and 1 for .data: the section whose bytes the relocation
+    // patches, in the order make_object() emits them.
+    std::uint32_t section = 0;
 };
 
 struct AssemblyResult {

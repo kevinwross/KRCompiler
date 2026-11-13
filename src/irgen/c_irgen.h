@@ -109,6 +109,12 @@ private:
     [[nodiscard]] Expression emit_implicit_member(std::string_view name);
     [[nodiscard]] Expression emit_implicit_member_lvalue(std::string_view name);
     [[nodiscard]] Expression emit_cast(const frontend::AstNode& expression);
+    [[nodiscard]] Expression emit_dynamic_cast(const frontend::AstNode& expression);
+    // `typeid` yields an lvalue of the type_info record: the address of the
+    // object's dynamic typeinfo for a polymorphic operand, or of the static
+    // typeinfo otherwise.
+    [[nodiscard]] Expression emit_typeid_reference(const frontend::AstNode& expression);
+    [[nodiscard]] Expression emit_typeid(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_sizeof(const frontend::AstNode& expression);
 
     [[nodiscard]] ir::Value* emit_condition(const frontend::AstNode& expression);
@@ -174,6 +180,26 @@ private:
     std::vector<std::pair<ir::GlobalVariable*, const frontend::RecordInfo*>>
         local_static_dtors_;
     void generate_global_constructors();
+    // Read-only class metadata: _ZTS<tag> holds the name, _ZTI<tag> the
+    // type_info, and _ZTV<tag> the vtable with the typeinfo address at word 0
+    // so a vptr points at word 1 (RTTI at vptr - 4, virtual slot k at
+    // vptr + 4*k).
+    [[nodiscard]] ir::GlobalVariable* ensure_typeinfo(
+        const frontend::RecordInfo& record);
+    [[nodiscard]] ir::GlobalVariable* ensure_vtable(
+        const frontend::RecordInfo& record);
+    [[nodiscard]] ir::Function* vtable_slot_implementation(
+        const frontend::RecordInfo& record, std::string_view slot);
+    void finalize_vtables();
+    struct PendingVtable {
+        const frontend::RecordInfo* record = nullptr;
+        ir::GlobalVariable* table = nullptr;
+    };
+    std::vector<PendingVtable> pending_vtables_;
+    std::unordered_map<const frontend::RecordInfo*, ir::GlobalVariable*>
+        typeinfo_globals_;
+    std::unordered_map<const frontend::RecordInfo*, ir::GlobalVariable*>
+        vtable_globals_;
     ir::Function* ensure_member_destructor(
         const frontend::RecordInfo* record);
     ir::Function* ensure_default_constructor(

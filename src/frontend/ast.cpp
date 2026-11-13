@@ -123,6 +123,8 @@ std::string_view ast_kind_name(AstKind kind) noexcept {
         return "MemberExpression";
     case AstKind::CastExpression:
         return "CastExpression";
+    case AstKind::TypeIdExpression:
+        return "TypeIdExpression";
     case AstKind::SizeofExpression:
         return "SizeofExpression";
     case AstKind::AlignofExpression:

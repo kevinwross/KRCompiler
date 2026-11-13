@@ -144,3 +144,24 @@ TEST_CASE("KR32 assembler rejects undefined symbols") {
                                        result, error));
     CHECK(error.find("undefined symbol") != std::string::npos);
 }
+TEST_CASE("KR32 assembler relocates symbolic data words") {
+    const auto result = assemble_or_fail(R"ASM(
+        .data
+table:
+        .word handler, 0, table
+        .text
+        .global handler
+handler:
+        RET
+)ASM");
+    REQUIRE(result.data.size() == 12);
+    REQUIRE(result.relocations.size() == 2);
+    CHECK(result.relocations[0].symbol == "handler");
+    CHECK(result.relocations[0].section == 1);
+    CHECK(result.relocations[0].offset == 0);
+    CHECK(result.relocations[1].symbol == "table");
+    CHECK(result.relocations[1].section == 1);
+    CHECK(result.relocations[1].offset == 8);
+    CHECK(result.data[4] == 0);
+    CHECK(result.data[5] == 0);
+}

@@ -1820,6 +1820,43 @@ TypePtr Sema::analyze_initializer(const AstNode& initializer, TypePtr target) {
     return target ? target : type;
 }
 
+void Sema::check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr source) {
+    if (target && target->is_reference) {
+        error(expression.location,
+              "dynamic_cast to a reference is not supported without exceptions");
+        return;
+    }
+    if (!target || target->kind != TypeKind::Pointer || !target->element ||
+        target->element->kind != TypeKind::Record) {
+        error(expression.location, "dynamic_cast target must be a pointer to a class");
+        return;
+    }
+    if (!source || source->kind != TypeKind::Pointer || !source->element ||
+        source->element->kind != TypeKind::Record) {
+        error(expression.location, "dynamic_cast operand must be a pointer to a class");
+        return;
+    }
+    const auto* source_record = source->element->record.get();
+    const auto* target_record = target->element->record.get();
+    if (!source_record || !target_record) {
+        return;
+    }
+    if (source_record->polymorphic) {
+        return;
+    }
+    // A non-polymorphic source is only valid when the target is one of its
+    // bases, which the compiler can check without a runtime table.
+    for (const auto* current = source_record; current != nullptr;
+         current = current->base && current->base->record
+                       ? current->base->record.get()
+                       : nullptr) {
+        if (current == target_record) {
+            return;
+        }
+    }
+    error(expression.location, "dynamic_cast requires a polymorphic source class");
+}
+
 TypePtr Sema::analyze_expression(const AstNode& expression) {
     switch (expression.kind) {
     case AstKind::IntegerLiteral: {
@@ -2396,8 +2433,40 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             !expression.children[1]) {
             return int_type_;
         }
-        analyze_expression(*expression.children[1]);
-        return analyze_type_name(*expression.children[0]);
+        {
+            const auto operand_type = analyze_expression(*expression.children[1]);
+            const auto target = analyze_type_name(*expression.children[0]);
+            if (!expression.labels.empty() &&
+                expression.labels.front() == "dynamic_cast") {
+                check_dynamic_cast(expression, target, operand_type);
+                // IR generation cannot re-analyse after the scopes are gone.
+                cast_targets_[&expression] = target;
+                cast_operands_[&expression] = operand_type;
+            }
+            return target;
+        }
+    case AstKind::TypeIdExpression: {
+        if (expression.children.empty() || !expression.children.front()) {
+            error(expression.location, "typeid has no operand");
+            return int_type_;
+        }
+        const auto& operand = *expression.children.front();
+        TypePtr operand_type = nullptr;
+        if (operand.kind == AstKind::TypeName) {
+            operand_type = analyze_type_name(operand);
+        } else {
+            operand_type = analyze_expression(operand);
+        }
+        typeid_operands_[&expression] = operand_type;
+        if (const auto info = type_named("std::type_info")) {
+            return info;
+        }
+        if (const auto info = type_named("type_info")) {
+            return info;
+        }
+        error(expression.location, "typeid requires <typeinfo>");
+        return int_type_;
+    }
     case AstKind::SizeofExpression:
     case AstKind::AlignofExpression:
     case AstKind::OffsetofExpression: {

@@ -54,6 +54,18 @@ public:
         }
         return analyze_expression(expression);
     }
+    [[nodiscard]] TypePtr typeid_operand_type(const AstNode& expression) const {
+        const auto found = typeid_operands_.find(&expression);
+        return found == typeid_operands_.end() ? nullptr : found->second;
+    }
+    [[nodiscard]] TypePtr cast_target_type(const AstNode& expression) const {
+        const auto found = cast_targets_.find(&expression);
+        return found == cast_targets_.end() ? nullptr : found->second;
+    }
+    [[nodiscard]] TypePtr cast_operand_type(const AstNode& expression) const {
+        const auto found = cast_operands_.find(&expression);
+        return found == cast_operands_.end() ? nullptr : found->second;
+    }
     [[nodiscard]] TypePtr bool_type() const { return bool_type_; }
     [[nodiscard]] TypePtr type_named(std::string_view name) {
         if (name == "bool" || name == "_Bool") {
@@ -176,6 +188,15 @@ private:
     bool auto_return_active_ = false;
     TypePtr auto_return_type_;
     std::unordered_map<const AstNode*, TypePtr> expression_types_;
+    // The type each `typeid` operand was analysed with. IR generation runs
+    // after the function's scopes are gone, so it cannot re-analyse the
+    // operand and must read the recorded type.
+    std::unordered_map<const AstNode*, TypePtr> typeid_operands_;
+    // The target and operand types of a `dynamic_cast`, recorded for the same
+    // reason. Other named casts lower from the AST directly.
+    std::unordered_map<const AstNode*, TypePtr> cast_targets_;
+    std::unordered_map<const AstNode*, TypePtr> cast_operands_;
+    void check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr source);
     [[nodiscard]] std::optional<long long> parse_integer_literal(std::string_view text) const;
     [[nodiscard]] std::optional<long long> parse_character_literal(
         std::string_view text) const;

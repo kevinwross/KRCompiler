@@ -38,6 +38,8 @@ std::string signed_constant(const ConstantInt& constant) {
     return std::to_string(static_cast<std::uint64_t>(constant.value));
 }
 
+void print_value_raw(std::ostream& out, const Value* value);
+
 void print_value(std::ostream& out, const Value* value) {
     if (!value) {
         out << "<null>";
@@ -79,6 +81,18 @@ void print_value(std::ostream& out, const Value* value) {
             }
         }
         out << '"';
+        break;
+    }
+    case ValueKind::ConstantAddressArray: {
+        const auto& constant = *static_cast<const ConstantAddressArray*>(value);
+        out << '[';
+        for (std::size_t index = 0; index < constant.elements.size(); ++index) {
+            if (index != 0) {
+                out << ", ";
+            }
+            print_value_raw(out, constant.elements[index]);
+        }
+        out << ']';
         break;
     }
     }
@@ -743,6 +757,17 @@ ConstantDataArray* Module::constant_data_array(TypePtr array_type,
     return result;
 }
 
+ConstantAddressArray* Module::constant_address_array(TypePtr array_type,
+                                                     std::vector<Value*> elements) {
+    auto constant = std::make_unique<ConstantAddressArray>();
+    constant->kind = ValueKind::ConstantAddressArray;
+    constant->type = array_type;
+    constant->elements = std::move(elements);
+    auto* result = constant.get();
+    constants_.push_back(std::move(constant));
+    return result;
+}
+
 void IRBuilder::set_insert_point(BasicBlock* block) { block_ = block; }
 
 void IRBuilder::set_debug_location(DebugLocation location) {
@@ -1338,6 +1363,7 @@ void print_module(const Module& module, std::ostream& out) {
         out << '@' << global->name << " = "
             << (global->external ? "external " : "")
             << (global->internal ? "internal " : "")
+            << (global->weak ? "weak " : "")
             << (global->constant ? "constant " : "global ")
             << type_to_string(global->element_type) << ' ';
         if (global->initializer) {
@@ -1384,6 +1410,28 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                 !is_integer(constant->type->element) || constant->type->element->bits != 8 ||
                 data.bytes.size() != constant->type->count) {
                 return fail("data-array constant has an invalid type or length");
+            }
+        }
+        if (constant->kind == ValueKind::ConstantAddressArray) {
+            const auto& addresses =
+                *static_cast<const ConstantAddressArray*>(constant.get());
+            if (!constant->type || constant->type->kind != TypeKind::Array ||
+                !is_integer(constant->type->element) || constant->type->element->bits != 32 ||
+                addresses.elements.size() != constant->type->count) {
+                return fail("address-array constant has an invalid type or length");
+            }
+            for (const auto* element : addresses.elements) {
+                if (!element) {
+                    return fail("address-array constant has a null element");
+                }
+                const bool is_address = element->kind == ValueKind::Function ||
+                                        element->kind == ValueKind::Global;
+                const bool is_zero =
+                    element->kind == ValueKind::ConstantInt &&
+                    static_cast<const ConstantInt*>(element)->value == 0;
+                if (!is_address && !is_zero) {
+                    return fail("address-array element is not an address");
+                }
             }
         }
     }

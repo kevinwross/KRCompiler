@@ -69,6 +69,7 @@ enum class AstKind {
     SubscriptExpression,
     MemberExpression,
     CastExpression,
+    TypeIdExpression,
     SizeofExpression,
     AlignofExpression,
     OffsetofExpression,

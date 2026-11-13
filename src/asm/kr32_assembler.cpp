@@ -893,8 +893,19 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
             for (std::size_t index = 0; index < item.operands.size(); ++index) {
                 std::int64_t value = 0;
                 if (!parse_integer(item.operands[index], value)) {
-                    error = "line " + std::to_string(item.line) + ": invalid .word value";
-                    return false;
+                    // A symbolic word holds a relocated address: the linker
+                    // patches it once the symbol is placed. This is how a
+                    // read-only vtable or typeinfo table names its entries.
+                    if (!is_identifier(item.operands[index])) {
+                        error = "line " + std::to_string(item.line) +
+                                ": invalid .word value";
+                        return false;
+                    }
+                    result.relocations.push_back(
+                        {static_cast<std::uint32_t>(item.offset + index * 4),
+                         item.operands[index],
+                         item.section == Section::Text ? 0U : 1U});
+                    value = 0;
                 }
                 const auto word = static_cast<std::uint32_t>(value);
                 for (std::size_t byte = 0; byte < 4; ++byte) {
@@ -973,7 +984,8 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 extension_word = address;
                 static_cast<void>(external);
                 result.relocations.push_back(
-                    {static_cast<std::uint32_t>(item.offset + 4), memory.symbol});
+                    {static_cast<std::uint32_t>(item.offset + 4), memory.symbol,
+                     item.section == Section::Text ? 0U : 1U});
             }
             if (operands.size() == 3) {
                 std::int64_t stride = 0;
@@ -1017,7 +1029,8 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 extension_word = address;
                 static_cast<void>(external);
                 result.relocations.push_back(
-                    {static_cast<std::uint32_t>(item.offset + 4), memory.symbol});
+                    {static_cast<std::uint32_t>(item.offset + 4), memory.symbol,
+                     item.section == Section::Text ? 0U : 1U});
             }
             const auto opcode = (mnemonic.rfind("FLOAD", 0) == 0) ? 0x50 : 0x51;
             encoded = encode_or_fail(
@@ -1068,7 +1081,9 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 }
                 extension_word = address;
                 static_cast<void>(external);
-                result.relocations.push_back({static_cast<std::uint32_t>(item.offset + 4), symbol});
+                result.relocations.push_back(
+                    {static_cast<std::uint32_t>(item.offset + 4), symbol,
+                     item.section == Section::Text ? 0U : 1U});
             }
             encoded = encode_or_fail(Opcode::Mov, rd, is_reg ? source_reg : 0, 0, !is_reg,
                                      static_cast<std::int32_t>(value), extension, extension_word);
@@ -1135,7 +1150,9 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 }
                 if (!symbol.empty()) {
                     static_cast<void>(external);
-                    result.relocations.push_back({static_cast<std::uint32_t>(item.offset + 4), symbol});
+                    result.relocations.push_back(
+                        {static_cast<std::uint32_t>(item.offset + 4), symbol,
+                         item.section == Section::Text ? 0U : 1U});
                 }
                 encoded = encode_or_fail(mnemonic == "JMP" ? Opcode::Jmp : Opcode::Call, 0, 0, 0,
                                          true, 0, true, address);
@@ -1153,7 +1170,9 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 }
                 if (!symbol.empty()) {
                     static_cast<void>(external);
-                    result.relocations.push_back({static_cast<std::uint32_t>(item.offset + 4), symbol});
+                    result.relocations.push_back(
+                        {static_cast<std::uint32_t>(item.offset + 4), symbol,
+                         item.section == Section::Text ? 0U : 1U});
                 }
                 encoded = encode_or_fail(Opcode::Jcond, 0, 0,
                                          static_cast<std::uint8_t>(*condition_for(mnemonic)),
@@ -1179,7 +1198,8 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 extension_word = address;
                 static_cast<void>(external);
                 result.relocations.push_back(
-                    {static_cast<std::uint32_t>(item.offset + 4), memory.symbol});
+                    {static_cast<std::uint32_t>(item.offset + 4), memory.symbol,
+                     item.section == Section::Text ? 0U : 1U});
             }
             auto opcode = opcode_for(mnemonic);
             if (!opcode) {

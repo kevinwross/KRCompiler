@@ -93,6 +93,21 @@ ir::Intrinsic matrix_intrinsic(const ir::Function& function) {
     return ir::Intrinsic::None;
 }
 
+// The symbol suffix for a class's metadata: `_ZTV<tag>`, `_ZTI<tag>`,
+// `_ZTS<tag>`. A qualified tag flattens to underscores so the name is a valid
+// assembler symbol.
+std::string type_symbol(const frontend::RecordInfo& record, std::string_view prefix) {
+    std::string name(prefix);
+    name += record.tag;
+    for (auto& character : name) {
+        const auto uc = static_cast<unsigned char>(character);
+        if (!std::isalnum(uc) && character != '_') {
+            character = '_';
+        }
+    }
+    return name;
+}
+
 std::string mangle_method(std::string_view tag, std::string_view name) {
     if (name.starts_with("operator")) {
         std::string suffix;
@@ -165,6 +180,7 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
         static_cast<void>(record);
     }
     generate_global_constructors();
+    finalize_vtables();
     sema_.break_cycles();
     function_ast_types_.clear();
     return std::move(module_);
@@ -4850,6 +4866,8 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
     }
     case frontend::AstKind::CastExpression:
         return emit_cast(expression);
+    case frontend::AstKind::TypeIdExpression:
+        return emit_typeid(expression);
     case frontend::AstKind::GenericSelection: {
         if (expression.children.empty() || !expression.children.front()) {
             return {};
@@ -5485,6 +5503,39 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
     if (expression.children.size() < 2 || !expression.children[0] ||
         !expression.children[1]) {
         return {};
+    }
+    // `typeid(a) == typeid(b)` is type equality. The compiler emits one
+    // typeinfo object per class, so two type_info lvalues compare equal
+    // exactly when they name the same type; compare their addresses.
+    if ((expression.text == "==" || expression.text == "!=") &&
+        (expression.children[0]->kind == frontend::AstKind::TypeIdExpression ||
+         expression.children[1]->kind == frontend::AstKind::TypeIdExpression)) {
+        auto info = sema_.type_named("std::type_info");
+        if (!info) {
+            info = sema_.type_named("type_info");
+        }
+        const auto info_type = info ? map_type(info) : nullptr;
+        if (info_type) {
+            const auto address_of = [&](const frontend::AstNode& node) -> Expression {
+                if (node.kind == frontend::AstKind::TypeIdExpression) {
+                    return emit_typeid_reference(node);
+                }
+                auto lvalue = emit_lvalue(node);
+                if (!lvalue.value || !lvalue.type || lvalue.type != info_type) {
+                    return {};
+                }
+                return {lvalue.value, info_type};
+            };
+            auto left = address_of(*expression.children[0]);
+            auto right = address_of(*expression.children[1]);
+            if (left.value && right.value) {
+                auto* condition = builder_.create_icmp(
+                    expression.text == "==" ? ir::ICmpPredicate::Eq
+                                            : ir::ICmpPredicate::Ne,
+                    left.value, right.value, "typeid.compare");
+                return {condition, module_->types().bool_type()};
+            }
+        }
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(expression.children[0]->text)) {
@@ -6899,6 +6950,9 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
     if (expression.kind == frontend::AstKind::CompoundLiteral) {
         return emit_expression(expression);
     }
+    if (expression.kind == frontend::AstKind::TypeIdExpression) {
+        return emit_typeid_reference(expression);
+    }
     if (expression.kind == frontend::AstKind::CastExpression &&
         !expression.children.empty() && expression.children.front()) {
         const auto target =
@@ -8273,6 +8327,116 @@ int CIRGen::virtual_slot(const frontend::RecordInfo& record,
     return -1;
 }
 
+ir::GlobalVariable* CIRGen::ensure_typeinfo(const frontend::RecordInfo& record) {
+    const auto cached = typeinfo_globals_.find(&record);
+    if (cached != typeinfo_globals_.end() && cached->second) {
+        return cached->second;
+    }
+    const auto i32 = int_type();
+    std::vector<std::uint8_t> name_bytes(record.tag.begin(), record.tag.end());
+    name_bytes.push_back(0);
+    const auto name_type = module_->types().array_type(
+        module_->types().int_type(8), name_bytes.size());
+    auto* name = module_->add_global(type_symbol(record, "_ZTS"), name_type, true, 1);
+    name->weak = true;
+    name->initializer = module_->constant_data_array(name_type, std::move(name_bytes));
+
+    // type_info layout: vtable pointer, name pointer, flags. A class that
+    // derives from another adds the base typeinfo as a fourth word, the
+    // single-inheritance form, so dynamic_cast can walk the chain.
+    const auto words = module_->types().array_type(i32, 4);
+    auto* typeinfo = module_->add_global(type_symbol(record, "_ZTI"), words, true, 4);
+    typeinfo->weak = true;
+    typeinfo_globals_[&record] = typeinfo;
+    ir::GlobalVariable* base = nullptr;
+    if (record.base && record.base->kind == frontend::TypeKind::Record &&
+        record.base->record) {
+        base = ensure_typeinfo(*record.base->record);
+    }
+    auto* zero = module_->constant_int(i32, 0);
+    typeinfo->initializer = module_->constant_address_array(
+        words, {zero, name, zero,
+                base ? static_cast<ir::Value*>(base) : static_cast<ir::Value*>(zero)});
+    return typeinfo;
+}
+
+ir::GlobalVariable* CIRGen::ensure_vtable(const frontend::RecordInfo& record) {
+    const auto cached = vtable_globals_.find(&record);
+    if (cached != vtable_globals_.end() && cached->second) {
+        return cached->second;
+    }
+    const auto slots = virtual_slots(record);
+    if (slots.empty()) {
+        return nullptr;
+    }
+    // Word 0 is the typeinfo address and the object's vptr points at word 1,
+    // so virtual slot k is at vptr + 4*k and the RTTI pointer at vptr - 4.
+    const auto count = slots.size() + 1;
+    const auto table_type = module_->types().array_type(int_type(), count);
+    auto* table = module_->add_global(type_symbol(record, "_ZTV"), table_type, true, 4);
+    table->weak = true;
+    table->initializer = module_->constant_address_array(
+        table_type, std::vector<ir::Value*>(count, module_->constant_int(int_type(), 0)));
+    vtable_globals_[&record] = table;
+    pending_vtables_.push_back({&record, table});
+    return table;
+}
+
+ir::Function* CIRGen::vtable_slot_implementation(const frontend::RecordInfo& record,
+                                                 std::string_view slot) {
+    const bool destructor_slot = slot.starts_with("~");
+    for (auto* current = &record; current != nullptr;
+         current = current->base && current->base->record
+                       ? current->base->record.get()
+                       : nullptr) {
+        if (destructor_slot) {
+            if (auto* implementation = ensure_member_destructor(current)) {
+                return implementation;
+            }
+        }
+        const auto methods = class_methods_.find(current->tag);
+        if (methods == class_methods_.end()) {
+            continue;
+        }
+        const auto found = methods->second.find(std::string(slot));
+        if (found != methods->second.end()) {
+            return found->second->declaration ? nullptr : found->second;
+        }
+        if (destructor_slot) {
+            for (const auto& candidate : methods->second) {
+                if (candidate.first.starts_with("~")) {
+                    return candidate.second;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
+void CIRGen::finalize_vtables() {
+    for (auto& pending : pending_vtables_) {
+        if (!pending.record || !pending.table || !pending.table->initializer) {
+            continue;
+        }
+        auto* words = static_cast<ir::ConstantAddressArray*>(pending.table->initializer);
+        if (words->elements.empty()) {
+            continue;
+        }
+        words->elements[0] = ensure_typeinfo(*pending.record);
+        const auto slots = virtual_slots(*pending.record);
+        for (std::size_t index = 0; index < slots.size() &&
+                                    index + 1 < words->elements.size();
+             ++index) {
+            if (auto* implementation =
+                    vtable_slot_implementation(*pending.record, slots[index])) {
+                words->elements[index + 1] = implementation;
+            } else {
+                words->elements[index + 1] = module_->constant_int(int_type(), 0);
+            }
+        }
+    }
+}
+
 void CIRGen::emit_vtable_init(ir::Value* object, ir::TypePtr type) {
     if (!object || !type || type->kind != ir::TypeKind::Struct) {
         return;
@@ -8282,101 +8446,23 @@ void CIRGen::emit_vtable_init(ir::Value* object, ir::TypePtr type) {
         !entry->second->polymorphic) {
         return;
     }
-    const auto slots = virtual_slots(*entry->second);
-    if (slots.empty()) {
+    auto* table = ensure_vtable(*entry->second);
+    if (!table) {
         return;
     }
-    auto* malloc_function = functions_.find("malloc") != functions_.end()
-                                ? functions_["malloc"]
-                                : nullptr;
-    if (!malloc_function) {
-        auto* function_type = module_->types().function_type(
-            module_->types().pointer_type(module_->types().void_type()),
-            {size_type()}, false);
-        malloc_function = module_->add_function("malloc", function_type,
-                                               ir::Linkage::External, true);
-        malloc_function->add_parameter(size_type(), "size");
-        functions_["malloc"] = malloc_function;
-    }
-    const auto table_size = static_cast<std::int64_t>(slots.size() * 4);
-    auto* raw = builder_.create_call(
-        malloc_function, {module_->constant_int(size_type(), table_size)},
-        module_->types().pointer_type(module_->types().void_type()),
-        "vtable.raw");
     const auto byte_type = module_->types().int_type(8);
-    auto* table = builder_.create(ir::Opcode::BitCast,
-                                  module_->types().pointer_type(byte_type), {raw},
-                                  "vtable");
-    for (std::size_t index = 0; index < slots.size(); ++index) {
-        ir::Function* implementation = nullptr;
-        for (auto* current = entry->second; current != nullptr;
-             current = current->base && current->base->record
-                           ? current->base->record.get()
-                           : nullptr) {
-            if (slots[index].starts_with("~")) {
-                implementation = ensure_member_destructor(current);
-                if (implementation) {
-                    break;
-                }
-            }
-            const auto methods = class_methods_.find(current->tag);
-            if (methods == class_methods_.end()) {
-                continue;
-            }
-            const auto found = methods->second.find(slots[index]);
-            if (found != methods->second.end()) {
-                implementation =
-                    found->second->declaration ? nullptr : found->second;
-                break;
-            }
-            if (slots[index].starts_with("~")) {
-                for (auto candidate = methods->second.begin();
-                     candidate != methods->second.end(); ++candidate) {
-                    if (candidate->first.starts_with("~")) {
-                        implementation = candidate->second;
-                        break;
-                    }
-                }
-                if (implementation) {
-                    break;
-                }
-            }
-            if (slots[index].starts_with("~")) {
-                for (const auto& candidate : methods->second) {
-                    if (candidate.first.starts_with("~")) {
-                        implementation = candidate.second;
-                        break;
-                    }
-                }
-                if (implementation) {
-                    break;
-                }
-            }
-        }
-        auto* slot = builder_.create_gep(
-            byte_type, table,
-            {module_->constant_int(size_type(),
-                                   static_cast<std::int64_t>(index) * 4)},
-            false, "vtable.slot");
-        slot->type = module_->types().pointer_type(
-            module_->types().pointer_type(byte_type));
-        ir::Value* value = nullptr;
-        if (implementation) {
-            value = builder_.create(
-                ir::Opcode::BitCast, module_->types().pointer_type(byte_type),
-                {implementation}, "vtable.fn");
-        } else {
-            value = module_->constant_null(
-                module_->types().pointer_type(byte_type));
-        }
-        builder_.create_store(value, slot);
-    }
+    auto* table_pointer = builder_.create(
+        ir::Opcode::BitCast, module_->types().pointer_type(byte_type), {table},
+        "vtable");
+    auto* functions = builder_.create_gep(
+        byte_type, table_pointer, {module_->constant_int(int_type(), 4)}, false,
+        "vtable.functions");
     auto* zero = module_->constant_int(int_type(), 0);
     auto* vptr_slot = builder_.create_gep(type, object, {zero, zero}, false,
                                           "vptr.slot");
     vptr_slot->type = module_->types().pointer_type(
         module_->types().pointer_type(byte_type));
-    builder_.create_store(table, vptr_slot);
+    builder_.create_store(functions, vptr_slot);
 }
 
 CIRGen::Expression CIRGen::emit_implicit_member(std::string_view name) {
@@ -8533,10 +8619,164 @@ CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
     return {builder_.create_load(type, address, false, 0, "element.load"), type};
 }
 
+CIRGen::Expression CIRGen::emit_typeid_reference(const frontend::AstNode& expression) {
+    frontend::TypePtr info = sema_.type_named("std::type_info");
+    if (!info || info->kind != frontend::TypeKind::Record || !info->record) {
+        info = sema_.type_named("type_info");
+    }
+    if (!info || info->kind != frontend::TypeKind::Record || !info->record) {
+        error(expression.location, "typeid requires <typeinfo>");
+        return {};
+    }
+    const auto info_type = map_type(info);
+    if (!info_type) {
+        return {};
+    }
+    if (expression.children.empty() || !expression.children.front()) {
+        return {};
+    }
+    const auto& operand = *expression.children.front();
+    const auto byte_type = module_->types().int_type(8);
+    const auto static_reference = [&](frontend::TypePtr type) -> ir::Value* {
+        if (!type || type->kind != frontend::TypeKind::Record || !type->record) {
+            error(expression.location, "typeid of a non-class type is not implemented");
+            return nullptr;
+        }
+        auto* global = ensure_typeinfo(*type->record);
+        return builder_.create(ir::Opcode::BitCast,
+                               module_->types().pointer_type(info_type), {global},
+                               "typeid.static");
+    };
+    ir::Value* address = nullptr;
+    if (operand.kind == frontend::AstKind::TypeName) {
+        address = static_reference(sema_.typeid_operand_type(expression));
+    } else {
+        const auto operand_type = sema_.typeid_operand_type(expression);
+        const bool polymorphic = operand_type &&
+                                 operand_type->kind == frontend::TypeKind::Record &&
+                                 operand_type->record &&
+                                 operand_type->record->polymorphic;
+        if (!polymorphic) {
+            address = static_reference(operand_type);
+        } else {
+            // The dynamic type is the one the object's vtable names, one word
+            // before the first virtual slot. An lvalue expression carries the
+            // object's address and its record type.
+            auto object = emit_lvalue(operand);
+            if (!object.value || !object.type ||
+                object.type->kind != ir::TypeKind::Struct) {
+                return {};
+            }
+            auto* zero = module_->constant_int(int_type(), 0);
+            auto* vptr_slot = builder_.create_gep(object.type, object.value,
+                                                  {zero, zero}, false, "typeid.vptr");
+            vptr_slot->type = module_->types().pointer_type(
+                module_->types().pointer_type(byte_type));
+            auto* table = builder_.create_load(module_->types().pointer_type(byte_type),
+                                               vptr_slot, false, 0, "typeid.vtable");
+            auto* info_slot = builder_.create_gep(
+                byte_type, table, {module_->constant_int(int_type(), -4)}, false,
+                "typeid.slot");
+            info_slot->type = module_->types().pointer_type(
+                module_->types().pointer_type(byte_type));
+            address = builder_.create_load(module_->types().pointer_type(byte_type),
+                                           info_slot, false, 0, "typeid.info");
+        }
+    }
+    if (!address) {
+        return {};
+    }
+    const auto reference_type = module_->types().pointer_type(info_type);
+    if (address->type != reference_type) {
+        address = builder_.create(ir::Opcode::BitCast, reference_type, {address},
+                                  "typeid.reference");
+    }
+    return {address, info_type};
+}
+
+CIRGen::Expression CIRGen::emit_typeid(const frontend::AstNode& expression) {
+    auto reference = emit_typeid_reference(expression);
+    if (!reference.value || !reference.type) {
+        return {};
+    }
+    auto* value = builder_.create_load(reference.type, reference.value, false, 0,
+                                       "typeid.value");
+    return {value, reference.type};
+}
+
+CIRGen::Expression CIRGen::emit_dynamic_cast(const frontend::AstNode& expression) {
+    // Sema recorded both types; re-analysing here would not see the scopes the
+    // operand was written in.
+    const auto target_frontend = sema_.cast_target_type(expression);
+    const auto source_frontend = sema_.cast_operand_type(expression);
+    if (!target_frontend || !source_frontend) {
+        return {};
+    }
+    const auto target = map_type(target_frontend);
+    if (!target || target->kind != ir::TypeKind::Pointer) {
+        return {};
+    }
+    auto operand = emit_expression(*expression.children[1]);
+    if (!operand.value) {
+        return {};
+    }
+    const auto* source_record = source_frontend->element && source_frontend->element->record
+                                    ? source_frontend->element->record.get()
+                                    : nullptr;
+    const auto* target_record = target_frontend->element &&
+                                        target_frontend->element->record
+                                    ? target_frontend->element->record.get()
+                                    : nullptr;
+    if (!source_record || !target_record) {
+        return {};
+    }
+    // An upcast names a base class of the source, so no object can fail it.
+    for (const auto* current = source_record; current != nullptr;
+         current = current->base && current->base->record
+                       ? current->base->record.get()
+                       : nullptr) {
+        if (current == target_record) {
+            if (operand.type == target) {
+                return {operand.value, target};
+            }
+            auto* cast = builder_.create(ir::Opcode::BitCast, target, {operand.value},
+                                         "dynamic_cast.up");
+            return {cast, target};
+        }
+    }
+    // A downcast asks the runtime whether the object's dynamic type is or
+    // derives from the target, and yields null when it does not.
+    const auto byte_type = module_->types().int_type(8);
+    const auto byte_pointer = module_->types().pointer_type(byte_type);
+    const auto helper_type = module_->types().function_type(
+        byte_pointer, {byte_pointer, byte_pointer}, false);
+    auto* helper = module_->add_function("__krc_dynamic_cast", helper_type,
+                                        ir::Linkage::External, true);
+    if (helper->parameters.empty()) {
+        helper->add_parameter(byte_pointer, "object");
+        helper->add_parameter(byte_pointer, "target_type");
+    }
+    auto* object = operand.value->type == byte_pointer
+                       ? operand.value
+                       : builder_.create(ir::Opcode::BitCast, byte_pointer,
+                                         {operand.value}, "dynamic_cast.object");
+    auto* typeinfo_global = ensure_typeinfo(*target_record);
+    auto* typeinfo = builder_.create(ir::Opcode::BitCast, byte_pointer,
+                                     {typeinfo_global}, "dynamic_cast.type");
+    auto* result = builder_.create_call(helper, {object, typeinfo}, byte_pointer,
+                                        "dynamic_cast.call");
+    auto* cast = builder_.create(ir::Opcode::BitCast, target, {result},
+                                 "dynamic_cast.result");
+    return {cast, target};
+}
+
 CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
     if (expression.children.size() < 2 || !expression.children[0] ||
         !expression.children[1]) {
         return {};
+    }
+    if (!expression.labels.empty() && expression.labels.front() == "dynamic_cast") {
+        return emit_dynamic_cast(expression);
     }
     const auto target_frontend =
         sema_.type_from_type_name_node(*expression.children[0]);

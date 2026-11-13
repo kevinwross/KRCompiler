@@ -9,6 +9,33 @@ int *__krc_errno_location(void) {
 }
 
 /*
+ * dynamic_cast support, docs/abi.md: an object's vptr sits at offset 0 and the
+ * typeinfo pointer one word before the first virtual slot. Each typeinfo names
+ * its base's typeinfo in its fourth word, so walking that chain tells whether
+ * the object's dynamic type is the target or derives from it. Single
+ * inheritance means the address needs no adjustment.
+ */
+void *__krc_dynamic_cast(unsigned char *object, unsigned char *target_type) {
+    unsigned char *vptr;
+    unsigned char *typeinfo;
+    if (object == 0 || target_type == 0) {
+        return 0;
+    }
+    vptr = *(unsigned char **)object;
+    if (vptr == 0) {
+        return 0;
+    }
+    typeinfo = *(unsigned char **)(vptr - 4);
+    while (typeinfo != 0) {
+        if (typeinfo == target_type) {
+            return object;
+        }
+        typeinfo = *(unsigned char **)(typeinfo + 12);
+    }
+    return 0;
+}
+
+/*
  * 64-bit integer helpers, plan.md §14.7. The KR32 backend lowers a `long long`
  * value to a word pair and calls these entry points for division and
  * remainder, because the ISA divides only 32-bit values.

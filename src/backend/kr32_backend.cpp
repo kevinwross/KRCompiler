@@ -338,6 +338,7 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
         return;
     case ir::ValueKind::ConstantFloat:
     case ir::ValueKind::ConstantDataArray:
+    case ir::ValueKind::ConstantAddressArray:
         out += "        MOV " + std::string(reg) + ", #0 ; unsupported constant\n";
         return;
     case ir::ValueKind::Parameter:
@@ -860,7 +861,9 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
         out += "        .align 4\n";
         out += global->name + ":\n";
         if (global->name.empty() || global->name.front() != '.') {
-            if (!global->internal) {
+            if (global->weak) {
+                out += "        .weak " + global->name + "\n";
+            } else if (!global->internal) {
                 out += "        .global " + global->name + "\n";
             }
         }
@@ -868,6 +871,18 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
             global->initializer->kind == ir::ValueKind::ConstantDataArray) {
             const auto* data = static_cast<const ir::ConstantDataArray*>(global->initializer);
             out += "        .byte " + escape_string(data->bytes) + "\n";
+        } else if (global->initializer &&
+                   global->initializer->kind == ir::ValueKind::ConstantAddressArray) {
+            const auto* addresses =
+                static_cast<const ir::ConstantAddressArray*>(global->initializer);
+            for (const auto* element : addresses->elements) {
+                if (element && (element->kind == ir::ValueKind::Function ||
+                                element->kind == ir::ValueKind::Global)) {
+                    out += "        .word " + element->name + "\n";
+                } else {
+                    out += "        .word 0\n";
+                }
+            }
         } else if (global->initializer &&
                    global->initializer->kind == ir::ValueKind::ConstantInt) {
             const auto constant = static_cast<std::uint64_t>(

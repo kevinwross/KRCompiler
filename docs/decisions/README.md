@@ -67,5 +67,6 @@ What was rejected and why.
 - [0022-internal-globals.md](0022-internal-globals.md) — accepted; adds internal global linkage for C `static` objects.
 - [0023-kr32-64-bit-integers.md](0023-kr32-64-bit-integers.md) — accepted; lowers 64-bit integers as a KR32 word pair, with two-word arguments, an `R0`/`R1` return, and division libcalls.
 - [0024-kr32-tile-intrinsics.md](0024-kr32-tile-intrinsics.md) — accepted; adds the IR intrinsic opcode, lowers the `kr32::matrix` surface to tile instructions, and implements memory-class aggregate returns in `R4`.
+- [0025-rtti-vtable-typeinfo.md](0025-rtti-vtable-typeinfo.md) — accepted; replaces the per-object vtable with weak `_ZTV`/`_ZTI` globals and implements `typeid` and pointer `dynamic_cast`.
 
 The next expected ADRs are the KR16 ABI appendix, the EH descriptor encoding, and the KDBG record layout.

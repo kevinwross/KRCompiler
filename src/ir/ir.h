@@ -118,6 +118,7 @@ enum class ValueKind {
     ConstantNull,
     ConstantUndef,
     ConstantDataArray,
+    ConstantAddressArray,
 };
 
 struct Value {
@@ -146,6 +147,13 @@ struct ConstantUndef final : Constant {};
 
 struct ConstantDataArray final : Constant {
     std::vector<std::uint8_t> bytes;
+};
+
+// An array of word-sized addresses: each element is a Function, a global, or a
+// null/zero word. The backend emits one relocated word per element, which is
+// how a vtable or typeinfo table names what it points at.
+struct ConstantAddressArray final : Constant {
+    std::vector<Value*> elements;
 };
 
 struct DebugLocation {
@@ -319,6 +327,10 @@ struct GlobalVariable final : Value {
     bool constant = false;
     bool external = false;
     bool internal = false;
+    // A weak definition may be replaced at link time by another object's
+    // definition of the same name. C++ class metadata (vtables, typeinfo) is
+    // weak so two translation units that use the same class agree on it.
+    bool weak = false;
     std::uint32_t alignment = 0;
 };
 
@@ -340,6 +352,8 @@ public:
     ConstantUndef* constant_undef(TypePtr type);
     ConstantDataArray* constant_data_array(TypePtr array_type,
                                            std::vector<std::uint8_t> bytes);
+    ConstantAddressArray* constant_address_array(TypePtr array_type,
+                                                 std::vector<Value*> elements);
 
     [[nodiscard]] const std::vector<std::unique_ptr<Function>>& functions() const {
         return functions_;

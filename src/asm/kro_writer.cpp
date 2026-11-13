@@ -74,7 +74,7 @@ bool make_object(const AssemblyResult& assembly, const target::TargetProfile& pr
             object.symbols.push_back(std::move(external));
         }
         linker::KroRelocation output;
-        output.section = 0;
+        output.section = relocation.section;
         output.type = linker::KroRelocationType::Abs32;
         output.width = 4;
         output.offset = relocation.offset;

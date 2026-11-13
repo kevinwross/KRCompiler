@@ -60,8 +60,13 @@ Itanium-like grammar with the `_Z` prefix; `extern "C"` unmangled; `_ZTV`/`_ZTI`
 
 - Vtable pointer at object offset 0; RTTI pointer at slot -1; virtual slots in declaration order; complete/deleting destructor slots.
 - `type_info`: vtable pointer, name pointer, flags.
+- Vtables and typeinfo objects are weak globals, one per class per program, so type identity holds across translation units ([ADR 0025](decisions/0025-rtti-vtable-typeinfo.md)):
+  - `_ZTV<Class>` is `[typeinfo, slot 0, slot 1, ...]`. An object's vptr is `_ZTV<Class> + 4`, so slot `k` is `vptr + 4*k` and the RTTI pointer is `vptr - 4` — "slot -1".
+  - `_ZTI<Class>` is `[0, _ZTS<Class>, flags, base typeinfo]`. The first word is the `type_info` vtable pointer and is zero in this subset, which has no virtual `type_info`. The fourth word is the base class's typeinfo or zero; it is the single-inheritance form `dynamic_cast` walks.
+  - `_ZTS<Class>` is the source-level class name as a NUL-terminated byte array.
+- `dynamic_cast<T*>(object)` lowers to `__krc_dynamic_cast(object, &_ZTI<T>)` unless the cast is an upcast, which needs no check; the helper returns the object pointer or null. A reference cast needs `std::bad_cast` and is not supported without exceptions.
 - Exceptions: table-driven descriptors with call-site ranges, landing pads, cleanup actions, and type filters; `__cxa_*` runtime entry points; cross-TU merge by the linker.
-- `-fno-exceptions` and `-fno-rtti` profiles are supported; the library subset must degrade to abort/terminate.
+- `-fno-exceptions` is supported; `-fno-rtti` is not implemented yet. The library subset must degrade to abort/terminate.
 
 ## Varargs, TLS, guards, static init
 

@@ -1,0 +1,32 @@
+#pragma once
+
+// Minimal std::type_info for the KR32 C++ subset.
+//
+// The layout is the one docs/abi.md fixes: a vtable pointer, a name pointer,
+// and flags. A class that derives from another appends its base's typeinfo as
+// a fourth word — the single-inheritance form — which is the chain
+// dynamic_cast walks. The compiler materializes one object per class as the
+// weak global `_ZTI<Class>`, and `typeid` evaluates to a reference to it.
+
+namespace std {
+
+class type_info {
+public:
+    type_info(const type_info&) = delete;
+    type_info& operator=(const type_info&) = delete;
+
+    // The source-level class name the compiler recorded in `_ZTS<Class>`.
+    const char* name() const { return __name; }
+
+    // Two type_info objects describe the same type when the compiler emitted
+    // one; it emits one per class and the name is unique to it.
+    bool operator==(const type_info& other) const { return __name == other.__name; }
+    bool operator!=(const type_info& other) const { return __name != other.__name; }
+
+private:
+    const void* __vptr;
+    const char* __name;
+    unsigned int __flags;
+};
+
+}  // namespace std

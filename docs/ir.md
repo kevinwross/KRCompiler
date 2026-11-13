@@ -129,7 +129,7 @@ entry:
 }
 ```
 
-Constants are `i32 42`, `f64 1.5`, `null`, `undef`, and `c"..."` for a byte array. Globals are `@name = global T ...`; linker-resolved declarations print as `@name = external global T`, and C `static` objects print as `@name = internal global T`. External globals have no storage in the module. Instruction names are assigned deterministically by the builder; unnamed values print as `%tmpN`. Target id appears as a module comment.
+Constants are `i32 42`, `f64 1.5`, `null`, `undef`, and `c"..."` for a byte array. Globals are `@name = global T ...`; linker-resolved declarations print as `@name = external global T`, C `static` objects print as `@name = internal global T`, and C++ class metadata as `@name = weak constant T ...`. External globals have no storage in the module. An address-array constant prints as `[@fn, @global, 0]`: its words are relocated addresses, which is how a vtable or typeinfo table names what it points at ([ADR 0025](decisions/0025-rtti-vtable-typeinfo.md)). Instruction names are assigned deterministically by the builder; unnamed values print as `%tmpN`. Target id appears as a module comment.
 
 ## Passes and levels
 

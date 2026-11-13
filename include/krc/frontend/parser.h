@@ -50,6 +50,11 @@ private:
     [[nodiscard]] std::unique_ptr<AstNode> parse_binary_expression(int minimum_precedence);
     [[nodiscard]] std::unique_ptr<AstNode> parse_unary_expression();
     [[nodiscard]] std::unique_ptr<AstNode> parse_postfix_expression();
+    // Applies the postfix operators (subscript, call, member, increment) to an
+    // already-parsed expression. Cast and `typeid` results use it so that
+    // `static_cast<T>(x).m` and `typeid(x).name()` parse.
+    [[nodiscard]] std::unique_ptr<AstNode> parse_postfix_tail(
+        std::unique_ptr<AstNode> expression);
     [[nodiscard]] std::unique_ptr<AstNode> parse_primary_expression();
     [[nodiscard]] std::unique_ptr<AstNode> parse_argument_list();
     [[nodiscard]] std::unique_ptr<AstNode> parse_type_name();

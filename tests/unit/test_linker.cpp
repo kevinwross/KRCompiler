@@ -182,3 +182,70 @@ TEST_CASE("KR32 executable writer emits the native container") {
     CHECK(bytes[26] == 0x01);
     CHECK(bytes[27] == 0x00);
 }
+TEST_CASE("linker patches data-section relocations") {
+    // One object: four bytes of text defining the handler, then a data table
+    // whose first word names it. The table is what a read-only vtable or
+    // typeinfo object looks like to the linker.
+    krc::linker::KroObject object;
+    object.target_id = 1;
+    object.pointer_width = 32;
+    object.abi_version = 1;
+
+    krc::linker::KroSection text;
+    text.name = ".text";
+    text.type = krc::linker::KroSectionType::Text;
+    text.flags = 0x1 | 0x4;
+    text.alignment = 4;
+    text.size = 4;
+    text.data = {0x76, 0x00, 0x00, 0x00};
+    object.sections.push_back(std::move(text));
+
+    krc::linker::KroSection data;
+    data.name = ".data";
+    data.type = krc::linker::KroSectionType::Data;
+    data.flags = 0x1 | 0x2;
+    data.alignment = 4;
+    data.size = 8;
+    data.data = {0, 0, 0, 0, 0, 0, 0, 0};
+    object.sections.push_back(std::move(data));
+
+    krc::linker::KroSymbol handler;
+    handler.name = "handler";
+    handler.binding = krc::linker::KroSymbolBinding::Global;
+    handler.type = krc::linker::KroSymbolType::Function;
+    handler.section = 0;
+    handler.value = 0;
+    object.symbols.push_back(std::move(handler));
+
+    krc::linker::KroRelocation relocation;
+    relocation.section = 1;
+    relocation.type = krc::linker::KroRelocationType::Abs32;
+    relocation.width = 4;
+    relocation.offset = 0;
+    relocation.symbol = 0;
+    object.relocations.push_back(relocation);
+
+    std::vector<krc::linker::KroObject> objects;
+    objects.push_back(std::move(object));
+    krc::linker::LinkOptions options;
+    options.base = 0x00010000;
+    options.entry_symbol = "handler";
+    krc::linker::LinkedImage image;
+    std::string error;
+    REQUIRE_MESSAGE(krc::linker::link_objects(objects, options, image, error), error);
+
+    const krc::linker::LinkedSection* data_section = nullptr;
+    for (const auto& section : image.sections) {
+        if (section.name == ".data") {
+            data_section = &section;
+        }
+    }
+    REQUIRE(data_section != nullptr);
+    REQUIRE(data_section->data.size() == 8);
+    CHECK(data_section->data[0] == 0x00);
+    CHECK(data_section->data[1] == 0x00);
+    CHECK(data_section->data[2] == 0x01);
+    CHECK(data_section->data[3] == 0x00);
+    CHECK(data_section->data[4] == 0);
+    CHECK(data_section->data[7] == 0);
+}

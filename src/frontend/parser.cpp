@@ -1842,7 +1842,8 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
     const auto location = peek().location;
     if (cxx_mode_ && peek().kind == TokenKind::Identifier &&
         (peek().text == "static_cast" || peek().text == "reinterpret_cast" ||
-         peek().text == "const_cast")) {
+         peek().text == "const_cast" || peek().text == "dynamic_cast")) {
+        const auto cast_kind = peek().text;
         ++position_;
         expect("<", "after cast keyword");
         auto type = parse_type_name();
@@ -1851,13 +1852,31 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
         auto operand = parse_expression();
         expect(")", "after cast operand");
         auto node = make_ast(AstKind::CastExpression, location);
+        // The four named casts share one node; semantics differ, so record
+        // which keyword produced it.
+        node->labels.push_back(cast_kind);
         if (type) {
             node->children.push_back(std::move(type));
         }
         if (operand) {
             node->children.push_back(std::move(operand));
         }
-        return node;
+        return parse_postfix_tail(std::move(node));
+    }
+    if (cxx_mode_ && peek().kind == TokenKind::Identifier && peek().text == "typeid" &&
+        peek(1).is("(")) {
+        ++position_;
+        expect("(", "after 'typeid'");
+        auto node = make_ast(AstKind::TypeIdExpression, location);
+        // A type name rather than an expression names the static type; the
+        // parser distinguishes them the same way a declaration does.
+        if (is_type_name_start()) {
+            node->children.push_back(parse_type_name());
+        } else {
+            node->children.push_back(parse_expression());
+        }
+        expect(")", "after 'typeid' operand");
+        return parse_postfix_tail(std::move(node));
     }
     if (cxx_mode_ && check("[")) {
         return parse_lambda_expression();
@@ -2120,7 +2139,10 @@ std::unique_ptr<AstNode> Parser::parse_lambda_expression() {
 }
 
 std::unique_ptr<AstNode> Parser::parse_postfix_expression() {
-    auto expression = parse_primary_expression();
+    return parse_postfix_tail(parse_primary_expression());
+}
+
+std::unique_ptr<AstNode> Parser::parse_postfix_tail(std::unique_ptr<AstNode> expression) {
     if (!expression) {
         return nullptr;
     }

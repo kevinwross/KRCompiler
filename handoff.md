@@ -88,6 +88,13 @@ tree supports:
   aggregate above 8 bytes returns through the destination pointer in `R4`
   ([ADR 0024](docs/decisions/0024-kr32-tile-intrinsics.md)); the transform stack
   is set up by `crt0.s`. `krc_run_matrix_intrinsics` requires exit 42.
+- RTTI works over weak `_ZTV`/`_ZTI`/`_ZTS` globals
+  ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)): `typeid` names the
+  dynamic type through a polymorphic glvalue, `typeid == typeid` compares
+  typeinfo addresses, and `dynamic_cast<T*>` is a bitcast for an upcast or a
+  `__krc_dynamic_cast` call for anything else. Polymorphic construction
+  allocates no table; objects of one class share one. `krc_run_rtti` requires
+  exit 42.
 - A call to a deleted member function is rejected, and access to a non-public
   member from a free function is rejected unless it is a friend.
 - The const and inheritance markers are enforced rather than parsed:
@@ -148,7 +155,7 @@ value in `implementation.md`. Do not claim a runtime result from CTest alone.
 ### M10 (the largest gaps)
 
 - Table-driven exceptions and unwinding.
-- RTTI, `dynamic_cast`, `typeid`.
+- Reference `dynamic_cast`, cross-casts, and `-fno-rtti` (the rest of RTTI).
 - Variadic templates and fold expressions.
 - Per-thread dynamic TLS. `thread_local` currently aliases static storage.
 - `memory`, `tuple`, `functional`, `array`.
@@ -241,20 +248,20 @@ its run waits for the host file dialog instead of returning.
   confirm `master` equals `origin/master`, then push.
 ## Suggested next actions
 
-1. RTTI next: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
-   plan §10.4. The executed-test harness can verify it end to end, and the
-   intrinsic path added for the tile operations is the precedent for a target
-   hook that has no portable instruction.
-2. Then table-driven exceptions and unwinding — the largest remaining M10 hole,
-   and one that needs its ADR (the EH descriptor encoding) before code.
-3. Remaining backlog: variadic templates and fold expressions, per-thread
-   dynamic TLS, the `std` containers (`memory`, `tuple`, `functional`,
-   `array`), KR16 libc/file I/O, and the broader host-service ABI.
+1. Table-driven exceptions and unwinding next: the largest remaining M10 hole.
+   Write the EH descriptor ADR (plan §10.4 names `__cxa_*` entry points and a
+   personality routine) before code. Reference casts and `std::bad_cast` — the
+   two things RTTI leaves out — arrive with exceptions.
+2. Then variadic templates and fold expressions, per-thread dynamic TLS, the
+   `std` containers (`memory`, `tuple`, `functional`, `array`), KR16
+   libc/file I/O, and the broader host-service ABI.
+3. Build out RTTI's remaining surface when the EH work lands: reference
+   `dynamic_cast`, cross-casts, and `-fno-rtti`.
 
 Matrix intrinsics are done: `matrix.cpp` links and runs to 42, so the corpus has
 no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 
-## Known gaps in the new matrix support
+## Known gaps in the matrix support
 
 - Aggregates larger than 8 bytes still cannot be *passed* by value; the ABI
   passes them as a pointer to a caller-owned copy, and the backend emits
@@ -265,6 +272,18 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
   future change must match the documented alignment or amend `docs/abi.md`.
 - The transform stack is a fixed 64 KiB region between the program stack and the
   heap; a deeply nested tile save could exhaust it, and nothing checks.
+
+## Known gaps in RTTI
+
+- `dynamic_cast` to a reference is rejected: failing it needs `std::bad_cast`,
+  which needs exceptions.
+- Cross-casts between sibling classes, multiple and virtual inheritance, and
+  `type_info::before()` are not implemented.
+- `typeid` of a non-class type is rejected rather than producing a
+  `_ZTIi`-style object.
+- `-fno-rtti` is not implemented; RTTI objects are always emitted.
+- `type_info`'s first word is zero and it has no virtual destructor, so code
+  that deletes a `type_info` through a pointer would be wrong; nothing does.
 
 ## Goal recommendation
 
