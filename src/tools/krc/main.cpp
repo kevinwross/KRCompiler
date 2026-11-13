@@ -50,7 +50,7 @@ void print_usage(std::ostream& out) {
         << "  --dump-ir              Lower to typed SSA IR and print it\n"
         << "  --dump-symbols FILE    Dump KDBG symbols from a .k32 image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
-        << "  -S                     Emit KR32 assembly to stdout\n"
+        << "  -S                     Emit KR32 assembly to stdout, or to -o FILE\n"
         << "  -c                     Emit a relocatable KRO object\n"
         << "  --emit-object          Write a KR16 KRO object instead of .kex\n"
         << "  -o FILE                Output path for -c\n"
@@ -473,7 +473,20 @@ int main(int argc, char** argv) {
                                 }
                             }
                         } else {
-                            std::cout << *assembly;
+                            if (emit_assembly) {
+                                if (output_path.empty()) {
+                                    std::cout << *assembly;
+                                } else {
+                                    std::ofstream file(output_path, std::ios::binary);
+                                    if (!file) {
+                                        diagnostics.report(
+                                            krc::frontend::Severity::Error,
+                                            "cannot open assembly output '" + output_path + "'");
+                                    } else {
+                                        file << *assembly;
+                                    }
+                                }
+                            }
                         }
                     } else if ((emit_assembly || emit_object) &&
                                !profile.backend_available) {
@@ -490,7 +503,18 @@ int main(int argc, char** argv) {
                                                "KR32 backend: " + backend_error);
                         } else {
                             if (emit_assembly) {
-                                std::cout << *assembly;
+                                if (output_path.empty()) {
+                                    std::cout << *assembly;
+                                } else {
+                                    std::ofstream file(output_path, std::ios::binary);
+                                    if (!file) {
+                                        diagnostics.report(
+                                            krc::frontend::Severity::Error,
+                                            "cannot open assembly output '" + output_path + "'");
+                                    } else {
+                                        file << *assembly;
+                                    }
+                                }
                             }
                             if (emit_object) {
                                 krc::asmkr32::AssemblyResult assembled;

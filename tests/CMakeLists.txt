@@ -326,6 +326,23 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/mainentry.c")
     set_tests_properties(krc_c_emit_mainentry_asm PROPERTIES PASS_REGULAR_EXPRESSION "CALL printf")
 
+    add_test(NAME krc_c_emit_hello_asm_file
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c
+                -DOUT=${KRC_TEST_OUTPUT_DIR}/hello_emit.s
+                "-DEXPECT=CALL putchar"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckAssemblyOutput.cmake)
+
+    add_test(NAME krc_kr16_emit_asm_file
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DTARGET=kr16
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c
+                -DOUT=${KRC_TEST_OUTPUT_DIR}/kr16_emit.s
+                "-DEXPECT=JMP|CALL"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckAssemblyOutput.cmake)
+
     add_test(NAME krc_c_object
         COMMAND $<TARGET_FILE:krc> -c
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c"
