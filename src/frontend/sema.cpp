@@ -1365,6 +1365,24 @@ void Sema::analyze_declaration(const AstNode& declaration) {
                     }
                 }
             } else {
+                // The initializer's own type decides whether this is a copy of a
+                // record or a conversion into one; the initializer analysis below
+                // reports the target type, so ask the expression directly.
+                // Only a scalar literal is handled: analysing other initializer
+                // nodes here would re-enter a form that has its own path.
+                const bool converts =
+                    type && type->kind == TypeKind::Record && type->record &&
+                    init->children[1]->kind == AstKind::IntegerLiteral;
+                if (converts) {
+                    const auto key = type->record->tag + "#1";
+                    for (const auto& constructor : type->record->methods) {
+                        if (constructor.name == key && constructor.is_deleted) {
+                            error(declarator->location,
+                                  "call to deleted constructor '" + type->record->tag +
+                                      "::" + type->record->tag + "'");
+                        }
+                    }
+                }
                 analyze_initializer(*init->children[1], type);
             }
         }
