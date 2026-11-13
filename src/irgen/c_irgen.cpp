@@ -3210,7 +3210,12 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
     if (has_label(specifiers, "typedef")) {
         return;
     }
-    if (has_label(specifiers, "static")) {
+    if (has_label(specifiers, "static") ||
+        has_label(specifiers, "thread_local") ||
+        has_label(specifiers, "_Thread_local")) {
+        // A block-scope thread-local object has static storage on this
+        // single-threaded VM, so it takes the same path as a local static and
+        // gets a guarded initializer when its initializer is not constant.
         for (std::size_t index = 1; index < declaration.children.size();
              ++index) {
             const auto* init = declaration.children[index].get();

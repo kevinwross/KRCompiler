@@ -291,6 +291,16 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - Exception state is a single global; the VM is single-threaded for the
   supported subset.
 
+## Thread storage
+
+C++ `thread_local` and C11 `_Thread_local` share static storage on the
+single-threaded VM. A block-scope thread-local object takes the local-static
+path: a guarded initializer that runs on first use, once, and a destructor
+registered to run at exit. IRGen's block-scope path accepts `static`,
+`thread_local`, and `_Thread_local`; it tested only for `static` before, so a
+thread-local object was emitted as an automatic and re-initialized on every
+call. `<threads.h>` still refuses to be included because guest threads do not
+exist.
 ## Debug display names
 
 `.debug_info` `F` records carry a display name, so a C++ dump shows

@@ -437,6 +437,25 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_printf.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
 
+    add_test(NAME krc_link_thread_local_storage
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/thread_local_storage.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/thread_local_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_kr16_link_thread_local_storage
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s
+                -DRUNTIME=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/thread_local_storage.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_thread_local.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
     add_test(NAME krc_debug_names
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -934,6 +953,23 @@ if(TARGET krc)
         set_tests_properties(krc_run_aggregate_values PROPERTIES
             DEPENDS krc_link_aggregate_values)
 
+        add_test(NAME krc_run_thread_local_storage
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/thread_local_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_thread_local_storage PROPERTIES
+            DEPENDS krc_link_thread_local_storage)
+
+        add_test(NAME krc_run_kr16_thread_local_storage
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_thread_local.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_thread_local_storage PROPERTIES
+            DEPENDS krc_kr16_link_thread_local_storage)
         add_test(NAME krc_run_debug_names
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}

@@ -432,8 +432,12 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
             saw_imaginary = true;
         } else if (label == "_Atomic") {
             error(specifiers.location, "_Atomic is not supported");
-        } else if (label == "_Thread_local") {
-            error(specifiers.location, "_Thread_local is not supported");
+        } else if (label == "_Thread_local" || label == "thread_local") {
+            // Thread storage duration is static storage on this single-threaded
+            // VM. C++ spells the specifier thread_local and C11 spells it
+            // _Thread_local; the declaration path gives a block-scope object
+            // static storage and a guarded initializer, so the specifier only
+            // has to be accepted here.
         } else if (label == "_Alignas" || label == "__inline" || label == "inline" ||
                    label == "_Noreturn") {
             // Qualifiers and function specifiers do not affect the value type here.
