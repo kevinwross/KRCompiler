@@ -215,7 +215,17 @@ void Kr16Backend::emit_function(std::string& out,
     out += "    MOV R4, SP\n";
     out += "    LEA SP, [R4-" + std::to_string(layout.frame_size) + "]\n";
     static const char* arguments[] = {"R1", "R2", "R3"};
+    // A variadic callee receives every argument on the stack, so one rule reads
+    // both the named parameters and the variable ones (ADR 0029).
+    const bool variadic = function.type && function.type->variadic;
     for (std::size_t index = 0; index < function.parameters.size(); ++index) {
+        if (variadic) {
+            out += "    LD R0, [R4+" + std::to_string(4 + 2 * index) + "]\n";
+            out += "    ST [SP+" +
+                   std::to_string(slot(function.parameters[index].get())) +
+                   "], R0\n";
+            continue;
+        }
         if (index < 3) {
             out += "    ST [SP+" +
                    std::to_string(slot(function.parameters[index].get())) + "], " +
@@ -237,6 +247,14 @@ void Kr16Backend::emit_function(std::string& out,
             switch (instruction->opcode) {
             case ir::Opcode::Alloca:
                 break;
+            case ir::Opcode::VaStart: {
+                // The first variable argument follows the named parameters in
+                // the caller's pushed area (ADR 0029).
+                const auto fixed = function.parameters.size();
+                out += "    LEA R0, [R4+" + std::to_string(4 + 2 * fixed) + "]\n";
+                store(*instruction, "R0");
+                break;
+            }
             case ir::Opcode::Load:
                 load(instruction->operands[0], "R0");
                 out += instruction->type && instruction->type->bits == 8
@@ -381,32 +399,60 @@ void Kr16Backend::emit_function(std::string& out,
             }
             case ir::Opcode::Call: {
                 const auto argument_count = instruction->operands.size() - 1;
+                const auto* callee_type = [&]() -> const ir::Type* {
+                    const auto* callee = instruction->operands[0];
+                    if (!callee || !callee->type) {
+                        return nullptr;
+                    }
+                    if (callee->type->kind == ir::TypeKind::Function) {
+                        return callee->type;
+                    }
+                    if (callee->type->kind == ir::TypeKind::Pointer &&
+                        callee->type->element &&
+                        callee->type->element->kind == ir::TypeKind::Function) {
+                        return callee->type->element;
+                    }
+                    return nullptr;
+                }();
+                const bool variadic_call = callee_type && callee_type->variadic;
                 // Register arguments first: the staged values are addressed
                 // relative to SP, which pushing the extras moves.
-                for (std::size_t index = 0;
-                     index < argument_count && index < 3; ++index) {
-                    load(instruction->operands[index + 1], arguments[index]);
+                if (!variadic_call) {
+                    for (std::size_t index = 0;
+                         index < argument_count && index < 3; ++index) {
+                        load(instruction->operands[index + 1], arguments[index]);
+                    }
                 }
-                // Extras go out last first, so the fourth argument ends at the
-                // lowest address and they run upward in declaration order. Each
-                // push moves SP, and the staged slots live above it, so the
-                // offset is compensated by everything already pushed.
-                for (std::size_t index = argument_count, pushed = 0; index > 3;
-                     --index, ++pushed) {
+                // Extras go out last first, so the first argument ends at the
+                // lowest address and they run upward in declaration order. A
+                // variadic call passes every argument this way.
+                const std::size_t first_pushed = variadic_call ? 1 : 4;
+                for (std::size_t index = argument_count, pushed = 0;
+                     index >= first_pushed; --index, ++pushed) {
                     load(instruction->operands[index], "R0",
                          static_cast<std::uint32_t>(2 * pushed));
                     out += "    PUSH R0\n";
+                    if (index == first_pushed) {
+                        break;
+                    }
                 }
+                const auto pushed_count =
+                    argument_count >= first_pushed
+                        ? argument_count - first_pushed + 1
+                        : std::size_t{0};
                 const auto* callee = instruction->operands[0];
                 if (callee->kind == ir::ValueKind::Function) {
                     out += "    MOV R0, #" + callee->name + "\n";
                 } else {
-                    load(callee, "R0");
+                    // The callee value is read after the pushes, so its slot
+                    // offset carries the same adjustment as the arguments.
+                    load(callee, "R0",
+                         static_cast<std::uint32_t>(2 * pushed_count));
                 }
                 out += "    CALL R0\n";
-                if (argument_count > 3) {
-                    out += "    LEA SP, [SP+" +
-                           std::to_string(2 * (argument_count - 3)) + "]\n";
+                if (pushed_count > 0) {
+                    out += "    LEA SP, [SP+" + std::to_string(2 * pushed_count) +
+                           "]\n";
                 }
                 if (instruction->type && !ir::is_void(instruction->type)) {
                     store(*instruction, "R0");

@@ -1,9 +1,10 @@
 # KR16 ABI (IP16 scalar subset)
 
 **Status:** Draft. The scalar argument/return/frame rules are frozen by
-[ADR 0016](decisions/0016-kr16-scalar-abi.md), and stack arguments by
-[ADR 0028](decisions/0028-kr16-stack-arguments.md); aggregates, varargs, and
-floating point remain open. The object and link path is
+[ADR 0016](decisions/0016-kr16-scalar-abi.md), stack arguments by
+[ADR 0028](decisions/0028-kr16-stack-arguments.md), and variadic calls by
+[ADR 0029](decisions/0029-kr16-variadic-calls.md); aggregates and floating point
+remain open. The object and link path is
 defined by [ADR 0019](decisions/0019-kr16-object-linker.md).
 
 ## Data model
@@ -82,6 +83,17 @@ Frame slots are addressed relative to the current `SP`; `R4` is used only for
 prologue/epilogue restoration. Scalar slots are two bytes; aggregate/array
 allocations reserve their full size.
 
+## Variadic calls
+
+A call whose callee type is variadic pushes every argument, named and variable,
+last first in two-byte slots, and leaves `R1`-`R3` unused. The caller
+releases the whole area after `CALL`. The callee reads parameter `i` from
+`[R4 + 4 + 2 * i]`, and `va_start` yields `[R4 + 4 + 2 * N]` for a
+function with `N` named parameters (
+[ADR 0029](decisions/0029-kr16-variadic-calls.md)). `va_list` is `char *` and
+`<stdarg.h>` advances two bytes per argument under `__kr16__`. A non-variadic
+call keeps the register rule above.
+
 ## Function pointers
 
 Function values lower to their 16-bit address. The compiler emits
@@ -113,7 +125,6 @@ functions defined in the same image or resolved by the linker.
 ## Deferred
 
 - Aggregate parameters and returns.
-- Variadic functions.
 - Floating-point arguments and results.
 - Callee-saved register allocation.
 - `.data`/`.rodata` section splitting and KEX symbols/debug records.
@@ -123,4 +134,4 @@ functions defined in the same image or resolved by the linker.
 
 The backend rejects unsupported features with a target-specific diagnostic
 rather than emitting a wrong calling sequence. Known rejected cases include
-aggregate parameters or returns, variadic calls, and floating-point values.
+aggregate parameters or returns and floating-point values.

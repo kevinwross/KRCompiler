@@ -297,9 +297,11 @@ KR16 passes the first three scalar arguments in `R1`-`R3` and pushes the rest
 last-first, one two-byte slot each; the caller releases the area with
 `LEA SP, [SP + 2 * count]` after `CALL`, and the callee reads argument
 `n >= 4` at `[R4 + 4 + 2 * (n - 4)]` ([ADR 0028](docs/decisions/0028-kr16-stack-arguments.md)).
-Variadic functions are still rejected, so `printf` cannot exist on KR16 yet;
-a varargs rule is the next decision, and with the stack area in place it is the
-only remaining blocker.
+A variadic call pushes every argument, named and variable, in two-byte slots; the
+callee reads parameter `i` at `[R4 + 4 + 2 * i]` and `va_start` yields
+`R4 + 4 + 2 * N` ([ADR 0029](docs/decisions/0029-kr16-variadic-calls.md)), with
+`<stdarg.h>` advancing two bytes per argument under `__kr16__`. `printf` on KR16
+is now blocked only by its own absence from `targets/kr16/runtime/libc.c`.
 
 ## KR16 execution
 
