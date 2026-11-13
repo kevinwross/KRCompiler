@@ -4246,6 +4246,13 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/const_mutable_member_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_cxx_const_method_ref_denied
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/const_method_ref_denied.cpp
+                "-DEXPECT=call to non-const member function"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
     add_test(NAME krc_cxx_const_method_denied
         COMMAND ${CMAKE_COMMAND}
                 -DEXE=$<TARGET_FILE:krc>
