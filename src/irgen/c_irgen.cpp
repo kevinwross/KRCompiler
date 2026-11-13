@@ -8069,15 +8069,10 @@ CIRGen::Expression CIRGen::emit_implicit_member_lvalue(std::string_view name) {
     if (index >= owner->members.size() || !owner->members[index].type) {
         return {};
     }
-    ir::TypePtr field_type = nullptr;
-    const auto owner_type = record_types_.find(owner);
-    if (owner_type != record_types_.end() &&
-        index < owner_type->second->fields.size()) {
-        field_type = owner_type->second->fields[index];
-    }
-    if (!field_type) {
-        field_type = map_type(owner->members[index].type);
-    }
+    // A polymorphic record's IR struct carries hidden fields (the vptr, and the
+    // base subobject), so its field index is not the frontend member index. Map
+    // the member type directly; the byte offset below already accounts for them.
+    const auto field_type = map_type(owner->members[index].type);
     if (!field_type) {
         return {};
     }
