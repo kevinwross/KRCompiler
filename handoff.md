@@ -172,6 +172,19 @@ Not green, and why:
   tile instructions. Implementing them is a capability, not a fix.
 - `FileOpen.cpp` builds and links since the `sys_open_dialog` host service was
   added to `targets/kr32/runtime/fileio.s` and declared in `sysroot/include/stdio.h`.
+
+Compile, link and run pattern used:
+
+```pwsh
+krc.exe -c ..\kr32\examples\<file> -o build\corpus\<file>.kro `
+  -I sysroot\include -I ..\kr32\include --sysroot build\windows-msvc-debug\stage\sysroot\kr32
+krld.exe build\corpus\<file>.kro `
+  build\windows-msvc-debug\stage\sysroot\kr32\lib\libkrcrt.kro targets\kr32\runtime\fileio.s `
+  build\windows-msvc-debug\stage\sysroot\kr32\lib\crt0.s --source-root=. -o build\corpus\<file>.k32
+..\kr32\build\windows-msvc\Debug\kr32.exe vm build\corpus\<file>.k32 --max-steps 20000000
+```
+
+A run leaves `host-output.txt` in the project root; delete it before committing.
 ## Traps that have caused real failures
 
 - **Test-name and fixture collisions.** Before adding a fixture or `add_test`,
