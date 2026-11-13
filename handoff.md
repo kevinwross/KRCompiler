@@ -135,21 +135,16 @@ value in `implementation.md`. Do not claim a runtime result from CTest alone.
 
 ### Known correctness limits
 
-- **64-bit integers are lowered, not observed at runtime.** `long long` is a word
-  pair with inline arithmetic and division through runtime helpers, and
-  `krc_link_longlong_arith` links; its exit code has not been run on this machine.
-  Converting a 64-bit integer to or from `float`/`double` still uses the ISA's
-  32-bit conversion, so values outside the 32-bit range convert wrongly.
+Compiler-side limits are listed in `implementation.md` under the M8–M10 evidence
+and the running log, next to the change that introduced each one. That list is
+the one to trust: a copy here has gone stale after every recent change.
+
+The sibling corpus carries two blocks of its own:
+
 - `../kr32/examples/matrix.cpp` is blocked on the KR32 matrix intrinsics
   declared by `kr32/matrix.hpp` (`matrix_mul`, `transpose`, vector ops).
 - `../kr32/examples/FileOpen.cpp` is blocked on `sys_open_dialog`, which is not
   declared or implemented.
-- Some C++ diagnostics remain permissive: a deleted constructor or destructor
-  used at a construction site is accepted, `const` correctness is not enforced,
-  and in-class member bodies are never analysed by Sema. Out-of-line member
-  bodies have class scope and `this`, so they are checked, and access control
-  covers free functions, member bodies, derived classes, friends, and friend
-  classes.
 
 ## Corpus notes
 
