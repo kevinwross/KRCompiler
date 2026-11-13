@@ -499,6 +499,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T14:49:31-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 563/563
+windows-msvc-release  PASS 563/563
+linux-gcc-debug       PASS 520/520
+linux-gcc-release     PASS 520/520
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty-three tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-three KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers the source-level debug names of [ADR 0030](docs/decisions/0030-debug-display-names.md).
+The rows ran one at a time, clean from deleted directories, with no warnings in
+any log.
+
 ### 2026-11-13T14:24:31-08:00 — host gate (Windows)
 
 ```text
@@ -2757,3 +2774,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T14:24:08-08:00** — The KR16 backend now rejects an aggregate return with `KR16 aggregate returns are not implemented`. It previously stored a truncated value in `R0`, so a four-byte struct return silently produced garbage — which is how `div` was caught. IP16 returns a scalar in `R0` only, and the profile has no aggregate return convention, so the two struct-returning division helpers are absent from its `<stdlib.h>`.
 - **2026-11-13T14:24:08-08:00** — KR16 file I/O is blocked outside this repository: the sibling VM implements only `SYS_VERSION`, with the other host services reserved, so there is no file service to call. The plan's "Integrate KR16 `resources/fileio.c`" item waits on that. The M9 item now says so.
 - **2026-11-13T14:24:08-08:00** — `krc_link_div_and_vsprintf`/`krc_run_div_and_vsprintf` cover the division helpers, `vsprintf`, `strtold`, and the stream flags against a temporary file the fixture creates, reads to end of file, clears, and removes; `krc_kr16_link_vsprintf`/`krc_run_kr16_vsprintf` cover formatting on the IP16 runtime. Both require exit 42. Windows debug CTest is 560/560.
+- **2026-11-13T14:49:13-08:00** — Gave the debug records source-level names. A member function now appears as `Widget::size`, a constructor as `Widget::Widget`, a destructor as `Widget::~Widget`, and a namespaced class as `Counter::bump`; before this the dump showed the flattened symbol (`Widget_size`, `Widget_ctor_0`). ADR 0030 adds an optional `debug_name` to `ir::Function`, set by IRGen from the class and member it already knows; the backend writes it into the `F` record and the symbol, mangling, object format, and KDBG encoding stay as they were.
+- **2026-11-13T14:49:13-08:00** — A synthesized copy of an inherited method keeps the base's display name, because it is the base's code; the consequence is that a dump can show the same display name twice (a class's own destructor and the library's synthesized one), which is why the ADR says display names are for reading and resolution keeps using the symbol.
+- **2026-11-13T14:49:13-08:00** — `krc_debug_names` links `tests/fixtures/c/debug_names.cpp` and checks the dump for seven display names through the new `cmake/CheckDebugNames.cmake`; `krc_run_debug_names` executes the same image and requires exit 42. The dump also shows `_ZTVWidget`/`_ZTIWidget` as symbols and `Widget`/`Counter` as types with their members, so a debugger can see the class layout, its methods, its vtable, and its typeinfo. Windows debug CTest is 563/563.
