@@ -405,6 +405,8 @@ if(TARGET krc)
 
     # Executed checks, registered only when a VM was configured for this
     # machine. A link-only test cannot see a wrong result in generated code.
+    # Every executed test must go inside this block, above its
+    # endif: a run test registered outside it runs on a host with no VM.
     if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
         foreach(run_fixture longlong_arith longlong_conditional)
             add_test(NAME krc_run_${run_fixture}
