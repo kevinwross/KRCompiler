@@ -466,7 +466,8 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - `crt0.s` sets the transform stack pointer from the linker's `__stack_limit`; a zero TSP faults on the first `MPUSH`, and the reset value is zero.
 - RTTI works over the vtable/typeinfo layout ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)). Vtables are weak `_ZTV<Class>` globals whose word 0 is `_ZTI<Class>`, so an object's vptr points at the first virtual slot and the RTTI pointer is one slot back. `_ZTI` carries the name, flags, and the base typeinfo, which is the chain `dynamic_cast` walks. `typeid` yields the object's dynamic typeinfo through a polymorphic glvalue and the static `_ZTI` otherwise; `typeid(a) == typeid(b)` compares typeinfo addresses. `dynamic_cast<T*>` is a bitcast for an upcast and a `__krc_dynamic_cast` call otherwise, returning null when the dynamic type is not the target or derived from it. `krc_link_rtti` and the executed `krc_run_rtti` require exit 42; `krc_cxx_dynamic_cast_reference_rejected` and `krc_cxx_typeid_without_typeinfo` assert the two diagnostics.
 - The per-object `malloc`'d vtable is gone, so polymorphic construction allocates nothing and two objects of one class share one table.
-- [ ] Full KR32 `libc.c`/`kr32os` and KR16 runtime integration.
+- Table-driven exceptions work over `.cpp_except` descriptors ([ADR 0026](docs/decisions/0026-exception-descriptors.md)). Every function emits a descriptor with its frame size and protected call sites; the assembly runtime `targets/kr32/runtime/eh.s` holds the naked `__cxa_throw`, the frame walk, and the descriptor scan, and `libc.c` holds the `__cxa_*` bookkeeping and the typeinfo-chain matcher. `try`/`catch`, catch-all, rethrow, a handler two frames above the throw, a base-class handler catching a derived exception, and a throw from inside a handler all work; `krc_run_exceptions` requires exit 42, and an unmatched exception aborts with exit 134.
+- Destructor cleanup on propagation is not implemented, so a `try` or `throw` while a local destructor is pending is rejected with `exception cleanup of automatic objects is not implemented yet` instead of silently skipping the destructor (`krc_cxx_exception_cleanup_unsupported`). `throw` of a scalar is rejected (`krc_cxx_throw_scalar`).- [ ] Full KR32 `libc.c`/`kr32os` and KR16 runtime integration.
 - [ ] Tag `v1.1`; Gate G9.
 
 ## 5. Open items and conditions
@@ -487,6 +488,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T10:56:53-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 519/519
+windows-msvc-release  PASS 519/519
+linux-gcc-debug       PASS 508/508
+linux-gcc-release     PASS 508/508
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register eleven tests fewer: the executed tests need a runnable
+KR32 VM and are not registered where the default is a Windows binary. This gate
+covers exception descriptors, the unwinder, the exception instructions, the
+`.cpp_except` section, and the exception runtime ([ADR 0026](docs/decisions/0026-exception-descriptors.md)).
+Clean configure and build of all four presets; no warnings in any log.
 
 ### 2026-11-13T10:21:45-08:00 — host gate (Windows)
 
@@ -2513,3 +2530,10 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T10:18:49-08:00** — Added `typeid`. The parser builds a `TypeIdExpression` for both the type-name and expression forms, Sema types it as `std::type_info` and records the operand type, and IRGen yields an lvalue of the typeinfo object: `vptr[-1]` for a polymorphic glvalue, `_ZTI<T>` otherwise. Two things had to be discovered by experiment: IRGen cannot re-analyse the operand because the function's scopes are gone by then (the compiler reported `use of undeclared identifier` and, worse, crashed downstream), and `emit_lvalue` returns the *value* type rather than a pointer type, so the dynamic path reads the record type, not `type->element`. `<typeinfo>` now exists in the sysroot with the fixed three-word layout, `name()`, and equality.
 - **2026-11-13T10:18:49-08:00** — Added `dynamic_cast` for pointer targets. An upcast lowers to a bitcast; anything else calls `__krc_dynamic_cast(object, &_ZTI<T>)`, which walks the typeinfo base chain and returns the object or null. Reference casts are rejected with a diagnostic because `std::bad_cast` needs exceptions, which do not exist yet. Also made `typeid(a) == typeid(b)` compare typeinfo addresses whether either side is a `typeid`, a type_info variable, or both; the first version handled only the both-`typeid` case and crashed the compiler on `info == typeid(a)`.
 - **2026-11-13T10:18:49-08:00** — Added `tests/fixtures/c/rtti.cpp`, which checks dynamic `typeid` through a base pointer, name(), a type_info reference, two-level downcasts, a failing downcast, an upcast, and a null source; `krc_run_rtti` requires exit 42. Added `dynamic_cast_reference.cpp` and `typeid_without_typeinfo.cpp` for the two diagnostics. Windows debug CTest is 515/515.
+- **2026-11-13T10:56:20-08:00** — Started exceptions, the largest M10 item, by reading plan §10.4/§14.4 and the sibling ABI's outline. The blocking fact is that a frame cannot be unwound from `R7` alone: the saved `R7` is at `[R7 + frame_size]`, and nothing in the frame records `frame_size`. That makes a program-counter→descriptor table unavoidable, which is also what the plan asks for ("cross-TU EH metadata is merged by the linker into a single table"). Wrote [ADR 0026](docs/decisions/0026-exception-descriptors.md) first, freezing the `.cpp_except` record, the walk, the landing-pad convention, and the exception object header.
+- **2026-11-13T10:56:20-08:00** — Added the `.cpp_except` section the ADR needs: the assembler gained a third section (and `SETSP` for the unwinder's stack restore), the KRO writer emits it as an allocated `Other` section, and the linker merges it and defines `__krc_eh_start`/`__krc_eh_end` beside the existing heap and stack symbols. Region and function addresses are `.word` relocations to local labels, so the table carries absolute addresses after linking without extending the assembler's expression grammar.
+- **2026-11-13T10:56:20-08:00** — Implemented the IR side: `invoke` (a call with normal and unwind edges), `landingpad` (a `ptr<i8>` to an eight-byte frame scratch holding the exception pointer and its typeinfo), and `resume`; the verifier, printer, and builder learned them and the v1.1 reservation of those three opcodes is gone. The backend emits each function's descriptor, records a region around every invoke's CALL (the region's upper bound is the return address, which is why an indirect `CALL R5` region is four bytes narrower than a direct one), and lowers pad entry and resume.
+- **2026-11-13T10:56:20-08:00** — Made every call inside a `try` protectable by routing all 81 IRGen call sites through one helper, which emits an invoke and continues in a fresh normal block when a landing pad is active. Constructors, operator calls, and the runtime helpers are then covered without each site knowing about exceptions.
+- **2026-11-13T10:56:20-08:00** — Wrote the unwinder in assembly (`targets/kr32/runtime/eh.s`) with the `__cxa_*` bookkeeping in `libc.c`. Two defects showed up only at run time: the walk restored `SP` to `frame + size + 8`, which is the value the frame had at entry rather than the pad's own stack pointer, and it never moved `R7` to the frame that owns the pad. Both were fixed (`R7 = frame; SETSP R7`), and the base-catch, catch-all, and nested-rethrow probes then returned 42.
+- **2026-11-13T10:56:20-08:00** — Destructor cleanup on propagation is deliberately not implemented. Rather than miscompile a valid program by skipping a destructor, IRGen rejects a protected region or a `throw` while a local destructor is pending, and the ADR records that the next change removes the diagnostic by emitting cleanup regions.
+- **2026-11-13T10:56:20-08:00** — Added `tests/fixtures/c/exceptions.cpp` (six semantics, exit 42), `exception_cleanup.cpp` and `throw_scalar.cpp` for the two diagnostics, and `krc_link_exceptions`/`krc_run_exceptions`. Two test-infrastructure gaps surfaced: `LinkRuntimeTwo.cmake` and `CheckDebugPaths.cmake` link `libkrcrt` without `eh.s`, which broke unrelated two-object tests, and `CheckDiagnostic.cmake` only ran `-fsyntax-only`, so a code-generation restriction could not be asserted; it now accepts `OBJECT` and runs a full compile. Windows debug CTest is 519/519.
