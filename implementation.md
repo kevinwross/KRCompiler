@@ -283,6 +283,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55, `hello.c` prints `Hello, KR16!` and exits 0, and a global-array fixture exits 6 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
 - [x] Gate G7: KR16 C is accepted, assembled, linked, and run, and the suite now proves it on every build. `KRC_KR16_VM` names the sibling VM (`../kr16/build/shell-debug/kr16.exe` on a Windows host) and `cmake/RunKr16Image.cmake` checks the program's exit status and, where it matters, its output. Nineteen executed tests cover the linked images (`hello.c` prints `Hello, KR16!` and exits 0, `sum.c` exits 55, a two-object `lib`/`main` image returns 42, extern data returns 7, struct copies return 81, the string/memory runtime returns 3) plus single-unit images for globals, indexing, `switch`, a call in a loop, shifts, a pointer write, a function pointer, pointer difference, three bit-field forms, and a two-dimensional array.
 - More than three scalar arguments work on KR16 ([ADR 0028](docs/decisions/0028-kr16-stack-arguments.md)): the first three travel in `R1`-`R3` and the rest are pushed last-first in two-byte slots, so the fourth ends at the lowest address and the callee reads argument `n >= 4` at `[R4 + 4 + 2 * (n - 4)]`. The fixture covers five and seven arguments, a call nested in a five-argument call, narrow arguments in stack positions, locals alongside stack arguments, a loop, recursion, and an indirect call with four parameters; `krc_run_kr16_arguments` requires exit 42.
+- Variadic calls work on KR16 ([ADR 0029](docs/decisions/0029-kr16-variadic-calls.md)): every argument, named and variable, is pushed in two-byte slots, so a_start is R4 + 4 + 2 * N and a_arg advances two bytes under __kr16__. The fixture covers a variable count of zero to five, named parameters beyond the register bank, a promoted char argument, consecutive calls, and a call through a variadic function pointer; `krc_run_kr16_variadic` requires exit 42.
 - A type the IP16 profile cannot represent is rejected where it is named, as `'<type>' is not supported by the kr16 profile` (plan.md §4.3), instead of being lowered to a zero-width integer or to `f32`/`f64`: `krc_kr16_long_long_rejected` covers `long long` and `krc_kr16_float_rejected` covers `float`, `double`, and `long double`, and the same sources still compile for KR32. `<stdlib.h>`, `<math.h>`, and `<time.h>` omit their 64-bit and floating-point declarations under `__kr16__`, so including them stays usable on the profile.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
@@ -492,6 +493,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T13:12:06-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 548/548
+windows-msvc-release  PASS 548/548
+linux-gcc-debug       PASS 512/512
+linux-gcc-release     PASS 512/512
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register thirty-six tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-one KR16 run tests need the KR16 VM a Linux host does not have. This gate
+covers KR16 variadic calls ([ADR 0029](docs/decisions/0029-kr16-variadic-calls.md)).
+Clean configure and build of all four presets; no warnings in any log.
 
 ### 2026-11-13T12:54:29-08:00 — host gate (Windows)
 
@@ -2658,3 +2675,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T12:54:01-08:00** — Implemented KR16 stack arguments, the first of the two blockers for `printf` on that target (the other is variadic calls). ADR 0028 freezes the rule: the first three scalar arguments stay in `R1`–`R3`, further arguments are pushed by the caller last-first in two-byte slots so the fourth ends at the lowest address, and the caller releases the area with `LEA SP, [SP + 2 * count]` after `CALL`. The callee reads argument `n >= 4` at `[R4 + 4 + 2 * (n - 4)]` and copies it into its frame slot in the prologue, so the rest of the function still sees one slot per parameter.
 - **2026-11-13T12:54:01-08:00** — The first attempt was wrong in a way only execution showed: each extra was loaded and pushed in one step, and pushing moves `SP`, so the *second* extra was read at a slot offset that had shifted by two bytes. `recurse(1, 1, 2, 3, 4)` returned the wrong sum while `recurse(0, ...)` was right, which localized it to the argument staging. The load helper now takes a `pushed` adjustment and the push loop passes the bytes already pushed, because the staged slots live above `SP` and their SP-relative offsets grow as the area is built.
 - **2026-11-13T12:54:01-08:00** — `tests/fixtures/c/kr16_arguments.c` exercises five arguments, seven arguments, a call whose own argument is a five-argument call, narrow `char` arguments in stack positions, a function with stack arguments and local arrays, repeated calls in a loop, recursion through stack arguments, and an indirect call through a function pointer with four parameters; `krc_run_kr16_arguments` requires exit 42. `docs/abi-kr16.md` now freezes stack arguments and drops "more than three arguments" from the deferred list and the diagnostic list; varargs remains deferred and is the remaining blocker for `printf`. Windows debug CTest is 546/546.
+- **2026-11-13T13:11:45-08:00** — Implemented KR16 variadic calls, the last calling-convention blocker for `printf` on that target. ADR 0029 freezes the rule: a variadic call pushes *every* argument, named and variable, last first in two-byte slots, so one contiguous area holds the whole list; the callee reads parameter `i` from `[R4 + 4 + 2 * i]`, `va_start` yields `R4 + 4 + 2 * N`, and `<stdarg.h>` advances two bytes per argument under `__kr16__`. Non-variadic calls keep ADR 0028's register rule.
+- **2026-11-13T13:11:45-08:00** — Two defects came out of the fixture. An indirect variadic call loaded its function pointer *after* pushing the argument area, so it read the pointer from an SP-relative slot that had shifted by the pushed bytes and called a garbage address; the callee load now carries the same adjustment as the arguments. And the fixture itself was wrong: `after_three(first, second, third, count, ...)` takes its variable-argument count as the fourth named parameter, and the test passed `4` with two arguments, so the callee correctly read two slots of stale stack — the test expectation was fixed, not the compiler.
+- **2026-11-13T13:11:45-08:00** — `tests/fixtures/c/kr16_variadic.c` covers a three-variable-argument sum, a call with no variable arguments, five variable arguments, four named parameters of which two are beyond the register bank, a promoted `char` argument, consecutive calls that keep the area balanced, and a variadic call through a function pointer; `krc_run_kr16_variadic` requires exit 42. `printf` on KR16 is now blocked only by its own implementation. Windows debug CTest is 548/548.
