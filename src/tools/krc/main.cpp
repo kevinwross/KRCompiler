@@ -232,6 +232,12 @@ int main(int argc, char** argv) {
         }
     }
 
+    // -S and -c each write their whole output to -o, so one path cannot hold
+    // both: the object would overwrite the assembly it was assembled from.
+    if (emit_assembly && emit_object && !output_path.empty()) {
+        return fail("-S and -c both write to -o; run them separately");
+    }
+
     if (dump_symbols) {
         if (inputs.size() != 1) {
             return fail("--dump-symbols accepts exactly one image");

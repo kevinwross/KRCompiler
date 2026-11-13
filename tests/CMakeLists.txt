@@ -326,6 +326,12 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/mainentry.c")
     set_tests_properties(krc_c_emit_mainentry_asm PROPERTIES PASS_REGULAR_EXPRESSION "CALL printf")
 
+    add_test(NAME krc_c_emit_conflict
+        COMMAND $<TARGET_FILE:krc> -S -c
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/emit_conflict.out")
+    set_tests_properties(krc_c_emit_conflict PROPERTIES WILL_FAIL TRUE)
+
     add_test(NAME krc_c_emit_hello_asm_file
         COMMAND ${CMAKE_COMMAND}
                 -DEXE=$<TARGET_FILE:krc>
