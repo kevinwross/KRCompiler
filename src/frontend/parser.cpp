@@ -1025,6 +1025,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
         if (is_virtual) {
             specifiers->labels.push_back("virtual");
         }
+        for (const auto& leading : leading_specifiers) {
+            specifiers->labels.push_back(leading);
+        }
         ++position_;  // the class name
         auto constructor_declarator = make_ast(AstKind::FunctionDeclarator, location);
         constructor_declarator->labels.push_back("prototype");

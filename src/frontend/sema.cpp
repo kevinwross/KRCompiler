@@ -865,12 +865,20 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             // a construction matches the constructor it would actually call.
             if (name == record.tag) {
                 std::string arity_label = "constructor-arity:";
+                std::string suffix;
                 for (const auto& label : child->labels) {
                     if (label.rfind(arity_label, 0) == 0) {
-                        entry.name = record.tag + "#" + label.substr(arity_label.size());
+                        suffix = "#" + label.substr(arity_label.size());
                         break;
                     }
                 }
+                // `explicit` decides whether a conversion may be implicit, so it
+                // travels with the registered constructor's name.
+                const bool is_explicit =
+                    std::find(member.children[0]->labels.begin(),
+                              member.children[0]->labels.end(),
+                              "explicit") != member.children[0]->labels.end();
+                entry.name = record.tag + suffix + (is_explicit ? ":explicit" : "");
             }
             record.methods.push_back(std::move(entry));
             continue;
@@ -1382,6 +1390,12 @@ void Sema::analyze_declaration(const AstNode& declaration) {
                             error(declarator->location,
                                   "call to deleted constructor '" + type->record->tag +
                                       "::" + type->record->tag + "'");
+                        }
+                        if (constructor.name == key + ":explicit") {
+                            error(declarator->location,
+                                  "constructor '" + type->record->tag + "::" +
+                                      type->record->tag +
+                                      "' is explicit; use direct initialisation");
                         }
                     }
                 }

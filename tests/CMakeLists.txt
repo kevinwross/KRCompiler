@@ -4273,6 +4273,23 @@ if(TARGET krc)
                 "-DEXPECT=call to non-const member function"
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
 
+    add_test(NAME krc_cxx_explicit_constructor_copy_init
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/explicit_constructor_copy_init.cpp
+                "-DEXPECT=is explicit; use direct initialisation"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
+    add_test(NAME krc_link_explicit_constructor_direct
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/explicit_constructor_direct.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/explicit_constructor_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_cxx_deleted_constructor_copy_variable
         COMMAND ${CMAKE_COMMAND}
                 -DEXE=$<TARGET_FILE:krc>
