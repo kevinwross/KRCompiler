@@ -58,6 +58,7 @@ struct RecordMethod {
     bool is_deleted = false;
     bool is_const = false;
     bool is_override = false;
+    bool is_final = false;
     SourceLocation location;
     AccessLevel access = AccessLevel::Public;
 };
@@ -67,6 +68,7 @@ struct RecordInfo {
     bool is_union = false;
     bool complete = false;
     bool polymorphic = false;
+    bool is_final = false;
     // `class` members are private until an access specifier says otherwise;
     // `struct` and `union` members are public.
     AccessLevel default_access = AccessLevel::Public;

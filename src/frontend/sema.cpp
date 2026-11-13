@@ -581,8 +581,17 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
         info->default_access = AccessLevel::Private;
     }
     for (const auto& label : specifier.labels) {
+        if (label == "final") {
+            info->is_final = true;
+        }
         if (label.starts_with("base:")) {
             info->base = type_named(label.substr(5));
+            if (info->base && info->base->kind == TypeKind::Record &&
+                info->base->record && info->base->record->is_final) {
+                error(specifier.location,
+                      "cannot derive from final class '" + info->base->record->tag +
+                          "'");
+            }
         }
     }
     // Bodies are analysed after every member is registered: a member body may
@@ -622,6 +631,8 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
                     declarator_has_label(*member->children[1], "const");
                 method_entry.is_override =
                     declarator_has_label(*member->children[1], "override");
+                method_entry.is_final =
+                    declarator_has_label(*member->children[1], "final");
                 method_entry.location = member->location;
                 method_entry.access = access;
                 info->methods.push_back(std::move(method_entry));
@@ -644,25 +655,28 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
         enclosing_record_ = saved_enclosing_record;
         current_function_name_ = saved_function_name;
     }
+    // A derived member may not override one the base marked final, and an
+    // `override` marker must name something the base actually declares.
     for (const auto& declared : info->methods) {
-        if (!declared.is_override) {
-            continue;
-        }
-        bool overrides_something = false;
+        bool found_in_base = false;
+        bool base_marked_final = false;
         for (const auto* base =
                  info->base && info->base->kind == TypeKind::Record && info->base->record
                      ? info->base->record.get()
                      : nullptr;
-             base != nullptr && !overrides_something;
+             base != nullptr;
              base = base->base && base->base->record ? base->base->record.get() : nullptr) {
             for (const auto& inherited : base->methods) {
                 if (inherited.name == declared.name) {
-                    overrides_something = true;
-                    break;
+                    found_in_base = true;
+                    base_marked_final = base_marked_final || inherited.is_final;
                 }
             }
         }
-        if (!overrides_something) {
+        if (base_marked_final) {
+            error(declared.location, "'" + info->tag + "::" + declared.name +
+                                         "' overrides a final member");
+        } else if (declared.is_override && !found_in_base) {
             error(declared.location,
                   "'" + info->tag + "::" + declared.name +
                       "' is marked override but overrides no base member");
@@ -793,6 +807,7 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             // `= delete` and pure markers travel on the member node.
             const bool is_const = declarator_has_label(*child, "const");
             const bool is_override = declarator_has_label(*child, "override");
+            const bool is_final = declarator_has_label(*child, "final");
             if (is_friend) {
                 // A friend declaration names a non-member function that may
                 // reach this record's non-public members.
@@ -807,6 +822,7 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             entry.is_deleted = is_deleted;
             entry.is_const = is_const;
             entry.is_override = is_override;
+            entry.is_final = is_final;
             entry.location = member.location;
             entry.access = access;
             record.methods.push_back(std::move(entry));

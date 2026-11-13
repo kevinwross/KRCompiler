@@ -848,6 +848,7 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
             const bool is_noexcept = check("noexcept");
             const bool is_const = check("const");
             const bool is_override = check("override");
+            const bool is_final = check("final");
             ++position_;
             if (is_noexcept && check("(")) {
                 skip_balanced_parens();
@@ -859,6 +860,9 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
             }
             if (is_override) {
                 direct->labels.emplace_back("override");
+            }
+            if (is_final) {
+                direct->labels.emplace_back("final");
             }
             continue;
         }
@@ -1125,6 +1129,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
             if (peek().text == "override") {
                 declarator->labels.push_back("override");
             }
+            if (peek().text == "final") {
+                declarator->labels.push_back("final");
+            }
             ++position_;
         }
         if (contains_function_declarator(*declarator) &&
@@ -1179,6 +1186,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
             }
             if (peek().text == "override") {
                 member->children.back()->labels.push_back("override");
+            }
+            if (peek().text == "final") {
+                member->children.back()->labels.push_back("final");
             }
             ++position_;
         }
