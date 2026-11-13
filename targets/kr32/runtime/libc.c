@@ -745,7 +745,7 @@ struct heap_header {
 
 static unsigned char *heap_next;
 static struct heap_header *free_head;
-#define HEAP_BEGIN ((unsigned char *)0x00020000)
+#define HEAP_BEGIN ((unsigned char *)0x00100000)
 #define HEAP_END ((unsigned char *)0x08000000)
 
 void *malloc(unsigned int size) {
