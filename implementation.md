@@ -471,6 +471,19 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-12T23:53:00-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 474/474
+windows-msvc-release  PASS 474/474
+linux-gcc-debug       PASS 472/472
+linux-gcc-release     PASS 472/472
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register two tests fewer: the executed tests need a runnable
+KR32 VM and are not registered where the default is a Windows binary.
+
 ### 2026-11-12T23:33:47-08:00 — host gate (Windows)
 
 ```text
