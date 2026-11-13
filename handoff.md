@@ -294,10 +294,9 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 ## Known gaps in the matrix support
 
 - Aggregates larger than 8 bytes travel by value as a pointer to a copy the
-  caller owns (memory class, per `docs/abi.md`), so a 20-byte struct parameter
-  works. What remains: an *aggregate member* used as a value
-  (`sum(holder.value)`) is rejected with `aggregate member load is not
-  implemented yet`, and an aggregate passed through a variadic argument is
+  caller owns (memory class, per `docs/abi.md`), and an aggregate read out of an
+  object (a member, an array element, a dereference, a global) is a value like
+  any other. What remains: an aggregate passed through a variadic argument is
   still unsupported.
 - An FP-only aggregate of 9–16 bytes returns through `R4` rather than `F0`/`F1`.
 - `vec4` and `mat4` are laid out with 4-byte alignment; the reference ABI

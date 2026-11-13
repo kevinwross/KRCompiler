@@ -8674,12 +8674,17 @@ CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {   
                                      "member.reference.load"),
                 address.type->element};
     }
-    if (!address.type || address.type->kind == ir::TypeKind::Struct) {
-        error(expression.location, "aggregate member load is not implemented yet");
+    if (!address.type) {
+        error(expression.location, "member type is unknown");
         return {};
     }
+    // An aggregate member is a value like any other: the backend copies it out
+    // of the object into the value's frame slot.
+    const auto aggregate = address.type->kind == ir::TypeKind::Struct ||
+                           address.type->kind == ir::TypeKind::Union;
     return {builder_.create_load(address.type, address.value,
-                                 address.is_volatile, 0, "member.load"),
+                                 address.is_volatile, 0,
+                                 aggregate ? "member.aggregate" : "member.load"),
             address.type};
 }
 
