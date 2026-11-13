@@ -236,8 +236,9 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
 2. Then RTTI: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
    plan §10.4. The executed-test harness can verify it end to end.
 3. Remaining backlog: the corpus tree wrong-code defect recorded in
-   `implementation.md`, deleted constructors at construction sites (needs
-   constructor matching IRGen does not have), RTTI, exceptions, variadic
+   `implementation.md`, the rest of deleted constructors — a deleted default
+   constructor is refused already, while `S(int) = delete` still permits
+   `S object;` and `S x(5);` goes unchecked — RTTI, exceptions, variadic
    templates, dynamic TLS, the `std` containers, KR16 libc/file I/O, and
    matrix/host intrinsics.
 
