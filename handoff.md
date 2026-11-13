@@ -85,6 +85,12 @@ tree supports:
   the fixture links, its runtime exit code is unobserved.
 - A call to a deleted member function is rejected, and access to a non-public
   member from a free function is rejected unless it is a friend.
+- The const and inheritance markers are enforced rather than parsed:
+  assigning a member of a const object is refused unless it is `mutable`,
+  calling a non-const member through a const object, pointer or reference is
+  refused while a const-qualified member stays callable, `override` naming
+  no base member is refused, `final` is enforced on classes and members,
+  and an object of an abstract class cannot be created.
 
 Recent commits worth knowing:
 
@@ -226,12 +232,11 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
    converge quickly, escalate it as a known wrong-code defect and move on.
 2. Then RTTI: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
    plan §10.4. The executed-test harness can verify it end to end.
-3. Remaining backlog: deleted constructors at construction sites (needs
-   constructor matching IRGen does not have), full `const` method correctness,
-   variadic templates, dynamic TLS, the `std` containers, KR16 libc/file I/O,
-   and matrix/host intrinsics.
-4. Run the host gate and record it before pushing; a matrix-green change stays
-   local until then.
+3. Remaining backlog: the corpus tree wrong-code defect recorded in
+   `implementation.md`, deleted constructors at construction sites (needs
+   constructor matching IRGen does not have), RTTI, exceptions, variadic
+   templates, dynamic TLS, the `std` containers, KR16 libc/file I/O, and
+   matrix/host intrinsics.
 
 ## Goal recommendation
 
