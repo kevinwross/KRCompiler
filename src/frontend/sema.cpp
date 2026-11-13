@@ -28,6 +28,21 @@ std::uint64_t round_up(std::uint64_t value, std::uint64_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
 }
 
+// A declarator nests its pieces, so a qualifier recorded on the function part
+// is not visible on the outermost node.
+bool declarator_has_label(const AstNode& declarator, const std::string& label) {
+    if (std::find(declarator.labels.begin(), declarator.labels.end(), label) !=
+        declarator.labels.end()) {
+        return true;
+    }
+    for (const auto& child : declarator.children) {
+        if (child && declarator_has_label(*child, label)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 Sema::Sema(DiagnosticEngine& diagnostics, const target::TargetProfile& profile,
@@ -603,6 +618,8 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
                 method_entry.name = declarator_name(*member->children[1]);
                 method_entry.type = function_type;
                 method_entry.is_virtual = is_virtual;
+                method_entry.is_const =
+                    declarator_has_label(*member->children[1], "const");
                 method_entry.access = access;
                 info->methods.push_back(std::move(method_entry));
                 member_bodies.push_back(member.get());
@@ -745,6 +762,9 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
                                            "pure") != member.labels.end();
             const bool is_deleted = std::find(member.labels.begin(), member.labels.end(),
                                               "deleted") != member.labels.end();
+            // `const` is recorded on the declarator by the parser; the plain
+            // `= delete` and pure markers travel on the member node.
+            const bool is_const = declarator_has_label(*child, "const");
             if (is_friend) {
                 // A friend declaration names a non-member function that may
                 // reach this record's non-public members.
@@ -757,6 +777,7 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             entry.is_virtual = is_virtual;
             entry.is_pure = is_pure;
             entry.is_deleted = is_deleted;
+            entry.is_const = is_const;
             entry.access = access;
             record.methods.push_back(std::move(entry));
             continue;
@@ -2181,6 +2202,13 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                     if (method.is_deleted) {
                         error(expression.location, "use of deleted function '" +
                                                        record->tag + "::" + method.name + "'");
+                    }
+                    // A const object may only call members that promise not to
+                    // modify it.
+                    if (!method.is_const && base->is_const) {
+                        error(expression.location, "call to non-const member function '" +
+                                                       record->tag + "::" + method.name +
+                                                       "' on a const object");
                     }
                     check_member_access(expression.location, *record, method.name,
                                         method.access);

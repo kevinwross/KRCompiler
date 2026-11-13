@@ -846,9 +846,15 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
             (check("const") || check("volatile") || check("noexcept") ||
              check("override") || check("final") || check("&") || check("&&"))) {
             const bool is_noexcept = check("noexcept");
+            const bool is_const = check("const");
             ++position_;
             if (is_noexcept && check("(")) {
                 skip_balanced_parens();
+            }
+            if (is_const) {
+                // The trailing qualifier is what makes a member function callable
+                // through a const object, so the front end has to keep it.
+                direct->labels.emplace_back("const");
             }
             continue;
         }
@@ -1107,6 +1113,11 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
         while (peek().text == "const" || peek().text == "volatile" ||
                peek().text == "override" || peek().text == "noexcept" ||
                peek().text == "final") {
+            if (peek().text == "const") {
+                // Recorded so Sema can refuse to call this member through a
+                // const object only when it is not const-qualified.
+                declarator->labels.push_back("const");
+            }
             ++position_;
         }
         if (contains_function_declarator(*declarator) &&
@@ -1156,6 +1167,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
         while (peek().text == "const" || peek().text == "volatile" ||
                peek().text == "override" || peek().text == "noexcept" ||
                peek().text == "final") {
+            if (peek().text == "const") {
+                member->children.back()->labels.push_back("const");
+            }
             ++position_;
         }
         if (!field_is_function && !field_name.empty() && match("=")) {

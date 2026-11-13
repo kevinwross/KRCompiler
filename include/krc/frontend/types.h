@@ -56,6 +56,7 @@ struct RecordMethod {
     bool is_virtual = false;
     bool is_pure = false;
     bool is_deleted = false;
+    bool is_const = false;
     AccessLevel access = AccessLevel::Public;
 };
 
