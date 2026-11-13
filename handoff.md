@@ -11,10 +11,10 @@ Written 2026-11-12 for continuation on another machine. Read this together with
   under `## Gate verification`. That section owns them; restating them here is how
   a handoff starts disagreeing with the tracker.
 - This is a Windows/MSVC checkout. `build/` is untracked.
-- The corpus is measured, not assumed: 14 of 15 examples build and 11 run
-  with the status their `main` returns. One wrong-code defect remains,
-  `binarytree.c` 115 and `balanced-tree.cpp` 108; `matrix.cpp` needs the
-  matrix intrinsics; `FileOpen.cpp` builds and links but blocks if run.
+- The corpus is measured, not assumed: 14 of 15 examples build and 13 run
+  with the status their `main` returns. The two that do not are `matrix.cpp`,
+  which needs the matrix intrinsics, and `FileOpen.cpp`, which builds and links
+  but blocks on an interactive host dialog if run.
 - The Linux presets need Ninja in WSL; see `AGENTS.local.md`, Environment assumptions.
 ## Objective and policy
 
@@ -159,19 +159,20 @@ The sibling corpus carries two blocks of its own:
 
 Measured by compiling with `krc -c`, linking with `libkrcrt.kro`, `fileio.s`
 and `crt0.s`, and running each image under `..\kr32`'s VM: **14 of 15 examples
-build, and 11 of those run with the status their `main` returns.** Those eleven
+build, and 13 of those run with the status their `main` returns.** Those thirteen
 are `hello.c`, `strings.c`, `types.c`, `varargs.c`, `libc-test.c`, `floats.c`,
-`fileio.c`, `mainentry.c` (all 0), `hello.cpp` (42), `cxx_libc.cpp` (0) and
-`cxx_tls.cpp` (42, the value its `long long` division is meant to produce).
+`fileio.c`, `mainentry.c` (all 0), `hello.cpp` (42), `cxx_libc.cpp` (0),
+`cxx_tls.cpp` (42, the value its `long long` division is meant to produce),
+`binarytree.c` and `balanced-tree.cpp` (0 each, since the heap-base fix).
 
 Not green, and why:
 
-- `binarytree.c` and `balanced-tree.cpp` run but halt with statuses 115 and
-  108 (the second varies between builds) and print no tree. This is a krc
-  code-generation defect, not a VM or program defect: the same source built
-  with `kr32.exe build` runs correctly, which makes `../kr32` a reference
-  oracle. `implementation.md` carries the narrowed evidence, the reduced
-  reproducers, and the hypotheses already eliminated.
+- `binarytree.c` and `balanced-tree.cpp` ran but halted with wrong statuses
+  until the heap base was fixed: `malloc` started at `0x00020000`, inside
+  `.text` for a large program, so allocations overwrote the code that was
+  about to run. `HEAP_BEGIN` is now `0x00100000`, both print their trees and
+  exit 0, and `krc_run_heap_above_code` regresses it by allocating a large
+  block and then calling a function defined after the allocation.
 - `matrix.cpp` builds but does not link: `transform` is a compiler intrinsic
   in the sibling front end, lowering to MLOAD, MMUL, MVEC, MTRANS and MSTORE
   tile instructions. Implementing them is a capability, not a fix.
