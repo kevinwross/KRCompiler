@@ -67,6 +67,9 @@ struct RecordInfo {
     std::string tag;
     bool is_union = false;
     bool complete = false;
+    // The specifier that completed this record, so a second analysis of the
+    // same definition is not mistaken for a redefinition.
+    const AstNode* definition = nullptr;
     bool polymorphic = false;
     bool is_final = false;
     // `class` members are private until an access specifier says otherwise;
@@ -83,6 +86,7 @@ struct RecordInfo {
 struct EnumInfo {
     std::string tag;
     bool complete = false;
+    const AstNode* definition = nullptr;
     std::vector<std::pair<std::string, long long>> enumerators;
 };
 

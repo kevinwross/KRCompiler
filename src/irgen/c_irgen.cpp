@@ -6073,7 +6073,11 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
     if ((operation == "+" || operation == "-") && ir::is_pointer(left.type)) {
         auto* zero = module_->constant_int(int_type(), 0);
         const bool subtract = operation == "-";
-        auto* index = subtract ? builder_.create_sub(zero, right.value, "neg") : right.value;
+        // The offset is an element count, so it takes the index type whatever
+        // the operand was; without this an unsigned `sizeof` operand makes the
+        // subtraction's operand types disagree.
+        auto* offset = promote(right.value, right.type, int_type());
+        auto* index = subtract ? builder_.create_sub(zero, offset, "neg") : offset;
         auto* value = builder_.create_gep(left.type->element, left.value, {index}, false,
                                           "ptradd");
         value->type = left.type;

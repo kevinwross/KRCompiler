@@ -606,11 +606,17 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
         return type;
     }
     if (info->complete) {
-        error(specifier.location, "redefinition of " +
-                                      std::string(is_union ? "union " : "struct ") + tag);
+        // The same specifier is analyzed again when a typedef declaration
+        // reaches its declarator; that is not a redefinition.
+        if (info->definition != &specifier) {
+            error(specifier.location, "redefinition of " +
+                                          std::string(is_union ? "union " : "struct ") + tag);
+            return type;
+        }
         return type;
     }
 
+    info->definition = &specifier;
     info->complete = true;
     if (std::find(specifier.labels.begin(), specifier.labels.end(), "class") !=
         specifier.labels.end()) {
@@ -969,10 +975,12 @@ TypePtr Sema::enum_type(const AstNode& specifier) {
         return type;
     }
     if (info->complete) {
-        error(specifier.location, "redefinition of enum '" + tag + "'");
+        if (info->definition != &specifier) {
+            error(specifier.location, "redefinition of enum '" + tag + "'");
+        }
         return type;
     }
-
+    info->definition = &specifier;
     info->complete = true;
     long long next_value = 0;
     for (const auto& enumerator : specifier.children) {
