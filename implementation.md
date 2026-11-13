@@ -37,7 +37,7 @@ A change is done when:
 | M4 C core + debug format | G3/G4 passed locally | complete locally | C core, bit-fields, debugger session, frozen KDBG v1, and dump tooling are in place; M5 C++ is next |
 | M5 C++ core | G5 passed locally | in progress | G5 runs; classes, methods, constructors, destructors, `new`/`delete`, default copy, inheritance, and static devirtualization work; general vtables, move semantics, and dynamic dispatch remain |
 | M6 C++11/14/17 | G6 | in progress | `nullptr`, `auto`/`decltype`, range-for, `constexpr`, `enum class`, and `::` qualification work; templates, lambdas, move semantics, and structured bindings remain |
-| M7 KR16 backend + C | G7 | complete locally | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global data, and a minimal `.kex` image work; `--emit-object` plus `krld` link startup and multiple user objects with absolute relocations. `hello.c`, `sum.c`, and a cross-object fixture run through the linked path; the wider runtime remains |
+| M7 KR16 backend + C | G7 | complete locally | KR16 syntax, IP16 data model, IR, scalar codegen, assembler, global data, and a minimal `.kex` image work; `--emit-object` plus `krld` link startup and multiple user objects with absolute relocations. Nineteen executed tests run the linked and single-unit images under the KR16 VM, covering globals, indexing, `switch`, loops with calls, shifts, pointers, function pointers, bit-fields, arrays, and the string/memory runtime; the wider runtime remains |
 | M8 v1.0 hardening | G8 | in progress | KR16 object and linked-image determinism checks pass; corpus, debugger parity, docs, and the release tag remain |
 | M9 v1.1 runtime/libc/host services | G9 partial | in progress | A KR16 string/memory runtime object builds and links; host services, file I/O, and the full libc port remain |
 | M10 v1.1 language/runtime completion | G9 | pending | — |
@@ -281,7 +281,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - [ ] KR16 ABI appendix and calling-convention suite.
 - [ ] Codegen, frame layout, image writer. Scalar codegen, SP-relative frame layout, the in-tree assembler, global arrays, and the minimal `.kex` writer work for single-unit integer/pointer code; relocatable objects and the full linker remain.
 - [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55, `hello.c` prints `Hello, KR16!` and exits 0, and a global-array fixture exits 6 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
-- [x] Gate G7: KR16 C is accepted, assembled, linked, and run. Linked `hello.c` prints `Hello, KR16!` and exits 0; `sum.c` exits 55; a two-object `lib`/`main` image returns 42, and local/nested/array struct copies return 81.
+- [x] Gate G7: KR16 C is accepted, assembled, linked, and run, and the suite now proves it on every build. `KRC_KR16_VM` names the sibling VM (`../kr16/build/shell-debug/kr16.exe` on a Windows host) and `cmake/RunKr16Image.cmake` checks the program's exit status and, where it matters, its output. Nineteen executed tests cover the linked images (`hello.c` prints `Hello, KR16!` and exits 0, `sum.c` exits 55, a two-object `lib`/`main` image returns 42, extern data returns 7, struct copies return 81, the string/memory runtime returns 3) plus single-unit images for globals, indexing, `switch`, a call in a loop, shifts, a pointer write, a function pointer, pointer difference, three bit-field forms, and a two-dimensional array.
 - A type the IP16 profile cannot represent is rejected where it is named, as `'<type>' is not supported by the kr16 profile` (plan.md §4.3), instead of being lowered to a zero-width integer or to `f32`/`f64`: `krc_kr16_long_long_rejected` covers `long long` and `krc_kr16_float_rejected` covers `float`, `double`, and `long double`, and the same sources still compile for KR32. `<stdlib.h>`, `<math.h>`, and `<time.h>` omit their 64-bit and floating-point declarations under `__kr16__`, so including them stays usable on the profile.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
@@ -491,6 +491,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T12:37:28-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 544/544
+windows-msvc-release  PASS 544/544
+linux-gcc-debug       PASS 510/510
+linux-gcc-release     PASS 510/510
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register thirty-four tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the nineteen
+KR16 run tests need the KR16 VM a Linux host does not have. This gate covers the
+KR16 execution wiring. Clean configure and build of all four presets; no
+warnings in any log.
 
 ### 2026-11-13T12:21:35-08:00 — host gate (Windows)
 
@@ -2619,3 +2635,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T12:21:11-08:00** — Implemented aggregate reads out of an object, the diagnostic that was left behind by the aggregate-argument work. A member, an array element, a pointer dereference, and a global of aggregate type all produce a value now, so `sum(holder.value)`, `sum(array[i])`, and `sum(*pointer)` compile and run.
 - **2026-11-13T12:21:11-08:00** — The IR already had the shape for it and the backend already emitted the copy: a `load` of a struct type copies the object into the value's frame slot, which was implemented but unreachable because the member path refused aggregates before building the load. No backend change was needed.
 - **2026-11-13T12:21:11-08:00** — `krc_link_aggregate_values` and the executed `krc_run_aggregate_values` cover a member read, a copy of a member that stays separate, array elements, a dereference, a global (including a write through a member), a member of a member, and passing such a value straight to a call; the fixture requires exit 42 and Windows debug CTest is 525/525.
+- **2026-11-13T12:37:06-08:00** — Executed the KR16 tests instead of only linking them. `KRC_KR16_VM` names the sibling VM the way `KRC_KR32_VM` does, and `cmake/RunKr16Image.cmake` runs an image and checks the program's exit status and, where it matters, its output. The KR16 `vm` command reports the program's status as its own, so the runner mirrors the KR32 one with `--max-cycles` instead of `--max-steps`.
+- **2026-11-13T12:37:06-08:00** — Nineteen `krc_run_kr16_*` tests now cover the five linked images and fourteen single-unit images: `hello.c` prints `Hello, KR16!` and exits 0 (checked through `EXPECT_OUTPUT`), `sum.c` exits 55, a two-object `lib`/`main` image returns 42, extern data returns 7, local/nested/array struct copies return 81, the string/memory runtime returns 3, and globals, indexing, `switch`, a call in a loop, shifts, a pointer write, a function pointer, pointer difference, three bit-field forms, and a two-dimensional array each exit with the value their fixture computes. Before this, a defect that only appears at run time on KR16 could reach the tree as a passing suite.
+- **2026-11-13T12:37:06-08:00** — Each expectation is the value the fixture's own arithmetic produces, not a recorded observation: `kr16_arith.c` is 49, `kr16_shift.c` is 32, the bit-field fixtures are 22, and the two-object image is 42. The run tests register only when the VM exists, so a host without it stays green, as for KR32. Windows debug CTest is 544/544.
