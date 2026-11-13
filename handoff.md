@@ -2,7 +2,6 @@
 
 Written 2026-11-12 for continuation on another machine. Read this together with
 `AGENTS.md`, `AGENTS.local.md`, `plan.md`, and `implementation.md`.
-
 ## State at handoff
 
 - Repository: `https://github.com/kevinwross/KRCompiler.git`, branch `master`.
@@ -12,7 +11,6 @@ Written 2026-11-12 for continuation on another machine. Read this together with
   a handoff starts disagreeing with the tracker.
 - This is a Windows/MSVC checkout. `build/` is untracked.
 - The Linux presets need Ninja in WSL; see `AGENTS.local.md`, Environment assumptions.
-
 ## Objective and policy
 
 Objective: **“Proceed with implementation of M0 thru M10.”**
@@ -39,7 +37,6 @@ Every merged change updates `implementation.md`. Documentation-only changes
 need no build. No external runtime dependency; doctest is the only vendored test
 dependency. ABI/object/symbol/target/IR changes need an ADR under
 `docs/decisions/` and, when a `D-xxx` decision changes, an Appendix A entry.
-
 ## First steps on the new machine
 
 ```pwsh
@@ -59,7 +56,6 @@ Then read:
 
 Sibling repositories `..\kr32` and `..\kr16` are **read-only inputs**. Clone
 them next to `KRCompiler` if corpus work is needed.
-
 ## What has been completed
 
 M0 through the M7/M8/M9 surfaces are substantially implemented. The current
@@ -110,7 +106,6 @@ Recent commits worth knowing:
 - `b1ec5c2`, `a744e14`, `4826601` — const-object member assignment, its
   `mutable` exemption, and a guard that reads still compile.
 - `1001430` — `-S -o FILE` writes the assembly instead of ignoring the path.
-
 ## Important test caveat
 
 Most CTest entries named `krc_link_*` only **link** a fixture; they do not assert
@@ -125,7 +120,6 @@ linked image:
 When adding a fixture, add the `add_test` entry with
 `cmake/LinkRuntime.cmake`, run it, then run the VM manually and record the exit
 value in `implementation.md`. Do not claim a runtime result from CTest alone.
-
 ## Known open work
 
 ### M8
@@ -156,48 +150,28 @@ and the running log, next to the change that introduced each one. That list is
 the one to trust: a copy here has gone stale after every recent change.
 
 The sibling corpus carries two blocks of its own:
-
-- `../kr32/examples/matrix.cpp` is blocked on the KR32 matrix intrinsics
-  declared by `kr32/matrix.hpp` (`matrix_mul`, `transpose`, vector ops).
-- `../kr32/examples/FileOpen.cpp` is blocked on `sys_open_dialog`, which is not
-  declared or implemented.
-
 ## Corpus notes
 
-Measured by compiling with `krc -c`, linking with `libkrcrt.kro`, `fileio.s`,
-and `crt0.s`, and running each image under `..\kr32`'s VM: **13 of 15 examples
-compile, link, and run.** Exit codes matched what each program returns for
-`hello.c`, `strings.c`, `types.c`, `varargs.c`, `libc-test.c`, `floats.c`,
-`fileio.c`, `mainentry.c` (all 0), `hello.cpp` (42), and `cxx_tls.cpp` (42, the
-value its `long long` division is meant to produce).
+Measured by compiling with `krc -c`, linking with `libkrcrt.kro`, `fileio.s`
+and `crt0.s`, and running each image under `..\kr32`'s VM: **14 of 15 examples
+build, and 11 of those run with the status their `main` returns.** Those eleven
+are `hello.c`, `strings.c`, `types.c`, `varargs.c`, `libc-test.c`, `floats.c`,
+`fileio.c`, `mainentry.c` (all 0), `hello.cpp` (42), `cxx_libc.cpp` (0) and
+`cxx_tls.cpp` (42, the value its `long long` division is meant to produce).
 
 Not green, and why:
 
-- `FileOpen.cpp` — does not compile: `implicit declaration of function
-  'sys_open_dialog'`.
-- `matrix.cpp` — does not compile: `expression is not an lvalue` at line 66.
-- `binarytree.c` and `balanced-tree.cpp` run but halt with statuses 115 and 36
-  and print no tree. This is a krc code-generation defect, not a VM or program
-  defect: the same source built with `kr32.exe build` runs correctly, which
-  makes `../kr32` a reference oracle. `implementation.md` carries the narrowed
-  evidence, the reduced reproducers, and the hypotheses already eliminated. The
-  reproducers are regenerated in one step: copy `../kr32/examples/binarytree.c`
-  and keep only the first 20 `root = insert(root, ...)` lines (passes) or the
-  first 22 (fails). They live untracked under `build/corpus`, which the gates do
-  not delete, but nothing in the repository depends on that.
-
-Compile pattern used:
-
-```pwsh
-krc.exe -c ..\kr32\examples\<file> `
-  -I sysroot\include -I ..\kr32\include `
-  --sysroot build\windows-msvc-debug\stage\sysroot\kr32 `
-  -o build\corpus\<file>.kro
-```
-
-Link pattern used `build\windows-msvc-debug\stage\sysroot\kr32\lib\libkrcrt.kro`
-plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
-
+- `binarytree.c` and `balanced-tree.cpp` run but halt with statuses 115 and
+  108 (the second varies between builds) and print no tree. This is a krc
+  code-generation defect, not a VM or program defect: the same source built
+  with `kr32.exe build` runs correctly, which makes `../kr32` a reference
+  oracle. `implementation.md` carries the narrowed evidence, the reduced
+  reproducers, and the hypotheses already eliminated.
+- `matrix.cpp` builds but does not link: `transform` is a compiler intrinsic
+  in the sibling front end, lowering to MLOAD, MMUL, MVEC, MTRANS and MSTORE
+  tile instructions. Implementing them is a capability, not a fix.
+- `FileOpen.cpp` builds and links since the `sys_open_dialog` host service was
+  added to `targets/kr32/runtime/fileio.s` and declared in `sysroot/include/stdio.h`.
 ## Traps that have caused real failures
 
 - **Test-name and fixture collisions.** Before adding a fixture or `add_test`,
@@ -220,7 +194,6 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
   build directories and rerun cleanly.
 - **Final gate record.** After the gate, `git diff --check`, commit the record,
   confirm `master` equals `origin/master`, then push.
-
 ## Suggested next actions
 
 1. Give the corpus tree defect one static attempt, but not by diffing assembly:
@@ -241,7 +214,6 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
    `S object;` and `S x(5);` goes unchecked — RTTI, exceptions, variadic
    templates, dynamic TLS, the `std` containers, KR16 libc/file I/O, and
    matrix/host intrinsics.
-
 ## Goal recommendation
 
 Keep the objective **“Proceed with implementation of M0 thru M10.”** If the new
