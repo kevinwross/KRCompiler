@@ -1878,6 +1878,19 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                      left->is_const)) {
             error(expression.location, "assignment to a non-modifiable lvalue");
         }
+        // A member of a const object is not assignable even though the member's
+        // own type carries no qualifier.
+        if (expression.children[0]->kind == AstKind::MemberExpression &&
+            !expression.children[0]->children.empty() &&
+            expression.children[0]->children.front()) {
+            auto base = analyze_expression(*expression.children[0]->children.front());
+            if (base && base->kind == TypeKind::Pointer) {
+                base = base->element;
+            }
+            if (base && base->kind == TypeKind::Record && base->is_const) {
+                error(expression.location, "assignment to a member of a const object");
+            }
+        }
         return left;
     }
     case AstKind::ConditionalExpression: {

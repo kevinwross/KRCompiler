@@ -4202,6 +4202,20 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/longlong_conditional_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_cxx_const_member_assign
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/const_member_assign.cpp
+                "-DEXPECT=assignment to a member of a const object"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
+    add_test(NAME krc_cxx_const_pointer_member_assign
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/const_pointer_member_assign.cpp
+                "-DEXPECT=assignment to a member of a const object"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
     add_test(NAME krc_link_delete_null
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
