@@ -217,12 +217,13 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
 
 ## Suggested next actions
 
-1. Give the corpus tree defect one assembly-level attempt: krc's `print_tree`
-   and `insert` against the reference build from `../kr32`, comparing the
-   recursive prologue/epilogue and how a variadic call's outgoing arguments are
-   placed. Seven rounds of behavioural probing produced no fix; static
-   comparison is the untried method. If it does not converge quickly, escalate
-   it as a known wrong-code defect and move on.
+1. Give the corpus tree defect one static attempt, but not by diffing assembly:
+   `kr32.exe build` accepts a C file and emits only an image — it has no assembly
+   output, so the reference cannot be diffed textually. Read the reference
+   compiler's frame conventions in `../kr32/src/cc` instead, or bisect
+   behaviourally on the reference build. Seven rounds of probing krc alone
+   produced no fix; something has to constrain the search. If it does not
+   converge quickly, escalate it as a known wrong-code defect and move on.
 2. Then RTTI: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
    plan §10.4. The executed-test harness can verify it end to end.
 3. Remaining backlog: deleted constructors at construction sites (needs
