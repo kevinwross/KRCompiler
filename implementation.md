@@ -467,7 +467,8 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - RTTI works over the vtable/typeinfo layout ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)). Vtables are weak `_ZTV<Class>` globals whose word 0 is `_ZTI<Class>`, so an object's vptr points at the first virtual slot and the RTTI pointer is one slot back. `_ZTI` carries the name, flags, and the base typeinfo, which is the chain `dynamic_cast` walks. `typeid` yields the object's dynamic typeinfo through a polymorphic glvalue and the static `_ZTI` otherwise; `typeid(a) == typeid(b)` compares typeinfo addresses. `dynamic_cast<T*>` is a bitcast for an upcast and a `__krc_dynamic_cast` call otherwise, returning null when the dynamic type is not the target or derived from it. `krc_link_rtti` and the executed `krc_run_rtti` require exit 42; `krc_cxx_dynamic_cast_reference_rejected` and `krc_cxx_typeid_without_typeinfo` assert the two diagnostics.
 - The per-object `malloc`'d vtable is gone, so polymorphic construction allocates nothing and two objects of one class share one table.
 - Table-driven exceptions work over `.cpp_except` descriptors ([ADR 0026](docs/decisions/0026-exception-descriptors.md)). Every function emits a descriptor with its frame size and protected call sites; the assembly runtime `targets/kr32/runtime/eh.s` holds the naked `__cxa_throw`, the frame walk, and the descriptor scan, and `libc.c` holds the `__cxa_*` bookkeeping and the typeinfo-chain matcher. `try`/`catch`, catch-all, rethrow, a handler two frames above the throw, a base-class handler catching a derived exception, and a throw from inside a handler all work; `krc_run_exceptions` requires exit 42, and an unmatched exception aborts with exit 134.
-- Destructor cleanup on propagation is not implemented, so a `try` or `throw` while a local destructor is pending is rejected with `exception cleanup of automatic objects is not implemented yet` instead of silently skipping the destructor (`krc_cxx_exception_cleanup_unsupported`). `throw` of a scalar is rejected (`krc_cxx_throw_scalar`).- [ ] Full KR32 `libc.c`/`kr32os` and KR16 runtime integration.
+- Destructor cleanup on propagation runs through cleanup landing pads ([ADR 0027](docs/decisions/0027-exception-cleanup.md)). Each lexical scope that owns a destructible object gets a pad that destroys it in reverse construction order and continues into the enclosing pad, so a `try` body's objects are destroyed before its handler runs, nested scopes chain outward, a guard constructed after the throw point is untouched, and the same holds across a function boundary. `krc_run_exception_cleanup` requires exit 42 and folds each guard's index into a counter, so a wrong destruction order fails the run. `throw` of a scalar is still rejected (`krc_cxx_throw_scalar`).
+- [ ] Full KR32 `libc.c`/`kr32os` and KR16 runtime integration.
 - [ ] Tag `v1.1`; Gate G9.
 
 ## 5. Open items and conditions
@@ -488,6 +489,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T11:22:22-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 520/520
+windows-msvc-release  PASS 520/520
+linux-gcc-debug       PASS 508/508
+linux-gcc-release     PASS 508/508
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register twelve tests fewer: the executed tests need a runnable
+KR32 VM and are not registered where the default is a Windows binary. This gate
+covers cleanup landing pads and the chained resumption that runs destructors
+during unwinding ([ADR 0027](docs/decisions/0027-exception-cleanup.md)). Clean
+configure and build of all four presets; no warnings in any log.
 
 ### 2026-11-13T10:56:53-08:00 — host gate (Windows)
 
@@ -2537,3 +2554,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T10:56:20-08:00** — Wrote the unwinder in assembly (`targets/kr32/runtime/eh.s`) with the `__cxa_*` bookkeeping in `libc.c`. Two defects showed up only at run time: the walk restored `SP` to `frame + size + 8`, which is the value the frame had at entry rather than the pad's own stack pointer, and it never moved `R7` to the frame that owns the pad. Both were fixed (`R7 = frame; SETSP R7`), and the base-catch, catch-all, and nested-rethrow probes then returned 42.
 - **2026-11-13T10:56:20-08:00** — Destructor cleanup on propagation is deliberately not implemented. Rather than miscompile a valid program by skipping a destructor, IRGen rejects a protected region or a `throw` while a local destructor is pending, and the ADR records that the next change removes the diagnostic by emitting cleanup regions.
 - **2026-11-13T10:56:20-08:00** — Added `tests/fixtures/c/exceptions.cpp` (six semantics, exit 42), `exception_cleanup.cpp` and `throw_scalar.cpp` for the two diagnostics, and `krc_link_exceptions`/`krc_run_exceptions`. Two test-infrastructure gaps surfaced: `LinkRuntimeTwo.cmake` and `CheckDebugPaths.cmake` link `libkrcrt` without `eh.s`, which broke unrelated two-object tests, and `CheckDiagnostic.cmake` only ran `-fsyntax-only`, so a code-generation restriction could not be asserted; it now accepts `OBJECT` and runs a full compile. Windows debug CTest is 519/519.
+- **2026-11-13T11:21:38-08:00** — Implemented destructor cleanup on propagation, the case ADR 0026 deliberately rejected ([ADR 0027](docs/decisions/0027-exception-cleanup.md)). Every lexical scope that owns a destructible object gets a cleanup landing pad, created on its first such declaration; calls after that point are invokes to it, calls before it stay with the enclosing pad, which is correct because no object of the scope is live yet.
+- **2026-11-13T11:21:38-08:00** — Chained the pads through the existing mechanism rather than adding a personality routine: the `_Unwind_Resume` call inside a cleanup pad is itself an invoke whose region names the enclosing pad, so the next descriptor lookup lands there, and the chain ends at the IR `resume` op when no enclosing pad exists. The descriptor format is unchanged, so ADR 0026's encoding still holds.
+- **2026-11-13T11:21:38-08:00** — Two defects came out of the first run. The cleanup sequence destroyed the scope's objects in declaration order because the pad used a forward snapshot of `local_cleanups_` while the normal path pops from the back; the snapshot is now built in reverse. And a synthetic constructor generated while another function's scopes were live inherited that function's pad, so it branched to a block of the caller and failed the verifier; a pad is now ignored unless its block belongs to the function being emitted.
+- **2026-11-13T11:21:38-08:00** — Replaced the `exception cleanup of automatic objects is not implemented yet` diagnostic and its test with `krc_link_exception_cleanup` and the executed `krc_run_exception_cleanup`, which requires guard 42 and encodes the destruction order into a counter (two guards give 21, nested scopes 65), so a wrong order fails rather than passes. Windows debug CTest is 520/520.
