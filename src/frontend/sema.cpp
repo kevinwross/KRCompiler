@@ -292,12 +292,26 @@ void Sema::check_member_access(const SourceLocation& location, const RecordInfo&
     if (access == AccessLevel::Public) {
         return;
     }
-    // Sema analyzes only free-function bodies, so the only caller that may
-    // reach a non-public member from here is a declared friend. In-class and
-    // out-of-line member bodies never reach this check.
     if (std::find(record.friends.begin(), record.friends.end(), current_function_name_) !=
         record.friends.end()) {
         return;
+    }
+    if (enclosing_record_ != nullptr) {
+        // The defining class reaches its own members, and a class derived from
+        // the declaring one reaches its protected members.
+        if (enclosing_record_ == &record) {
+            return;
+        }
+        if (access == AccessLevel::Protected) {
+            for (auto* base = enclosing_record_->base.get(); base != nullptr;) {
+                const auto* base_record =
+                    base->kind == TypeKind::Record ? base->record.get() : nullptr;
+                if (base_record == &record) {
+                    return;
+                }
+                base = base_record != nullptr ? base_record->base.get() : nullptr;
+            }
+        }
     }
     error(location, "'" + record.tag + "::" + name + "' is " +
                         (access == AccessLevel::Private ? "private" : "protected"));
@@ -1187,6 +1201,17 @@ void Sema::analyze_function_definition(const AstNode& definition) {
 
     const auto saved_function_name = current_function_name_;
     current_function_name_ = name;
+    const auto saved_enclosing_record = enclosing_record_;
+    enclosing_record_ = nullptr;
+    if (const auto separator = name.rfind("::"); separator != std::string::npos) {
+        // An out-of-line definition names its class; give the body that class's
+        // members and a `this` object, which the body may use unqualified.
+        const auto class_name = name.substr(0, separator);
+        auto* tag = lookup_tag(class_name);
+        if (tag != nullptr && tag->type && tag->type->kind == TypeKind::Record) {
+            enclosing_record_ = tag->type->record.get();
+        }
+    }
     const bool saved_auto_return = auto_return_active_;
     auto_return_active_ =
         std::find(specifiers->labels.begin(), specifiers->labels.end(), "auto") !=
@@ -1196,9 +1221,18 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     if (const auto* function = find_function_declarator(*declarator)) {
         analyze_parameters(*function);
     }
-    if (name.find("::") == std::string::npos) {
-        analyze_compound(*body);
+    if (enclosing_record_ != nullptr) {
+        const auto record_type_name = lookup_tag(enclosing_record_->tag);
+        if (record_type_name != nullptr && record_type_name->type) {
+            Symbol self;
+            self.kind = SymbolKind::Variable;
+            self.name = "this";
+            self.type = pointer_to(record_type_name->type);
+            self.location = declarator->location;
+            declare_ordinary(std::move(self));
+        }
     }
+    analyze_compound(*body);
     pop_scope();
     if (auto_return_active_ && auto_return_type_ && type->return_type) {
         auto updated = std::make_shared<Type>(*type);
@@ -1211,6 +1245,7 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     auto_return_active_ = saved_auto_return;
     auto_return_type_ = nullptr;
     current_function_name_ = saved_function_name;
+    enclosing_record_ = saved_enclosing_record;
 }
 
 void Sema::analyze_parameters(const AstNode& function_declarator) {
@@ -1605,6 +1640,25 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         }
         if (auto* symbol = lookup_ordinary(expression.text)) {
             return symbol->type ? symbol->type : int_type_;
+        }
+        // Inside a member body an unqualified name may be a member of the
+        // defining class or one of its bases.
+        for (const auto* record = enclosing_record_; record != nullptr;
+             record = record->base && record->base->record
+                          ? record->base->record.get()
+                          : nullptr) {
+            for (const auto& member : record->members) {
+                if (member.name == expression.text) {
+                    check_member_access(expression.location, *record, member.name,
+                                        member.access);
+                    return member.type;
+                }
+            }
+            for (const auto& method : record->methods) {
+                if (method.name == expression.text) {
+                    return method.type;
+                }
+            }
         }
         error(expression.location, "use of undeclared identifier '" + expression.text + "'");
         return int_type_;

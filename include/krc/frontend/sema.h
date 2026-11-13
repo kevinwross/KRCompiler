@@ -209,6 +209,10 @@ private:
     std::vector<Scope> scopes_;
     std::vector<std::weak_ptr<RecordInfo>> record_infos_;
     std::string current_function_name_;
+    // The class named by an out-of-line member definition (`S::get`), null in a
+    // free function. It gives the body class scope and `this`, and lets the
+    // access check recognize the defining class.
+    RecordInfo* enclosing_record_ = nullptr;
     bool had_error_ = false;
 };
 
