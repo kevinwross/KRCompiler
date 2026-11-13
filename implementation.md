@@ -499,6 +499,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T15:16:49-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 567/567
+windows-msvc-release  PASS 567/567
+linux-gcc-debug       PASS 522/522
+linux-gcc-release     PASS 522/522
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty-five tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers C11 `_Thread_local` and the guarded thread-local initializer.
+
+The Linux release build hit the intermittent GCC 15 garbage-collector
+segfault (`kro_object.cpp` at `-O3`); the rebuild of the same tree finished
+53/53 with no errors and the suite then passed 522/522. `AGENTS.local.md`
+records that this failure is intermittent and that a single rebuild is the
+remedy. No warnings appear in any log.
+
 ### 2026-11-13T14:49:31-08:00 — host gate (Windows)
 
 ```text
@@ -2777,3 +2798,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T14:49:13-08:00** — Gave the debug records source-level names. A member function now appears as `Widget::size`, a constructor as `Widget::Widget`, a destructor as `Widget::~Widget`, and a namespaced class as `Counter::bump`; before this the dump showed the flattened symbol (`Widget_size`, `Widget_ctor_0`). ADR 0030 adds an optional `debug_name` to `ir::Function`, set by IRGen from the class and member it already knows; the backend writes it into the `F` record and the symbol, mangling, object format, and KDBG encoding stay as they were.
 - **2026-11-13T14:49:13-08:00** — A synthesized copy of an inherited method keeps the base's display name, because it is the base's code; the consequence is that a dump can show the same display name twice (a class's own destructor and the library's synthesized one), which is why the ADR says display names are for reading and resolution keeps using the symbol.
 - **2026-11-13T14:49:13-08:00** — `krc_debug_names` links `tests/fixtures/c/debug_names.cpp` and checks the dump for seven display names through the new `cmake/CheckDebugNames.cmake`; `krc_run_debug_names` executes the same image and requires exit 42. The dump also shows `_ZTVWidget`/`_ZTIWidget` as symbols and `Widget`/`Counter` as types with their members, so a debugger can see the class layout, its methods, its vtable, and its typeinfo. Windows debug CTest is 563/563.
+- **2026-11-13T15:16:34-08:00** — Implemented C11 thread storage duration. `_Thread_local` was rejected with "`_Thread_local` is not supported"; it is now accepted as the C spelling of C++'s `thread_local`, and a block-scope thread-local declaration takes the local-static path: static storage plus a guarded initializer, so it is created on first use, once, and survives for the rest of the run. `<threads.h>` still refuses to be included, because guest threads do not exist; the storage class is what the VM can honour.
+- **2026-11-13T15:16:34-08:00** — The guard was missing for both spellings: IRGen's block-scope path tested only for the `static` label, so a `thread_local` object was emitted as an automatic and re-initialized on every call. The path now accepts `static`, `thread_local`, and `_Thread_local`. A C++ probe confirmed the same bug for `thread_local` and now observes one initialization across two calls.
+- **2026-11-13T15:16:34-08:00** — `tests/fixtures/c/thread_local_storage.c` covers a file-scope object that persists, a block-scope object with a dynamic initializer that runs once, and a never-called function whose object is never initialized; `krc_run_thread_local_storage` and `krc_run_kr16_thread_local_storage` require exit 42 on both targets. Destructor registration already worked: a `thread_local` object's destructor runs at exit, which a marker-file probe confirmed. Windows debug CTest is 567/567.
