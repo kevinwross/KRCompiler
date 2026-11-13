@@ -416,7 +416,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - A returned temporary converts implicitly as a call argument (`take(make())`); a linked fixture returns 7.
 - A returned temporary converts implicitly in an assignment (`result = make()`); a linked fixture returns 7.
 - A deleted member function is rejected where it is named: `= delete` is recorded instead of being read as a pure specifier, and a member or qualified call reports `use of deleted function`. `krc_cxx_deleted_function` asserts both the rejection and the message. A deleted constructor or destructor used at a construction or destruction site is still accepted, because constructor selection happens in IR generation rather than Sema.
-- Access control is enforced for free functions: a `class` member is private until an access specifier changes it, `struct` and `union` members are public, and touching a non-public member from a function that is not a friend reports `'S::value' is private` or `is protected`. `krc_cxx_private_member_access` and `krc_cxx_protected_member_access` assert the diagnostics, and a `friend` function still reaches a private member. Sema analyzes only free-function bodies, so access from in-class or out-of-line member bodies is unexamined; friend classes are parsed but not recorded.
+- Access control is enforced for free functions: a `class` member is private until an access specifier changes it, `struct` and `union` members are public, and touching a non-public member from a function that is not a friend reports `'S::value' is private` or `is protected`. `krc_cxx_private_member_access` and `krc_cxx_protected_member_access` assert the diagnostics, and a `friend` function still reaches a private member. Sema analyzes only free-function bodies, so access from in-class or out-of-line member bodies is unexamined; friend classes are parsed but not recorded. Enabling analysis of out-of-line member bodies is blocked on Sema giving them class scope: with the skip removed, nine `krc_link_out_of_line_*` fixtures fail on `use of undeclared identifier` for an unqualified member, and `this` is not a Sema symbol at all.
 - 64-bit integers on KR32 are a low/high word pair: add, subtract, multiply, the bitwise operators, both shift directions, and comparisons lower inline; division and remainder call `__krc_udivdi3`/`__krc_sdivdi3`/`__krc_umoddi3`/`__krc_smoddi3` in `targets/kr32/runtime/libc.c`. A 64-bit argument consumes two argument words and a 64-bit return travels in R0/R1 ([ADR 0023](docs/decisions/0023-kr32-64-bit-integers.md)). `krc_link_longlong_arith` links a fixture whose eight checks set the exit status on failure; that exit status has not been observed on this machine, so the lowering is verified at compile and link level only.
 - A returned temporary converts for comparison against an integer (`make() == 7`) or a double (`make() > 1.0`), for `static_cast<double>`, and for arithmetic (`make() + 1`); linked fixtures return 7 or 8. `auto result = make()` infers the record type; a linked fixture returns 7.
 - `!make()` applies `operator bool` to a materialized returned temporary; a linked fixture returns 7.
@@ -457,6 +457,16 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-12T21:53:45-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 465/465
+windows-msvc-release  PASS 465/465
+linux-gcc-debug       PASS 465/465
+linux-gcc-release     PASS 465/465
+not verified: native Linux x64, Linux ARM64
+```
 
 ### 2026-11-12T11:03:14-08:00 — host gate (Windows)
 
