@@ -27,6 +27,9 @@ struct AssembledRelocation {
 struct AssemblyResult {
     std::vector<std::uint8_t> text;
     std::vector<std::uint8_t> data;
+    // The `.cpp_except` exception-descriptor section (ADR 0026). It is
+    // allocated read-only memory in the run image, not debug data.
+    std::vector<std::uint8_t> exception;
     std::vector<AssembledSymbol> symbols;
     std::vector<AssembledRelocation> relocations;
 };

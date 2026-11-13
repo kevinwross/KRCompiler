@@ -263,6 +263,20 @@ Kr32Backend::FrameLayout Kr32Backend::layout_function(const ir::Function& functi
         layout.has_return_pointer = true;
         offset += 4;
     }
+    const bool needs_eh_scratch = std::any_of(
+        function.blocks.begin(), function.blocks.end(),
+        [](const std::unique_ptr<ir::BasicBlock>& block) {
+            return std::any_of(block->instructions.begin(), block->instructions.end(),
+                               [](const std::unique_ptr<ir::Instruction>& instruction) {
+                                   return instruction->opcode == ir::Opcode::LandingPad;
+                               });
+        });
+    if (needs_eh_scratch) {
+        offset = static_cast<std::uint32_t>(round_up(offset, 4));
+        layout.eh_scratch = offset;
+        layout.has_eh_scratch = true;
+        offset += 8;
+    }
     for (const auto& parameter : function.parameters) {
         const auto alignment = static_cast<std::uint32_t>(align_of(parameter->type));
         offset = static_cast<std::uint32_t>(round_up(offset, alignment));
@@ -851,6 +865,9 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     for (const auto& helper : wide_division_helpers()) {
         out += "        .extern " + helper + "\n";
     }
+    // Emitted only by a landing pad's resume, but declared unconditionally:
+    // an unused .extern is harmless and keeps the call site simple.
+    out += "        .extern _Unwind_Resume\n";
 
     for (const auto& global : module_.globals()) {
         if (global->external) {
@@ -1014,11 +1031,11 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
         }
     }
 
+    eh_regions_.clear();
     for (const auto& block : function.blocks) {
         out += block_label(function, *block) + ":\n";
         for (const auto& instruction : block->instructions) {
-            if (instruction->debug.valid()) {
-                auto source = debug_sources_.find(instruction->debug.file);
+            if (instruction->debug.valid()) {                auto source = debug_sources_.find(instruction->debug.file);
                 if (source == debug_sources_.end()) {
                     const auto id = next_debug_source_++;
                     source = debug_sources_.emplace(instruction->debug.file, id).first;
@@ -1111,6 +1128,24 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     out += "        ADJSP #" + std::to_string(layout.frame_size) + "\n";
     out += "        POP R7\n";
     out += "        RET\n";
+    out += ".L" + function.name + ".end:\n";
+
+    // The exception descriptor (ADR 0026). Every function gets one, even
+    // without a protected call site, because the unwinder needs the frame size
+    // of every frame it walks.
+    out += "        .cpp_except\n";
+    out += "        .align 4\n";
+    out += "        .word 0x4845524B\n";
+    out += "        .word " + function.name + "\n";
+    out += "        .word .L" + function.name + ".end\n";
+    out += "        .word " + std::to_string(layout.frame_size) + "\n";
+    out += "        .word " + std::to_string(eh_regions_.size()) + "\n";
+    for (const auto& region : eh_regions_) {
+        out += "        .word " + region.start + "\n";
+        out += "        .word " + region.end + "\n";
+        out += "        .word " + region.pad + "\n";
+    }
+    out += "        .text\n";
 }
 
 void Kr32Backend::emit_instruction(std::string& out, const ir::Function& function,
@@ -1470,7 +1505,8 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         }
         out += "        JMP .L" + function.name + ".ret\n";
         break;
-    case ir::Opcode::Call: {
+    case ir::Opcode::Call:
+    case ir::Opcode::Invoke: {
         auto callee_type = instruction.operands[0]->type;
         if (callee_type && callee_type->kind == ir::TypeKind::Pointer) {
             callee_type = callee_type->element;
@@ -1608,6 +1644,14 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 return_destination = slot->second;
             }
         }
+        // An invoke records the call's address and the return address it
+        // pushes, so the unwinder can find the pad for a return address.
+        std::string region_start;
+        if (instruction.opcode == ir::Opcode::Invoke) {
+            region_start = ".Linvoke." + function.name + "." +
+                           std::to_string(eh_regions_.size());
+            out += "        " + region_start + ":\n";
+        }
         if (instruction.operands[0]->kind == ir::ValueKind::Function) {
             if (memory_return) {
                 out += "        LEA R4, [R7 + " + std::to_string(return_destination) +
@@ -1621,6 +1665,15 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                        "]\n";
             }
             out += "        CALL R5\n";
+        }
+        if (instruction.opcode == ir::Opcode::Invoke) {
+            const auto region_end = region_start + ".end";
+            out += "        " + region_end + ":\n";
+            if (instruction.successors.size() >= 2 && instruction.successors[1]) {
+                eh_regions_.push_back(
+                    {region_start, region_end,
+                     block_label(function, *instruction.successors[1])});
+            }
         }
         if (!memory_return && instruction.type && !ir::is_void(instruction.type)) {
             if (ir::is_float(instruction.type)) {
@@ -1644,8 +1697,31 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 store_value(out, function, layout, instruction, "R0");
             }
         }
+        if (instruction.opcode == ir::Opcode::Invoke &&
+            !instruction.successors.empty() && instruction.successors[0]) {
+            out += "        JMP " +
+                   block_label(function, *instruction.successors[0]) + "\n";
+        }
         break;
     }
+    case ir::Opcode::LandingPad:
+        if (!layout.has_eh_scratch) {
+            out += "        HALT ; landing pad has no frame scratch\n";
+            break;
+        }
+        // The unwinder enters here with the exception object pointer in R0 and
+        // its typeinfo in R1 (ADR 0026).
+        out += "        STORE R0, [R7 + " + std::to_string(layout.eh_scratch) + "]\n";
+        out += "        STORE R1, [R7 + " +
+               std::to_string(layout.eh_scratch + 4) + "]\n";
+        out += "        LEA R0, [R7 + " + std::to_string(layout.eh_scratch) + "]\n";
+        store_value(out, function, layout, instruction, "R0");
+        break;
+    case ir::Opcode::Resume:
+        load_value(out, function, layout, instruction.operands[0], "R0");
+        out += "        CALL _Unwind_Resume\n";
+        out += "        HALT ; _Unwind_Resume returned\n";
+        break;
     case ir::Opcode::Intrinsic:
         emit_intrinsic(out, function, layout, instruction);
         break;

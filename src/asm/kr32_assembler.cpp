@@ -18,7 +18,21 @@ namespace krc::asmkr32 {
 
 namespace {
 
-enum class Section { Text, Data };
+enum class Section { Text, Data, Exception };
+
+// The section order make_object() writes, and the index an object's symbol or
+// relocation uses for the section it belongs to.
+std::uint32_t section_index(Section section) {
+    switch (section) {
+    case Section::Text:
+        return 0;
+    case Section::Data:
+        return 1;
+    case Section::Exception:
+        break;
+    }
+    return 2;
+}
 
 enum class ItemKind { Label, Instruction, Bytes, Word, Zero, Align };
 
@@ -526,6 +540,14 @@ bool instruction_layout(const Item& item, bool& extension, std::string& error) {
         }
         return true;
     }
+    if (mnemonic == "SETSP" && operands.size() == 1) {
+        std::uint8_t reg = 0;
+        if (!parse_register(operands[0], reg)) {
+            error = "SETSP expects a register";
+            return false;
+        }
+        return true;
+    }
     if (mnemonic == "ADJSP" && operands.size() == 1) {
         std::int64_t value = 0;
         if (!parse_integer(operands[0], value)) {
@@ -614,6 +636,7 @@ private:
     std::unordered_map<std::string, Section> labels_;
     std::size_t text_size_ = 0;
     std::size_t data_size_ = 0;
+    std::size_t exception_size_ = 0;
     std::uint32_t data_base_ = 0;
 };
 
@@ -666,6 +689,8 @@ bool Assembler::parse(std::string_view source, std::string& error) {
                 section = Section::Text;
             } else if (directive == ".DATA") {
                 section = Section::Data;
+            } else if (directive == ".CPP_EXCEPT") {
+                section = Section::Exception;
             } else if (directive == ".GLOBAL") {
                 global_names_.emplace(std::string(rest));
             } else if (directive == ".WEAK") {
@@ -735,25 +760,33 @@ bool Assembler::parse(std::string_view source, std::string& error) {
 bool Assembler::layout(std::string& error) {
     std::size_t text_offset = 0;
     std::size_t data_offset = 0;
+    std::size_t exception_offset = 0;
+    const auto section_offset = [&](Section which) -> std::size_t& {
+        switch (which) {
+        case Section::Text:
+            return text_offset;
+        case Section::Data:
+            return data_offset;
+        case Section::Exception:
+            break;
+        }
+        return exception_offset;
+    };
     for (auto& item : items_) {
         const auto align_to = [](std::size_t value, std::size_t alignment) {
             return (value + alignment - 1) / alignment * alignment;
         };
         if (item.kind == ItemKind::Label) {
             labels_.emplace(item.name, item.section);
-            item.offset = item.section == Section::Text ? text_offset : data_offset;
+            item.offset = section_offset(item.section);
             continue;
         }
         if (item.kind == ItemKind::Align) {
             std::int64_t alignment = 0;
             parse_integer(item.operands.front(), alignment);
             const auto target = static_cast<std::size_t>(alignment);
-            if (item.section == Section::Text) {
-                text_offset = align_to(text_offset, target);
-            } else {
-                data_offset = align_to(data_offset, target);
-            }
-            item.offset = item.section == Section::Text ? text_offset : data_offset;
+            section_offset(item.section) = align_to(section_offset(item.section), target);
+            item.offset = section_offset(item.section);
             continue;
         }
         if (item.kind == ItemKind::Instruction) {
@@ -762,49 +795,32 @@ bool Assembler::layout(std::string& error) {
                 error = "line " + std::to_string(item.line) + ": " + error;
                 return false;
             }
-            item.offset = item.section == Section::Text ? text_offset : data_offset;
-            if (item.section == Section::Text) {
-                text_offset += extension ? 8 : 4;
-            } else {
-                data_offset += extension ? 8 : 4;
-            }
+            item.offset = section_offset(item.section);
+            section_offset(item.section) += extension ? 8 : 4;
             continue;
         }
-        item.offset = item.section == Section::Text ? text_offset : data_offset;
+        item.offset = section_offset(item.section);
         if (item.kind == ItemKind::Bytes) {
-            const auto size = item.operands.size();
-            if (item.section == Section::Text) {
-                text_offset += size;
-            } else {
-                data_offset += size;
-            }
+            section_offset(item.section) += item.operands.size();
         } else if (item.kind == ItemKind::Word) {
-            const auto size = item.operands.size() * 4;
-            if (item.section == Section::Text) {
-                text_offset += size;
-            } else {
-                data_offset += size;
-            }
+            section_offset(item.section) += item.operands.size() * 4;
         } else {
             std::int64_t size = 0;
             if (!parse_integer(item.operands.front(), size) || size < 0) {
                 error = "line " + std::to_string(item.line) + ": invalid .zero size";
                 return false;
             }
-            if (item.section == Section::Text) {
-                text_offset += static_cast<std::size_t>(size);
-            } else {
-                data_offset += static_cast<std::size_t>(size);
-            }
+            section_offset(item.section) += static_cast<std::size_t>(size);
         }
     }
     text_size_ = text_offset;
     data_size_ = data_offset;
+    exception_size_ = exception_offset;
     data_base_ = static_cast<std::uint32_t>((text_size_ + 3) / 4 * 4);
     for (const auto& item : items_) {
         if (item.kind == ItemKind::Label) {
             const auto label = labels_.find(item.name);
-            if (label != labels_.end()) {
+            if (label != labels_.end() && label->second != Section::Exception) {
                 addresses_[item.name] = static_cast<std::uint32_t>(
                     item.offset + (label->second == Section::Data ? data_base_ : 0));
             }
@@ -833,6 +849,7 @@ bool Assembler::resolve_symbol(std::string_view name, std::uint32_t& address, bo
 bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
     result.text.assign(text_size_, 0);
     result.data.assign(data_size_, 0);
+    result.exception.assign(exception_size_, 0);
 
     const auto emit_word = [&](std::vector<std::uint8_t>& bytes, std::size_t offset,
                                std::uint32_t word) {
@@ -877,7 +894,10 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
     };
 
     for (auto& item : items_) {
-        auto& bytes = item.section == Section::Text ? result.text : result.data;
+        auto& bytes = item.section == Section::Text
+                          ? result.text
+                          : (item.section == Section::Data ? result.data
+                                                           : result.exception);
         if (item.kind == ItemKind::Bytes) {
             for (std::size_t index = 0; index < item.operands.size(); ++index) {
                 std::int64_t value = 0;
@@ -904,7 +924,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                     result.relocations.push_back(
                         {static_cast<std::uint32_t>(item.offset + index * 4),
                          item.operands[index],
-                         item.section == Section::Text ? 0U : 1U});
+                         section_index(item.section)});
                     value = 0;
                 }
                 const auto word = static_cast<std::uint32_t>(value);
@@ -985,7 +1005,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 static_cast<void>(external);
                 result.relocations.push_back(
                     {static_cast<std::uint32_t>(item.offset + 4), memory.symbol,
-                     item.section == Section::Text ? 0U : 1U});
+                     section_index(item.section)});
             }
             if (operands.size() == 3) {
                 std::int64_t stride = 0;
@@ -1030,7 +1050,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 static_cast<void>(external);
                 result.relocations.push_back(
                     {static_cast<std::uint32_t>(item.offset + 4), memory.symbol,
-                     item.section == Section::Text ? 0U : 1U});
+                     section_index(item.section)});
             }
             const auto opcode = (mnemonic.rfind("FLOAD", 0) == 0) ? 0x50 : 0x51;
             encoded = encode_or_fail(
@@ -1083,7 +1103,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 static_cast<void>(external);
                 result.relocations.push_back(
                     {static_cast<std::uint32_t>(item.offset + 4), symbol,
-                     item.section == Section::Text ? 0U : 1U});
+                     section_index(item.section)});
             }
             encoded = encode_or_fail(Opcode::Mov, rd, is_reg ? source_reg : 0, 0, !is_reg,
                                      static_cast<std::int32_t>(value), extension, extension_word);
@@ -1120,6 +1140,8 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                                      false, 0, false, 0);
         } else if (mnemonic == "WRSP") {
             encoded = encode_or_fail(Opcode::Wrsp, rd, 0, 0, false, 0, false, 0);
+        } else if (mnemonic == "SETSP") {
+            encoded = encode_or_fail(Opcode::Setsp, 0, rd, 0, false, 0, false, 0);
         } else if (mnemonic == "JMP" || mnemonic == "CALL" || condition_for(mnemonic)) {
             bool external = false;
             std::uint32_t address = 0;
@@ -1152,7 +1174,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                     static_cast<void>(external);
                     result.relocations.push_back(
                         {static_cast<std::uint32_t>(item.offset + 4), symbol,
-                         item.section == Section::Text ? 0U : 1U});
+                         section_index(item.section)});
                 }
                 encoded = encode_or_fail(mnemonic == "JMP" ? Opcode::Jmp : Opcode::Call, 0, 0, 0,
                                          true, 0, true, address);
@@ -1172,7 +1194,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                     static_cast<void>(external);
                     result.relocations.push_back(
                         {static_cast<std::uint32_t>(item.offset + 4), symbol,
-                         item.section == Section::Text ? 0U : 1U});
+                         section_index(item.section)});
                 }
                 encoded = encode_or_fail(Opcode::Jcond, 0, 0,
                                          static_cast<std::uint8_t>(*condition_for(mnemonic)),
@@ -1199,7 +1221,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                 static_cast<void>(external);
                 result.relocations.push_back(
                     {static_cast<std::uint32_t>(item.offset + 4), memory.symbol,
-                     item.section == Section::Text ? 0U : 1U});
+                     section_index(item.section)});
             }
             auto opcode = opcode_for(mnemonic);
             if (!opcode) {
@@ -1288,7 +1310,7 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
         std::uint64_t offset = address;
         const auto label = labels_.find(name);
         if (label != labels_.end()) {
-            section = label->second == Section::Data ? 1 : 0;
+            section = section_index(label->second);
             for (const auto& item : items_) {
                 if (item.kind == ItemKind::Label && item.name == name) {
                     offset = item.offset;

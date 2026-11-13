@@ -24,7 +24,10 @@ if(NOT second_result EQUAL 0)
     message(FATAL_ERROR "krc failed for ${SOURCE2}")
 endif()
 
-execute_process(COMMAND "${KRLD}" "${object1}" "${object2}" "${LIBC}" "${IO}" "${RUNTIME}"
+get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(exception_runtime "${root}/targets/kr32/runtime/eh.s")
+execute_process(COMMAND "${KRLD}" "${object1}" "${object2}" "${LIBC}" "${IO}"
+                        "${exception_runtime}" "${RUNTIME}"
                         -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)

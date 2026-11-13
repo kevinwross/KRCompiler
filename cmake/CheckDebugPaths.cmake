@@ -14,7 +14,10 @@ if(NOT compile_result EQUAL 0)
     message(FATAL_ERROR "krc failed to compile the debug-path fixture")
 endif()
 
-execute_process(COMMAND "${KRLD}" "${object}" "${LIBC}" "${IO}" "${CRT0}"
+get_filename_component(source_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(exception_runtime "${source_root}/targets/kr32/runtime/eh.s")
+execute_process(COMMAND "${KRLD}" "${object}" "${LIBC}" "${IO}"
+                        "${exception_runtime}" "${CRT0}"
                         "--source-root=${ROOT}" -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)

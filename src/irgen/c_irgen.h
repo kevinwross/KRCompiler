@@ -87,8 +87,27 @@ private:
     [[nodiscard]] bool method_is_virtual(const frontend::RecordInfo& record,
                                          std::string_view name) const;
 
-    [[nodiscard]] Expression emit_expression(const frontend::AstNode& expression);
-    [[nodiscard]] Expression emit_lvalue(const frontend::AstNode& expression);
+    // Every call goes through here so that a call inside a `try` becomes an
+    // invoke: the unwinder enters the landing pad instead of returning, and the
+    // new normal block carries on where the call site left off.
+    ir::Instruction* create_call_instruction(ir::Value* callee,
+                                             std::vector<ir::Value*> arguments,
+                                             ir::TypePtr result_type,
+                                             const std::string& name);
+    // An external runtime entry point, declared on first use.
+    ir::Function* ensure_runtime_function(std::string_view name, ir::TypePtr result,
+                                          const std::vector<ir::TypePtr>& parameters);
+    void emit_try(const frontend::AstNode& statement);
+    void emit_throw(const frontend::AstNode& statement);
+    // The landing pad of the `try` currently being lowered, or null. Set for
+    // the protected body and cleared while the handler itself is emitted.
+    ir::BasicBlock* current_landing_pad_ = nullptr;
+    // Cleanup of automatic objects on propagation is not implemented yet, so a
+    // throw or a protected region while one is live is rejected rather than
+    // miscompiled (ADR 0026).
+    void reject_uncleaned_locals(const frontend::SourceLocation& location,
+                                 const char* operation);
+    [[nodiscard]] Expression emit_expression(const frontend::AstNode& expression);    [[nodiscard]] Expression emit_lvalue(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_condition_expression(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_lambda(const frontend::AstNode& expression);
     void emit_cleanups();

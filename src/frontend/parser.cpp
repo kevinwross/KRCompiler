@@ -1523,6 +1523,12 @@ std::unique_ptr<AstNode> Parser::parse_statement() {
     if (check("{")) {
         return parse_compound_statement();
     }
+    if (cxx_mode_ && check("try")) {
+        return parse_try_statement();
+    }
+    if (cxx_mode_ && check("throw")) {
+        return parse_throw_statement();
+    }
     if (match(";")) {
         return make_ast(AstKind::NullStatement, peek().location);
     }
@@ -2248,6 +2254,45 @@ std::unique_ptr<AstNode> Parser::parse_argument_list() {
         }
     }
     expect(")", "after argument list");
+    return node;
+}
+
+std::unique_ptr<AstNode> Parser::parse_try_statement() {
+    const auto location = peek().location;
+    ++position_;
+    auto node = make_ast(AstKind::TryStatement, location);
+    node->children.push_back(parse_statement());
+    while (check("catch")) {
+        const auto catch_location = peek().location;
+        ++position_;
+        expect("(", "after 'catch'");
+        auto clause = make_ast(AstKind::CatchClause, catch_location);
+        if (match("...")) {
+            // catch-all: no parameter
+        } else {
+            auto specifiers = parse_decl_specifiers();
+            auto declarator = parse_declarator(false);
+            auto parameter =
+                make_ast(AstKind::ParameterDeclaration, catch_location);
+            parameter->children.push_back(std::move(specifiers));
+            parameter->children.push_back(std::move(declarator));
+            clause->children.push_back(std::move(parameter));
+        }
+        expect(")", "after catch parameter");
+        clause->children.push_back(parse_statement());
+        node->children.push_back(std::move(clause));
+    }
+    return node;
+}
+
+std::unique_ptr<AstNode> Parser::parse_throw_statement() {
+    const auto location = peek().location;
+    ++position_;
+    auto node = make_ast(AstKind::ThrowStatement, location);
+    if (!check(";")) {
+        node->children.push_back(parse_expression());
+    }
+    expect(";", "after 'throw'");
     return node;
 }
 

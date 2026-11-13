@@ -266,7 +266,6 @@ enum class FCmpPredicate {
 };
 
 [[nodiscard]] bool is_terminator(Opcode opcode);
-[[nodiscard]] bool is_reserved_v11(Opcode opcode);
 [[nodiscard]] std::string_view opcode_name(Opcode opcode);
 [[nodiscard]] std::string_view icmp_predicate_name(ICmpPredicate predicate);
 [[nodiscard]] std::string_view fcmp_predicate_name(FCmpPredicate predicate);
@@ -411,6 +410,16 @@ public:
                             bool inbounds = false, std::string name = {});
     Instruction* create_call(Value* callee, std::vector<Value*> arguments,
                              TypePtr result_type = nullptr, std::string name = {});
+    // A call that may unwind: the normal successor runs on return, and the
+    // unwinder enters `unwind` instead of returning (ADR 0026).
+    Instruction* create_invoke(Value* callee, std::vector<Value*> arguments,
+                               TypePtr result_type, BasicBlock* normal,
+                               BasicBlock* unwind, std::string name = {});
+    // Entered by the unwinder. Produces a `ptr<i8>` to an eight-byte scratch
+    // holding the exception object pointer at +0 and its typeinfo at +4.
+    Instruction* create_landingpad(std::string name = {});
+    // Continues unwinding with the exception the landing pad received.
+    Instruction* create_resume(Value* exception);
     Instruction* create_intrinsic(Intrinsic intrinsic, TypePtr result_type,
                                   std::vector<Value*> arguments, std::string name = {});
     Instruction* create_br(BasicBlock* destination);

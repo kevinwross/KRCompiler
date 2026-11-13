@@ -29,7 +29,20 @@ private:
         // Where the incoming memory-class return destination (R4) is saved.
         std::uint32_t return_pointer = 0;
         bool has_return_pointer = false;
+        // Eight bytes a landing pad writes the exception object pointer and its
+        // typeinfo into (ADR 0026).
+        std::uint32_t eh_scratch = 0;
+        bool has_eh_scratch = false;
         std::uint32_t frame_size = 0;
+    };
+
+    // One call site that can unwind, as the `.cpp_except` descriptor records
+    // it: the call's address, the return address it pushes, and the pad the
+    // unwinder enters instead of returning.
+    struct EhRegion {
+        std::string start;
+        std::string end;
+        std::string pad;
     };
 
     [[nodiscard]] FrameLayout layout_function(const ir::Function& function) const;
@@ -81,6 +94,8 @@ private:
     [[nodiscard]] std::string escape_string(const std::vector<std::uint8_t>& bytes) const;
     mutable std::size_t compare_label_counter_ = 0;
     mutable std::size_t wide_label_counter_ = 0;
+    // The call sites of the function currently being emitted.
+    mutable std::vector<EhRegion> eh_regions_;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;

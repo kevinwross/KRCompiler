@@ -65,7 +65,13 @@ Itanium-like grammar with the `_Z` prefix; `extern "C"` unmangled; `_ZTV`/`_ZTI`
   - `_ZTI<Class>` is `[0, _ZTS<Class>, flags, base typeinfo]`. The first word is the `type_info` vtable pointer and is zero in this subset, which has no virtual `type_info`. The fourth word is the base class's typeinfo or zero; it is the single-inheritance form `dynamic_cast` walks.
   - `_ZTS<Class>` is the source-level class name as a NUL-terminated byte array.
 - `dynamic_cast<T*>(object)` lowers to `__krc_dynamic_cast(object, &_ZTI<T>)` unless the cast is an upcast, which needs no check; the helper returns the object pointer or null. A reference cast needs `std::bad_cast` and is not supported without exceptions.
-- Exceptions: table-driven descriptors with call-site ranges, landing pads, cleanup actions, and type filters; `__cxa_*` runtime entry points; cross-TU merge by the linker.
+- Exception objects and landing pads ([ADR 0026](decisions/0026-exception-descriptors.md)):
+  - The `.cpp_except` section is allocated read-only memory in the run image, not debug data. The linker merges the objects' sections and defines `__krc_eh_start` and `__krc_eh_end`.
+  - Every function contributes a descriptor: `magic "KREH"`, function start and end, frame size, and a table of protected call sites `{start_pc, end_pc, landing_pad}`. The call's return address is the inclusive upper bound of its region.
+  - `__cxa_throw(object, typeinfo, destructor)` is a naked assembly routine; the unwinder walks the saved `R7` chain using each descriptor's frame size, restores `R7`/`SP` to the frame that owns a landing pad, and enters it with the exception object pointer in `R0` and its typeinfo in `R1`.
+  - The exception object carries a sixteen-byte header below it: typeinfo, destructor, the previously handled exception, and a spare word. `__cxa_allocate_exception`, `__cxa_begin_catch`, `__cxa_end_catch`, `__cxa_rethrow`, and `__cxa_free_exception` maintain it.
+  - A catch clause tests `__krc_eh_matches(thrown_typeinfo, &_ZTI<T>)`, which walks the typeinfo base chain; an unmatched exception resumes at the next frame and aborts with exit status 134 when no frame handles it.
+- Destructor cleanup on propagation and a personality routine are not implemented yet, so the compiler rejects a `try` or `throw` while a local whose destructor must run is live (ADR 0026 records why rejecting is better than skipping the destructor).
 - `-fno-exceptions` is supported; `-fno-rtti` is not implemented yet. The library subset must degrade to abort/terminate.
 
 ## Varargs, TLS, guards, static init
@@ -86,7 +92,8 @@ Itanium-like grammar with the `_Z` prefix; `extern "C"` unmangled; `_ZTV`/`_ZTI`
 - [ ] KR16 aggregate passing, varargs, floating point, `this`, and more than three arguments.
 - [ ] Itanium-like mangling grammar and examples.
 - [ ] Vtable/RTTI layout, including virtual destructors.
-- [ ] EH descriptor encoding and personality routine.
+- [x] EH descriptor encoding and landing-pad convention ([ADR 0026](decisions/0026-exception-descriptors.md)).
+- [ ] EH personality routine, cleanup actions, and type filters.
 - [ ] TCB/TLS layout and guard variables.
 - [ ] Static initialization/destruction order.
 - [ ] Attribute ABI effects per target.

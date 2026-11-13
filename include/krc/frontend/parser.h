@@ -40,6 +40,8 @@ private:
     [[nodiscard]] std::unique_ptr<AstNode> parse_initializer_list();
     [[nodiscard]] std::unique_ptr<AstNode> parse_compound_statement();
     [[nodiscard]] std::unique_ptr<AstNode> parse_statement();
+    [[nodiscard]] std::unique_ptr<AstNode> parse_try_statement();
+    [[nodiscard]] std::unique_ptr<AstNode> parse_throw_statement();
     [[nodiscard]] std::unique_ptr<AstNode> parse_struct_specifier(bool is_union);
     [[nodiscard]] std::unique_ptr<AstNode> parse_enum_specifier();
     [[nodiscard]] std::unique_ptr<AstNode> parse_member_declaration();

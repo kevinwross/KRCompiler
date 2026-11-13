@@ -830,6 +830,66 @@ void *calloc(unsigned int count, unsigned int size) {
     return result;
 }
 
+/*
+ * Exception runtime, ADR 0026. The frame walk and the `.cpp_except` table scan
+ * live in eh.s; these are the allocation and handler bookkeeping entry points.
+ * The exception object carries a sixteen-byte header: typeinfo, destructor,
+ * the previously handled exception, and a spare word. The thrown object starts
+ * at header + 16.
+ */
+extern unsigned char *__krc_current_exception;
+void _Unwind_Resume(void *exception);
+void _Exit(int status);
+
+void *__cxa_allocate_exception(unsigned int size) {
+    unsigned char *block = (unsigned char *)malloc(size + 16);
+    if (block == 0) {
+        return 0;
+    }
+    return block + 16;
+}
+
+void __cxa_free_exception(void *object) {
+    if (object != 0) {
+        free((unsigned char *)object - 16);
+    }
+}
+
+void *__cxa_begin_catch(void *object) {
+    if (object != 0) {
+        __krc_current_exception = (unsigned char *)object - 16;
+    }
+    return object;
+}
+
+void __cxa_end_catch(void) {
+    unsigned char *header = __krc_current_exception;
+    if (header == 0) {
+        return;
+    }
+    __krc_current_exception = *(unsigned char **)(header + 8);
+    free(header);
+}
+
+void __cxa_rethrow(void) {
+    if (__krc_current_exception != 0) {
+        _Unwind_Resume(__krc_current_exception + 16);
+    }
+    _Exit(134);
+}
+
+/* A handler for `candidate` catches a thrown type that is or derives from it. */
+int __krc_eh_matches(void *thrown, void *candidate) {
+    unsigned char *typeinfo = (unsigned char *)thrown;
+    while (typeinfo != 0) {
+        if (typeinfo == (unsigned char *)candidate) {
+            return 1;
+        }
+        typeinfo = *(unsigned char **)(typeinfo + 12);
+    }
+    return 0;
+}
+
 void *realloc(void *pointer, unsigned int size) {
     if (pointer == 0) {
         return malloc(size);

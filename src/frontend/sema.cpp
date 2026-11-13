@@ -1616,6 +1616,55 @@ void Sema::analyze_statement(const AstNode& statement) {
             analyze_expression(*statement.children[1]);
         }
         break;
+    case AstKind::ThrowStatement: {
+        if (statement.children.empty() || !statement.children.front()) {
+            if (handler_depth_ == 0) {
+                error(statement.location,
+                      "'throw;' outside an exception handler is not allowed");
+            }
+            break;
+        }
+        const auto thrown = analyze_expression(*statement.children.front());
+        if (!thrown || thrown->kind != TypeKind::Record || !thrown->record) {
+            error(statement.location, "throw requires a class type");
+        }
+        break;
+    }
+    case AstKind::TryStatement: {
+        if (statement.children.empty() || !statement.children.front()) {
+            break;
+        }
+        analyze_statement(*statement.children.front());
+        for (std::size_t index = 1; index < statement.children.size(); ++index) {
+            const auto* clause = statement.children[index].get();
+            if (!clause || clause->kind != AstKind::CatchClause) {
+                continue;
+            }
+            push_scope();
+            std::size_t body_index = 0;
+            if (!clause->children.empty() && clause->children.front() &&
+                clause->children.front()->kind == AstKind::ParameterDeclaration) {
+                const auto* parameter = clause->children.front().get();
+                const auto type = parameter_type(*parameter);
+                const auto name =
+                    parameter->children.size() > 1 && parameter->children[1]
+                        ? declarator_name(*parameter->children[1])
+                        : std::string{};
+                if (!name.empty() && type) {
+                    declare_ordinary(Symbol{SymbolKind::Variable, name, type,
+                                            parameter->location, true, 0});
+                }
+                body_index = 1;
+            }
+            ++handler_depth_;
+            if (body_index < clause->children.size() && clause->children[body_index]) {
+                analyze_statement(*clause->children[body_index]);
+            }
+            --handler_depth_;
+            pop_scope();
+        }
+        break;
+    }
     case AstKind::RangeForStatement: {
         push_scope();
         TypePtr range_type;

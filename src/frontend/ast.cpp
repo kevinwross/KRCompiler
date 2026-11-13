@@ -79,6 +79,12 @@ std::string_view ast_kind_name(AstKind kind) noexcept {
         return "GotoStatement";
     case AstKind::LabelStatement:
         return "LabelStatement";
+    case AstKind::ThrowStatement:
+        return "ThrowStatement";
+    case AstKind::TryStatement:
+        return "TryStatement";
+    case AstKind::CatchClause:
+        return "CatchClause";
     case AstKind::NullStatement:
         return "NullStatement";
     case AstKind::StaticAssertDeclaration:

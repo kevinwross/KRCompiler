@@ -387,6 +387,14 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     for (const auto& section : image.sections) {
         image_end = std::max(image_end, section.address + section.size);
     }
+    std::uint64_t eh_start = 0;
+    std::uint64_t eh_end = 0;
+    for (const auto& section : image.sections) {
+        if (section.name == ".cpp_except") {
+            eh_start = section.address;
+            eh_end = section.address + section.size;
+        }
+    }
     const auto heap_start = align_up(image_end, 8);
     constexpr std::uint64_t stack_top = 0x08010000;
     constexpr std::uint64_t stack_limit = stack_top - 0x10000;
@@ -395,6 +403,8 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
         {"__heap_end", stack_limit},
         {"__stack_top", stack_top},
         {"__stack_limit", stack_limit},
+        {"__krc_eh_start", eh_start},
+        {"__krc_eh_end", eh_end},
     };
     for (const auto& [name, address] : synthetic) {
         if (definitions.find(name) != definitions.end()) {

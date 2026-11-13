@@ -95,6 +95,14 @@ tree supports:
   `__krc_dynamic_cast` call for anything else. Polymorphic construction
   allocates no table; objects of one class share one. `krc_run_rtti` requires
   exit 42.
+- Table-driven exceptions work across frames
+  ([ADR 0026](docs/decisions/0026-exception-descriptors.md)): `throw`,
+  `try`/`catch`, catch-all, rethrow, and handlers that catch a base of the
+  thrown class. Every function contributes a `.cpp_except` descriptor, the
+  runtime `eh.s` walks the saved `R7` chain using each frame's recorded size,
+  and an unmatched exception aborts with exit 134. `krc_run_exceptions`
+  requires exit 42. Destructor cleanup on propagation is not implemented and
+  is rejected rather than skipped (`krc_cxx_exception_cleanup_unsupported`).
 - A call to a deleted member function is rejected, and access to a non-public
   member from a free function is rejected unless it is a friend.
 - The const and inheritance markers are enforced rather than parsed:
@@ -154,8 +162,8 @@ value in `implementation.md`. Do not claim a runtime result from CTest alone.
 
 ### M10 (the largest gaps)
 
-- Table-driven exceptions and unwinding.
-- Reference `dynamic_cast`, cross-casts, and `-fno-rtti` (the rest of RTTI).
+- Exception cleanup: destructor cleanup on propagation, a personality routine,
+  and reference `dynamic_cast` (needs `std::bad_cast`).
 - Variadic templates and fold expressions.
 - Per-thread dynamic TLS. `thread_local` currently aliases static storage.
 - `memory`, `tuple`, `functional`, `array`.
@@ -205,10 +213,14 @@ Compile, link and run pattern used:
 krc.exe -c ..\kr32\examples\<file> -o build\corpus\<file>.kro `
   -I sysroot\include -I ..\kr32\include --sysroot build\windows-msvc-debug\stage\sysroot\kr32
 krld.exe build\corpus\<file>.kro `
-  build\windows-msvc-debug\stage\sysroot\kr32\lib\libkrcrt.kro targets\kr32\runtime\fileio.s `
+  build\windows-msvc-debug\stage\sysroot\kr32\lib\libkrcrt.kro `
+  targets\kr32\runtime\fileio.s targets\kr32\runtime\eh.s `
   build\windows-msvc-debug\stage\sysroot\kr32\lib\crt0.s --source-root=. -o build\corpus\<file>.k32
 ..\kr32\build\windows-msvc\Debug\kr32.exe vm build\corpus\<file>.k32 --max-steps 20000000
 ```
+
+`eh.s` is the exception runtime and belongs in every KR32 image; the CTest link
+scripts append it themselves.
 
 A run leaves `host-output.txt` in the project root; delete it before committing.
 
@@ -248,18 +260,33 @@ its run waits for the host file dialog instead of returning.
   confirm `master` equals `origin/master`, then push.
 ## Suggested next actions
 
-1. Table-driven exceptions and unwinding next: the largest remaining M10 hole.
-   Write the EH descriptor ADR (plan §10.4 names `__cxa_*` entry points and a
-   personality routine) before code. Reference casts and `std::bad_cast` — the
-   two things RTTI leaves out — arrive with exceptions.
+1. Destructor cleanup on propagation — the piece ADR 0026 deliberately left
+   out, and the one that makes exceptions usable with objects that own
+   resources. It needs cleanup regions in the descriptor, a cleanup landing pad
+   that runs the live destructors and calls `_Unwind_Resume`, and then removing
+   the `exception cleanup of automatic objects is not implemented yet`
+   diagnostic. Reference `dynamic_cast` arrives with the same work, because a
+   failed reference cast throws `std::bad_cast`.
 2. Then variadic templates and fold expressions, per-thread dynamic TLS, the
    `std` containers (`memory`, `tuple`, `functional`, `array`), KR16
    libc/file I/O, and the broader host-service ABI.
-3. Build out RTTI's remaining surface when the EH work lands: reference
-   `dynamic_cast`, cross-casts, and `-fno-rtti`.
 
 Matrix intrinsics are done: `matrix.cpp` links and runs to 42, so the corpus has
 no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
+
+## Known gaps in exception handling
+
+- Destructor cleanup on propagation is not implemented; the compiler rejects a
+  `try` or `throw` while a local destructor is pending.
+- There is no personality routine: the landing pad matches catch clauses itself,
+  and the descriptor hands the runtime only the pad address.
+- A handler that ends in a throw skips its `__cxa_end_catch`, so the exception
+  object leaks and the current-exception link is not restored.
+- `throw` accepts a class object only; scalars and pointers are rejected.
+- `throw` is a statement, not an expression; `noexcept` and exception
+  specifications are not supported.
+- Exception state is a single global; the VM is single-threaded for the
+  supported subset.
 
 ## Known gaps in the matrix support
 

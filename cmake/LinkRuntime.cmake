@@ -32,6 +32,13 @@ endif()
 if(DEFINED IO AND NOT IO STREQUAL "")
     list(APPEND extra_objects "${IO}")
 endif()
+# The exception runtime is self-contained assembly (ADR 0026): linking it into
+# an image that never throws costs a few hundred bytes and keeps the link
+# recipe uniform.
+get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+if(EXISTS "${root}/targets/kr32/runtime/eh.s")
+    list(APPEND extra_objects "${root}/targets/kr32/runtime/eh.s")
+endif()
 get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 execute_process(COMMAND "${KRLD}" "${object}" ${extra_objects} "${RUNTIME}"
                         "--source-root=${root}" -o "${OUTPUT}"

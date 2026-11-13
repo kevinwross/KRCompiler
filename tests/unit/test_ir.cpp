@@ -111,17 +111,39 @@ TEST_CASE("IR verifier checks phi predecessors and dominance") {
     CHECK(error.empty());
 }
 
-TEST_CASE("IR verifier rejects a reserved v1.1 opcode") {
-    FunctionFixture fixture;
-    IRBuilder builder(fixture.module.types());
-    builder.set_insert_point(fixture.entry);
-    auto* invoke = builder.create(Opcode::Invoke, fixture.module.types().void_type(), {});
-    CHECK(invoke->opcode == Opcode::Invoke);
+TEST_CASE("IR verifies an invoke with a landing pad and resume") {
+    Module module(krc::target::TargetId::Kr32);
+    TypeContext& types = module.types();
+    const auto i32 = types.int_type(32);
+    const auto void_type = types.void_type();
+    auto* callee = module.add_function("callee", types.function_type(void_type, {}),
+                                       Linkage::External, true);
+    auto* caller = module.add_function("caller", types.function_type(i32, {}),
+                                      Linkage::External);
+    auto* entry = caller->add_block("entry");
+    auto* normal = caller->add_block("normal");
+    auto* pad = caller->add_block("pad");
+
+    IRBuilder builder(types);
+    builder.set_insert_point(entry);
+    builder.create_invoke(callee, {}, void_type, normal, pad);
+    builder.set_insert_point(normal);
+    builder.create_ret(module.constant_int(i32, 7));
+    builder.set_insert_point(pad);
+    auto* landing = builder.create_landingpad("exception");
+    builder.create_resume(landing);
 
     Verifier verifier;
     std::string error;
-    CHECK_FALSE(verifier.verify(fixture.module, error));
-    CHECK(error.find("v1.1") != std::string::npos);
+    CHECK(verifier.verify(module, error));
+    CHECK(error.empty());
+
+    std::ostringstream out;
+    print_module(module, out);
+    CHECK(out.str().find("invoke void @callee() to label %normal unwind label %pad") !=
+          std::string::npos);
+    CHECK(out.str().find("landingpad ptr<i8>") != std::string::npos);
+    CHECK(out.str().find("resume %exception") != std::string::npos);
 }
 
 TEST_CASE("IR printer is deterministic") {

@@ -440,11 +440,6 @@ bool is_terminator(Opcode opcode) {
     }
 }
 
-bool is_reserved_v11(Opcode opcode) {
-    return opcode == Opcode::Invoke || opcode == Opcode::LandingPad ||
-           opcode == Opcode::Resume;
-}
-
 std::string_view opcode_name(Opcode opcode) {
     switch (opcode) {
     case Opcode::Add:
@@ -950,6 +945,35 @@ Instruction* IRBuilder::create_intrinsic(Intrinsic intrinsic, TypePtr result_typ
     return instruction;
 }
 
+Instruction* IRBuilder::create_invoke(Value* callee, std::vector<Value*> arguments,
+                                      TypePtr result_type, BasicBlock* normal,
+                                      BasicBlock* unwind, std::string name) {
+    TypePtr function_type = callee ? callee->type : nullptr;
+    if (function_type && function_type->kind == TypeKind::Pointer) {
+        function_type = function_type->element;
+    }
+    if (!result_type && function_type && function_type->kind == TypeKind::Function) {
+        result_type = function_type->return_type;
+    }
+    std::vector<Value*> operands;
+    operands.push_back(callee);
+    operands.insert(operands.end(), arguments.begin(), arguments.end());
+    auto* instruction = create(Opcode::Invoke, std::move(result_type),
+                               std::move(operands), std::move(name));
+    instruction->successors.push_back(normal);
+    instruction->successors.push_back(unwind);
+    return instruction;
+}
+
+Instruction* IRBuilder::create_landingpad(std::string name) {
+    const auto pointer = types_.pointer_type(types_.int_type(8));
+    return create(Opcode::LandingPad, pointer, {}, std::move(name));
+}
+
+Instruction* IRBuilder::create_resume(Value* exception) {
+    return create(Opcode::Resume, types_.void_type(), {exception});
+}
+
 Instruction* IRBuilder::create_br(BasicBlock* destination) {
     auto* instruction = create(Opcode::Br, types_.void_type(), {});
     instruction->successors.push_back(destination);
@@ -1279,13 +1303,33 @@ void print_instruction(std::ostream& out, const Instruction& instruction) {
         }
         break;
     case Opcode::Invoke:
-    case Opcode::LandingPad:
-    case Opcode::Resume:
-        out << opcode_name(instruction.opcode);
-        for (std::size_t index = 0; index < instruction.operands.size(); ++index) {
-            out << ' ';
+        out << "invoke " << type_to_string(instruction.type) << ' ';
+        print_operand(0);
+        out << '(';
+        for (std::size_t index = 1; index < instruction.operands.size(); ++index) {
+            if (index != 1) {
+                out << ", ";
+            }
+            if (operand(index) && operand(index)->type) {
+                out << type_to_string(operand(index)->type) << ' ';
+            }
             print_operand(index);
         }
+        out << ") to label %";
+        if (!instruction.successors.empty() && instruction.successors[0]) {
+            print_block_label(out, instruction.successors[0]);
+        }
+        out << " unwind label %";
+        if (instruction.successors.size() > 1 && instruction.successors[1]) {
+            print_block_label(out, instruction.successors[1]);
+        }
+        break;
+    case Opcode::LandingPad:
+        out << "landingpad " << type_to_string(instruction.type);
+        break;
+    case Opcode::Resume:
+        out << "resume ";
+        print_operand(0);
         break;
     }
     print_debug(out, instruction.debug);
@@ -1520,9 +1564,6 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                 if (is_terminator(instruction.opcode) &&
                     index + 1 != block->instructions.size()) {
                     return function_fail("instruction appears after a terminator");
-                }
-                if (is_reserved_v11(instruction.opcode)) {
-                    return function_fail("uses a v1.1-only opcode");
                 }
                 if (!instruction.type) {
                     return function_fail("instruction has no result type");
@@ -1898,7 +1939,8 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                         return function_fail("memset has invalid operand types");
                     }
                     break;
-                case Opcode::Call: {
+                case Opcode::Call:
+                case Opcode::Invoke: {
                     if (operands.empty() || !check_operand_types()) {
                         return false;
                     }
@@ -1926,8 +1968,34 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                     if (!same_type(instruction.type, callee_type->return_type)) {
                         return function_fail("call result type mismatch");
                     }
+                    // An invoke has a normal edge and the landing pad the
+                    // unwinder enters instead of returning.
+                    if (instruction.opcode == Opcode::Invoke &&
+                        !check_successors(instruction, 2)) {
+                        return false;
+                    }
                     break;
                 }
+                case Opcode::LandingPad:
+                    // Entered by the unwinder through an invoke's unwind edge,
+                    // so it must open its block and that block takes no
+                    // ordinary branch.
+                    if (!require_operands(0) || !is_pointer(instruction.type)) {
+                        return function_fail("landingpad must produce a pointer");
+                    }
+                    if (instruction_index != 0) {
+                        return function_fail("landingpad must open its block");
+                    }
+                    break;
+                case Opcode::Resume:
+                    if (!require_operands(1) || !check_operand_types()) {
+                        return false;
+                    }
+                    if (!is_pointer(operands[0]->type) ||
+                        !is_void(instruction.type)) {
+                        return function_fail("resume takes a pointer and produces void");
+                    }
+                    break;
                 case Opcode::Intrinsic: {
                     if (!check_operand_types()) {
                         return false;
@@ -2111,10 +2179,6 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                     }
                     break;
                 }
-                case Opcode::Invoke:
-                case Opcode::LandingPad:
-                case Opcode::Resume:
-                    return function_fail("uses a v1.1-only opcode");
                 }
                 ++instruction_index;
             }

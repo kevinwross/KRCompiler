@@ -256,7 +256,7 @@ ir::Function* CIRGen::ensure_default_constructor(
                 ir::Opcode::BitCast, base_constructor->type->parameters[0],
                 {base_self}, "implicit.base.this");
         }
-        builder_.create_call(base_constructor, {base_self}, nullptr,
+        create_call_instruction(base_constructor, {base_self}, nullptr,
                              "implicit.base.ctor");
     }
     std::size_t field_position = 0;
@@ -316,7 +316,7 @@ ir::Function* CIRGen::ensure_default_constructor(
                             element_constructor->type->parameters[0],
                             {member_self}, "implicit.member.this");
                     }
-                    builder_.create_call(element_constructor, {member_self},
+                    create_call_instruction(element_constructor, {member_self},
                                          nullptr, "implicit.member.ctor");
                 }
             }
@@ -327,7 +327,7 @@ ir::Function* CIRGen::ensure_default_constructor(
                     ir::Opcode::BitCast, constructor->type->parameters[0],
                     {member_self}, "implicit.member.this");
             }
-            builder_.create_call(constructor, {member_self}, nullptr,
+            create_call_instruction(constructor, {member_self}, nullptr,
                                  "implicit.member.ctor");
         }
         field_position++;
@@ -454,7 +454,7 @@ ir::Function* CIRGen::ensure_member_destructor(
                 own_destructor->type->parameters[0], {self},
                 "own.dtor.this");
         }
-        builder_.create_call(own_destructor, {self}, nullptr, "own.dtor");
+        create_call_instruction(own_destructor, {self}, nullptr, "own.dtor");
     }
     const auto field_offset =
         type->fields.size() - record->members.size();
@@ -481,7 +481,7 @@ ir::Function* CIRGen::ensure_member_destructor(
                         entry_it->function->type->parameters[0], {self},
                         "member.dtor.this");
                 }
-                builder_.create_call(entry_it->function, {self}, nullptr,
+                create_call_instruction(entry_it->function, {self}, nullptr,
                                      "member.dtor");
             };
         if (entry_it->count <= 1) {
@@ -525,7 +525,7 @@ ir::Function* CIRGen::ensure_member_destructor(
                 base_destructor->type->parameters[0], {self},
                 "base.dtor.this");
         }
-        builder_.create_call(base_destructor, {self}, nullptr,
+        create_call_instruction(base_destructor, {self}, nullptr,
                              "base.dtor");
     }
     builder_.create_ret(nullptr);
@@ -583,7 +583,7 @@ void CIRGen::generate_global_constructors() {
                             base_constructor->type->parameters[0], {self},
                             "global.base.ctor.this");
                     }
-                    builder_.create_call(base_constructor, {self}, nullptr,
+                    create_call_instruction(base_constructor, {self}, nullptr,
                                          "global.base.ctor");
                 }
             }
@@ -649,7 +649,7 @@ void CIRGen::generate_global_constructors() {
                                             ->parameters[0],
                                         {self}, "global.member.ctor.this");
                                 }
-                                builder_.create_call(
+                                create_call_instruction(
                                     element_constructor, {self}, nullptr,
                                     "global.member.ctor");
                             }
@@ -675,7 +675,7 @@ void CIRGen::generate_global_constructors() {
                         member_constructor->type->parameters[0], {self},
                         "global.member.this");
                 }
-                builder_.create_call(member_constructor, {self}, nullptr,
+                create_call_instruction(member_constructor, {self}, nullptr,
                                      "global.member.ctor");
             }
             builder_.create_ret(nullptr);
@@ -726,7 +726,7 @@ void CIRGen::generate_global_constructors() {
             }
             arguments.push_back(argument.value);
         }
-        builder_.create_call(constructor, std::move(arguments), nullptr,
+        create_call_instruction(constructor, std::move(arguments), nullptr,
                              "global.ctor");
         builder_.create_ret(nullptr);
         scopes_ = std::move(previous_scopes);
@@ -829,7 +829,7 @@ void CIRGen::generate_global_constructors() {
                                        destructor->type->parameters[0],
                                        {self}, "global.dtor.this");
             }
-            builder_.create_call(destructor, {self}, nullptr, "global.dtor");
+            create_call_instruction(destructor, {self}, nullptr, "global.dtor");
         }
         const auto type = info.global->element_type;
         const auto field_offset =
@@ -898,7 +898,7 @@ void CIRGen::generate_global_constructors() {
                         found->second->type->parameters[0], {member_self},
                         "global.member.dtor.this");
                 }
-                builder_.create_call(found->second, {member_self}, nullptr,
+                create_call_instruction(found->second, {member_self}, nullptr,
                                      "global.member.dtor");
                 auto* next = builder_.create_add(
                     index, module_->constant_int(int_type(), 1),
@@ -943,7 +943,7 @@ void CIRGen::generate_global_constructors() {
                     found->second->type->parameters[0], {member_self},
                     "global.member.dtor.this");
             }
-            builder_.create_call(found->second, {member_self}, nullptr,
+            create_call_instruction(found->second, {member_self}, nullptr,
                                  "global.member.dtor");
         }
         if (base_destructor) {
@@ -955,7 +955,7 @@ void CIRGen::generate_global_constructors() {
                     base_destructor->type->parameters[0], {base_self},
                     "global.base.dtor.this");
             }
-            builder_.create_call(base_destructor, {base_self}, nullptr,
+            create_call_instruction(base_destructor, {base_self}, nullptr,
                                  "global.base.dtor");
         }
         builder_.create_ret(nullptr);
@@ -1007,7 +1007,7 @@ void CIRGen::generate_global_constructors() {
                                    destructor->type->parameters[0], {self},
                                    "static.dtor.this");
         }
-        builder_.create_call(destructor, {self}, nullptr, "static.dtor");
+        create_call_instruction(destructor, {self}, nullptr, "static.dtor");
         builder_.create_ret(nullptr);
         scopes_ = std::move(previous_scopes);
         current_function_ = previous_function;
@@ -1030,7 +1030,7 @@ void CIRGen::generate_global_constructors() {
     builder_.set_insert_point(entry);
     push_scope();
     for (auto* constructor : constructors) {
-        builder_.create_call(constructor, {}, nullptr, "init.global");
+        create_call_instruction(constructor, {}, nullptr, "init.global");
     }
     for (const auto& info : global_initializers_) {
         if (!info.global || !info.expression) {
@@ -1073,7 +1073,7 @@ void CIRGen::generate_global_constructors() {
         push_scope();
         for (auto destructor = destructors.rbegin();
              destructor != destructors.rend(); ++destructor) {
-            builder_.create_call(*destructor, {}, nullptr, "destroy.global");
+            create_call_instruction(*destructor, {}, nullptr, "destroy.global");
         }
         builder_.create_ret(nullptr);
         scopes_ = std::move(previous_destroy_scopes);
@@ -1107,16 +1107,16 @@ void CIRGen::generate_global_constructors() {
     builder_.reset_value_names();
     builder_.set_insert_point(wrapper_entry);
     push_scope();
-    builder_.create_call(init_function, {}, nullptr, "init.globals");
+    create_call_instruction(init_function, {}, nullptr, "init.globals");
     std::vector<ir::Value*> arguments;
     for (const auto& parameter : wrapper->parameters) {
         arguments.push_back(parameter.get());
     }
-    auto* call = builder_.create_call(user_main, std::move(arguments),
+    auto* call = create_call_instruction(user_main, std::move(arguments),
                                       user_main->type->return_type,
                                       "user.main");
     if (destroy_function) {
-        builder_.create_call(destroy_function, {}, nullptr,
+        create_call_instruction(destroy_function, {}, nullptr,
                              "destroy.globals");
     }
     if (ir::is_void(user_main->type->return_type)) {
@@ -2225,7 +2225,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                         base_constructor->type->parameters[0],
                         {self_value}, "ctor.base.cast");
                 }
-                builder_.create_call(base_constructor, {self_value},
+                create_call_instruction(base_constructor, {self_value},
                                      nullptr, "ctor.base.default");
             }
         }
@@ -2265,7 +2265,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                     constructor->type->parameters[0], {self},
                     "ctor.member.this");
             }
-            builder_.create_call(constructor, {self}, nullptr,
+            create_call_instruction(constructor, {self}, nullptr,
                                  "ctor.member.default");
         }
     }
@@ -2321,7 +2321,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                         }
                         arguments.push_back(argument.value);
                     }
-                    builder_.create_call(constructor, std::move(arguments), nullptr,
+                    create_call_instruction(constructor, std::move(arguments), nullptr,
                                          "delegate.ctor");
                 } else {
                     error(initializer->location,
@@ -2376,7 +2376,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                     }
                     arguments.push_back(argument.value);
                 }
-                builder_.create_call(constructor, std::move(arguments), nullptr,
+                create_call_instruction(constructor, std::move(arguments), nullptr,
                                      "member.ctor");
                 continue;
             }
@@ -2471,6 +2471,12 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
     switch (statement.kind) {
     case frontend::AstKind::CompoundStatement:
         emit_compound(statement);
+        break;
+    case frontend::AstKind::ThrowStatement:
+        emit_throw(statement);
+        break;
+    case frontend::AstKind::TryStatement:
+        emit_try(statement);
         break;
     case frontend::AstKind::Declaration:
         emit_declaration(statement);
@@ -2771,7 +2777,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
                                 method->second->type->parameters[0],
                                 {self}, "switch.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self},
                             method->second->type->return_type,
                             "switch.conversion");
@@ -2979,7 +2985,7 @@ void CIRGen::emit_cleanups_to(std::size_t mark) {
                     cleanup.destructor->type->parameters[0], {address},
                     "dtor.this");
             }
-            builder_.create_call(cleanup.destructor, {address}, nullptr,
+            create_call_instruction(cleanup.destructor, {address}, nullptr,
                                  "dtor.call");
             continue;
         }
@@ -3009,7 +3015,7 @@ void CIRGen::emit_cleanups_to(std::size_t mark) {
                 ir::Opcode::BitCast, cleanup.destructor->type->parameters[0],
                 {address}, "dtor.this");
         }
-        builder_.create_call(cleanup.destructor, {address}, nullptr,
+        create_call_instruction(cleanup.destructor, {address}, nullptr,
                              "dtor.call");
         auto* next = builder_.create_add(
             index, module_->constant_int(int_type(), 1), "dtor.next");
@@ -3257,7 +3263,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                             }
                             arguments.push_back(argument.value);
                         }
-                        builder_.create_call(constructor,
+                        create_call_instruction(constructor,
                                              std::move(arguments), nullptr,
                                              "static.ctor");                        emit_branch(end_block);
                         builder_.set_insert_point(end_block);
@@ -3326,7 +3332,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                 "static.array.element");
                             element->type =
                                 module_->types().pointer_type(type->element);
-                            builder_.create_call(constructor, {element},
+                            create_call_instruction(constructor, {element},
                                                  nullptr, "static.array.ctor");
                         }
                         emit_branch(end_block);
@@ -3548,7 +3554,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                             "array.element");
                         element->type =
                             module_->types().pointer_type(type->element);
-                        builder_.create_call(constructor, {element}, nullptr,
+                        create_call_instruction(constructor, {element}, nullptr,
                                              "array.constructor");
                     }
                 }
@@ -3716,7 +3722,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 }
                 arguments.push_back(argument.value);
             }
-            builder_.create_call(constructor, std::move(arguments), nullptr, "ctor.call");
+            create_call_instruction(constructor, std::move(arguments), nullptr, "ctor.call");
         } else if (init->children.size() > 1 && init->children[1]) {
             bool copied = false;
             bool move_source = false;
@@ -3753,7 +3759,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                 copy_constructor->type->parameters[0],
                                 {arguments[0]}, "ctor.this");
                         }
-                        builder_.create_call(copy_constructor, std::move(arguments),
+                        create_call_instruction(copy_constructor, std::move(arguments),
                                              nullptr, "copy.ctor");
                         copied = true;
                     }
@@ -3782,7 +3788,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                         ir::Opcode::BitCast, constructor->type->parameters[0],
                         {constructor_this}, "ctor.this");
                 }
-                builder_.create_call(constructor, {constructor_this}, nullptr, "ctor.call");
+                create_call_instruction(constructor, {constructor_this}, nullptr, "ctor.call");
             } else if (record != ir_records_.end()) {
                 std::vector<const frontend::RecordInfo*> levels;
                 for (auto* current = record->second; current != nullptr;
@@ -3806,7 +3812,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                 base_constructor->type->parameters[0],
                                 {base_this}, "default.base.this");
                         }
-                        builder_.create_call(base_constructor, {base_this},
+                        create_call_instruction(base_constructor, {base_this},
                                              nullptr, "default.base.ctor");
                     }
                 }
@@ -3887,7 +3893,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                                     ->parameters[0],
                                                 {self}, "member.ctor.this");
                                         }
-                                        builder_.create_call(
+                                        create_call_instruction(
                                             element_constructor, {self},
                                             nullptr, "member.ctor");
                                     }
@@ -3920,7 +3926,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                 member_constructor->type->parameters[0],
                                 {self}, "member.this");
                         }
-                        builder_.create_call(member_constructor, {self},
+                        create_call_instruction(member_constructor, {self},
                                              nullptr, "member.ctor");
                     }
                 }
@@ -3999,7 +4005,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                                 method->second->type->parameters[0],
                                 {self.value}, "init.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self.value},
                             method->second->type->return_type,
                             "init.conversion");
@@ -4059,7 +4065,7 @@ void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* a
                                 constructor->type->parameters[0], {self},
                                 "init.this");
                         }
-                        builder_.create_call(
+                        create_call_instruction(
                             constructor, {self, argument.value}, nullptr,
                             "init.constructor");
                         return;
@@ -4415,7 +4421,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                                 method->second->type->parameters[0],
                                 {self}, "return.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self},
                             method->second->type->return_type,
                             "return.conversion");
@@ -4465,7 +4471,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                                     method->second->type->parameters[0],
                                     {self.value}, "return.this");
                             }
-                            auto* call = builder_.create_call(
+                            auto* call = create_call_instruction(
                                 method->second, {self.value},
                                 method->second->type->return_type,
                                 "return.conversion");
@@ -4524,7 +4530,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                                 constructor->type->parameters[0], {self},
                                 "return.this");
                         }
-                        builder_.create_call(
+                        create_call_instruction(
                             constructor, {self, value.value}, nullptr,
                             "return.constructor");
                         auto* loaded = builder_.create_load(
@@ -4590,7 +4596,7 @@ ir::Value* CIRGen::emit_condition(const frontend::AstNode& expression) {
                                 method->second->type->parameters[0],
                                 {self.value}, "tobool.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self.value},
                             method->second->type->return_type, "tobool.call");
                         if (from_integer) {
@@ -4802,7 +4808,7 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
                                     arguments.push_back(module_->constant_int(
                                         method->second->type->parameters[1], 0));
                                 }
-                                auto* call = builder_.create_call(
+                                auto* call = create_call_instruction(
                                     method->second, std::move(arguments),
                                     method->second->type->return_type,
                                     "post.operator");
@@ -5585,7 +5591,7 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                             argument.value, argument.type,
                             method_function->type->parameters[1]);
                     }
-                    auto* call = builder_.create_call(
+                    auto* call = create_call_instruction(
                         method_function, {self.value, argument.value},
                         method_function->type->return_type, "operator.call");
                     return {call, method_function->type->return_type};
@@ -5622,7 +5628,7 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                                 free_function->type->parameters[0]),
                         promote(right_argument.value, right_argument.type,
                                 free_function->type->parameters[1])};
-                    auto* call = builder_.create_call(
+                    auto* call = create_call_instruction(
                         free_function, std::move(arguments),
                         free_function->type->return_type, "operator.call");
                     return {call, free_function->type->return_type};
@@ -5738,7 +5744,7 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                         method->second->type->parameters[0],
                         {self.value}, "logical.this");
                 }
-                auto* call = builder_.create_call(
+                auto* call = create_call_instruction(
                     method->second, {self.value},
                     method->second->type->return_type, "logical.conversion");
                 const Expression converted{call,
@@ -5808,7 +5814,7 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                     method->second->type->parameters[0], {self},
                     "compare.this");
             }
-            auto* call = builder_.create_call(
+            auto* call = create_call_instruction(
                 method->second, {self},
                 method->second->type->return_type, "compare.conversion");
             value.value = call;
@@ -5897,7 +5903,7 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                                 method->second->type->parameters[0],
                                 {self}, "arith.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self},
                             method->second->type->return_type,
                             "arith.conversion");
@@ -6047,7 +6053,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                             arguments.push_back(argument.value);
                         }
                     }
-                    builder_.create_call(constructor, std::move(arguments), nullptr,
+                    create_call_instruction(constructor, std::move(arguments), nullptr,
                                          "placement.ctor");
                 }
             }
@@ -6122,7 +6128,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                     count_value, "new.size"),
                 module_->constant_int(size_type(), 4), "new.cookie.size");
         }
-        auto* call = builder_.create_call(malloc_function, {size},
+        auto* call = create_call_instruction(malloc_function, {size},
                                           module_->types().pointer_type(
                                               module_->types().void_type()),
                                           "new.raw");
@@ -6176,7 +6182,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 module_->types().pointer_type(
                     module_->types().void_type()),
                 {pointer}, "new.init.bytes");
-            builder_.create_call(memset_function,
+            create_call_instruction(memset_function,
                                   {destination,
                                    module_->constant_int(int_type(), 0),
                                    bytes},
@@ -6282,7 +6288,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                     base_constructor->type->parameters[0],
                                     {base_this}, "new.base.this");
                             }
-                            builder_.create_call(
+                            create_call_instruction(
                                 base_constructor, {base_this}, nullptr,
                                 "new.base.ctor");
                         }
@@ -6356,7 +6362,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                                     ->parameters[0],
                                                 {self}, "member.ctor.this");
                                         }
-                                        builder_.create_call(
+                                        create_call_instruction(
                                             element_constructor, {self},
                                             nullptr, "member.ctor");
                                     }
@@ -6389,7 +6395,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                 member_constructor->type->parameters[0],
                                 {self}, "new.member.this");
                         }
-                        builder_.create_call(member_constructor, {self},
+                        create_call_instruction(member_constructor, {self},
                                              nullptr, "new.member.ctor");
                     }
                 };
@@ -6421,7 +6427,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                                    constructor->type->parameters[0],
                                                    {self}, "new.this");
                         }
-                        builder_.create_call(constructor, {self}, nullptr,
+                        create_call_instruction(constructor, {self}, nullptr,
                                              "new.ctor");
                     } else if (has_defaults || has_member_ctors ||
                                has_base_ctor) {
@@ -6458,7 +6464,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                         }
                         arguments.push_back(argument.value);
                     }
-                    builder_.create_call(constructor, std::move(arguments),
+                    create_call_instruction(constructor, std::move(arguments),
                                          nullptr, "new.ctor");
                 } else if (!array && (has_defaults || has_member_ctors ||
                                       has_base_ctor)) {
@@ -6538,7 +6544,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                     destructor->type->parameters[0], {self},
                                     "delete.dtor.this");
                             }
-                            builder_.create_call(callee, {self}, nullptr,
+                            create_call_instruction(callee, {self}, nullptr,
                                                  "delete.dtor");
                         }
                     }
@@ -6560,7 +6566,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                     member_destructor->type->parameters[0],
                                     {self}, "delete.member.this");
                             }
-                            builder_.create_call(member_destructor, {self},
+                            create_call_instruction(member_destructor, {self},
                                                  nullptr,
                                                  "delete.member.dtor");
                         }
@@ -6686,10 +6692,10 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                         ir::Opcode::BitCast,
                         module_->types().pointer_type(destructor->type),
                         {function}, "delete.vfn.ptr");
-                    builder_.create_call(callee, {self}, nullptr,
+                    create_call_instruction(callee, {self}, nullptr,
                                          "delete.vdtor");
                 } else {
-                    builder_.create_call(destructor, {self}, nullptr,
+                    create_call_instruction(destructor, {self}, nullptr,
                                          "delete.dtor");
                 }
                 emit_branch(increment_block);
@@ -6708,7 +6714,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 module_->types().pointer_type(module_->types().void_type()), {base},
                 "delete.base.raw");
         }
-        builder_.create_call(free_function, {cast}, nullptr, "delete.call");
+        create_call_instruction(free_function, {cast}, nullptr, "delete.call");
         builder_.create_br(done_block);
         builder_.set_insert_point(done_block);
         return {nullptr, module_->types().void_type()};
@@ -6742,7 +6748,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                         method->second->type->parameters[0],
                                         {self_value}, "unary.this");
                                 }
-                                auto* call = builder_.create_call(
+                                auto* call = create_call_instruction(
                                     method->second, {self_value},
                                     method->second->type->return_type,
                                     "unary.operator");
@@ -6783,7 +6789,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                 method->second->type->parameters[0],
                                 {self}, "unary.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self},
                             method->second->type->return_type,
                             "unary.conversion");
@@ -6832,7 +6838,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                 method->second->type->parameters[0],
                                 {self}, "not.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self},
                             method->second->type->return_type,
                             "not.bool");
@@ -6870,7 +6876,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                     method->second->type->parameters[0],
                                     {self.value}, "not.this");
                             }
-                            auto* call = builder_.create_call(
+                            auto* call = create_call_instruction(
                                 method->second, {self.value},
                                 method->second->type->return_type,
                                 "not.bool");
@@ -7065,7 +7071,7 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
                                         function->type->parameters[1]);
                                 }
                                 arguments.push_back(index.value);
-                                auto* call = builder_.create_call(
+                                auto* call = create_call_instruction(
                                     function, std::move(arguments),
                                     function->type->return_type,
                                     "subscript.lvalue");
@@ -7141,7 +7147,7 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
                             ir::Opcode::BitCast, method->second->type->parameters[0],
                             {self}, "assign.this");
                     }
-                    builder_.create_call(method->second, {self, source.value}, nullptr,
+                    create_call_instruction(method->second, {self, source.value}, nullptr,
                                          "assign.compound");
                     return {nullptr, module_->types().void_type()};
                 }
@@ -7191,7 +7197,7 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
                             ir::Opcode::BitCast, method->type->parameters[0], {self},
                             "assign.this");
                     }
-                    auto* call = builder_.create_call(
+                    auto* call = create_call_instruction(
                         method, {self, source.value}, method->type->return_type,
                         "assign.operator");
                     if (method->type->return_type &&
@@ -7290,7 +7296,7 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
                             method->second->type->parameters[0], {self},
                             "assign.this");
                     }
-                    auto* call = builder_.create_call(
+                    auto* call = create_call_instruction(
                         method->second, {self},
                         method->second->type->return_type,
                         "assign.conversion");
@@ -7485,7 +7491,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     }
                     arguments.push_back(argument.value);
                 }
-                builder_.create_call(constructor, std::move(arguments), nullptr,
+                create_call_instruction(constructor, std::move(arguments), nullptr,
                                      "temporary.constructor");
                 auto* loaded = builder_.create_load(
                     type, storage, false, 0, "temporary.value");
@@ -7535,7 +7541,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 }
                 arguments.push_back(argument.value);
             }
-            auto* call = builder_.create_call(
+            auto* call = create_call_instruction(
                 callee, std::move(arguments),
                 lambda->second.function->return_type, "lambda.call");
             return {call, lambda->second.function->return_type};
@@ -7583,7 +7589,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                             }
                             arguments.push_back(argument.value);
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, std::move(arguments),
                             method->second->type->return_type, "call.operator");
                         return {call, method->second->type->return_type};
@@ -7663,7 +7669,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                                 {function}, "this.vfn.ptr");
                         }
                     }
-                    auto* call = builder_.create_call(
+                    auto* call = create_call_instruction(
                         callee, std::move(arguments),
                         method->second->type->return_type, "this.method");
                     return {call, method->second->type->return_type};
@@ -7828,7 +7834,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                             "vfn.ptr");
                     }
                 }
-                auto* call = builder_.create_call(
+                auto* call = create_call_instruction(
                     callee, std::move(arguments), method->type->return_type,
                     "method.call");
                 return {call, method->type->return_type};
@@ -7866,7 +7872,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     }
                     arguments.push_back(argument.value);
                 }
-                auto* call = builder_.create_call(
+                auto* call = create_call_instruction(
                     method, std::move(arguments), method->type->return_type,
                     "static.method.call");
                 return {call, method->type->return_type};
@@ -7934,7 +7940,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                                 constructor->type->parameters[0], {self},
                                 "argument.this");
                         }
-                        builder_.create_call(
+                        create_call_instruction(
                             constructor, {self, value.value}, nullptr,
                             "argument.constructor");
                         auto* loaded = builder_.create_load(
@@ -7986,7 +7992,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 ir::Opcode::BitCast, method->second->type->parameters[0],
                 {self.value}, "argument.this");
         }
-        auto* call = builder_.create_call(
+        auto* call = create_call_instruction(
             method->second, {self.value}, method->second->type->return_type,
             "argument.conversion");
         return {call, method->second->type->return_type};
@@ -8065,7 +8071,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             }
         }
     }
-    auto* call = builder_.create_call(callee.value, arguments, function_type->return_type,
+    auto* call = create_call_instruction(callee.value, arguments, function_type->return_type,
                                       "call");
     return {call, function_type->return_type};
 }
@@ -8575,7 +8581,7 @@ CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
                                     function->type->parameters[1]);
                             }
                             arguments.push_back(index.value);
-                            auto* call = builder_.create_call(
+                            auto* call = create_call_instruction(
                                 function, std::move(arguments),
                                 function->type->return_type, "subscript.call");
                             const auto ast_type =
@@ -8763,15 +8769,207 @@ CIRGen::Expression CIRGen::emit_dynamic_cast(const frontend::AstNode& expression
     auto* typeinfo_global = ensure_typeinfo(*target_record);
     auto* typeinfo = builder_.create(ir::Opcode::BitCast, byte_pointer,
                                      {typeinfo_global}, "dynamic_cast.type");
-    auto* result = builder_.create_call(helper, {object, typeinfo}, byte_pointer,
+    auto* result = create_call_instruction(helper, {object, typeinfo}, byte_pointer,
                                         "dynamic_cast.call");
     auto* cast = builder_.create(ir::Opcode::BitCast, target, {result},
                                  "dynamic_cast.result");
     return {cast, target};
 }
 
-CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
-    if (expression.children.size() < 2 || !expression.children[0] ||
+ir::Function* CIRGen::ensure_runtime_function(std::string_view name, ir::TypePtr result,
+                                              const std::vector<ir::TypePtr>& parameters) {
+    if (const auto found = functions_.find(std::string(name)); found != functions_.end()) {
+        return found->second;
+    }
+    auto* function = module_->add_function(
+        std::string(name), module_->types().function_type(result, parameters, false),
+        ir::Linkage::External, true);
+    for (std::size_t index = 0; index < parameters.size(); ++index) {
+        function->add_parameter(parameters[index], "arg" + std::to_string(index));
+    }
+    functions_[std::string(name)] = function;
+    return function;
+}
+
+ir::Instruction* CIRGen::create_call_instruction(ir::Value* callee,
+                                                 std::vector<ir::Value*> arguments,
+                                                 ir::TypePtr result_type,
+                                                 const std::string& name) {
+    if (!current_landing_pad_ || !current_function_ || !builder_.insert_block()) {
+        return builder_.create_call(callee, std::move(arguments), result_type, name);
+    }
+    auto* normal = current_function_->add_block("invoke.continue");
+    auto* invoke = builder_.create_invoke(callee, std::move(arguments), result_type,
+                                          normal, current_landing_pad_, name);
+    builder_.set_insert_point(normal);
+    return invoke;
+}
+
+void CIRGen::reject_uncleaned_locals(const frontend::SourceLocation& location,
+                                     const char* operation) {
+    static_cast<void>(operation);
+    if (local_cleanups_.empty()) {
+        return;
+    }
+    error(location, "exception cleanup of automatic objects is not implemented yet");
+}
+
+void CIRGen::emit_throw(const frontend::AstNode& statement) {
+    reject_uncleaned_locals(statement.location, "throw");
+    const auto void_type = module_->types().void_type();
+    const auto byte_type = module_->types().int_type(8);
+    const auto byte_pointer = module_->types().pointer_type(byte_type);
+    if (statement.children.empty() || !statement.children.front()) {
+        auto* rethrow = ensure_runtime_function("__cxa_rethrow", void_type, {});
+        create_call_instruction(rethrow, {}, void_type, "rethrow");
+        builder_.create_unreachable();
+        return;
+    }
+    auto value = emit_expression(*statement.children.front());
+    if (!value.value || !value.type || value.type->kind != ir::TypeKind::Struct) {
+        error(statement.location, "throw requires a class type");
+        return;
+    }
+    const auto record = ir_records_.find(value.type);
+    if (record == ir_records_.end() || !record->second) {
+        error(statement.location, "throw requires a class type");
+        return;
+    }
+    auto* allocate = ensure_runtime_function("__cxa_allocate_exception", byte_pointer,
+                                             {size_type()});
+    auto* throw_function = ensure_runtime_function(
+        "__cxa_throw", void_type, {byte_pointer, byte_pointer, byte_pointer});
+    const auto size = ir_size_of(value.type);
+    auto* object = create_call_instruction(
+        allocate, {module_->constant_int(size_type(), static_cast<std::int64_t>(size))},
+        byte_pointer, "exception.memory");
+    auto* record_pointer = builder_.create(
+        ir::Opcode::BitCast, module_->types().pointer_type(value.type), {object},
+        "exception.object");
+    builder_.create_store(value.value, record_pointer);
+    auto* typeinfo = builder_.create(ir::Opcode::BitCast, byte_pointer,
+                                     {ensure_typeinfo(*record->second)},
+                                     "exception.type");
+    create_call_instruction(throw_function,
+                            {object, typeinfo, module_->constant_null(byte_pointer)},
+                            void_type, "throw");
+    builder_.create_unreachable();
+}
+
+void CIRGen::emit_try(const frontend::AstNode& statement) {
+    if (statement.children.empty() || !statement.children.front()) {
+        return;
+    }
+    reject_uncleaned_locals(statement.location, "try");
+    const auto void_type = module_->types().void_type();
+    const auto byte_type = module_->types().int_type(8);
+    const auto byte_pointer = module_->types().pointer_type(byte_type);
+    auto* pad = current_function_->add_block("catch.pad");
+    auto* end = current_function_->add_block("catch.end");
+    const auto previous_pad = current_landing_pad_;
+    current_landing_pad_ = pad;
+    emit_statement(*statement.children.front());
+    current_landing_pad_ = previous_pad;
+    // The body may end in a throw, in which case the normal edge is dead.
+    if (!builder_.insert_block()->terminated()) {
+        builder_.create_br(end);
+    }
+
+    // The handler: the unwinder enters the pad with the exception object
+    // pointer in R0 and its typeinfo in R1 (ADR 0026).
+    builder_.set_insert_point(pad);
+    auto* landing = builder_.create_landingpad("exception");
+    auto* object_slot = builder_.create_gep(
+        byte_type, landing, {module_->constant_int(int_type(), 0)}, false,
+        "exception.object.slot");
+    object_slot->type = module_->types().pointer_type(byte_pointer);
+    auto* exception = builder_.create_load(byte_pointer, object_slot, false, 0,
+                                           "exception.object");
+    auto* type_slot = builder_.create_gep(
+        byte_type, landing, {module_->constant_int(int_type(), 4)}, false,
+        "exception.type.slot");
+    type_slot->type = module_->types().pointer_type(byte_pointer);
+    auto* exception_type =
+        builder_.create_load(byte_pointer, type_slot, false, 0, "exception.type");
+    auto* matches = ensure_runtime_function("__krc_eh_matches", int_type(),
+                                            {byte_pointer, byte_pointer});
+    auto* begin_catch = ensure_runtime_function("__cxa_begin_catch", byte_pointer,
+                                                {byte_pointer});
+    auto* end_catch = ensure_runtime_function("__cxa_end_catch", void_type, {});
+
+    for (std::size_t index = 1; index < statement.children.size(); ++index) {
+        const auto* clause = statement.children[index].get();
+        if (!clause || clause->kind != frontend::AstKind::CatchClause) {
+            continue;
+        }
+        const bool catch_all = clause->children.empty() ||
+                               !clause->children.front() ||
+                               clause->children.front()->kind !=
+                                   frontend::AstKind::ParameterDeclaration;
+        const frontend::AstNode* parameter =
+            catch_all ? nullptr : clause->children.front().get();
+        frontend::TypePtr frontend_type;
+        if (parameter) {
+            frontend_type = sema_.declaration_type(*parameter->children[0],
+                                                   parameter->children[1].get());
+        }
+        const auto type = frontend_type ? map_type(frontend_type) : nullptr;
+        if (!catch_all && (!type || !frontend_type || !frontend_type->is_reference ||
+                           !frontend_type->element ||
+                           !frontend_type->element->record)) {
+            error(clause->location, "catch requires a reference to a class type");
+            continue;
+        }
+        ir::Value* condition = module_->constant_int(module_->types().bool_type(), 1);
+        if (!catch_all) {
+            auto* catch_typeinfo = builder_.create(
+                ir::Opcode::BitCast, byte_pointer,
+                {ensure_typeinfo(*frontend_type->element->record)},
+                "catch.type");
+            auto* matched = create_call_instruction(
+                matches, {exception_type, catch_typeinfo}, int_type(), "catch.matches");
+            condition = builder_.create_icmp(ir::ICmpPredicate::Ne, matched,
+                                             module_->constant_int(int_type(), 0),
+                                             "catch.matched");
+        }
+        auto* handler = current_function_->add_block("catch.handler");
+        auto* next = current_function_->add_block("catch.next");
+        builder_.create_cond_br(condition, handler, next);
+        builder_.set_insert_point(handler);
+        create_call_instruction(begin_catch, {exception}, byte_pointer,
+                                "catch.begin");
+        push_scope();
+        if (parameter) {
+            const auto name = parameter->children.size() > 1 && parameter->children[1]
+                                  ? declarator_name(*parameter->children[1])
+                                  : std::string{};
+            if (!name.empty()) {
+                // The handler sees a reference to the thrown object; the
+                // exception object already holds the thrown value.
+                auto* storage = builder_.create_alloca(type, 0, "catch.variable");
+                auto* object = builder_.create(ir::Opcode::BitCast, type,
+                                               {exception}, "catch.object");
+                builder_.create_store(object, storage);
+                declare_local(name, {storage, type, frontend_type});
+            }
+        }
+        emit_statement(*clause->children.back());
+        if (parameter) {
+            pop_scope();
+        }
+        // A handler that ends in a throw or rethrow leaves the catch state to
+        // the propagating exception; end_catch is not reached (ADR 0026).
+        if (!builder_.insert_block()->terminated()) {
+            create_call_instruction(end_catch, {}, void_type, "catch.end");
+            builder_.create_br(end);
+        }
+        builder_.set_insert_point(next);
+    }
+    builder_.create_resume(exception);
+    builder_.set_insert_point(end);
+}
+
+CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {    if (expression.children.size() < 2 || !expression.children[0] ||
         !expression.children[1]) {
         return {};
     }
@@ -8851,7 +9049,7 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {
                                 method->second->type->parameters[0],
                                 {self.value}, "cast.this");
                         }
-                        auto* call = builder_.create_call(
+                        auto* call = create_call_instruction(
                             method->second, {self.value},
                             method->second->type->return_type, "cast.conversion");
                         return {call, method->second->type->return_type};

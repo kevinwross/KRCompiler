@@ -196,6 +196,8 @@ private:
     // reason. Other named casts lower from the AST directly.
     std::unordered_map<const AstNode*, TypePtr> cast_targets_;
     std::unordered_map<const AstNode*, TypePtr> cast_operands_;
+    // Non-zero while a catch body is being analysed; `throw;` needs a handler.
+    int handler_depth_ = 0;
     void check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr source);
     [[nodiscard]] std::optional<long long> parse_integer_literal(std::string_view text) const;
     [[nodiscard]] std::optional<long long> parse_character_literal(

@@ -40,6 +40,17 @@ bool make_object(const AssemblyResult& assembly, const target::TargetProfile& pr
     data.data = assembly.data;
     object.sections.push_back(std::move(data));
 
+    // The exception-descriptor table is ordinary allocated memory: the runtime
+    // reads it while unwinding, so it is not debug data (ADR 0026).
+    linker::KroSection exception;
+    exception.name = ".cpp_except";
+    exception.type = linker::KroSectionType::Other;
+    exception.flags = 0x1 | 0x2;
+    exception.alignment = 4;
+    exception.size = assembly.exception.size();
+    exception.data = assembly.exception;
+    object.sections.push_back(std::move(exception));
+
     std::unordered_map<std::string, std::uint32_t> symbol_indices;
     for (const auto& symbol : assembly.symbols) {
         linker::KroSymbol output;
