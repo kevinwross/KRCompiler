@@ -302,6 +302,10 @@ void Sema::check_member_access(const SourceLocation& location, const RecordInfo&
         if (enclosing_record_ == &record) {
             return;
         }
+        if (std::find(record.friend_classes.begin(), record.friend_classes.end(),
+                      enclosing_record_->tag) != record.friend_classes.end()) {
+            return;
+        }
         if (access == AccessLevel::Protected) {
             for (auto* base = enclosing_record_->base.get(); base != nullptr;) {
                 const auto* base_record =
@@ -615,6 +619,16 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
     }
     const bool is_friend = std::find(member.labels.begin(), member.labels.end(), "friend") !=
                            member.labels.end();
+    if (is_friend && member.children.size() == 1) {
+        // `friend class X;` grants X access and declares no member. Without
+        // this, the declaration reads as an anonymous member and copies X's
+        // fields into this record.
+        if (base && base->kind == TypeKind::Record && base->record &&
+            !base->record->tag.empty()) {
+            record.friend_classes.push_back(base->record->tag);
+        }
+        return;
+    }
 
     std::uint64_t declaration_alignment = 0;
     for (const auto& specifier : specifiers->children) {

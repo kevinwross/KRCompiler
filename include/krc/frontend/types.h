@@ -69,9 +69,9 @@ struct RecordInfo {
     TypePtr base;
     std::vector<RecordMember> members;
     std::vector<RecordMethod> methods;
-    // Names of functions declared `friend` in this record. Friend classes are
-    // not recorded yet.
+    // Names of functions and classes declared `friend` in this record.
     std::vector<std::string> friends;
+    std::vector<std::string> friend_classes;
 };
 
 struct EnumInfo {
