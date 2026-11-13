@@ -1585,11 +1585,18 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
     case ir::Opcode::BitCast:
     case ir::Opcode::PtrToInt:
     case ir::Opcode::IntToPtr:
-        load_low_word(out, function, layout, instruction.operands[0], "R0");
-        if (is_wide(instruction.type)) {
-            // A 32-bit source zero-extends into the pair; a pointer fits the
-            // KR32 address space, so its high word is zero.
-            out += "        MOV R1, #0\n";
+        if (is_wide(instruction.operands[0]->type)) {
+            // A cast between equal-width values is a bit copy, so both words
+            // travel; a narrower destination stores only the low one. Loading
+            // the low word alone here truncated an `i64` to its low half.
+            load_wide(out, function, layout, instruction.operands[0]);
+        } else {
+            load_low_word(out, function, layout, instruction.operands[0], "R0");
+            if (is_wide(instruction.type)) {
+                // A 32-bit source zero-extends into the pair; a pointer fits
+                // the KR32 address space, so its high word is zero.
+                out += "        MOV R1, #0\n";
+            }
         }
         store_value(out, function, layout, instruction, "R0");
         break;
