@@ -43,6 +43,7 @@ struct RecordMember {
     TypePtr type;
     SourceLocation location;
     bool bit_field = false;
+    bool is_mutable = false;
     unsigned bit_width = 0;
     std::uint64_t alignment = 0;
     const AstNode* default_initializer = nullptr;

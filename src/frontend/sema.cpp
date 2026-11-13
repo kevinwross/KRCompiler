@@ -790,6 +790,11 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
         member_info.location = child->location;
         member_info.alignment = declaration_alignment;
         member_info.access = access;
+        // `mutable` travels on the declaration specifiers.
+        const auto& specifier_labels = specifiers->labels;
+        member_info.is_mutable =
+            std::find(specifier_labels.begin(), specifier_labels.end(), "mutable") !=
+            specifier_labels.end();
         if (bit_width) {
             member_info.bit_field = true;
             member_info.bit_width = *bit_width;
@@ -1879,7 +1884,7 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             error(expression.location, "assignment to a non-modifiable lvalue");
         }
         // A member of a const object is not assignable even though the member's
-        // own type carries no qualifier.
+        // own type carries no qualifier — unless it is declared `mutable`.
         if (expression.children[0]->kind == AstKind::MemberExpression &&
             !expression.children[0]->children.empty() &&
             expression.children[0]->children.front()) {
@@ -1888,7 +1893,23 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                 base = base->element;
             }
             if (base && base->kind == TypeKind::Record && base->is_const) {
-                error(expression.location, "assignment to a member of a const object");
+                bool mutable_member = false;
+                for (const auto* record = base->record.get();
+                     record != nullptr && !mutable_member;
+                     record = record->base && record->base->record
+                                  ? record->base->record.get()
+                                  : nullptr) {
+                    for (const auto& member : record->members) {
+                        if (member.name == expression.children[0]->text &&
+                            member.is_mutable) {
+                            mutable_member = true;
+                            break;
+                        }
+                    }
+                }
+                if (!mutable_member) {
+                    error(expression.location, "assignment to a member of a const object");
+                }
             }
         }
         return left;

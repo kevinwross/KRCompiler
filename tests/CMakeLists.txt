@@ -4202,6 +4202,16 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/longlong_conditional_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_const_mutable_member
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/const_mutable_member.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/const_mutable_member_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_cxx_const_member_assign
         COMMAND ${CMAKE_COMMAND}
                 -DEXE=$<TARGET_FILE:krc>
