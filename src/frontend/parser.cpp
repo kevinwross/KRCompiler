@@ -847,6 +847,7 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
              check("override") || check("final") || check("&") || check("&&"))) {
             const bool is_noexcept = check("noexcept");
             const bool is_const = check("const");
+            const bool is_override = check("override");
             ++position_;
             if (is_noexcept && check("(")) {
                 skip_balanced_parens();
@@ -855,6 +856,9 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
                 // The trailing qualifier is what makes a member function callable
                 // through a const object, so the front end has to keep it.
                 direct->labels.emplace_back("const");
+            }
+            if (is_override) {
+                direct->labels.emplace_back("override");
             }
             continue;
         }
@@ -1118,6 +1122,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
                 // const object only when it is not const-qualified.
                 declarator->labels.push_back("const");
             }
+            if (peek().text == "override") {
+                declarator->labels.push_back("override");
+            }
             ++position_;
         }
         if (contains_function_declarator(*declarator) &&
@@ -1169,6 +1176,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
                peek().text == "final") {
             if (peek().text == "const") {
                 member->children.back()->labels.push_back("const");
+            }
+            if (peek().text == "override") {
+                member->children.back()->labels.push_back("override");
             }
             ++position_;
         }

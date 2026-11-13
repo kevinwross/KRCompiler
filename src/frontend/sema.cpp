@@ -620,6 +620,9 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
                 method_entry.is_virtual = is_virtual;
                 method_entry.is_const =
                     declarator_has_label(*member->children[1], "const");
+                method_entry.is_override =
+                    declarator_has_label(*member->children[1], "override");
+                method_entry.location = member->location;
                 method_entry.access = access;
                 info->methods.push_back(std::move(method_entry));
                 member_bodies.push_back(member.get());
@@ -640,6 +643,30 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
         analyze_function_body(*definition, info.get());
         enclosing_record_ = saved_enclosing_record;
         current_function_name_ = saved_function_name;
+    }
+    for (const auto& declared : info->methods) {
+        if (!declared.is_override) {
+            continue;
+        }
+        bool overrides_something = false;
+        for (const auto* base =
+                 info->base && info->base->kind == TypeKind::Record && info->base->record
+                     ? info->base->record.get()
+                     : nullptr;
+             base != nullptr && !overrides_something;
+             base = base->base && base->base->record ? base->base->record.get() : nullptr) {
+            for (const auto& inherited : base->methods) {
+                if (inherited.name == declared.name) {
+                    overrides_something = true;
+                    break;
+                }
+            }
+        }
+        if (!overrides_something) {
+            error(declared.location,
+                  "'" + info->tag + "::" + declared.name +
+                      "' is marked override but overrides no base member");
+        }
     }
     info->polymorphic =
         std::any_of(info->methods.begin(), info->methods.end(),
@@ -765,6 +792,7 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             // `const` is recorded on the declarator by the parser; the plain
             // `= delete` and pure markers travel on the member node.
             const bool is_const = declarator_has_label(*child, "const");
+            const bool is_override = declarator_has_label(*child, "override");
             if (is_friend) {
                 // A friend declaration names a non-member function that may
                 // reach this record's non-public members.
@@ -778,6 +806,8 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             entry.is_pure = is_pure;
             entry.is_deleted = is_deleted;
             entry.is_const = is_const;
+            entry.is_override = is_override;
+            entry.location = member.location;
             entry.access = access;
             record.methods.push_back(std::move(entry));
             continue;

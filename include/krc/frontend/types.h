@@ -57,6 +57,8 @@ struct RecordMethod {
     bool is_pure = false;
     bool is_deleted = false;
     bool is_const = false;
+    bool is_override = false;
+    SourceLocation location;
     AccessLevel access = AccessLevel::Public;
 };
 
