@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 unsigned int strlen(const char *text) {
     unsigned int length = 0;
     while (text[length] != 0) {
@@ -320,4 +322,308 @@ char *strtok(char *text, const char *delimiters) {
         *token_cursor++ = 0;
     }
     return token;
+}
+
+/* fprintf-style output for the KR16 profile.
+ *
+ * IP16 has no long long and no floating point, so every conversion here is
+ * integer or string: `int`, `long`, and pointers are all 16 bits. The format
+ * engine writes through one sink so `printf` (console) and `snprintf`
+ * (buffer) share the same code.
+ */
+
+
+static char *format_buffer;
+static int format_count;
+static int format_limit = -1;
+
+static void format_char(int character) {
+    if (format_buffer) {
+        if (format_limit < 0 || format_count < format_limit - 1) {
+            format_buffer[format_count] = (char)character;
+        }
+        format_count++;
+    } else {
+        putchar(character);
+    }
+}
+
+#define FORMAT_UPPER 1
+#define FORMAT_NEGATIVE 2
+#define FORMAT_ZERO_PAD 4
+#define FORMAT_LEFT 8
+#define FORMAT_PREFIX 16
+#define FORMAT_PLUS 32
+#define FORMAT_SPACE 64
+#define FORMAT_PRECISION_SHIFT 8
+
+static void format_integer(unsigned int value, unsigned int base, int width,
+                           int flags) {
+    char digits[20];
+    int count = 0;
+    const int negative = (flags & FORMAT_NEGATIVE) != 0;
+    const int uppercase = (flags & FORMAT_UPPER) != 0;
+    const int prefix = (flags & FORMAT_PREFIX) != 0;
+    const int precision = flags >> FORMAT_PRECISION_SHIFT;
+    const char *alphabet = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
+    if (value == 0 && precision == 0) {
+        digits[count++] = '0';
+    } else {
+        while (value > 0) {
+            digits[count++] = alphabet[value % base];
+            value = value / base;
+        }
+        if (count == 0) {
+            digits[count++] = '0';
+        }
+    }
+    const char sign = negative
+                          ? '-'
+                          : ((flags & FORMAT_PLUS) ? '+'
+                                                   : ((flags & FORMAT_SPACE)
+                                                          ? ' '
+                                                          : 0));
+    const int zeros = precision > count ? precision - count : 0;
+    const int prefix_length =
+        (sign ? 1 : 0) + (prefix ? (base == 8 ? 1 : 2) : 0);
+    const int digits_length = count + zeros;
+    const int padding = width > prefix_length + digits_length
+                            ? width - prefix_length - digits_length
+                            : 0;
+    if (sign) {
+        format_char(sign);
+    }
+    if (prefix) {
+        format_char('0');
+        if (base != 8) {
+            format_char(uppercase ? 'X' : 'x');
+        }
+    }
+    if ((flags & FORMAT_LEFT) == 0) {
+        const int zero_padding = (flags & FORMAT_ZERO_PAD) && precision == 0;
+        int index = 0;
+        while (index < padding) {
+            format_char(zero_padding ? '0' : ' ');
+            index++;
+        }
+    }
+    int index = 0;
+    while (index < zeros) {
+        format_char('0');
+        index++;
+    }
+    while (count > 0) {
+        count--;
+        format_char(digits[count]);
+    }
+    if ((flags & FORMAT_LEFT) != 0) {
+        index = 0;
+        while (index < padding) {
+            format_char(' ');
+            index++;
+        }
+    }
+}
+
+static void format_text(const char *text, int width, int precision,
+                        int precision_set, int left_align) {
+    if (text == 0) {
+        text = "(null)";
+    }
+    int length = 0;
+    while (text[length] != 0 && (!precision_set || length < precision)) {
+        length++;
+    }
+    const int padding = width > length ? width - length : 0;
+    int index = 0;
+    if (!left_align) {
+        while (index < padding) {
+            format_char(' ');
+            index++;
+        }
+    }
+    index = 0;
+    while (index < length) {
+        format_char(text[index]);
+        index++;
+    }
+    if (left_align) {
+        index = 0;
+        while (index < padding) {
+            format_char(' ');
+            index++;
+        }
+    }
+}
+
+int vsnprintf(char *buffer, unsigned int size, const char *format,
+              va_list arguments) {
+    char *saved_buffer = format_buffer;
+    const int saved_count = format_count;
+    const int saved_limit = format_limit;
+    format_buffer = buffer;
+    format_count = 0;
+    format_limit = size > 0u ? (int)size : 0;
+
+    while (*format != 0) {
+        if (*format != '%') {
+            format_char(*format);
+            format++;
+            continue;
+        }
+        format++;
+        int alternate = 0;
+        int zero_pad = 0;
+        int left_align = 0;
+        int plus = 0;
+        int space = 0;
+        for (;;) {
+            if (*format == '#') {
+                alternate = 1;
+            } else if (*format == '0') {
+                zero_pad = 1;
+            } else if (*format == '-') {
+                left_align = 1;
+            } else if (*format == '+') {
+                plus = 1;
+            } else if (*format == ' ') {
+                space = 1;
+            } else {
+                break;
+            }
+            format++;
+        }
+        int width = 0;
+        if (*format == '*') {
+            width = va_arg(arguments, int);
+            if (width < 0) {
+                left_align = 1;
+                width = -width;
+            }
+            format++;
+        }
+        while (*format >= '0' && *format <= '9') {
+            width = width * 10 + (*format - '0');
+            format++;
+        }
+        int precision = 0;
+        int precision_set = 0;
+        if (*format == '.') {
+            precision_set = 1;
+            format++;
+            if (*format == '*') {
+                precision = va_arg(arguments, int);
+                if (precision < 0) {
+                    precision_set = 0;
+                    precision = 0;
+                }
+                format++;
+            }
+            while (*format >= '0' && *format <= '9') {
+                precision = precision * 10 + (*format - '0');
+                format++;
+            }
+        }
+        /* int, long, size_t, and pointers are one 16-bit slot on this profile,
+         * so every length modifier is accepted and ignored. */
+        while (*format == 'h' || *format == 'l' || *format == 'z' ||
+               *format == 't' || *format == 'j') {
+            format++;
+        }
+        const int numeric_flags =
+            (zero_pad ? FORMAT_ZERO_PAD : 0) |
+            (left_align ? FORMAT_LEFT : 0) | (plus ? FORMAT_PLUS : 0) |
+            (space ? FORMAT_SPACE : 0) |
+            (precision_set ? (precision << FORMAT_PRECISION_SHIFT) : 0);
+        if (*format == '%') {
+            format_char('%');
+        } else if (*format == 'd' || *format == 'i') {
+            const int value = va_arg(arguments, int);
+            const unsigned int magnitude =
+                value < 0 ? (unsigned int)(0u - (unsigned int)value)
+                          : (unsigned int)value;
+            format_integer(magnitude, 10, width,
+                           numeric_flags |
+                               (value < 0 ? FORMAT_NEGATIVE : 0));
+        } else if (*format == 'u') {
+            format_integer(va_arg(arguments, unsigned int), 10, width,
+                           numeric_flags);
+        } else if (*format == 'o') {
+            format_integer(va_arg(arguments, unsigned int), 8, width,
+                           numeric_flags | (alternate ? FORMAT_PREFIX : 0));
+        } else if (*format == 'x' || *format == 'X') {
+            format_integer(va_arg(arguments, unsigned int), 16, width,
+                           numeric_flags |
+                               (*format == 'X' ? FORMAT_UPPER : 0) |
+                               (alternate ? FORMAT_PREFIX : 0));
+        } else if (*format == 'p') {
+            format_integer((unsigned int)va_arg(arguments, void *), 16, width,
+                           numeric_flags | FORMAT_PREFIX | FORMAT_ZERO_PAD);
+        } else if (*format == 'c') {
+            const int value = va_arg(arguments, int);
+            const int padding = width > 1 ? width - 1 : 0;
+            int index = 0;
+            if (!left_align) {
+                while (index < padding) {
+                    format_char(' ');
+                    index++;
+                }
+            }
+            format_char(value);
+            index = 0;
+            if (left_align) {
+                while (index < padding) {
+                    format_char(' ');
+                    index++;
+                }
+            }
+        } else if (*format == 's') {
+            format_text(va_arg(arguments, const char *), width, precision,
+                        precision_set, left_align);
+        } else if (*format == 0) {
+            break;
+        } else {
+            format_char('%');
+            format_char(*format);
+        }
+        format++;
+    }
+
+    if (format_buffer && format_limit > 0) {
+        const int terminator =
+            format_count < format_limit - 1 ? format_count : format_limit - 1;
+        format_buffer[terminator] = 0;
+    }
+    const int written = format_count;
+    format_buffer = saved_buffer;
+    format_count = saved_count;
+    format_limit = saved_limit;
+    return written < 0 ? 0 : written;
+}
+
+int snprintf(char *buffer, unsigned int size, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int written = vsnprintf(buffer, size, format, arguments);
+    va_end(arguments);
+    return written;
+}
+
+int sprintf(char *buffer, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    const int written = vsnprintf(buffer, 0xFFFFu, format, arguments);
+    va_end(arguments);
+    return written;
+}
+
+int printf(const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    format_buffer = 0;
+    format_limit = -1;
+    format_count = 0;
+    const int written = vsnprintf(0, 0, format, arguments);
+    va_end(arguments);
+    return written;
 }

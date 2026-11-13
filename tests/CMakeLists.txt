@@ -365,6 +365,16 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
         set_tests_properties(krc_run_kr16_variadic PROPERTIES
             DEPENDS krc_kr16_variadic_image)
+
+        add_test(NAME krc_run_kr16_printf
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_printf.kex
+                    -DEXPECT_EXIT=42
+                    "-DEXPECT_OUTPUT=kr16 printf 7 ok -3"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_printf PROPERTIES
+            DEPENDS krc_kr16_link_printf)
     endif()
 
     add_test(NAME krc_kr16_arguments_image
@@ -376,6 +386,16 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_variadic.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_variadic.kex")
+
+    add_test(NAME krc_kr16_link_printf
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s
+                -DRUNTIME=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_printf.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_printf.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
 
     add_test(NAME krc_kr16_shift_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
