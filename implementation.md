@@ -455,6 +455,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - An empty braced array allocation (`new int[3]{}`) zeroes every element, and a partial initializer (`new int[3]{1}`) zeroes the remainder; linked fixtures return 0 and 1.
 - `std::move(first)` selects the move constructor and the move assignment operator, `std::forward<S>(first)` preserves the rvalue, `std::swap(left, right)` exchanges two scalars or two records, and `std::min`/`std::max` select an integer or a double; linked fixtures return 7 or 37.
 - A braced array of class objects (`new S[2]{}`) runs each default constructor; a linked fixture returns 7.
+- An aggregate larger than eight bytes travels by value as a hidden pointer to a caller-owned copy, so a 20-byte struct, a 12-byte struct with a `double` member, and a 24-byte FP-only struct all pass as parameters and the callee works on its own copy; `krc_link_aggregate_arguments` and the executed `krc_run_aggregate_arguments` require exit 42, and the fixture clobbers a parameter and then reads the caller's object to prove the copy is separate.
 - Placement construction (`new (storage) S(7)`) selects the matching constructor; a linked fixture returns 7.
 - A call initializer is evaluated exactly once (`int x = bump()`); a linked fixture returns 7.
 - A namespace-qualified type name (`ns::S object`, `new ns::S`) parses in declarations and allocations; a linked fixture returns 10.
@@ -489,6 +490,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T12:06:00-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 523/523
+windows-msvc-release  PASS 523/523
+linux-gcc-debug       PASS 509/509
+linux-gcc-release     PASS 509/509
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fourteen tests fewer: the executed tests need a
+runnable KR32 VM and are not registered where the default is a Windows binary.
+This gate covers memory-class aggregate arguments and the parser fix for a
+record-returning function whose first parameter is a record. Clean configure and
+build of all four presets; no warnings in any log.
 
 ### 2026-11-13T11:44:14-08:00 — host gate (Windows)
 
@@ -2578,3 +2595,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T11:43:41-08:00** — The operand may now be an lvalue of polymorphic class type, not just a pointer or reference, which is the form `dynamic_cast<T&>(object)` actually takes. Sema normalizes the three operand kinds to the class type; IRGen takes the address for an lvalue or a reference and uses the pointer value as-is for a pointer.
 - **2026-11-13T11:43:41-08:00** — Three defects came out of the first runs. A declared constructor never initializes the vptr — the code that materializes the object does, as it does for locals and `new` — so the thrown `bad_cast` needed an explicit vtable init. A reference operand went through `emit_expression`, which yields the referred object rather than its address for the lvalue form, so the runtime check received garbage. And the cast was rejected for an object operand even though C++ allows an lvalue, which is what made the failure hard to see: the probe compiled only through the reference form.
 - **2026-11-13T11:43:41-08:00** — Replaced the `krc_cxx_dynamic_cast_reference_rejected` diagnostic with `krc_link_dynamic_cast_reference` and the executed `krc_run_dynamic_cast_reference`, which requires exit 42 and checks the successful cast, the `bad_cast` catch, and a `std::exception&` catch of the same failure. Windows debug CTest is 521/521.
+- **2026-11-13T12:05:19-08:00** — Implemented memory-class aggregate arguments, the last silent codegen gap in the aggregate convention. `docs/abi.md` already said an aggregate larger than 8 bytes travels as an invisible pointer to a copy the caller owns, and the backend answered a 20-byte parameter with `; aggregate argument unavailable` — an argument that was simply never passed, so the callee read garbage. A 20-byte struct, a 12-byte struct with a `double` member, and a 24-byte FP-only struct now pass by value and return 42 in `krc_run_aggregate_arguments`.
+- **2026-11-13T12:05:19-08:00** — The lowering is in IRGen, not the backend: `map_function_type` turns a memory-class aggregate parameter into a hidden pointer, the prologue copies the pointed-to object into the parameter's frame slot, and every call site materializes the argument value in a temporary and passes its address. That keeps the backend unchanged — it still passes one word — and gives the callee its own copy, which is what the ABI promises and what the fixture checks by clobbering a parameter and reading the caller's object afterwards.
+- **2026-11-13T12:05:19-08:00** — The classification is one predicate used in both places, so the signature and the argument adaptation cannot disagree: an aggregate is memory class when it exceeds 8 bytes, except an FP-only aggregate up to 16 bytes, which stays in two FPRs.
+- **2026-11-13T12:05:19-08:00** — Two defects came out of the fixture. The parser treated a record-returning function whose first parameter is a record (`Large pass_through(Large value)`) as a constructor-initialized declaration, because the disambiguation looked only for keywords inside the parentheses; it now also rejects a class or typedef name. And five code paths added IR parameters from `map_type` directly rather than through the new classification, so the declared type and the parameter disagreed until each one used the same predicate. An aggregate *member* used as a value (`sum(holder.value)`) is still rejected with `aggregate member load is not implemented yet`; the fixture reads the members instead and the diagnostic stays documented. Windows debug CTest is 523/523.
