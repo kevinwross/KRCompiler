@@ -4077,6 +4077,13 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_assert_fail.cpp")
     set_tests_properties(krc_cxx_static_assert_fail PROPERTIES WILL_FAIL TRUE)
 
+    add_test(NAME krc_cxx_deleted_function
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/deleted_function_call.cpp
+                "-DEXPECT=use of deleted function"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
     add_test(NAME krc_link_delete_null
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

@@ -47,6 +47,7 @@ struct RecordMethod {
     TypePtr type;
     bool is_virtual = false;
     bool is_pure = false;
+    bool is_deleted = false;
 };
 
 struct RecordInfo {

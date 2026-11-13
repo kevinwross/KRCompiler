@@ -630,7 +630,15 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             }
             const bool is_pure = std::find(member.labels.begin(), member.labels.end(),
                                            "pure") != member.labels.end();
-            record.methods.push_back({name, type, is_virtual, is_pure});
+            const bool is_deleted = std::find(member.labels.begin(), member.labels.end(),
+                                              "deleted") != member.labels.end();
+            RecordMethod entry;
+            entry.name = name;
+            entry.type = type;
+            entry.is_virtual = is_virtual;
+            entry.is_pure = is_pure;
+            entry.is_deleted = is_deleted;
+            record.methods.push_back(std::move(entry));
             continue;
         }
         if (is_static) {
@@ -1749,6 +1757,11 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                     tag->type->record) {
                     for (const auto& method : tag->type->record->methods) {
                         if (method.name == method_name && method.type) {
+                            if (method.is_deleted) {
+                                error(callee->location,
+                                      "use of deleted function '" + class_name + "::" +
+                                          method_name + "'");
+                            }
                             for (const auto& argument : expression.children[1]->children) {
                                 if (argument) {
                                     analyze_expression(*argument);
@@ -1908,6 +1921,10 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             }
             for (const auto& method : record->methods) {
                 if (method.name == expression.text) {
+                    if (method.is_deleted) {
+                        error(expression.location, "use of deleted function '" +
+                                                       record->tag + "::" + method.name + "'");
+                    }
                     return method.type;
                 }
             }

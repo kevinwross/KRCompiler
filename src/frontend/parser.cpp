@@ -1171,8 +1171,16 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
         }
     }
     if (match("=")) {
-        static_cast<void>(parse_assignment_expression());
-        member->labels.push_back("pure");
+        // A pure specifier is `= 0`; `= delete` and `= default` say what the
+        // compiler must do about the definition instead.
+        if (match("delete")) {
+            member->labels.push_back("deleted");
+        } else if (match("default")) {
+            member->labels.push_back("defaulted");
+        } else {
+            static_cast<void>(parse_assignment_expression());
+            member->labels.push_back("pure");
+        }
     }
     expect(";", "after member declaration");
     return member;
