@@ -92,8 +92,18 @@ Recent commits worth knowing:
   output found by running the `../kr32` corpus.
 - `4044d9a` — namespace-qualified type names in declarations and `new`.
 - `f24f1be`, `de2c793` — `thread_local` at namespace and block scope.
-- `902968b` — 64-bit integer lowering (ADR 0023).
-- `d71bee9`, `41b58a3` — deleted-function and access-control diagnostics.
+- `902968b` — 64-bit integer lowering (ADR 0023); `480b4ed` fixed a `BitCast`
+  that truncated it. Both verified by execution under `../kr32`'s VM, where
+  `cxx_tls.cpp`'s `long long` division now returns 42.
+- `d71bee9`, `41b58a3`, `7eb8ec4`, `91df34a` — deleted functions, access
+  control, out-of-line class scope, and friend classes.
+- `f249956` — Sema analyses in-class member bodies.
+- `23d1cf1`, `86594bc` — KR16 profile rejects `long long` and floating point.
+- `6ab2671`, `cf10b13` — executed tests run images under the VM and check exit
+  status and output, which is how the `BitCast` truncation was found.
+- `b1ec5c2`, `a744e14`, `4826601` — const-object member assignment, its
+  `mutable` exemption, and a guard that reads still compile.
+- `1001430` — `-S -o FILE` writes the assembly instead of ignoring the path.
 
 ## Important test caveat
 
@@ -148,11 +158,24 @@ The sibling corpus carries two blocks of its own:
 
 ## Corpus notes
 
-Examples that compiled, linked, and ran under KR32 in the previous session:
+Measured by compiling with `krc -c`, linking with `libkrcrt.kro`, `fileio.s`,
+and `crt0.s`, and running each image under `..\kr32`'s VM: **13 of 15 examples
+compile, link, and run.** Exit codes matched what each program returns for
+`hello.c`, `strings.c`, `types.c`, `varargs.c`, `libc-test.c`, `floats.c`,
+`fileio.c`, `mainentry.c` (all 0), `hello.cpp` (42), and `cxx_tls.cpp` (42, the
+value its `long long` division is meant to produce).
 
-- `hello.c`, `binarytree.c`, `strings.c`, `types.c`, `varargs.c`,
-  `libc-test.c`, `floats.c`, `hello.cpp`, `cxx_libc.cpp`, `mainentry.c`,
-  `balanced-tree.cpp` (output was only spot-checked).
+Not green, and why:
+
+- `FileOpen.cpp` — does not compile: `implicit declaration of function
+  'sys_open_dialog'`.
+- `matrix.cpp` — does not compile: `expression is not an lvalue` at line 66.
+- `binarytree.c` and `balanced-tree.cpp` run but halt with statuses 115 and 36
+  and print no tree. This is a krc code-generation defect, not a VM or program
+  defect: the same source built with `kr32.exe build` runs correctly, which
+  makes `../kr32` a reference oracle. `implementation.md` carries the narrowed
+  evidence, the reduced reproducers (`bt20` passes, `bt22` fails), and the
+  hypotheses already eliminated.
 
 Compile pattern used:
 
@@ -191,14 +214,18 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
 
 ## Suggested next actions
 
-1. Run the linked `longlong_arith` fixture under the sibling `../kr32` VM and
-   record its exit code in `implementation.md`; that is the one verification the
-   64-bit lowering is missing.
-2. Pick one coherent M10 or M8/M9 item and implement it end-to-end with a linked
-   fixture; prefer closing a named gap over adding more same-shape tests.
-3. High-value candidates: matrix/host intrinsics, KR16 libc/file I/O, an
-   in-class member body pass, `const` correctness, or the first slice of
-   exceptions/RTTI/templates.
+1. Give the corpus tree defect one assembly-level attempt: krc's `print_tree`
+   and `insert` against the reference build from `../kr32`, comparing the
+   recursive prologue/epilogue and how a variadic call's outgoing arguments are
+   placed. Seven rounds of behavioural probing produced no fix; static
+   comparison is the untried method. If it does not converge quickly, escalate
+   it as a known wrong-code defect and move on.
+2. Then RTTI: `typeid` and `dynamic_cast` over the vtable/typeinfo layout in
+   plan §10.4. The executed-test harness can verify it end to end.
+3. Remaining backlog: deleted constructors at construction sites (needs
+   constructor matching IRGen does not have), full `const` method correctness,
+   variadic templates, dynamic TLS, the `std` containers, KR16 libc/file I/O,
+   and matrix/host intrinsics.
 4. Run the host gate and record it before pushing; a matrix-green change stays
    local until then.
 
