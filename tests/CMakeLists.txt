@@ -428,7 +428,6 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_printf_long_long PROPERTIES
             DEPENDS krc_link_printf_long_long)
-    endif()
 
         add_test(NAME krc_run_const_member_read
             COMMAND ${CMAKE_COMMAND}
@@ -447,6 +446,7 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_const_mutable_member PROPERTIES
             DEPENDS krc_link_const_mutable_member)
+    endif()
 
     add_test(NAME krc_link_printf_width
         COMMAND ${CMAKE_COMMAND}
