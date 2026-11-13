@@ -745,6 +745,10 @@ struct heap_header {
 
 static unsigned char *heap_next;
 static struct heap_header *free_head;
+/* The heap must start above the loaded image. Images load at 0x10000 and a
+   large program's .text alone can run past 0x40000, so a base of 0x00020000
+   handed out memory inside the code and allocations overwrote the
+   instructions that were about to run. */
 #define HEAP_BEGIN ((unsigned char *)0x00100000)
 #define HEAP_END ((unsigned char *)0x08000000)
 
