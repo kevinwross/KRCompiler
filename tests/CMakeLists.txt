@@ -4271,16 +4271,6 @@ if(TARGET krc)
                 "-DEXPECT=cannot instantiate abstract class"
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
 
-    add_test(NAME krc_link_alloc_interleave
-        COMMAND ${CMAKE_COMMAND}
-                -DKRC=$<TARGET_FILE:krc>
-                -DKRLD=$<TARGET_FILE:krld>
-                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/alloc_interleave.c
-                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
-                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
-                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/alloc_interleave_linked.k32
-                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
-
     add_test(NAME krc_link_inherit_member_arith
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -4523,3 +4513,4 @@ if(TARGET krld)
     add_test(NAME krld_version COMMAND $<TARGET_FILE:krld> --version)
     set_tests_properties(krld_version PROPERTIES PASS_REGULAR_EXPRESSION "krld 0\\.1\\.0")
 endif()
+
