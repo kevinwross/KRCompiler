@@ -457,6 +457,15 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_inherit_member_arith PROPERTIES
             DEPENDS krc_link_inherit_member_arith)
+
+        add_test(NAME krc_run_logical_not_pointer
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/logical_not_pointer_linked.k32
+                    -DEXPECT_EXIT=1
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_logical_not_pointer PROPERTIES
+            DEPENDS krc_link_logical_not_pointer)
     endif()
 
     add_test(NAME krc_link_printf_width
