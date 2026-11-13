@@ -247,4 +247,3 @@ Keep the objective **“Proceed with implementation of M0 thru M10.”** If the 
 session supports persisted goals, create that goal with a 3000-round cap. Do not
 mark it complete while M8/M9/M10 items above are open, and do not treat the
 previous `blocked` state as a technical blocker — it meant “paused by user.”
-
