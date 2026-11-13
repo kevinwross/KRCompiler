@@ -458,6 +458,15 @@ if(TARGET krc)
         set_tests_properties(krc_run_inherit_member_arith PROPERTIES
             DEPENDS krc_link_inherit_member_arith)
 
+        add_test(NAME krc_run_heap_above_code
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/heap_above_code_linked.k32
+                    -DEXPECT_EXIT=7
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_heap_above_code PROPERTIES
+            DEPENDS krc_link_heap_above_code)
+
         add_test(NAME krc_run_logical_not_pointer
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}
@@ -4272,6 +4281,16 @@ if(TARGET krc)
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/const_method_ref_denied.cpp
                 "-DEXPECT=call to non-const member function"
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
+    add_test(NAME krc_link_heap_above_code
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/heap_above_code.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/heap_above_code_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_struct_return_assignment
         COMMAND ${CMAKE_COMMAND}
