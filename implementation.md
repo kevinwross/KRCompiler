@@ -464,6 +464,8 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - The `kr32::matrix` surface lowers to tile instructions: `matrix_mul` is `MLOAD`/`MLOAD`/`MMUL`/`MSTORE`, `matrix_mul_add` is `MMAC`, `transpose` is `MTRANS`, `transform` is `MTRANS`/`MVEC`/`MTRANS`/`VSTORE`, `dot` is `MLOAD`/`VLOAD`/`VDOT`, and `push`/`pop`/`drop` drive the transform stack with `MPUSH`/`MPOP`/`MDROP` ([ADR 0024](docs/decisions/0024-kr32-tile-intrinsics.md)). Recognition is by symbol and signature, so the fixture declares the functions and still links because no call survives. `krc_link_matrix_intrinsics` and the executed `krc_run_matrix_intrinsics` require exit 42, which every value check in the fixture reaches only on exact results.
 - A by-value aggregate return larger than 8 bytes is memory class and copies to the destination the caller passes in `R4`; the callee saves `R4` in its frame and `ret` copies the object there. `../../kr32/examples/matrix.cpp` returns `mat4` by value from `make_translation` and `make_scale` and now runs to 42.
 - `crt0.s` sets the transform stack pointer from the linker's `__stack_limit`; a zero TSP faults on the first `MPUSH`, and the reset value is zero.
+- RTTI works over the vtable/typeinfo layout ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)). Vtables are weak `_ZTV<Class>` globals whose word 0 is `_ZTI<Class>`, so an object's vptr points at the first virtual slot and the RTTI pointer is one slot back. `_ZTI` carries the name, flags, and the base typeinfo, which is the chain `dynamic_cast` walks. `typeid` yields the object's dynamic typeinfo through a polymorphic glvalue and the static `_ZTI` otherwise; `typeid(a) == typeid(b)` compares typeinfo addresses. `dynamic_cast<T*>` is a bitcast for an upcast and a `__krc_dynamic_cast` call otherwise, returning null when the dynamic type is not the target or derived from it. `krc_link_rtti` and the executed `krc_run_rtti` require exit 42; `krc_cxx_dynamic_cast_reference_rejected` and `krc_cxx_typeid_without_typeinfo` assert the two diagnostics.
+- The per-object `malloc`'d vtable is gone, so polymorphic construction allocates nothing and two objects of one class share one table.
 - [ ] Full KR32 `libc.c`/`kr32os` and KR16 runtime integration.
 - [ ] Tag `v1.1`; Gate G9.
 
@@ -485,6 +487,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T10:21:45-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 515/515
+windows-msvc-release  PASS 515/515
+linux-gcc-debug       PASS 505/505
+linux-gcc-release     PASS 505/505
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register ten tests fewer: the executed tests need a runnable
+KR32 VM and are not registered where the default is a Windows binary. This gate
+covers read-only vtables, typeinfo objects, `typeid`, pointer `dynamic_cast`,
+weak globals, address-array constants, and data-section relocations
+([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)). Clean configure and
+build of all four presets; no warnings in any log. A first attempt stopped in
+the Linux rows on `-Werror=switch` because `load_value` did not handle the new
+`ConstantAddressArray` value kind; it was fixed and the gate re-run from
+deleted build directories.
 
 ### 2026-11-13T09:44:25-08:00 — host gate (Windows)
 
@@ -2485,3 +2507,9 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T09:17:12-08:00** — Added `tests/fixtures/c/matrix_intrinsics.cpp`, which declares the eight functions without defining them: it links only if every call was recognised, and its executed test requires exit 42, reached only when the transform, product, aliasing assignment, accumulate, transpose, dot, and push/pop/drop results are all exact. Windows debug CTest is 511/511. One expectation in the fixture was wrong on the first run (I treated `scale_matrix(8.0)` as an unaffine matrix with `m[15] = 8`), and the program's own exit code 4 said so; the matrix is affine, so the corner stays 2 after accumulation.
 - **2026-11-13T09:52:05-08:00** — Ran the host gate for the tile-intrinsic change, deleting the four build directories first so nothing incremental could hide a failure. All four configurations configure, build, and test clean with no warnings: `windows-msvc-debug` 511/511, `windows-msvc-release` 511/511, `linux-gcc-debug` 502/502, and `linux-gcc-release` 502/502 under WSL. The Linux rows register nine fewer tests because the executed tests need a runnable KR32 VM. The gate started at `2026-11-13T09:44:25-08:00`, the configure time of the first presets, and is recorded in full under `## Gate verification`.
 - **2026-11-13T09:52:05-08:00** — Re-measured the corpus after the change with the same `krc -c` / `krld` / `vm` recipe. All 15 examples compile and link, and every one of the 14 that do not wait on a host dialog runs with the status its `main` returns: eleven at 0, `hello.cpp` and `matrix.cpp` at 42, and `cxx_tls.cpp` at 42. `matrix.cpp` was the last gap and it now passes end to end. `FileOpen.cpp` links and is excluded from the run loop because its host file dialog blocks; that is a property of the example, not a compiler limit.
+- **2026-11-13T10:18:49-08:00** — Started RTTI, the next M10 item, by reading plan §8.6/§10.4 and ADR 0013. The per-object `malloc`'d vtable ADR 0013 left behind cannot serve `typeid`: two objects of one class must report the same `type_info`, and a per-object table is neither shared nor merged across translation units. The right shape is the one plan §10.4 already fixes — a weak `_ZTV<Class>` global with the typeinfo at slot -1 — which needs data initializers that name symbols, so the enabling work came first: an address-array IR constant, weak globals, `.word <symbol>` in the assembler, and section-aware data relocations. Wrote [ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md) before the code, because the vtable layout and the typeinfo record are ABI.
+- **2026-11-13T10:18:49-08:00** — Made data relocations work end to end. `ConstantAddressArray` holds word-sized addresses (`[@function, @global, 0]`), the backend emits `.word <symbol>` for it, the assembler accepts a symbolic `.word` and records the section it patches, and the KRO writer now passes that section through instead of forcing every relocation into `.text`. The last step was the defect that mattered: `_ZTV`/`_ZTI` linked cleanly with all-zero words because a data reloc was patched into the text section at a data offset. Reading the image's `.data` bytes proved it, and the dispatch fixture then ran to its expected exit 2.
+- **2026-11-13T10:18:49-08:00** — Replaced the per-object vtable with static metadata. `emit_vtable_init` now stores `&_ZTV<Class> + 4` into the object's vptr slot, so virtual slot `k` stays `vptr + 4*k` and the existing dispatch code is untouched; `_ZTI<Class>` is `[0, _ZTS<Class>, 0, base]`, and finalization runs after every function body exists so destructor clones are visible to the slots. All 511 prior tests still pass, which is the evidence that dispatch, virtual destructors, pure virtuals, and virtual references are unchanged.
+- **2026-11-13T10:18:49-08:00** — Added `typeid`. The parser builds a `TypeIdExpression` for both the type-name and expression forms, Sema types it as `std::type_info` and records the operand type, and IRGen yields an lvalue of the typeinfo object: `vptr[-1]` for a polymorphic glvalue, `_ZTI<T>` otherwise. Two things had to be discovered by experiment: IRGen cannot re-analyse the operand because the function's scopes are gone by then (the compiler reported `use of undeclared identifier` and, worse, crashed downstream), and `emit_lvalue` returns the *value* type rather than a pointer type, so the dynamic path reads the record type, not `type->element`. `<typeinfo>` now exists in the sysroot with the fixed three-word layout, `name()`, and equality.
+- **2026-11-13T10:18:49-08:00** — Added `dynamic_cast` for pointer targets. An upcast lowers to a bitcast; anything else calls `__krc_dynamic_cast(object, &_ZTI<T>)`, which walks the typeinfo base chain and returns the object or null. Reference casts are rejected with a diagnostic because `std::bad_cast` needs exceptions, which do not exist yet. Also made `typeid(a) == typeid(b)` compare typeinfo addresses whether either side is a `typeid`, a type_info variable, or both; the first version handled only the both-`typeid` case and crashed the compiler on `info == typeid(a)`.
+- **2026-11-13T10:18:49-08:00** — Added `tests/fixtures/c/rtti.cpp`, which checks dynamic `typeid` through a base pointer, name(), a type_info reference, two-level downcasts, a failing downcast, an upcast, and a null source; `krc_run_rtti` requires exit 42. Added `dynamic_cast_reference.cpp` and `typeid_without_typeinfo.cpp` for the two diagnostics. Windows debug CTest is 515/515.
