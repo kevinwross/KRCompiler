@@ -369,7 +369,7 @@ int main(int argc, char** argv) {
                             diagnostics.report(krc::frontend::Severity::Error,
                                                "KR16 backend: " +
                                                    backend_error);
-                        } else if (emit_object) {
+                        } else if (emit_object && !diagnostics.has_errors()) {
                             std::string source;
                             if (!emit_object_container) {
                                 source =
