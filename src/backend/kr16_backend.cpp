@@ -165,7 +165,10 @@ void Kr16Backend::emit_function(std::string& out,
         }
         return found->second;
     };
-    const auto load = [&](const ir::Value* value, std::string_view reg) {
+    // `adjust` compensates for bytes pushed below SP: the staged slots sit
+    // above SP, so their SP-relative offsets grow by everything pushed.
+    const auto load = [&](const ir::Value* value, std::string_view reg,
+                          std::uint32_t adjust = 0) {
         if (!value) {
             out += "    MOV " + std::string(reg) + ", #0\n";
             return;
@@ -191,12 +194,12 @@ void Kr16Backend::emit_function(std::string& out,
                 static_cast<const ir::Instruction*>(value);
             if (instruction->opcode == ir::Opcode::Alloca) {
                 out += "    LEA " + std::string(reg) + ", [SP+" +
-                       std::to_string(slot(value)) + "]\n";
+                       std::to_string(slot(value) + adjust) + "]\n";
                 return;
             }
         }
         out += "    LD " + std::string(reg) + ", [SP+" +
-               std::to_string(slot(value)) + "]\n";
+               std::to_string(slot(value) + adjust) + "]\n";
     };
     const auto store = [&](const ir::Instruction& instruction,
                            std::string_view reg) {
@@ -213,13 +216,18 @@ void Kr16Backend::emit_function(std::string& out,
     out += "    LEA SP, [R4-" + std::to_string(layout.frame_size) + "]\n";
     static const char* arguments[] = {"R1", "R2", "R3"};
     for (std::size_t index = 0; index < function.parameters.size(); ++index) {
-        if (index >= 3) {
-            error = "KR16 supports at most three register parameters";
-            return;
+        if (index < 3) {
+            out += "    ST [SP+" +
+                   std::to_string(slot(function.parameters[index].get())) + "], " +
+                   arguments[index] + "\n";
+            continue;
         }
+        // The caller pushed the extras above the return address, last argument
+        // first, so the fourth sits just past the saved frame pointer
+        // (docs/abi-kr16.md, ADR 0028).
+        out += "    LD R0, [R4+" + std::to_string(4 + 2 * (index - 3)) + "]\n";
         out += "    ST [SP+" +
-               std::to_string(slot(function.parameters[index].get())) + "], " +
-               arguments[index] + "\n";
+               std::to_string(slot(function.parameters[index].get())) + "], R0\n";
     }
 
     std::size_t synthetic_label = 0;
@@ -372,14 +380,22 @@ void Kr16Backend::emit_function(std::string& out,
                 break;
             }
             case ir::Opcode::Call: {
-                for (std::size_t index = 1;
-                     index < instruction->operands.size(); ++index) {
-                    if (index > 3) {
-                        error = "KR16 supports at most three call arguments";
-                        return;
-                    }
-                    load(instruction->operands[index],
-                         arguments[index - 1]);
+                const auto argument_count = instruction->operands.size() - 1;
+                // Register arguments first: the staged values are addressed
+                // relative to SP, which pushing the extras moves.
+                for (std::size_t index = 0;
+                     index < argument_count && index < 3; ++index) {
+                    load(instruction->operands[index + 1], arguments[index]);
+                }
+                // Extras go out last first, so the fourth argument ends at the
+                // lowest address and they run upward in declaration order. Each
+                // push moves SP, and the staged slots live above it, so the
+                // offset is compensated by everything already pushed.
+                for (std::size_t index = argument_count, pushed = 0; index > 3;
+                     --index, ++pushed) {
+                    load(instruction->operands[index], "R0",
+                         static_cast<std::uint32_t>(2 * pushed));
+                    out += "    PUSH R0\n";
                 }
                 const auto* callee = instruction->operands[0];
                 if (callee->kind == ir::ValueKind::Function) {
@@ -388,6 +404,10 @@ void Kr16Backend::emit_function(std::string& out,
                     load(callee, "R0");
                 }
                 out += "    CALL R0\n";
+                if (argument_count > 3) {
+                    out += "    LEA SP, [SP+" +
+                           std::to_string(2 * (argument_count - 3)) + "]\n";
+                }
                 if (instruction->type && !ir::is_void(instruction->type)) {
                     store(*instruction, "R0");
                 }

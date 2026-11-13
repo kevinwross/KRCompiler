@@ -1,8 +1,9 @@
 # KR16 ABI (IP16 scalar subset)
 
 **Status:** Draft. The scalar argument/return/frame rules are frozen by
-[ADR 0016](decisions/0016-kr16-scalar-abi.md); aggregates, varargs, floating
-point, and more than three arguments remain open. The object and link path is
+[ADR 0016](decisions/0016-kr16-scalar-abi.md), and stack arguments by
+[ADR 0028](decisions/0028-kr16-stack-arguments.md); aggregates, varargs, and
+floating point remain open. The object and link path is
 defined by [ADR 0019](decisions/0019-kr16-object-linker.md).
 
 ## Data model
@@ -38,14 +39,19 @@ is `0xE000`. All slots are two bytes.
 ## Calling convention
 
 1. The caller evaluates arguments and places the first three in `R1`, `R2`,
-   `R3`.
+   `R3`. Further arguments are pushed last first, one two-byte slot each, so
+   the fourth argument ends at the lowest address and the rest follow in
+   declaration order; the caller releases the pushed area with
+   `LEA SP, [SP + 2 * count]` immediately after `CALL`.
 2. A direct call loads the callee address with `MOV R0, #callee` and executes
    `CALL R0`.
 3. An indirect call loads the function pointer into `R0` after its arguments
    and executes `CALL R0`.
 4. The callee saves the incoming frame pointer:
    `PUSH R4; MOV R4, SP; LEA SP, [R4 - frame_size]`.
-5. Each parameter is stored into a two-byte frame slot in the prologue.
+5. Each parameter is stored into a two-byte frame slot in the prologue: the
+   first three from `R1`-`R3`, and argument `n >= 4` from
+   `[R4 + 4 + 2 * (n - 4)]`.
 6. The result is returned in `R0`.
 7. The epilogue restores `MOV SP, R4; POP R4; RET`.
 
@@ -109,7 +115,6 @@ functions defined in the same image or resolved by the linker.
 - Aggregate parameters and returns.
 - Variadic functions.
 - Floating-point arguments and results.
-- More than three arguments.
 - Callee-saved register allocation.
 - `.data`/`.rodata` section splitting and KEX symbols/debug records.
 - A full C++ ABI for KR16.
@@ -118,5 +123,4 @@ functions defined in the same image or resolved by the linker.
 
 The backend rejects unsupported features with a target-specific diagnostic
 rather than emitting a wrong calling sequence. Known rejected cases include
-more than three arguments, aggregate parameters or returns, variadic calls, and
-floating-point values.
+aggregate parameters or returns, variadic calls, and floating-point values.

@@ -347,7 +347,21 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
         set_tests_properties(krc_run_kr16_bits_nested PROPERTIES
             DEPENDS krc_kr16_bits_nested_image)
+
+        add_test(NAME krc_run_kr16_arguments
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_arguments.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_arguments PROPERTIES
+            DEPENDS krc_kr16_arguments_image)
     endif()
+
+    add_test(NAME krc_kr16_arguments_image
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_arguments.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_arguments.kex")
 
     add_test(NAME krc_kr16_shift_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16

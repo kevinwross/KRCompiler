@@ -291,6 +291,16 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - Exception state is a single global; the VM is single-threaded for the
   supported subset.
 
+## KR16 stack arguments and varargs
+
+KR16 passes the first three scalar arguments in `R1`-`R3` and pushes the rest
+last-first, one two-byte slot each; the caller releases the area with
+`LEA SP, [SP + 2 * count]` after `CALL`, and the callee reads argument
+`n >= 4` at `[R4 + 4 + 2 * (n - 4)]` ([ADR 0028](docs/decisions/0028-kr16-stack-arguments.md)).
+Variadic functions are still rejected, so `printf` cannot exist on KR16 yet;
+a varargs rule is the next decision, and with the stack area in place it is the
+only remaining blocker.
+
 ## KR16 execution
 
 `KRC_KR16_VM` points at `../kr16/build/shell-debug/kr16.exe` on a Windows
