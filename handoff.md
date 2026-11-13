@@ -174,8 +174,11 @@ Not green, and why:
   and print no tree. This is a krc code-generation defect, not a VM or program
   defect: the same source built with `kr32.exe build` runs correctly, which
   makes `../kr32` a reference oracle. `implementation.md` carries the narrowed
-  evidence, the reduced reproducers (`bt20` passes, `bt22` fails), and the
-  hypotheses already eliminated.
+  evidence, the reduced reproducers, and the hypotheses already eliminated. The
+  reproducers are regenerated in one step: copy `../kr32/examples/binarytree.c`
+  and keep only the first 20 `root = insert(root, ...)` lines (passes) or the
+  first 22 (fails). They live untracked under `build/corpus`, which the gates do
+  not delete, but nothing in the repository depends on that.
 
 Compile pattern used:
 
