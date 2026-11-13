@@ -475,6 +475,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T00:22:24-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 477/477
+windows-msvc-release  PASS 477/477
+linux-gcc-debug       PASS 474/474
+linux-gcc-release     PASS 474/474
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register three tests fewer: the executed tests need a
+runnable KR32 VM and are not registered where the default is a Windows
+binary. The timestamp is the first Windows configure, from the CMake cache;
+the WSL logs were lost when that VM restarted during the gate, so the Linux
+rows are identified by their counts rather than their own log times.
+
 ### 2026-11-13T00:05:56-08:00 — host gate (Windows)
 
 ```text
