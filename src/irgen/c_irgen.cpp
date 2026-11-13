@@ -6790,8 +6790,19 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
         return {builder_.create_xor(operand.value, minus_one, "not"), operand.type};
     }
     if (expression.text == "!") {
-        auto* zero = module_->constant_int(operand.type, 0);
-        auto* value = builder_.create_icmp(ir::ICmpPredicate::Eq, operand.value, zero, "not");
+        // `!` applies to pointers as well as integers. An integer constant
+        // cannot carry a pointer type and the comparison wants matching
+        // operands, so a pointer is reduced to an integer first; an integer
+        // operand keeps its own width.
+        auto* compared = operand.value;
+        ir::TypePtr compare_type = operand.type;
+        if (operand.type && operand.type->kind == ir::TypeKind::Pointer) {
+            compared = builder_.create(ir::Opcode::PtrToInt, int_type(),
+                                       {operand.value}, "not.int");
+            compare_type = int_type();
+        }
+        auto* zero = module_->constant_int(compare_type, 0);
+        auto* value = builder_.create_icmp(ir::ICmpPredicate::Eq, compared, zero, "not");
         return {value, value->type};
     }
     if (expression.text == "++" || expression.text == "--") {
