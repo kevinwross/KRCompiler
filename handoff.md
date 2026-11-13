@@ -291,6 +291,15 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - Exception state is a single global; the VM is single-threaded for the
   supported subset.
 
+## Debug display names
+
+`.debug_info` `F` records carry a display name, so a C++ dump shows
+`Widget::size`, `Widget::Widget`, `Widget::~Widget`, and `Counter::bump`
+instead of the flattened symbol ([ADR 0030](docs/decisions/0030-debug-display-names.md)).
+The symbol stays mangled, the KDBG format is unchanged, and display names are
+not unique — a synthesized copy of an inherited method keeps the base's name —
+so anything that resolves still uses the symbol. `krc_debug_names` checks the
+names and `krc_run_debug_names` runs the same image.
 ## KR16 host services
 
 The sibling VM implements only `SYS_VERSION`; every other `SYS #n` service is

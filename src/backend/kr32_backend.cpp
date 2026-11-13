@@ -1053,7 +1053,11 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
         }
     }
 
-    debug_info_ += "F " + function.name + " " + function.name + " .L" + function.name +
+    // The display name is what a debugger shows; the symbol stays mangled
+    // (docs/decisions/0030-debug-display-names.md).
+    const auto& display_name =
+        function.debug_name.empty() ? function.name : function.debug_name;
+    debug_info_ += "F " + display_name + " " + function.name + " .L" + function.name +
                    ".ret " + std::to_string(layout.frame_size) + " " +
                    [&] {
                        auto result = type_to_string(function.type ? function.type->return_type

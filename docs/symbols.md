@@ -47,7 +47,11 @@ unknown tags and reject out-of-bounds or checksum failures.
 | `.kdbg_type` | `Type` and `Member`: name, size, kind, member layout |
 | `.kdbg_build` | `Build`: compiler, build ID, source count |
 
-Strings are NUL-terminated offsets into the payload string table. Records are
+Strings are NUL-terminated offsets into the payload string table. The
+Function record's name comes from the .debug_info F record's display
+name, which is Class::method for a member function and the symbol for
+everything else ([ADR 0030](decisions/0030-debug-display-names.md)); a display
+name is not unique, so anything that resolves keeps using the symbol. Records are
 emitted deterministically: sources, lines, functions, symbols, variables, types,
 then build metadata.
 

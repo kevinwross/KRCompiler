@@ -72,5 +72,6 @@ What was rejected and why.
 - [0027-exception-cleanup.md](0027-exception-cleanup.md) — accepted; adds cleanup landing pads that run live destructors and chain into the handler.
 - [0028-kr16-stack-arguments.md](0028-kr16-stack-arguments.md) — accepted; freezes how KR16 passes more than three scalar arguments.
 - [0029-kr16-variadic-calls.md](0029-kr16-variadic-calls.md) — accepted; freezes how KR16 passes and reads a variadic argument list.
+- [0030-debug-display-names.md](0030-debug-display-names.md) — accepted; gives IR functions a debug display name used in the F record.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.

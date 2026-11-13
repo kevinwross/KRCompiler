@@ -235,6 +235,7 @@ ir::Function* CIRGen::ensure_default_constructor(
     auto* function = module_->add_function(record->tag + "_ctor_0",
                                            function_type, ir::Linkage::Weak,
                                            false);
+    function->debug_name = record->tag + "::" + record->tag;
     function->add_parameter(module_->types().pointer_type(type), "this");
     const auto previous_function = current_function_;
     const auto previous_class = current_class_;
@@ -431,6 +432,7 @@ ir::Function* CIRGen::ensure_member_destructor(
     auto* function = module_->add_function(
         "__krc_member_dtor_" + record->tag, function_type,
         ir::Linkage::Internal, false);
+    function->debug_name = record->tag + "::~" + record->tag;
     function->add_parameter(module_->types().pointer_type(record_type->second),
                             "this");
     const auto previous_function = current_function_;
@@ -1456,6 +1458,8 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
             : mangle_method(record_name, method_name);
     auto* function = module_->add_function(mangled, ir_type, ir::Linkage::Weak,
                                            false);
+    function->debug_name =
+        is_constructor ? record_name + "::" + class_name : record_name + "::" + method_name;
     function->add_parameter(module_->types().pointer_type(class_type), "this");
     const auto* function_declarator = find_function_declarator(*definition.children[1]);
     std::size_t parameter_index = 0;
@@ -1589,6 +1593,9 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                                 : mangle_method(child->text, method_name);
             auto* function =
                 module_->add_function(mangled, ir_type, ir::Linkage::Weak, false);
+            function->debug_name =
+                is_constructor ? record->tag + "::" + record->tag
+                               : record->tag + "::" + method_name;
             if (has_label(*member->children[0], "static")) {
                 static_methods_.insert(function);
             }
@@ -1702,6 +1709,7 @@ void CIRGen::clone_inherited_methods() {
             for (const auto& parameter : base_function->parameters) {
                 clone->add_parameter(parameter->type, parameter->name);
             }
+            clone->debug_name = base_function->debug_name;
             derived_methods.emplace(name, clone);
             function_source_names_[clone] = name;
             functions_[clone->name] = clone;
@@ -1867,6 +1875,7 @@ void CIRGen::collect_function(const frontend::AstNode& specifiers,
             weak ? ir::Linkage::Weak
                  : internal ? ir::Linkage::Internal : ir::Linkage::External,
             !definition);
+        function->debug_name = name;
         functions_.emplace(name, function);
     }
 

@@ -309,6 +309,9 @@ struct Function final : Value {
     Linkage linkage = Linkage::External;
     CallingConvention calling_convention = CallingConvention::C;
     bool declaration = false;
+    // The name a debugger shows, such as `Animal::legs`. Empty means the symbol
+    // name is the display name. Only the backend reads this.
+    std::string debug_name;
     std::vector<std::unique_ptr<Parameter>> parameters;
     std::vector<std::unique_ptr<BasicBlock>> blocks;
 

@@ -437,6 +437,28 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_printf.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
 
+    add_test(NAME krc_debug_names
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_names.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DIO=${CMAKE_SOURCE_DIR}/targets/kr32/runtime/fileio.s
+                -DEH=${CMAKE_SOURCE_DIR}/targets/kr32/runtime/eh.s
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_names.k32
+                "-DEXPECT=function Widget::Widget;function Widget::~Widget;function Widget::size;function Widget::doubled;function Counter::bump;function Counter::value;function helper"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDebugNames.cmake)
+
+    add_test(NAME krc_link_debug_names
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_names.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_names_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
     add_test(NAME krc_link_div_and_vsprintf
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -912,6 +934,14 @@ if(TARGET krc)
         set_tests_properties(krc_run_aggregate_values PROPERTIES
             DEPENDS krc_link_aggregate_values)
 
+        add_test(NAME krc_run_debug_names
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/debug_names_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_debug_names PROPERTIES
+            DEPENDS krc_link_debug_names)
         add_test(NAME krc_run_div_and_vsprintf
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}
