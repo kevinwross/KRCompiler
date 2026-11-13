@@ -1368,11 +1368,13 @@ void Sema::analyze_declaration(const AstNode& declaration) {
                 // The initializer's own type decides whether this is a copy of a
                 // record or a conversion into one; the initializer analysis below
                 // reports the target type, so ask the expression directly.
-                // Only a scalar literal is handled: analysing other initializer
-                // nodes here would re-enter a form that has its own path.
-                const bool converts =
-                    type && type->kind == TypeKind::Record && type->record &&
-                    init->children[1]->kind == AstKind::IntegerLiteral;
+                // A literal or a named value converts; other initializer nodes have
+                // their own path and must not be analysed here.
+                const bool scalar_initializer =
+                    init->children[1]->kind == AstKind::IntegerLiteral ||
+                    init->children[1]->kind == AstKind::Identifier;
+                const bool converts = type && type->kind == TypeKind::Record &&
+                                      type->record && scalar_initializer;
                 if (converts) {
                     const auto key = type->record->tag + "#1";
                     for (const auto& constructor : type->record->methods) {
