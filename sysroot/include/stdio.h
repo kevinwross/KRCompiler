@@ -69,4 +69,8 @@ int fileno(FILE *stream);
 char *tmpnam(char *buffer);
 int fflush(FILE *stream);
 
+/* Host service: shows the platform's open-file dialog and writes the chosen
+   path into buffer. Returns the length written, or -1 when cancelled. */
+int sys_open_dialog(char *buffer, int size);
+
 #endif

@@ -86,3 +86,14 @@ krc_sys_dup:
 krc_sys_dup2:
         SYSCALL #59
         RET
+
+; The host's native open-file dialog. Narrower than the C ABI: the host takes
+; a kind in R0, a buffer in R1, its size in R2, and the result returns in R0.
+        .global sys_open_dialog
+sys_open_dialog:
+        MOV R3, R1
+        MOV R2, R0
+        MOV R1, #1
+        MOV R0, #0
+        SYSCALL #51
+        RET
