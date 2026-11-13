@@ -4511,4 +4511,3 @@ if(TARGET krld)
     add_test(NAME krld_version COMMAND $<TARGET_FILE:krld> --version)
     set_tests_properties(krld_version PROPERTIES PASS_REGULAR_EXPRESSION "krld 0\\.1\\.0")
 endif()
-
