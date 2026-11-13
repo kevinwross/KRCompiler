@@ -287,6 +287,22 @@ void Sema::warning(const SourceLocation& location, std::string message) {
     diagnostics_.report(Severity::Warning, location, std::move(message));
 }
 
+void Sema::check_member_access(const SourceLocation& location, const RecordInfo& record,
+                               const std::string& name, AccessLevel access) {
+    if (access == AccessLevel::Public) {
+        return;
+    }
+    // Sema analyzes only free-function bodies, so the only caller that may
+    // reach a non-public member from here is a declared friend. In-class and
+    // out-of-line member bodies never reach this check.
+    if (std::find(record.friends.begin(), record.friends.end(), current_function_name_) !=
+        record.friends.end()) {
+        return;
+    }
+    error(location, "'" + record.tag + "::" + name + "' is " +
+                        (access == AccessLevel::Private ? "private" : "protected"));
+}
+
 TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_typedef,
                                         bool& is_extern, bool& is_static) {
     is_typedef = false;
@@ -506,6 +522,10 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
     }
 
     info->complete = true;
+    if (std::find(specifier.labels.begin(), specifier.labels.end(), "class") !=
+        specifier.labels.end()) {
+        info->default_access = AccessLevel::Private;
+    }
     for (const auto& label : specifier.labels) {
         if (label.starts_with("base:")) {
             info->base = type_named(label.substr(5));
@@ -527,8 +547,22 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
                 const auto& labels = member->children[0]->labels;
                 const bool is_virtual =
                     std::find(labels.begin(), labels.end(), "virtual") != labels.end();
-                info->methods.push_back({declarator_name(*member->children[1]),
-                                         function_type, is_virtual, false});
+                AccessLevel access = info->default_access;
+                for (const auto& label : member->labels) {
+                    if (label == "access:public") {
+                        access = AccessLevel::Public;
+                    } else if (label == "access:private") {
+                        access = AccessLevel::Private;
+                    } else if (label == "access:protected") {
+                        access = AccessLevel::Protected;
+                    }
+                }
+                RecordMethod method_entry;
+                method_entry.name = declarator_name(*member->children[1]);
+                method_entry.type = function_type;
+                method_entry.is_virtual = is_virtual;
+                method_entry.access = access;
+                info->methods.push_back(std::move(method_entry));
             }
             continue;
         }
@@ -554,6 +588,19 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
     bool is_extern = false;
     bool is_static = false;
     auto base = base_type_from_specifiers(*specifiers, is_typedef, is_extern, is_static);
+
+    AccessLevel access = record.default_access;
+    for (const auto& label : member.labels) {
+        if (label == "access:public") {
+            access = AccessLevel::Public;
+        } else if (label == "access:private") {
+            access = AccessLevel::Private;
+        } else if (label == "access:protected") {
+            access = AccessLevel::Protected;
+        }
+    }
+    const bool is_friend = std::find(member.labels.begin(), member.labels.end(), "friend") !=
+                           member.labels.end();
 
     std::uint64_t declaration_alignment = 0;
     for (const auto& specifier : specifiers->children) {
@@ -632,12 +679,19 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
                                            "pure") != member.labels.end();
             const bool is_deleted = std::find(member.labels.begin(), member.labels.end(),
                                               "deleted") != member.labels.end();
+            if (is_friend) {
+                // A friend declaration names a non-member function that may
+                // reach this record's non-public members.
+                record.friends.push_back(name);
+                continue;
+            }
             RecordMethod entry;
             entry.name = name;
             entry.type = type;
             entry.is_virtual = is_virtual;
             entry.is_pure = is_pure;
             entry.is_deleted = is_deleted;
+            entry.access = access;
             record.methods.push_back(std::move(entry));
             continue;
         }
@@ -667,6 +721,7 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
         member_info.type = std::move(type);
         member_info.location = child->location;
         member_info.alignment = declaration_alignment;
+        member_info.access = access;
         if (bit_width) {
             member_info.bit_field = true;
             member_info.bit_width = *bit_width;
@@ -1762,6 +1817,8 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                                       "use of deleted function '" + class_name + "::" +
                                           method_name + "'");
                             }
+                            check_member_access(callee->location, *tag->type->record,
+                                                method.name, method.access);
                             for (const auto& argument : expression.children[1]->children) {
                                 if (argument) {
                                     analyze_expression(*argument);
@@ -1916,6 +1973,8 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                           : nullptr) {
             for (const auto& member : record->members) {
                 if (member.name == expression.text) {
+                    check_member_access(expression.location, *record, member.name,
+                                        member.access);
                     return member.type;
                 }
             }
@@ -1925,6 +1984,8 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                         error(expression.location, "use of deleted function '" +
                                                        record->tag + "::" + method.name + "'");
                     }
+                    check_member_access(expression.location, *record, method.name,
+                                        method.access);
                     return method.type;
                 }
             }

@@ -32,6 +32,12 @@ struct Type;
 using TypePtr = std::shared_ptr<const Type>;
 struct AstNode;
 
+enum class AccessLevel {
+    Public,
+    Private,
+    Protected,
+};
+
 struct RecordMember {
     std::string name;
     TypePtr type;
@@ -40,6 +46,7 @@ struct RecordMember {
     unsigned bit_width = 0;
     std::uint64_t alignment = 0;
     const AstNode* default_initializer = nullptr;
+    AccessLevel access = AccessLevel::Public;
 };
 
 struct RecordMethod {
@@ -48,6 +55,7 @@ struct RecordMethod {
     bool is_virtual = false;
     bool is_pure = false;
     bool is_deleted = false;
+    AccessLevel access = AccessLevel::Public;
 };
 
 struct RecordInfo {
@@ -55,9 +63,15 @@ struct RecordInfo {
     bool is_union = false;
     bool complete = false;
     bool polymorphic = false;
+    // `class` members are private until an access specifier says otherwise;
+    // `struct` and `union` members are public.
+    AccessLevel default_access = AccessLevel::Public;
     TypePtr base;
     std::vector<RecordMember> members;
     std::vector<RecordMethod> methods;
+    // Names of functions declared `friend` in this record. Friend classes are
+    // not recorded yet.
+    std::vector<std::string> friends;
 };
 
 struct EnumInfo {

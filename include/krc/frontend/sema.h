@@ -183,6 +183,10 @@ private:
 
     void error(const SourceLocation& location, std::string message);
     void warning(const SourceLocation& location, std::string message);
+    // Reports a non-public member reached from outside the declaring record
+    // unless the enclosing function is one of its friends.
+    void check_member_access(const SourceLocation& location, const RecordInfo& record,
+                             const std::string& name, AccessLevel access);
 
     DiagnosticEngine& diagnostics_;
     const target::TargetProfile& profile_;

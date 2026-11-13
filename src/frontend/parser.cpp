@@ -911,16 +911,23 @@ std::unique_ptr<AstNode> Parser::parse_struct_specifier(bool is_union) {
         node->labels.push_back("definition");
         const auto previous_class = current_class_name_;
         current_class_name_ = node->text;
+        std::string access;
         while (!check("}") && !at_end()) {
             if (peek().kind == TokenKind::Identifier &&
                 (peek().text == "public" || peek().text == "private" ||
                  peek().text == "protected") &&
                 peek(1).text == ":") {
+                access = peek().text;
                 position_ += 2;
                 continue;
             }
             auto member = parse_member_declaration();
             if (member) {
+                // The access level applies to every member that follows it,
+                // so it travels with the member rather than the record.
+                if (!access.empty()) {
+                    member->labels.push_back("access:" + access);
+                }
                 node->children.push_back(std::move(member));
             } else {
                 synchronize();
@@ -956,6 +963,11 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
     bool is_virtual = false;
     if (peek().kind == TokenKind::Identifier && peek().text == "virtual") {
         is_virtual = true;
+        ++position_;
+    }
+    bool is_friend = false;
+    if (cxx_mode_ && peek().kind == TokenKind::Identifier && peek().text == "friend") {
+        is_friend = true;
         ++position_;
     }
     if (check("~")) {
@@ -1063,6 +1075,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
             if (member_initializers) {
                 definition->children.push_back(std::move(member_initializers));
             }
+            if (is_friend) {
+                definition->labels.push_back("friend");
+            }
             return definition;
         }
         return nullptr;
@@ -1077,6 +1092,9 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
 
     auto member = make_ast(AstKind::MemberDeclaration, specifiers->location);
     member->children.push_back(std::move(specifiers));
+    if (is_friend) {
+        member->labels.push_back("friend");
+    }
     if (match(";")) {
         return member;
     }
