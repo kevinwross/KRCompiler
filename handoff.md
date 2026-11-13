@@ -185,6 +185,9 @@ krld.exe build\corpus\<file>.kro `
 ```
 
 A run leaves `host-output.txt` in the project root; delete it before committing.
+
+Skip `FileOpen.cpp` when running the corpus in a loop: it now links, and
+its run waits for the host file dialog instead of returning.
 ## Traps that have caused real failures
 
 - **Test-name and fixture collisions.** Before adding a fixture or `add_test`,
