@@ -291,6 +291,23 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - Exception state is a single global; the VM is single-threaded for the
   supported subset.
 
+## KR16 heap
+
+The linker now reports KR16's memory limits: `__heap_start` is the first byte
+past the image, `__heap_end`/`__stack_limit` are `0xE000`, and
+`__stack_top` is `0xF000` (the KR32 values stay as they were). The runtime
+heap in `targets/kr16/runtime/libc.c` is a first-fit free list over that
+region with forward *and* backward merging, splitting, and a `realloc` that
+copies only the bytes it owns.
+
+## Tagged definitions inside a typedef
+
+`typedef struct Node { struct Node *next; } Node;` and the same form for enums
+and unions are accepted: the specifier records itself as the definition, so the
+second analysis a typedef declaration performs is not a redefinition. Pointer
+arithmetic with an unsigned operand (`bytes - sizeof(int)`) converts the
+offset to the index type instead of failing the verifier.
+
 ## KR16 stack arguments and varargs
 
 KR16 passes the first three scalar arguments in `R1`-`R3` and pushes the rest

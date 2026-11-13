@@ -396,8 +396,14 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
         }
     }
     const auto heap_start = align_up(image_end, 8);
-    constexpr std::uint64_t stack_top = 0x08010000;
-    constexpr std::uint64_t stack_limit = stack_top - 0x10000;
+    // KR32 sits above a 64 KiB window at 0x08000000; IP16 has a 64 KiB address
+    // space whose RAM ends below the memory-mapped I/O window.
+    std::uint64_t stack_top = 0x08010000;
+    std::uint64_t stack_limit = stack_top - 0x10000;
+    if (objects.front().target_id == kROTargetId(target::TargetId::Kr16)) {
+        stack_top = 0xF000;
+        stack_limit = 0xE000;
+    }
     const std::pair<std::string, std::uint64_t> synthetic[] = {
         {"__heap_start", heap_start},
         {"__heap_end", stack_limit},

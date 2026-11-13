@@ -216,29 +216,111 @@ int abs(int value) {
     return value < 0 ? -value : value;
 }
 
-static unsigned char *heap_next;
-#define HEAP_BEGIN ((unsigned char *)0x2000)
-#define HEAP_END ((unsigned char *)0xE000)
+/* A first-fit heap over the region the linker reports.
+ *
+ * Every block carries its payload size, a forward link, and a free flag; the
+ * list runs in address order, so `free` merges forward with the next block
+ * while it is free. There is no backward merge, because a block cannot reach
+ * the one before it without a back pointer.
+ */
+
+extern unsigned char __heap_start;
+extern unsigned char __heap_end;
+
+typedef struct HeapBlock {
+    unsigned int size;      /* payload bytes, always even */
+    struct HeapBlock *next; /* next block in address order */
+    unsigned int free;      /* non-zero when the payload is available */
+} HeapBlock;
+
+static HeapBlock *heap_first;
+
+static void heap_initialize(void) {
+    if (heap_first != 0) {
+        return;
+    }
+    unsigned char *begin = (unsigned char *)&__heap_start;
+    unsigned char *limit = (unsigned char *)&__heap_end;
+    while (((unsigned int)begin & 1u) != 0) {
+        begin++;
+    }
+    const unsigned int header = (unsigned int)sizeof(HeapBlock);
+    if ((unsigned int)limit <= (unsigned int)begin + header + 2u) {
+        return;
+    }
+    heap_first = (HeapBlock *)begin;
+    heap_first->size = (unsigned int)limit - (unsigned int)begin - header;
+    heap_first->next = 0;
+    heap_first->free = 1;
+}
+
+static unsigned int heap_round(unsigned int size) {
+    unsigned int rounded = (size + 1u) & ~1u;
+    return rounded == 0 ? 2u : rounded;
+}
+
+static void heap_split(HeapBlock *block, unsigned int wanted) {
+    const unsigned int header = (unsigned int)sizeof(HeapBlock);
+    if (block->size < wanted + header + 2u) {
+        return;
+    }
+    HeapBlock *remainder =
+        (HeapBlock *)((unsigned char *)block + header + wanted);
+    remainder->size = block->size - wanted - header;
+    remainder->next = block->next;
+    remainder->free = 1;
+    block->size = wanted;
+    block->next = remainder;
+}
 
 void *malloc(unsigned int size) {
-    size = (size + 1) & ~1u;
-    if (heap_next == 0) {
-        heap_next = HEAP_BEGIN;
+    heap_initialize();
+    if (size == 0) {
+        size = 1;
     }
-    if (size == 0 || heap_next + size > HEAP_END) {
-        return 0;
+    const unsigned int wanted = heap_round(size);
+    HeapBlock *block = heap_first;
+    while (block != 0) {
+        if (block->free && block->size >= wanted) {
+            heap_split(block, wanted);
+            block->free = 0;
+            return (void *)((unsigned char *)block + sizeof(HeapBlock));
+        }
+        block = block->next;
     }
-    void *result = heap_next;
-    heap_next += size;
-    return result;
+    return 0;
 }
 
 void free(void *pointer) {
-    (void)pointer;
+    if (pointer == 0) {
+        return;
+    }
+    HeapBlock *block =
+        (HeapBlock *)((unsigned char *)pointer - (int)sizeof(HeapBlock));
+    block->free = 1;
+    /* Merge forward with the next block while it is free. */
+    while (block->next != 0 && block->next->free) {
+        block->size = block->size + (unsigned int)sizeof(HeapBlock) +
+                      block->next->size;
+        block->next = block->next->next;
+    }
+    /* Merge backward: the block before this one is found by address order. */
+    HeapBlock *previous = heap_first;
+    while (previous != 0 && previous->next != block) {
+        previous = previous->next;
+    }
+    if (previous != 0 && previous->free) {
+        previous->size = previous->size + (unsigned int)sizeof(HeapBlock) +
+                        block->size;
+        previous->next = block->next;
+    }
 }
 
 void *calloc(unsigned int count, unsigned int size) {
-    unsigned int total = count * size;
+    const unsigned int total = count * size;
+    if (count != 0 && total / count != size) {
+        return 0;
+    }
     unsigned char *memory = (unsigned char *)malloc(total);
     if (memory == 0) {
         return 0;
@@ -254,18 +336,37 @@ void *realloc(void *pointer, unsigned int size) {
     if (pointer == 0) {
         return malloc(size);
     }
-    void *result = malloc(size);
-    if (result == 0) {
+    if (size == 0) {
+        free(pointer);
         return 0;
     }
+    HeapBlock *block =
+        (HeapBlock *)((unsigned char *)pointer - sizeof(HeapBlock));
+    const unsigned int wanted = heap_round(size);
+    if (block->size >= wanted) {
+        heap_split(block, wanted);
+        if (block->next != 0 && block->next->free &&
+            block->next->next != 0 && block->next->next->free) {
+            HeapBlock *middle = block->next;
+            middle->size = middle->size + (unsigned int)sizeof(HeapBlock) +
+                           middle->next->size;
+            middle->next = middle->next->next;
+        }
+        return pointer;
+    }
+    void *moved = malloc(size);
+    if (moved == 0) {
+        return 0;
+    }
+    unsigned char *destination = (unsigned char *)moved;
     unsigned char *source = (unsigned char *)pointer;
-    unsigned char *destination = (unsigned char *)result;
     unsigned int index = 0;
-    while (index < size) {
+    while (index < block->size && index < wanted) {
         destination[index] = source[index];
         index++;
     }
-    return result;
+    free(pointer);
+    return moved;
 }
 
 char *strdup(const char *source) {

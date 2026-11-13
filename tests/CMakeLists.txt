@@ -375,6 +375,24 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
         set_tests_properties(krc_run_kr16_printf PROPERTIES
             DEPENDS krc_kr16_link_printf)
+
+        add_test(NAME krc_run_kr16_heap
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_heap.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_heap PROPERTIES
+            DEPENDS krc_kr16_link_heap)
+
+        add_test(NAME krc_run_kr16_typedef_tags
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_typedef_tags.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_typedef_tags PROPERTIES
+            DEPENDS krc_kr16_typedef_tags_image)
     endif()
 
     add_test(NAME krc_kr16_arguments_image
@@ -387,6 +405,11 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_variadic.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_variadic.kex")
 
+    add_test(NAME krc_kr16_typedef_tags_image
+        COMMAND $<TARGET_FILE:krc> -c --target=kr16
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/typedef_tags.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr16_typedef_tags.kex")
+
     add_test(NAME krc_kr16_link_printf
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -395,6 +418,16 @@ if(TARGET krc)
                 -DRUNTIME=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_printf.c
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_printf.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
+
+    add_test(NAME krc_kr16_link_heap
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s
+                -DRUNTIME=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_heap.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_heap.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
 
     add_test(NAME krc_kr16_shift_image
@@ -519,6 +552,16 @@ if(TARGET krc)
                 -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/aggregate_values_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_link_typedef_tags
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/typedef_tags.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/typedef_tags_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
     add_test(NAME krc_link_dynamic_cast_reference
@@ -842,6 +885,15 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_aggregate_values PROPERTIES
             DEPENDS krc_link_aggregate_values)
+
+        add_test(NAME krc_run_typedef_tags
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/typedef_tags_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_typedef_tags PROPERTIES
+            DEPENDS krc_link_typedef_tags)
     endif()
 
     add_test(NAME krc_link_printf_width
