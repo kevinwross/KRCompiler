@@ -13,10 +13,25 @@
 
 namespace {
 
+// Git may check a text file out with CRLF on a machine whose core.autocrlf is
+// true, so a byte comparison against generated text depends on the checkout's
+// end-of-line translation rather than on the content under test. Strip the
+// CR of CRLF pairs; the generator always emits LF.
 std::string read_file(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::binary);
     REQUIRE(file);
-    return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    const std::istreambuf_iterator<char> begin(file);
+    const std::istreambuf_iterator<char> end;
+    const std::string text(begin, end);
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        if (text[index] == '\r' && index + 1 < text.size() && text[index + 1] == '\n') {
+            continue;
+        }
+        normalized.push_back(text[index]);
+    }
+    return normalized;
 }
 
 }  // namespace
