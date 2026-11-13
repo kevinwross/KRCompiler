@@ -1870,22 +1870,35 @@ TypePtr Sema::analyze_initializer(const AstNode& initializer, TypePtr target) {
 }
 
 void Sema::check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr source) {
-    if (target && target->is_reference) {
+    // A reference target is checked the same way as a pointer target; the
+    // failed case throws std::bad_cast rather than yielding null. Both kinds
+    // carry the class as the pointer's element.
+    if (!target) {
+        error(expression.location, "dynamic_cast requires a target type");
+        return;
+    }
+    const bool reference_target = target->is_reference;
+    const TypePtr target_element =
+        target->kind == TypeKind::Pointer ? target->element : nullptr;
+    if (!target_element || target_element->kind != TypeKind::Record) {
         error(expression.location,
-              "dynamic_cast to a reference is not supported without exceptions");
+              reference_target
+                  ? "dynamic_cast target must be a reference to a class"
+                  : "dynamic_cast target must be a pointer to a class");
         return;
     }
-    if (!target || target->kind != TypeKind::Pointer || !target->element ||
-        target->element->kind != TypeKind::Record) {
-        error(expression.location, "dynamic_cast target must be a pointer to a class");
+    // The operand is a pointer, a reference, or an lvalue of a class type; the
+    // lvalue form is what a reference target usually takes.
+    const TypePtr source_element =
+        source && source->kind == TypeKind::Pointer
+            ? source->element
+            : (source && source->kind == TypeKind::Record ? source : nullptr);
+    if (!source || !source_element || source_element->kind != TypeKind::Record) {
+        error(expression.location,
+              "dynamic_cast operand must be a pointer or an lvalue of a class");
         return;
     }
-    if (!source || source->kind != TypeKind::Pointer || !source->element ||
-        source->element->kind != TypeKind::Record) {
-        error(expression.location, "dynamic_cast operand must be a pointer to a class");
-        return;
-    }
-    const auto* source_record = source->element->record.get();
+    const auto* source_record = source_element->record.get();
     const auto* target_record = target->element->record.get();
     if (!source_record || !target_record) {
         return;

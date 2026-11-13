@@ -1,0 +1,16 @@
+#pragma once
+
+// Minimal std::exception for the KR32 C++ subset. Every member is defined
+// inline, so each translation unit emits the vtable, typeinfo, and destructor
+// as weak definitions and the linker keeps one of each.
+
+namespace std {
+
+class exception {
+public:
+    exception() {}
+    virtual ~exception() {}
+    virtual const char* what() const { return "std::exception"; }
+};
+
+}  // namespace std

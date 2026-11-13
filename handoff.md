@@ -92,9 +92,12 @@ tree supports:
   ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)): `typeid` names the
   dynamic type through a polymorphic glvalue, `typeid == typeid` compares
   typeinfo addresses, and `dynamic_cast<T*>` is a bitcast for an upcast or a
-  `__krc_dynamic_cast` call for anything else. Polymorphic construction
-  allocates no table; objects of one class share one. `krc_run_rtti` requires
-  exit 42.
+  `__krc_dynamic_cast` call for anything else. A reference cast lowers to the
+  same call and throws `std::bad_cast` when it fails, which needs the exception
+  runtime; `krc_run_dynamic_cast_reference` requires exit 42 and catches the
+  failure both as `std::bad_cast&` and as `std::exception&`. Polymorphic
+  construction allocates no table; objects of one class share one.
+  `krc_run_rtti` requires exit 42.
 - Table-driven exceptions work across frames
   ([ADR 0026](docs/decisions/0026-exception-descriptors.md)): `throw`,
   `try`/`catch`, catch-all, rethrow, and handlers that catch a base of the
@@ -265,10 +268,8 @@ its run waits for the host file dialog instead of returning.
   confirm `master` equals `origin/master`, then push.
 ## Suggested next actions
 
-1. Reference `dynamic_cast` now that cleanup exists: a failed reference cast
-   throws `std::bad_cast`, which the exception machinery can raise once
-   `<exception>` and `operator new`-free allocation are in place. That also
-   makes `type_info` complete.
+1. Cross-casts between sibling classes and multiple inheritance in
+   `dynamic_cast`, plus `type_info::before()` and `hash_code`.
 2. Then variadic templates and fold expressions, per-thread dynamic TLS, the
    `std` containers (`memory`, `tuple`, `functional`, `array`), KR16
    libc/file I/O, and the broader host-service ABI.
@@ -304,8 +305,6 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 
 ## Known gaps in RTTI
 
-- `dynamic_cast` to a reference is rejected: failing it needs `std::bad_cast`,
-  which needs exceptions.
 - Cross-casts between sibling classes, multiple and virtual inheritance, and
   `type_info::before()` are not implemented.
 - `typeid` of a non-class type is rejected rather than producing a
@@ -313,6 +312,8 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - `-fno-rtti` is not implemented; RTTI objects are always emitted.
 - `type_info`'s first word is zero and it has no virtual destructor, so code
   that deletes a `type_info` through a pointer would be wrong; nothing does.
+- `<typeinfo>` is a subset: `bad_cast` works, `bad_typeid` and `bad_alloc` do
+  not exist yet, and `type_info::hash_code` is absent.
 
 ## Goal recommendation
 

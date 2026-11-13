@@ -8,6 +8,8 @@
 // dynamic_cast walks. The compiler materializes one object per class as the
 // weak global `_ZTI<Class>`, and `typeid` evaluates to a reference to it.
 
+#include <exception>
+
 namespace std {
 
 class type_info {
@@ -27,6 +29,14 @@ private:
     const void* __vptr;
     const char* __name;
     unsigned int __flags;
+};
+
+// Thrown by a reference dynamic_cast whose check fails. Catching it by
+// `std::exception&` works because the typeinfo chain records the base class.
+class bad_cast : public exception {
+public:
+    bad_cast() {}
+    virtual const char* what() const { return "std::bad_cast"; }
 };
 
 }  // namespace std

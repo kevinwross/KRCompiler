@@ -146,6 +146,10 @@ private:
     [[nodiscard]] Expression emit_implicit_member_lvalue(std::string_view name);
     [[nodiscard]] Expression emit_cast(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_dynamic_cast(const frontend::AstNode& expression);
+    // Allocates and default-constructs a class object, then throws it. Used by
+    // a reference dynamic_cast, which throws std::bad_cast when it fails.
+    void throw_object(const frontend::RecordInfo& record,
+                      const frontend::SourceLocation& location);
     // `typeid` yields an lvalue of the type_info record: the address of the
     // object's dynamic typeinfo for a polymorphic operand, or of the static
     // typeinfo otherwise.

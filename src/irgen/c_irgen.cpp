@@ -8785,6 +8785,42 @@ CIRGen::Expression CIRGen::emit_typeid(const frontend::AstNode& expression) {
     return {value, reference.type};
 }
 
+void CIRGen::throw_object(const frontend::RecordInfo& record,
+                          const frontend::SourceLocation& location) {
+    const auto info = sema_.type_named(record.tag);
+    if (!info || info->kind != frontend::TypeKind::Record) {
+        error(location, "cannot throw '" + record.tag + "'");
+        return;
+    }
+    const auto type = map_type(info);
+    const auto void_type = module_->types().void_type();
+    const auto byte_type = module_->types().int_type(8);
+    const auto byte_pointer = module_->types().pointer_type(byte_type);
+    auto* allocate = ensure_runtime_function("__cxa_allocate_exception", byte_pointer,
+                                             {size_type()});
+    auto* throw_function = ensure_runtime_function(
+        "__cxa_throw", void_type, {byte_pointer, byte_pointer, byte_pointer});
+    const auto size = ir_size_of(type);
+    auto* memory = create_call_instruction(
+        allocate, {module_->constant_int(size_type(), static_cast<std::int64_t>(size))},
+        byte_pointer, "exception.memory");
+    auto* object = builder_.create(ir::Opcode::BitCast,
+                                   module_->types().pointer_type(type), {memory},
+                                   "exception.object");
+    if (auto* constructor = ensure_default_constructor(&record)) {
+        create_call_instruction(constructor, {object}, nullptr, "exception.ctor");
+    }
+    // A declared constructor does not set the vptr itself; the code that
+    // materializes the object does, as it does for locals and new.
+    emit_vtable_init(object, type);
+    auto* typeinfo = builder_.create(ir::Opcode::BitCast, byte_pointer,
+                                     {ensure_typeinfo(record)}, "exception.type");
+    create_call_instruction(throw_function,
+                            {memory, typeinfo, module_->constant_null(byte_pointer)},
+                            void_type, "throw.exception");
+    builder_.create_unreachable();
+}
+
 CIRGen::Expression CIRGen::emit_dynamic_cast(const frontend::AstNode& expression) {
     // Sema recorded both types; re-analysing here would not see the scopes the
     // operand was written in.
@@ -8797,13 +8833,22 @@ CIRGen::Expression CIRGen::emit_dynamic_cast(const frontend::AstNode& expression
     if (!target || target->kind != ir::TypeKind::Pointer) {
         return {};
     }
-    auto operand = emit_expression(*expression.children[1]);
+    // An lvalue or a reference operand names the object itself; its address is
+    // what the runtime check takes. A pointer operand already is that address.
+    const bool source_is_object =
+        source_frontend->kind == frontend::TypeKind::Record ||
+        source_frontend->is_reference;
+    auto operand = source_is_object ? emit_lvalue(*expression.children[1])
+                                    : emit_expression(*expression.children[1]);
     if (!operand.value) {
         return {};
     }
-    const auto* source_record = source_frontend->element && source_frontend->element->record
-                                    ? source_frontend->element->record.get()
-                                    : nullptr;
+    const auto* source_record =
+        source_frontend->kind == frontend::TypeKind::Record
+            ? (source_frontend->record ? source_frontend->record.get() : nullptr)
+            : (source_frontend->element && source_frontend->element->record
+                   ? source_frontend->element->record.get()
+                   : nullptr);
     const auto* target_record = target_frontend->element &&
                                         target_frontend->element->record
                                     ? target_frontend->element->record.get()
@@ -8846,6 +8891,25 @@ CIRGen::Expression CIRGen::emit_dynamic_cast(const frontend::AstNode& expression
                                      {typeinfo_global}, "dynamic_cast.type");
     auto* result = create_call_instruction(helper, {object, typeinfo}, byte_pointer,
                                         "dynamic_cast.call");
+    if (target_frontend->is_reference) {
+        // A reference cast cannot yield null: a failed check throws
+        // std::bad_cast, which the caller's handlers see like any other throw.
+        auto* failed = builder_.create_icmp(
+            ir::ICmpPredicate::Eq, result, module_->constant_null(byte_pointer),
+            "dynamic_cast.failed");
+        auto* throw_block = current_function_->add_block("dynamic_cast.throw");
+        auto* ok_block = current_function_->add_block("dynamic_cast.ok");
+        builder_.create_cond_br(failed, throw_block, ok_block);
+        builder_.set_insert_point(throw_block);
+        const auto info = sema_.type_named("std::bad_cast");
+        if (!info || info->kind != frontend::TypeKind::Record || !info->record) {
+            error(expression.location, "a reference dynamic_cast requires <typeinfo>");
+            builder_.create_unreachable();
+        } else {
+            throw_object(*info->record, expression.location);
+        }
+        builder_.set_insert_point(ok_block);
+    }
     auto* cast = builder_.create(ir::Opcode::BitCast, target, {result},
                                  "dynamic_cast.result");
     return {cast, target};
