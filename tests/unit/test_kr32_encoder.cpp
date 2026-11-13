@@ -30,6 +30,8 @@ TEST_CASE("KR32 encoder reproduces the golden instruction words") {
     CHECK(encode_or_fail(Opcode::Add, 3, 1, 2, false, 0).words[0] == 0x40624000u);
     CHECK(encode_or_fail(Opcode::Slt, 1, 2, 3, false, 0).words[0] == 0x30246000u);
     CHECK(encode_or_fail(Opcode::Sltu, 1, 2, 3, false, 0).words[0] == 0x32246000u);
+    CHECK(encode_or_fail(Opcode::MulH, 1, 2, 3, false, 0).words[0] == 0x46246000u);
+    CHECK(encode_or_fail(Opcode::MulHu, 1, 2, 3, false, 0).words[0] == 0x48246000u);
     CHECK(encode_or_fail(Opcode::Load, 4, 5, 3, true, 8).words[0] == 0x028A6808u);
     CHECK(encode_or_fail(Opcode::Load8U, 4, 5, 3, true, 8).words[0] == 0x068A6808u);
     CHECK(encode_or_fail(Opcode::Store, 6, 7, 2, true, 0).words[0] == 0x04CE4800u);

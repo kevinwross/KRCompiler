@@ -6,6 +6,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "ir/ir.h"
 #include "krc/target/target.h"
@@ -40,6 +41,23 @@ private:
                           const FrameLayout& layout, const ir::Instruction& instruction) const;
     void load_value(std::string& out, const ir::Function& function, const FrameLayout& layout,
                     const ir::Value* value, std::string_view reg) const;
+    // Loads the low 32 bits of an integer value, whether or not the value is
+    // wider than a word. Index and condition uses need only the low word.
+    void load_low_word(std::string& out, const ir::Function& function,
+                       const FrameLayout& layout, const ir::Value* value,
+                       std::string_view reg) const;
+    // Leaves a 64-bit integer in the register pair R0 (low) and R1 (high).
+    void load_wide(std::string& out, const ir::Function& function, const FrameLayout& layout,
+                   const ir::Value* value) const;
+    // Stores the R0/R1 pair into the two words reserved for the instruction.
+    void store_wide(std::string& out, const ir::Function& function, const FrameLayout& layout,
+                    const ir::Instruction& instruction) const;
+    void emit_wide_binary(std::string& out, const ir::Function& function,
+                          const FrameLayout& layout, const ir::Instruction& instruction) const;
+    void emit_wide_icmp(std::string& out, const ir::Function& function,
+                        const FrameLayout& layout, const ir::Instruction& instruction) const;
+    // The 64-bit division helpers this module calls, in declaration order.
+    [[nodiscard]] std::vector<std::string> wide_division_helpers() const;
     void load_fp(std::string& out, const ir::Function& function, const FrameLayout& layout,
                  const ir::Value* value, std::string_view reg) const;
     void store_fp(std::string& out, const ir::Function& function, const FrameLayout& layout,
@@ -52,6 +70,7 @@ private:
                                           const ir::BasicBlock& block) const;
     [[nodiscard]] std::string escape_string(const std::vector<std::uint8_t>& bytes) const;
     mutable std::size_t compare_label_counter_ = 0;
+    mutable std::size_t wide_label_counter_ = 0;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;

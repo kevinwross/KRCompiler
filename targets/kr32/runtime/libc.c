@@ -8,6 +8,158 @@ int *__krc_errno_location(void) {
     return &krc_errno;
 }
 
+/*
+ * 64-bit integer helpers, plan.md §14.7. The KR32 backend lowers a `long long`
+ * value to a word pair and calls these entry points for division and
+ * remainder, because the ISA divides only 32-bit values.
+ *
+ * The pair travels as an eight-byte aggregate in the argument registers
+ * R0..R3 and returns in R0/R1 (plan.md §10.2). Each body uses 32-bit words
+ * only: calling a 64-bit operator here would recurse into the helper that
+ * implements it.
+ *
+ * __krc_pair64_divide publishes its results in file-scope variables rather
+ * than through pointer parameters because the four entry points need both
+ * results from one pass. The compiler never calls a helper from inside
+ * another, so one set of results is enough; the runtime is single-threaded.
+ */
+struct __krc_pair64 {
+    unsigned int lo;
+    unsigned int hi;
+};
+
+static struct __krc_pair64 __krc_divide_quotient;
+static struct __krc_pair64 __krc_divide_remainder;
+
+static int __krc_pair64_zero(struct __krc_pair64 value) {
+    return value.lo == 0u && value.hi == 0u;
+}
+
+static int __krc_pair64_negative(struct __krc_pair64 value) {
+    return (value.hi & 0x80000000u) != 0u;
+}
+
+static int __krc_pair64_unsigned_less(struct __krc_pair64 left,
+                                      struct __krc_pair64 right) {
+    if (left.hi != right.hi) {
+        return left.hi < right.hi;
+    }
+    return left.lo < right.lo;
+}
+
+static struct __krc_pair64 __krc_pair64_negate(struct __krc_pair64 value) {
+    struct __krc_pair64 result;
+    result.lo = (~value.lo) + 1u;
+    result.hi = (~value.hi) + (result.lo == 0u ? 1u : 0u);
+    return result;
+}
+
+/* Shift-subtract long division. A set carry out of the top bit means the
+ * shifted remainder exceeded 64 bits, in which case the wrapped value already
+ * exceeds any divisor and the subtraction still applies. */
+static void __krc_pair64_divide(struct __krc_pair64 dividend,
+                                struct __krc_pair64 divisor) {
+    struct __krc_pair64 partial;
+    struct __krc_pair64 result;
+    int bit;
+    partial.lo = 0u;
+    partial.hi = 0u;
+    result.lo = 0u;
+    result.hi = 0u;
+    if (__krc_pair64_zero(divisor)) {
+        /* The ISA traps on a zero divisor; the helper reports zero rather
+         * than faulting inside a runtime routine. */
+        __krc_divide_quotient = partial;
+        __krc_divide_remainder = partial;
+        return;
+    }
+    for (bit = 63; bit >= 0; --bit) {
+        unsigned int next = bit >= 32 ? ((dividend.hi >> (bit - 32)) & 1u)
+                                      : ((dividend.lo >> bit) & 1u);
+        unsigned int carry = partial.hi >> 31;
+        unsigned int borrow;
+        partial.hi = (partial.hi << 1) | (partial.lo >> 31);
+        partial.lo = (partial.lo << 1) | next;
+        if (carry != 0u || !__krc_pair64_unsigned_less(partial, divisor)) {
+            borrow = partial.lo < divisor.lo ? 1u : 0u;
+            partial.lo = partial.lo - divisor.lo;
+            partial.hi = partial.hi - divisor.hi - borrow;
+            if (bit >= 32) {
+                result.hi |= 1u << (bit - 32);
+            } else {
+                result.lo |= 1u << bit;
+            }
+        }
+    }
+    __krc_divide_quotient = result;
+    __krc_divide_remainder = partial;
+}
+
+struct __krc_pair64 __krc_udivdi3(struct __krc_pair64 left,
+                                  struct __krc_pair64 right) {
+    struct __krc_pair64 quotient;
+    __krc_pair64_divide(left, right);
+    quotient = __krc_divide_quotient;
+    return quotient;
+}
+
+struct __krc_pair64 __krc_umoddi3(struct __krc_pair64 left,
+                                  struct __krc_pair64 right) {
+    struct __krc_pair64 remainder;
+    __krc_pair64_divide(left, right);
+    remainder = __krc_divide_remainder;
+    return remainder;
+}
+
+struct __krc_pair64 __krc_sdivdi3(struct __krc_pair64 left,
+                                  struct __krc_pair64 right) {
+    struct __krc_pair64 magnitude_left;
+    struct __krc_pair64 magnitude_right;
+    struct __krc_pair64 quotient;
+    int negative = __krc_pair64_negative(left) != __krc_pair64_negative(right);
+    magnitude_left = left;
+    magnitude_right = right;
+    if (__krc_pair64_negative(left)) {
+        struct __krc_pair64 negated = __krc_pair64_negate(left);
+        magnitude_left = negated;
+    }
+    if (__krc_pair64_negative(right)) {
+        struct __krc_pair64 negated = __krc_pair64_negate(right);
+        magnitude_right = negated;
+    }
+    __krc_pair64_divide(magnitude_left, magnitude_right);
+    quotient = __krc_divide_quotient;
+    if (negative) {
+        struct __krc_pair64 negated = __krc_pair64_negate(quotient);
+        quotient = negated;
+    }
+    return quotient;
+}
+
+struct __krc_pair64 __krc_smoddi3(struct __krc_pair64 left,
+                                  struct __krc_pair64 right) {
+    struct __krc_pair64 magnitude_left;
+    struct __krc_pair64 magnitude_right;
+    struct __krc_pair64 remainder;
+    magnitude_left = left;
+    magnitude_right = right;
+    if (__krc_pair64_negative(left)) {
+        struct __krc_pair64 negated = __krc_pair64_negate(left);
+        magnitude_left = negated;
+    }
+    if (__krc_pair64_negative(right)) {
+        struct __krc_pair64 negated = __krc_pair64_negate(right);
+        magnitude_right = negated;
+    }
+    __krc_pair64_divide(magnitude_left, magnitude_right);
+    remainder = __krc_divide_remainder;
+    if (__krc_pair64_negative(left)) {
+        struct __krc_pair64 negated = __krc_pair64_negate(remainder);
+        remainder = negated;
+    }
+    return remainder;
+}
+
 extern int krc_sys_getchar(void);
 extern int krc_sys_open(const char *path, int flags);
 extern int krc_sys_close(int descriptor);

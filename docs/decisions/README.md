@@ -65,5 +65,6 @@ What was rejected and why.
 - [0020-kdbg-source-path-policy.md](0020-kdbg-source-path-policy.md) — accepted; keeps KDBG v1 and adds `krld --source-root` relative source paths.
 - [0021-external-globals.md](0021-external-globals.md) — accepted; adds external global declarations to IR and `.extern` emission.
 - [0022-internal-globals.md](0022-internal-globals.md) — accepted; adds internal global linkage for C `static` objects.
+- [0023-kr32-64-bit-integers.md](0023-kr32-64-bit-integers.md) — accepted; lowers 64-bit integers as a KR32 word pair, with two-word arguments, an `R0`/`R1` return, and division libcalls.
 
 The next expected ADRs are the KR16 ABI appendix, the EH descriptor encoding, and the KDBG record layout.

@@ -27,6 +27,31 @@ std::string register_name(std::size_t index) {
     return "R" + std::to_string(index);
 }
 
+// A 64-bit integer is wider than the KR32 word. Such a value occupies two
+// consecutive frame words, low word first, and travels in the R0/R1 register
+// pair, which plan.md §10.2 specifies for 64-bit arguments and returns.
+bool is_wide(ir::TypePtr type) {
+    return type && type->kind == ir::TypeKind::Integer && type->bits > 32;
+}
+
+std::string wide_helper_name(ir::Opcode opcode) {
+    switch (opcode) {
+    case ir::Opcode::UDiv:
+        return "__krc_udivdi3";
+    case ir::Opcode::SDiv:
+        return "__krc_sdivdi3";
+    case ir::Opcode::URem:
+        return "__krc_umoddi3";
+    case ir::Opcode::SRem:
+        return "__krc_smoddi3";
+    default:
+        return {};
+    }
+}
+
+const char* const kWideHelpers[] = {"__krc_udivdi3", "__krc_sdivdi3", "__krc_umoddi3",
+                                    "__krc_smoddi3"};
+
 std::string load_opcode(ir::TypePtr type) {
     if (!type || type->kind != ir::TypeKind::Integer) {
         return "LOAD";
@@ -200,7 +225,7 @@ Kr32Backend::FrameLayout Kr32Backend::layout_function(const ir::Function& functi
                         integer_arguments += (size + 3) / 4;
                     }
                 } else {
-                    integer_arguments++;
+                    integer_arguments += is_wide(parameter) ? 2 : 1;
                 }
             }
             const std::size_t fixed_stack_words =
@@ -266,6 +291,14 @@ std::optional<std::uint32_t> Kr32Backend::value_slot(
 void Kr32Backend::load_value(std::string& out, const ir::Function& function,
                              const FrameLayout& layout, const ir::Value* value,
                              std::string_view reg) const {
+    if (value && is_wide(value->type)) {
+        if (reg != "R0") {
+            out += "        HALT ; 64-bit value required in the R0/R1 pair\n";
+            return;
+        }
+        load_wide(out, function, layout, value);
+        return;
+    }
     if (!value) {
         out += "        MOV " + std::string(reg) + ", #0\n";
         return;
@@ -317,6 +350,14 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
 void Kr32Backend::store_value(std::string& out, const ir::Function& function,
                               const FrameLayout& layout, const ir::Instruction& instruction,
                               std::string_view reg) const {
+    if (is_wide(instruction.type)) {
+        if (reg != "R0") {
+            out += "        HALT ; 64-bit result required in the R0/R1 pair\n";
+            return;
+        }
+        store_wide(out, function, layout, instruction);
+        return;
+    }
     std::string error;
     const auto slot = value_slot(function, layout, &instruction, error);
     if (!slot) {
@@ -324,6 +365,260 @@ void Kr32Backend::store_value(std::string& out, const ir::Function& function,
         return;
     }
     out += "        STORE " + std::string(reg) + ", [R7 + " + std::to_string(*slot) + "]\n";
+}
+
+void Kr32Backend::load_wide(std::string& out, const ir::Function& function,
+                            const FrameLayout& layout, const ir::Value* value) const {
+    if (!value) {
+        out += "        MOV R0, #0\n";
+        out += "        MOV R1, #0\n";
+        return;
+    }
+    if (value->kind == ir::ValueKind::ConstantInt) {
+        const auto constant =
+            static_cast<std::uint64_t>(static_cast<const ir::ConstantInt*>(value)->value);
+        out += "        MOV R0, #" +
+               std::to_string(static_cast<std::int32_t>(constant & 0xFFFFFFFFu)) + "\n";
+        out += "        MOV R1, #" +
+               std::to_string(static_cast<std::int32_t>(constant >> 32)) + "\n";
+        return;
+    }
+    if (value->kind == ir::ValueKind::ConstantNull ||
+        value->kind == ir::ValueKind::ConstantUndef ||
+        value->kind == ir::ValueKind::ConstantFloat ||
+        value->kind == ir::ValueKind::ConstantDataArray) {
+        out += "        MOV R0, #0\n";
+        out += "        MOV R1, #0\n";
+        return;
+    }
+    if (value->kind == ir::ValueKind::Function || value->kind == ir::ValueKind::Global) {
+        out += "        LEA R0, [" + value->name + "]\n";
+        out += "        MOV R1, #0\n";
+        return;
+    }
+    std::string error;
+    const auto slot = value_slot(function, layout, value, error);
+    if (!slot) {
+        out += "; " + error + "\n";
+        out += "        MOV R0, #0\n";
+        out += "        MOV R1, #0\n";
+        return;
+    }
+    out += "        LOAD R0, [R7 + " + std::to_string(*slot) + "]\n";
+    out += "        LOAD R1, [R7 + " + std::to_string(*slot + 4) + "]\n";
+}
+
+void Kr32Backend::load_low_word(std::string& out, const ir::Function& function,
+                                const FrameLayout& layout, const ir::Value* value,
+                                std::string_view reg) const {
+    if (!value || !is_wide(value->type)) {
+        load_value(out, function, layout, value, reg);
+        return;
+    }
+    // The low word alone addresses an object or decides a branch for every
+    // value the KR32 address space can hold.
+    if (value->kind == ir::ValueKind::ConstantInt) {
+        const auto constant =
+            static_cast<std::uint64_t>(static_cast<const ir::ConstantInt*>(value)->value);
+        out += "        MOV " + std::string(reg) + ", #" +
+               std::to_string(static_cast<std::int32_t>(constant & 0xFFFFFFFFu)) + "\n";
+        return;
+    }
+    if (value->kind == ir::ValueKind::Function || value->kind == ir::ValueKind::Global) {
+        out += "        LEA " + std::string(reg) + ", [" + value->name + "]\n";
+        return;
+    }
+    if (value->kind == ir::ValueKind::ConstantNull ||
+        value->kind == ir::ValueKind::ConstantUndef ||
+        value->kind == ir::ValueKind::ConstantFloat ||
+        value->kind == ir::ValueKind::ConstantDataArray) {
+        out += "        MOV " + std::string(reg) + ", #0\n";
+        return;
+    }
+    std::string error;
+    const auto slot = value_slot(function, layout, value, error);
+    if (!slot) {
+        out += "; " + error + "\n";
+        out += "        MOV " + std::string(reg) + ", #0\n";
+        return;
+    }
+    out += "        LOAD " + std::string(reg) + ", [R7 + " + std::to_string(*slot) + "]\n";
+}
+
+void Kr32Backend::store_wide(std::string& out, const ir::Function& function,
+                             const FrameLayout& layout,
+                             const ir::Instruction& instruction) const {
+    std::string error;
+    const auto slot = value_slot(function, layout, &instruction, error);
+    if (!slot) {
+        out += "; " + error + "\n";
+        return;
+    }
+    out += "        STORE R0, [R7 + " + std::to_string(*slot) + "]\n";
+    out += "        STORE R1, [R7 + " + std::to_string(*slot + 4) + "]\n";
+}
+
+// Lowers a 64-bit binary operation onto the 32-bit word pair. The pair is
+// R0/R1 (low/high) for the first operand and R2/R3 for the second; R4..R6 are
+// scratch. Division and remainder are runtime libcalls because the ISA has no
+// 64-bit divide (plan.md §10.1, §14.7).
+void Kr32Backend::emit_wide_binary(std::string& out, const ir::Function& function,
+                                   const FrameLayout& layout,
+                                   const ir::Instruction& instruction) const {
+    load_wide(out, function, layout, instruction.operands[1]);
+    out += "        MOV R2, R0\n";
+    out += "        MOV R3, R1\n";
+    load_wide(out, function, layout, instruction.operands[0]);
+
+    const auto shift_labels = [&](const std::string& suffix) {
+        const auto serial = wide_label_counter_++;
+        const auto stem = ".L" + function.name + ".wide." + std::to_string(serial);
+        return std::make_pair(stem + "." + suffix, stem + ".done");
+    };
+
+    switch (instruction.opcode) {
+    case ir::Opcode::Add:
+        out += "        ADD R0, R0, R2\n";
+        out += "        SLTU R4, R0, R2\n";
+        out += "        ADD R1, R1, R3\n";
+        out += "        ADD R1, R1, R4\n";
+        break;
+    case ir::Opcode::Sub:
+        out += "        SLTU R4, R0, R2\n";
+        out += "        SUB R0, R0, R2\n";
+        out += "        SUB R1, R1, R3\n";
+        out += "        SUB R1, R1, R4\n";
+        break;
+    case ir::Opcode::Mul:
+        out += "        MUL R4, R0, R3\n";
+        out += "        MUL R5, R1, R2\n";
+        out += "        MULHU R6, R0, R2\n";
+        out += "        ADD R4, R4, R5\n";
+        out += "        ADD R1, R4, R6\n";
+        out += "        MUL R0, R0, R2\n";
+        break;
+    case ir::Opcode::And:
+    case ir::Opcode::Or:
+    case ir::Opcode::Xor: {
+        const auto mnemonic = instruction.opcode == ir::Opcode::And
+                                  ? "AND"
+                                  : (instruction.opcode == ir::Opcode::Or ? "OR" : "XOR");
+        out += "        " + std::string(mnemonic) + " R0, R0, R2\n";
+        out += "        " + std::string(mnemonic) + " R1, R1, R3\n";
+        break;
+    }
+    case ir::Opcode::Shl:
+    case ir::Opcode::LShr:
+    case ir::Opcode::AShr: {
+        const auto labels = shift_labels("wide");
+        out += "        CMP R2, #0\n";
+        out += "        JZ " + labels.second + "\n";
+        out += "        CMP R2, #32\n";
+        out += "        JCS " + labels.first + "\n";
+        // A count of 1..31 mixes both words; 32..63 keeps one word and fills
+        // the other. The ISA masks shift counts to five bits, so the count of
+        // zero and the count of 32 and above need their own paths.
+        out += "        MOV R4, #32\n";
+        out += "        SUB R4, R4, R2\n";
+        if (instruction.opcode == ir::Opcode::Shl) {
+            out += "        SHR R4, R0, R4\n";
+            out += "        SHL R0, R0, R2\n";
+            out += "        SHL R1, R1, R2\n";
+            out += "        OR R1, R1, R4\n";
+        } else if (instruction.opcode == ir::Opcode::LShr) {
+            out += "        SHL R4, R1, R4\n";
+            out += "        SHR R0, R0, R2\n";
+            out += "        SHR R1, R1, R2\n";
+            out += "        OR R0, R0, R4\n";
+        } else {
+            out += "        SHL R4, R1, R4\n";
+            out += "        SHR R0, R0, R2\n";
+            out += "        SAR R1, R1, R2\n";
+            out += "        OR R0, R0, R4\n";
+        }
+        out += "        JMP " + labels.second + "\n";
+        out += labels.first + ":\n";
+        out += "        SUB R2, R2, #32\n";
+        if (instruction.opcode == ir::Opcode::Shl) {
+            out += "        SHL R1, R0, R2\n";
+            out += "        MOV R0, #0\n";
+        } else if (instruction.opcode == ir::Opcode::LShr) {
+            out += "        SHR R0, R1, R2\n";
+            out += "        MOV R1, #0\n";
+        } else {
+            out += "        SAR R0, R1, R2\n";
+            out += "        SAR R1, R1, #31\n";
+        }
+        out += labels.second + ":\n";
+        break;
+    }
+    case ir::Opcode::UDiv:
+    case ir::Opcode::SDiv:
+    case ir::Opcode::URem:
+    case ir::Opcode::SRem:
+        out += "        CALL " + wide_helper_name(instruction.opcode) + "\n";
+        break;
+    default:
+        out += "        HALT ; unsupported 64-bit operation\n";
+        break;
+    }
+    store_wide(out, function, layout, instruction);
+}
+
+// Compares the high words first; only an equal high word defers to the low
+// word, which keeps the signedness of the predicate on both halves.
+void Kr32Backend::emit_wide_icmp(std::string& out, const ir::Function& function,
+                                 const FrameLayout& layout,
+                                 const ir::Instruction& instruction) const {
+    load_wide(out, function, layout, instruction.operands[1]);
+    out += "        MOV R2, R0\n";
+    out += "        MOV R3, R1\n";
+    load_wide(out, function, layout, instruction.operands[0]);
+    const auto serial = wide_label_counter_++;
+    const auto stem = ".L" + function.name + ".icmp64." + std::to_string(serial);
+    const auto true_label = stem + ".true";
+    const auto low_label = stem + ".low";
+    const auto done_label = stem + ".done";
+    const auto condition = condition_for(instruction.icmp_predicate);
+    out += "        MOV R4, #0\n";
+    out += "        CMP R1, R3\n";
+    out += "        JZ " + low_label + "\n";
+    out += "        " + condition + " " + true_label + "\n";
+    out += "        JMP " + done_label + "\n";
+    out += low_label + ":\n";
+    out += "        CMP R0, R2\n";
+    out += "        " + condition + " " + true_label + "\n";
+    out += "        JMP " + done_label + "\n";
+    out += true_label + ":\n";
+    out += "        MOV R4, #1\n";
+    out += done_label + ":\n";
+    store_value(out, function, layout, instruction, "R4");
+}
+
+std::vector<std::string> Kr32Backend::wide_division_helpers() const {
+    std::unordered_set<std::string> used;
+    for (const auto& function : module_.functions()) {
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (!is_wide(instruction->type)) {
+                    continue;
+                }
+                const auto helper = wide_helper_name(instruction->opcode);
+                if (!helper.empty()) {
+                    used.insert(helper);
+                }
+            }
+        }
+    }
+    // Emit in the fixed declaration order so the assembly stays byte
+    // identical across builds (§15.6).
+    std::vector<std::string> helpers;
+    for (const auto* helper : kWideHelpers) {
+        if (used.contains(helper)) {
+            helpers.emplace_back(helper);
+        }
+    }
+    return helpers;
 }
 
 void Kr32Backend::load_fp(std::string& out, const ir::Function& function,
@@ -453,6 +748,11 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     debug_sources_.clear();
     debug_types_.clear();
     next_debug_source_ = 0;
+    wide_label_counter_ = 0;
+
+    for (const auto& helper : wide_division_helpers()) {
+        out += "        .extern " + helper + "\n";
+    }
 
     for (const auto& global : module_.globals()) {
         if (global->external) {
@@ -473,9 +773,14 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
             out += "        .byte " + escape_string(data->bytes) + "\n";
         } else if (global->initializer &&
                    global->initializer->kind == ir::ValueKind::ConstantInt) {
-            out += "        .word " +
-                   std::to_string(static_cast<const ir::ConstantInt*>(global->initializer)->value) +
+            const auto constant = static_cast<std::uint64_t>(
+                static_cast<const ir::ConstantInt*>(global->initializer)->value);
+            out += "        .word " + std::to_string(static_cast<std::int32_t>(constant & 0xFFFFFFFFu)) +
                    "\n";
+            if (is_wide(global->element_type)) {
+                out += "        .word " +
+                       std::to_string(static_cast<std::int32_t>(constant >> 32)) + "\n";
+            }
         } else {
             const auto size = size_of(global->element_type, error);
             if (!error.empty()) {
@@ -566,6 +871,21 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                        std::to_string(slot->second + word * 4) + "]\n";
             }
             integer_parameter += words;
+        } else if (is_wide(parameter->type)) {
+            for (std::uint64_t word = 0; word < 2; ++word) {
+                const auto target = std::to_string(slot->second + word * 4);
+                if (integer_parameter < 4) {
+                    out += "        STORE " + register_name(integer_parameter) + ", [R7 + " +
+                           target + "]\n";
+                } else {
+                    out += "        LOAD R0, [R7 + " +
+                           std::to_string(layout.frame_size + 8 +
+                                          (integer_parameter - 4) * 4) +
+                           "]\n";
+                    out += "        STORE R0, [R7 + " + target + "]\n";
+                }
+                integer_parameter++;
+            }
         } else if (integer_parameter < 4) {
             out += "        STORE " + register_name(integer_parameter) + ", [R7 + " +
                    std::to_string(slot->second) + "]\n";
@@ -682,6 +1002,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                                    const FrameLayout& layout,
                                    const ir::Instruction& instruction) const {
     const auto binary_instruction = [&](std::string_view mnemonic) {
+        if (is_wide(instruction.operands[0]->type)) {
+            emit_wide_binary(out, function, layout, instruction);
+            return;
+        }
         load_value(out, function, layout, instruction.operands[0], "R0");
         load_value(out, function, layout, instruction.operands[1], "R1");
         out += "        " + std::string(mnemonic) + " R0, R0, R1\n";
@@ -820,7 +1144,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         break;
     case ir::Opcode::Load: {
         load_value(out, function, layout, instruction.operands[0], "R0");
-        if (ir::is_float(instruction.type)) {
+        if (is_wide(instruction.type)) {
+            out += "        LOAD R1, [R0 + 4]\n";
+            out += "        LOAD R0, [R0]\n";
+            store_value(out, function, layout, instruction, "R0");
+        } else if (ir::is_float(instruction.type)) {
             out += "        " +
                    std::string(instruction.type->bits == 32 ? "FLOAD.W" : "FLOAD.D") +
                    " F0, [R0]\n";
@@ -870,6 +1198,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                        std::to_string(slot->second + offset) + "]\n";
                 out += "        STORE R0, [R1 + " + std::to_string(offset) + "]\n";
             }
+        } else if (is_wide(instruction.operands[0]->type)) {
+            load_wide(out, function, layout, instruction.operands[0]);
+            load_value(out, function, layout, instruction.operands[1], "R2");
+            out += "        STORE R0, [R2]\n";
+            out += "        STORE R1, [R2 + 4]\n";
         } else {
             load_value(out, function, layout, instruction.operands[0], "R0");
             load_value(out, function, layout, instruction.operands[1], "R1");
@@ -931,7 +1264,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 out += "        HALT ; " + error + "\n";
                 return;
             }
-            load_value(out, function, layout, instruction.operands[index], "R1");
+            load_low_word(out, function, layout, instruction.operands[index], "R1");
             if (stride != 1) {
                 out += "        MUL R1, R1, #" + std::to_string(stride) + "\n";
             }
@@ -941,6 +1274,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         break;
     }
     case ir::Opcode::ICmp: {
+        if (is_wide(instruction.operands[0]->type)) {
+            emit_wide_icmp(out, function, layout, instruction);
+            break;
+        }
         load_value(out, function, layout, instruction.operands[0], "R0");
         load_value(out, function, layout, instruction.operands[1], "R1");
         out += "        CMP R0, R1\n";
@@ -963,7 +1300,12 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                block_label(function, *instruction.successors.front()) + "\n";
         break;
     case ir::Opcode::CondBr:
-        load_value(out, function, layout, instruction.operands[0], "R0");
+        if (is_wide(instruction.operands[0]->type)) {
+            load_wide(out, function, layout, instruction.operands[0]);
+            out += "        OR R0, R0, R1\n";
+        } else {
+            load_value(out, function, layout, instruction.operands[0], "R0");
+        }
         out += "        CMP R0, #0\n";
         out += "        JNZ " + block_label(function, *instruction.successors[0]) + "\n";
         out += "        JMP " + block_label(function, *instruction.successors[1]) + "\n";
@@ -1019,7 +1361,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                     fixed_integer_arguments += (size + 3) / 4;
                 }
             } else {
-                fixed_integer_arguments++;
+                fixed_integer_arguments += is_wide(parameter) ? 2 : 1;
             }
         }
         const std::size_t fixed_stack_words =
@@ -1031,6 +1373,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             if (argument->type && ir::is_float(argument->type)) {
                 load_fp(out, function, layout, argument, "F0");
                 out += "        FSTORE.D F0, [R7 + " + std::to_string(offset) + "]\n";
+            } else if (argument->type && is_wide(argument->type)) {
+                load_wide(out, function, layout, argument);
+                out += "        STORE R0, [R7 + " + std::to_string(offset) + "]\n";
+                out += "        STORE R1, [R7 + " + std::to_string(offset + 4) + "]\n";
             } else {
                 load_value(out, function, layout, argument, "R0");
                 out += "        STORE R0, [R7 + " + std::to_string(offset) + "]\n";
@@ -1070,6 +1416,44 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                            std::to_string(slot->second + word * 4) + "]\n";
                     integer_index++;
                 }
+            } else if (argument->type && is_wide(argument->type)) {
+                // Each word of a 64-bit argument consumes one argument word.
+                // The pair is moved a word at a time so that the argument
+                // registers already holding earlier arguments survive.
+                const auto slot = layout.slots.find(argument);
+                const bool constant_argument = argument->kind == ir::ValueKind::ConstantInt;
+                const auto constant = constant_argument
+                                          ? static_cast<std::uint64_t>(
+                                                static_cast<const ir::ConstantInt*>(argument)->value)
+                                          : 0;
+                for (std::uint64_t word = 0; word < 2; ++word) {
+                    const auto position = integer_index + word;
+                    const auto half = static_cast<std::int32_t>(
+                        word == 0 ? (constant & 0xFFFFFFFFu) : (constant >> 32));
+                    if (position < 4) {
+                        const auto target = register_name(position);
+                        if (constant_argument) {
+                            out += "        MOV " + target + ", #" + std::to_string(half) + "\n";
+                        } else if (slot != layout.slots.end()) {
+                            out += "        LOAD " + target + ", [R7 + " +
+                                   std::to_string(slot->second + word * 4) + "]\n";
+                        } else {
+                            out += "        HALT ; 64-bit argument has no frame slot\n";
+                        }
+                    } else {
+                        if (constant_argument) {
+                            out += "        MOV R4, #" + std::to_string(half) + "\n";
+                        } else if (slot != layout.slots.end()) {
+                            out += "        LOAD R4, [R7 + " +
+                                   std::to_string(slot->second + word * 4) + "]\n";
+                        } else {
+                            out += "        HALT ; 64-bit argument has no frame slot\n";
+                        }
+                        out += "        STORE R4, [R7 + " +
+                               std::to_string((position - 4) * 4) + "]\n";
+                    }
+                }
+                integer_index += 2;
             } else {
                 if (integer_index < 4) {
                     load_value(out, function, layout, argument,
@@ -1128,6 +1512,17 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         out += "        FCVT.W." +
                std::string(instruction.operands[0]->type->bits == 32 ? "S" : "D") +
                " R0, F0\n";
+        if (is_wide(instruction.type)) {
+            // The ISA converts to a 32-bit word. A wider destination extends
+            // that word, so values outside the 32-bit range still convert
+            // wrongly, but the high word is defined rather than stale.
+            if (instruction.opcode == ir::Opcode::FPToSI) {
+                out += "        MOV R1, R0\n";
+                out += "        SAR R1, R1, #31\n";
+            } else {
+                out += "        MOV R1, #0\n";
+            }
+        }
         store_value(out, function, layout, instruction, "R0");
         break;
     case ir::Opcode::SIToFP:
@@ -1140,19 +1535,49 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
     case ir::Opcode::Trunc:
     case ir::Opcode::ZExt:
     case ir::Opcode::SExt: {
-        load_value(out, function, layout, instruction.operands[0], "R0");
-        const auto source_bits = instruction.operands[0]->type
-                                     ? instruction.operands[0]->type->bits
-                                     : 32;
-        if (instruction.opcode == ir::Opcode::SExt && source_bits < 32) {
-            out += "        SHL R0, R0, #" + std::to_string(32 - source_bits) + "\n";
-            out += "        SAR R0, R0, #" + std::to_string(32 - source_bits) + "\n";
-        } else if (instruction.opcode == ir::Opcode::ZExt && source_bits < 32) {
-            out += "        AND R0, R0, #" + std::to_string((1ull << source_bits) - 1) + "\n";
-        } else if (instruction.opcode == ir::Opcode::Trunc && instruction.type &&
-                   instruction.type->bits < 32) {
-            out += "        AND R0, R0, #" +
-                   std::to_string((1ull << instruction.type->bits) - 1) + "\n";
+        const auto source_type = instruction.operands[0]->type;
+        const auto source_bits =
+            source_type && source_type->bits != 0 ? source_type->bits : 32;
+        const auto dest_bits =
+            instruction.type && instruction.type->bits != 0 ? instruction.type->bits : 32;
+        const bool sign_extend = instruction.opcode == ir::Opcode::SExt;
+        const auto extend_from = [&](unsigned from_bits) {
+            if (sign_extend && from_bits < 32) {
+                out += "        SHL R0, R0, #" + std::to_string(32 - from_bits) + "\n";
+                out += "        SAR R0, R0, #" + std::to_string(32 - from_bits) + "\n";
+            } else if (!sign_extend && instruction.opcode == ir::Opcode::ZExt &&
+                       from_bits < 32) {
+                out += "        AND R0, R0, #" +
+                       std::to_string((1ull << from_bits) - 1) + "\n";
+            }
+        };
+        if (is_wide(instruction.type)) {
+            if (is_wide(source_type)) {
+                load_wide(out, function, layout, instruction.operands[0]);
+            } else {
+                load_value(out, function, layout, instruction.operands[0], "R0");
+                extend_from(source_bits);
+                // The high word is all sign bits or zero, so the 32-bit width
+                // is the word width either way.
+                if (sign_extend) {
+                    out += "        MOV R1, R0\n";
+                    out += "        SAR R1, R1, #31\n";
+                } else {
+                    out += "        MOV R1, #0\n";
+                }
+            }
+            store_value(out, function, layout, instruction, "R0");
+            break;
+        }
+        if (is_wide(source_type)) {
+            // The low word of a 64-bit value is its truncation.
+            load_wide(out, function, layout, instruction.operands[0]);
+        } else {
+            load_value(out, function, layout, instruction.operands[0], "R0");
+            extend_from(source_bits);
+        }
+        if (dest_bits < 32) {
+            out += "        AND R0, R0, #" + std::to_string((1ull << dest_bits) - 1) + "\n";
         }
         store_value(out, function, layout, instruction, "R0");
         break;
@@ -1160,7 +1585,12 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
     case ir::Opcode::BitCast:
     case ir::Opcode::PtrToInt:
     case ir::Opcode::IntToPtr:
-        load_value(out, function, layout, instruction.operands[0], "R0");
+        load_low_word(out, function, layout, instruction.operands[0], "R0");
+        if (is_wide(instruction.type)) {
+            // A 32-bit source zero-extends into the pair; a pointer fits the
+            // KR32 address space, so its high word is zero.
+            out += "        MOV R1, #0\n";
+        }
         store_value(out, function, layout, instruction, "R0");
         break;
     case ir::Opcode::Unreachable:

@@ -330,7 +330,8 @@ bool instruction_layout(const Item& item, bool& extension, std::string& error) {
         return true;
     }
     if ((mnemonic == "ADD" || mnemonic == "SUB" || mnemonic == "MUL" ||
-         mnemonic == "DIV" || mnemonic == "DIVS" || mnemonic == "MOD" ||
+         mnemonic == "MULH" || mnemonic == "MULHU" || mnemonic == "DIV" ||
+         mnemonic == "DIVS" || mnemonic == "MOD" ||
          mnemonic == "MODS" || mnemonic == "AND" || mnemonic == "OR" ||
          mnemonic == "XOR" || mnemonic == "SHL" || mnemonic == "SHR" ||
          mnemonic == "SAR" || mnemonic == "CMP" || mnemonic == "SLT" ||
@@ -420,6 +421,8 @@ std::optional<Opcode> opcode_for(std::string_view mnemonic) {
     if (mnemonic == "ADD") return Opcode::Add;
     if (mnemonic == "SUB") return Opcode::Sub;
     if (mnemonic == "MUL") return Opcode::Mul;
+    if (mnemonic == "MULH") return Opcode::MulH;
+    if (mnemonic == "MULHU") return Opcode::MulHu;
     if (mnemonic == "DIV") return Opcode::Div;
     if (mnemonic == "DIVS") return Opcode::DivS;
     if (mnemonic == "MOD") return Opcode::Mod;

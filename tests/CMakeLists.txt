@@ -370,6 +370,16 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/printf_long_long_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_longlong_arith
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/longlong_arith.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/longlong_arith_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_link_printf_width
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -4169,6 +4179,14 @@ if(TARGET krc)
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/struct.c
                 -DOUT1=${KRC_TEST_OUTPUT_DIR}/determinism1.kro
                 -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism2.kro
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
+
+    add_test(NAME krc_determinism_longlong
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/longlong_arith.c
+                -DOUT1=${KRC_TEST_OUTPUT_DIR}/determinism_longlong1.kro
+                -DOUT2=${KRC_TEST_OUTPUT_DIR}/determinism_longlong2.kro
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckObjectDeterminism.cmake)
 
     add_test(NAME krc_determinism_kr16_image

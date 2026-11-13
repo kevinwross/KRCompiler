@@ -340,7 +340,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 
 **M9 evidence (2026-11-11, in progress):**
 
-- `printf` parses the `ll` length modifier and routes `d/i/u/o/x/X` through a widened formatter; full 64-bit arithmetic remains a backend limitation.
+- `printf` parses the `ll` length modifier and routes `d/i/u/o/x/X` through a widened formatter; the formatter now receives both words of a 64-bit argument instead of a truncated one.
 - KR16 `puts` terminates its string with a newline, and the runtime provides `putchar`/`getchar` over the `0xF000`/`0xF004` console ports.
 - `targets/kr16/runtime/libc.c` builds to `stage/sysroot/kr16/lib/libkrcrt.kro` through `krc --emit-object`.
 - A startup + runtime + user-image link runs the string, conversion, allocation, random, and tokenizer functions and exits 3.
@@ -415,6 +415,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - A returned temporary converts implicitly in a return statement (`return make()`); a linked fixture returns 7.
 - A returned temporary converts implicitly as a call argument (`take(make())`); a linked fixture returns 7.
 - A returned temporary converts implicitly in an assignment (`result = make()`); a linked fixture returns 7.
+- 64-bit integers on KR32 are a low/high word pair: add, subtract, multiply, the bitwise operators, both shift directions, and comparisons lower inline; division and remainder call `__krc_udivdi3`/`__krc_sdivdi3`/`__krc_umoddi3`/`__krc_smoddi3` in `targets/kr32/runtime/libc.c`. A 64-bit argument consumes two argument words and a 64-bit return travels in R0/R1 ([ADR 0023](docs/decisions/0023-kr32-64-bit-integers.md)). `krc_link_longlong_arith` links a fixture whose eight checks set the exit status on failure; that exit status has not been observed on this machine, so the lowering is verified at compile and link level only.
 - A returned temporary converts for comparison against an integer (`make() == 7`) or a double (`make() > 1.0`), for `static_cast<double>`, and for arithmetic (`make() + 1`); linked fixtures return 7 or 8. `auto result = make()` infers the record type; a linked fixture returns 7.
 - `!make()` applies `operator bool` to a materialized returned temporary; a linked fixture returns 7.
 - `-make()` applies `operator int` to a materialized returned temporary; a linked fixture produces -7 (`4294967289`).
@@ -1814,3 +1815,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-12T11:03:07-08:00** — Accepted `thread_local` at block scope as a static local and covered it, returning 7. Windows debug CTest is 460/460.
 - **2026-11-12T10:12:07-08:00** — Refreshed the M10 evidence list for temporary materialization, braced/placement `new`, and the supported `std` utilities. Documentation only; Windows debug CTest remains 456/456.
 - **2026-11-12T11:15:37-08:00** — Added `handoff.md` with machine-transfer state, build and gate procedure, completed surfaces, open M8/M9/M10 work, known correctness limits, corpus status, and traps. Documentation only; the 11:03 gate remains 460/460.
+- **2026-11-12T20:31:28-08:00** — Normalized CRLF when the sysroot-bits test compares generated headers with the checked-in ones. The test failed on this machine only because `core.autocrlf` checked `sysroot/*/include/bits/*.h` out with CRLF. Windows debug CTest is 460/460.
+- **2026-11-12T20:42:35-08:00** — Lowered `long long` on KR32 as a low/high word pair through the backend: pair load/store, 64-bit constants, add/subtract/multiply/bitwise/shift/compare, truncation and extension, 64-bit arguments and returns, and `__krc_*di3` runtime helpers in `targets/kr32/runtime/libc.c`. Added `MULH`/`MULHU` to the KR32 assembler and encoder with golden words, `krc_link_longlong_arith`, a long-long object determinism check, and ADR 0023. `krc_link_longlong_arith` links; its runtime exit code is not yet observed because the `../kr32` VM was being rebuilt. Host matrix, incremental: windows-msvc-debug, windows-msvc-release, linux-gcc-debug, and linux-gcc-release each 462/462. This is a matrix run, not a gate.

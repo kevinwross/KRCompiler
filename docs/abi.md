@@ -46,7 +46,7 @@ LP64: `int` 32, `long` 64, `long long` 64, pointer 64, `short` 16, `char` 8, `fl
 
 ## Calling conventions
 
-- **KR32:** inherits `../../kr32/docs/abi.md` revision 1. Integer args R0–R3, FP args F0–F7, integer return R0, FP return F0/F1, R7 frame pointer, R11 thread pointer, 16-byte public call alignment, `sret` above 8 bytes, stack-passed varargs in 8-byte slots, `this` per the KR32 C++ ABI.
+- **KR32:** inherits `../../kr32/docs/abi.md` revision 1. Integer args R0–R3, FP args F0–F7, integer return R0, FP return F0/F1, R7 frame pointer, R11 thread pointer, 16-byte public call alignment, `sret` above 8 bytes, stack-passed varargs in 8-byte slots, `this` per the KR32 C++ ABI. A 64-bit integer such as `long long` occupies two consecutive integer argument words, low word first, and returns in R0/R1; see [ADR 0023](decisions/0023-kr32-64-bit-integers.md).
 - **KR16:** scalar subset frozen by [ADR 0016](decisions/0016-kr16-scalar-abi.md) and documented in [abi-kr16.md](abi-kr16.md): integer/pointer args `R1`–`R3`, return `R0`, `R4` frame pointer, two-byte stack alignment, all other registers caller-saved. Aggregate parameters/returns, varargs, floating point, and more than three arguments are deferred.
 - **KR64:** LP64 placeholder; first six integer args R0–R5, first eight FP args F0–F7.
 

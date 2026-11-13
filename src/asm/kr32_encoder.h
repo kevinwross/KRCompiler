@@ -34,6 +34,8 @@ enum class Opcode : std::uint8_t {
     Add = 0x20,
     Sub = 0x21,
     Mul = 0x22,
+    MulH = 0x23,
+    MulHu = 0x24,
     Div = 0x25,
     DivS = 0x26,
     Mod = 0x27,
