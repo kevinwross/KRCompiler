@@ -5,11 +5,16 @@ Written 2026-11-12 for continuation on another machine. Read this together with
 ## State at handoff
 
 - Repository: `https://github.com/kevinwross/KRCompiler.git`, branch `master`.
-- `master` equals `origin/master`; its tip records the 21:53 Windows gate.
+- `master` equals `origin/master`; the tip of the latest gate is named in
+  `implementation.md` with the per-configuration counts.
 - The gate timestamps and the per-configuration counts live in `implementation.md`
   under `## Gate verification`. That section owns them; restating them here is how
   a handoff starts disagreeing with the tracker.
 - This is a Windows/MSVC checkout. `build/` is untracked.
+- The corpus is measured, not assumed: 14 of 15 examples build and 11 run
+  with the status their `main` returns. One wrong-code defect remains,
+  `binarytree.c` 115 and `balanced-tree.cpp` 108; `matrix.cpp` needs the
+  matrix intrinsics; `FileOpen.cpp` builds and links but blocks if run.
 - The Linux presets need Ninja in WSL; see `AGENTS.local.md`, Environment assumptions.
 ## Objective and policy
 
