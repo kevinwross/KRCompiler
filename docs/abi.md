@@ -71,7 +71,7 @@ Itanium-like grammar with the `_Z` prefix; `extern "C"` unmangled; `_ZTV`/`_ZTI`
   - `__cxa_throw(object, typeinfo, destructor)` is a naked assembly routine; the unwinder walks the saved `R7` chain using each descriptor's frame size, restores `R7`/`SP` to the frame that owns a landing pad, and enters it with the exception object pointer in `R0` and its typeinfo in `R1`.
   - The exception object carries a sixteen-byte header below it: typeinfo, destructor, the previously handled exception, and a spare word. `__cxa_allocate_exception`, `__cxa_begin_catch`, `__cxa_end_catch`, `__cxa_rethrow`, and `__cxa_free_exception` maintain it.
   - A catch clause tests `__krc_eh_matches(thrown_typeinfo, &_ZTI<T>)`, which walks the typeinfo base chain; an unmatched exception resumes at the next frame and aborts with exit status 134 when no frame handles it.
-- Destructor cleanup on propagation and a personality routine are not implemented yet, so the compiler rejects a `try` or `throw` while a local whose destructor must run is live (ADR 0026 records why rejecting is better than skipping the destructor).
+- Destructor cleanup on propagation runs through cleanup landing pads: each lexical scope that owns a destructible object gets a pad that destroys it and continues into the enclosing pad ([ADR 0027](decisions/0027-exception-cleanup.md)). There is still no personality routine.
 - `-fno-exceptions` is supported; `-fno-rtti` is not implemented yet. The library subset must degrade to abort/terminate.
 
 ## Varargs, TLS, guards, static init
@@ -93,7 +93,8 @@ Itanium-like grammar with the `_Z` prefix; `extern "C"` unmangled; `_ZTV`/`_ZTI`
 - [ ] Itanium-like mangling grammar and examples.
 - [ ] Vtable/RTTI layout, including virtual destructors.
 - [x] EH descriptor encoding and landing-pad convention ([ADR 0026](decisions/0026-exception-descriptors.md)).
-- [ ] EH personality routine, cleanup actions, and type filters.
+- [x] Cleanup landing pads for automatic objects ([ADR 0027](decisions/0027-exception-cleanup.md)).
+- [ ] EH personality routine and exception specifications.
 - [ ] TCB/TLS layout and guard variables.
 - [ ] Static initialization/destruction order.
 - [ ] Attribute ABI effects per target.

@@ -263,6 +263,16 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/exceptions_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_link_exception_cleanup
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/exception_cleanup.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/exception_cleanup_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
     add_test(NAME krc_unknown_option COMMAND $<TARGET_FILE:krc> --no-such-option)
     set_tests_properties(krc_unknown_option PROPERTIES WILL_FAIL TRUE)
 
@@ -538,6 +548,15 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_exceptions PROPERTIES
             DEPENDS krc_link_exceptions)
+
+        add_test(NAME krc_run_exception_cleanup
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/exception_cleanup_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_exception_cleanup PROPERTIES
+            DEPENDS krc_link_exception_cleanup)
     endif()
 
     add_test(NAME krc_link_printf_width
@@ -4524,14 +4543,6 @@ if(TARGET krc)
                 -DEXE=$<TARGET_FILE:krc>
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/typeid_without_typeinfo.cpp
                 "-DEXPECT=typeid requires <typeinfo>"
-                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
-
-    add_test(NAME krc_cxx_exception_cleanup_unsupported
-        COMMAND ${CMAKE_COMMAND}
-                -DEXE=$<TARGET_FILE:krc>
-                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/exception_cleanup.cpp
-                -DOBJECT=${KRC_TEST_OUTPUT_DIR}/exception_cleanup.kro
-                "-DEXPECT=exception cleanup of automatic objects is not implemented yet"
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
 
     add_test(NAME krc_cxx_throw_scalar

@@ -101,8 +101,13 @@ tree supports:
   thrown class. Every function contributes a `.cpp_except` descriptor, the
   runtime `eh.s` walks the saved `R7` chain using each frame's recorded size,
   and an unmatched exception aborts with exit 134. `krc_run_exceptions`
-  requires exit 42. Destructor cleanup on propagation is not implemented and
-  is rejected rather than skipped (`krc_cxx_exception_cleanup_unsupported`).
+  requires exit 42.
+- Destructor cleanup on propagation works through cleanup landing pads
+  ([ADR 0027](docs/decisions/0027-exception-cleanup.md)): every scope with a
+  destructible object gets a pad that destroys it in reverse order and chains
+  into the enclosing pad, so a `try` body's objects are destroyed before its
+  handler runs. `krc_run_exception_cleanup` requires exit 42 and fails on a
+  wrong destruction order.
 - A call to a deleted member function is rejected, and access to a non-public
   member from a free function is rejected unless it is a friend.
 - The const and inheritance markers are enforced rather than parsed:
@@ -260,13 +265,10 @@ its run waits for the host file dialog instead of returning.
   confirm `master` equals `origin/master`, then push.
 ## Suggested next actions
 
-1. Destructor cleanup on propagation — the piece ADR 0026 deliberately left
-   out, and the one that makes exceptions usable with objects that own
-   resources. It needs cleanup regions in the descriptor, a cleanup landing pad
-   that runs the live destructors and calls `_Unwind_Resume`, and then removing
-   the `exception cleanup of automatic objects is not implemented yet`
-   diagnostic. Reference `dynamic_cast` arrives with the same work, because a
-   failed reference cast throws `std::bad_cast`.
+1. Reference `dynamic_cast` now that cleanup exists: a failed reference cast
+   throws `std::bad_cast`, which the exception machinery can raise once
+   `<exception>` and `operator new`-free allocation are in place. That also
+   makes `type_info` complete.
 2. Then variadic templates and fold expressions, per-thread dynamic TLS, the
    `std` containers (`memory`, `tuple`, `functional`, `array`), KR16
    libc/file I/O, and the broader host-service ABI.
@@ -276,10 +278,10 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 
 ## Known gaps in exception handling
 
-- Destructor cleanup on propagation is not implemented; the compiler rejects a
-  `try` or `throw` while a local destructor is pending.
 - There is no personality routine: the landing pad matches catch clauses itself,
   and the descriptor hands the runtime only the pad address.
+- A destructor that throws is not terminated as the standard requires; it
+  unwinds to the enclosing pad.
 - A handler that ends in a throw skips its `__cxa_end_catch`, so the exception
   object leaks and the current-exception link is not restored.
 - `throw` accepts a class object only; scalars and pointers are rejected.

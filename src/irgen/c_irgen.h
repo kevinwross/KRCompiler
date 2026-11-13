@@ -102,11 +102,28 @@ private:
     // The landing pad of the `try` currently being lowered, or null. Set for
     // the protected body and cleared while the handler itself is emitted.
     ir::BasicBlock* current_landing_pad_ = nullptr;
-    // Cleanup of automatic objects on propagation is not implemented yet, so a
-    // throw or a protected region while one is live is rejected rather than
-    // miscompiled (ADR 0026).
-    void reject_uncleaned_locals(const frontend::SourceLocation& location,
-                                 const char* operation);
+    // Destructor cleanup on propagation (ADR 0027): one cleanup landing pad per
+    // lexical scope that owns a destructible automatic object. The pad runs
+    // that scope's destructors and continues unwinding into the enclosing pad.
+    struct LocalCleanup;
+    struct ScopePad {
+        std::size_t mark = 0;
+        ir::BasicBlock* pad = nullptr;
+        ir::BasicBlock* enclosing = nullptr;
+    };
+    std::vector<ScopePad> scope_pads_;
+    // Creates the current scope's pad on its first destructible local, so a
+    // call before that point is still protected by the enclosing pad.
+    void note_scope_cleanup();
+    // A pad only protects calls in its own function: synthetic constructors and
+    // destructors are generated while another function's state is live, so the
+    // pad is ignored when it belongs to a different function.
+    [[nodiscard]] ir::BasicBlock* owned_landing_pad(ir::BasicBlock* pad) const;
+    // Runs a list of cleanups in the given (already reverse-declaration) order.
+    void emit_cleanup_sequence(const std::vector<LocalCleanup>& cleanups);
+    // Continues unwinding from a pad: into the enclosing pad when there is one,
+    // otherwise out of the frame.
+    void emit_resume(ir::Value* exception);
     [[nodiscard]] Expression emit_expression(const frontend::AstNode& expression);    [[nodiscard]] Expression emit_lvalue(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_condition_expression(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_lambda(const frontend::AstNode& expression);

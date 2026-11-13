@@ -69,5 +69,6 @@ What was rejected and why.
 - [0024-kr32-tile-intrinsics.md](0024-kr32-tile-intrinsics.md) — accepted; adds the IR intrinsic opcode, lowers the `kr32::matrix` surface to tile instructions, and implements memory-class aggregate returns in `R4`.
 - [0025-rtti-vtable-typeinfo.md](0025-rtti-vtable-typeinfo.md) — accepted; replaces the per-object vtable with weak `_ZTV`/`_ZTI` globals and implements `typeid` and pointer `dynamic_cast`.
 - [0026-exception-descriptors.md](0026-exception-descriptors.md) — accepted; freezes the `.cpp_except` descriptor, the frame walk, landing pads, and the exception runtime, without destructor cleanup yet.
+- [0027-exception-cleanup.md](0027-exception-cleanup.md) — accepted; adds cleanup landing pads that run live destructors and chain into the handler.
 
-The next expected ADRs are the KR16 ABI appendix, the KDBG record layout, and the destructor-cleanup extension to ADR 0026.
+The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
