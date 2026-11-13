@@ -984,6 +984,92 @@ std::unique_ptr<AstNode> Parser::parse_member_declaration() {
         is_friend = true;
         ++position_;
     }
+    // A constructor carries the class name and no return type, so the ordinary
+    // path parses nothing and discards the member. It is recognised here, but
+    // only when the declaration ends in `;` or `=`: a definition with a member
+    // initializer list or a body keeps the existing path.
+    bool is_constructor_declaration = false;
+    if (cxx_mode_ && !current_class_name_.empty() &&
+        peek().kind == TokenKind::Identifier && peek().text == current_class_name_ &&
+        peek(1).text == "(") {
+        std::size_t scan = position_ + 1;
+        std::size_t depth = 0;
+        while (scan < tokens_.size()) {
+            const auto& scanned = tokens_[scan].text;
+            if (scanned == "(") {
+                ++depth;
+            } else if (scanned == ")") {
+                --depth;
+                if (depth == 0) {
+                    ++scan;
+                    break;
+                }
+            } else if (depth == 0 && (scanned == "{" || scanned == ";")) {
+                break;
+            }
+            ++scan;
+        }
+        while (scan < tokens_.size() &&
+               (tokens_[scan].text == "const" || tokens_[scan].text == "volatile" ||
+                tokens_[scan].text == "override" || tokens_[scan].text == "final" ||
+                tokens_[scan].text == "noexcept")) {
+            ++scan;
+        }
+        is_constructor_declaration =
+            scan < tokens_.size() &&
+            (tokens_[scan].text == ";" || tokens_[scan].text == "=");
+    }
+    if (is_constructor_declaration) {
+        auto specifiers = make_ast(AstKind::DeclSpecifiers, location);
+        specifiers->labels.push_back("void");
+        if (is_virtual) {
+            specifiers->labels.push_back("virtual");
+        }
+        ++position_;  // the class name
+        auto constructor_declarator = make_ast(AstKind::FunctionDeclarator, location);
+        constructor_declarator->labels.push_back("prototype");
+        constructor_declarator->labels.push_back("constructor");
+        constructor_declarator->children.push_back(
+            make_ast(AstKind::Declarator, location, current_class_name_));
+        expect("(", "after the constructor name");
+        if (!check(")")) {
+            // Parameters are skipped; only whether any were written matters for
+            // the default-construction check that reads this marker.
+            constructor_declarator->labels.push_back("constructor-args");
+            std::size_t depth = 1;
+            while (!at_end() && depth > 0) {
+                if (check("(")) {
+                    ++depth;
+                } else if (check(")")) {
+                    --depth;
+                }
+                ++position_;
+            }
+        } else {
+            expect(")", "after the constructor parameter list");
+        }
+        while (check("const") || check("volatile") || check("override") ||
+               check("final") || check("noexcept")) {
+            ++position_;
+        }
+        auto constructor_member = make_ast(AstKind::MemberDeclaration, location);
+        constructor_member->children.push_back(std::move(specifiers));
+        constructor_member->children.push_back(std::move(constructor_declarator));
+        if (is_friend) {
+            constructor_member->labels.push_back("friend");
+        }
+        if (match("=")) {
+            if (match("delete")) {
+                constructor_member->labels.push_back("deleted");
+            } else if (match("default")) {
+                constructor_member->labels.push_back("defaulted");
+            } else {
+                static_cast<void>(parse_assignment_expression());
+            }
+        }
+        expect(";", "after member declaration");
+        return constructor_member;
+    }
     if (check("~")) {
         ++position_;
         std::string destructor_name = "~";

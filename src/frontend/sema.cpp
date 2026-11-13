@@ -861,6 +861,11 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             entry.is_final = is_final;
             entry.location = member.location;
             entry.access = access;
+            // Only the default constructor is tracked, so a deleted constructor
+            // that takes arguments cannot be mistaken for it.
+            if (name == record.tag && declarator_has_label(*child, "constructor-args")) {
+                continue;
+            }
             record.methods.push_back(std::move(entry));
             continue;
         }
@@ -1289,6 +1294,23 @@ void Sema::analyze_declaration(const AstNode& declaration) {
             record_is_abstract(*type->record)) {
             error(declarator->location,
                   "cannot instantiate abstract class '" + type->record->tag + "'");
+        }
+        // A record declared without an initializer is default-constructed.
+        if (!is_typedef && !has_initializer && type && type->kind == TypeKind::Record &&
+            type->record) {
+            for (const auto* record = type->record.get(); record != nullptr;
+                 record = record->base && record->base->kind == TypeKind::Record &&
+                                  record->base->record
+                              ? record->base->record.get()
+                              : nullptr) {
+                for (const auto& constructor : record->methods) {
+                    if (constructor.name == record->tag && constructor.is_deleted) {
+                        error(declarator->location,
+                              "call to deleted constructor '" + record->tag + "::" +
+                                  record->tag + "'");
+                    }
+                }
+            }
         }
         const auto name = declarator_name(*declarator);
         if (name.empty()) {
