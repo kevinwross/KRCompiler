@@ -6,14 +6,12 @@ Written 2026-11-12 for continuation on another machine. Read this together with
 ## State at handoff
 
 - Repository: `https://github.com/kevinwross/KRCompiler.git`, branch `master`.
-- `master` equals `origin/master` at commit **`a518f40`** ("Record the 11:03 Windows gate").
-- Working tree was clean when this file was written.
-- Latest host gate: **`2026-11-12T11:03:14-08:00`**, recorded in
-  `implementation.md` under `## Gate verification`.
-- Gate result: `windows-msvc-debug`, `windows-msvc-release`, `linux-gcc-debug`,
-  and `linux-gcc-release` each **PASS 460/460**.
-- Not verified: native Linux x64, Linux ARM64.
+- `master` equals `origin/master`; its tip records the 21:53 Windows gate.
+- The gate timestamps and the per-configuration counts live in `implementation.md`
+  under `## Gate verification`. That section owns them; restating them here is how
+  a handoff starts disagreeing with the tracker.
 - This is a Windows/MSVC checkout. `build/` is untracked.
+- The Linux presets need Ninja in WSL; see `AGENTS.local.md`, Environment assumptions.
 
 ## Objective and policy
 
@@ -82,6 +80,11 @@ tree supports:
   range-for, move/copy semantics, `std::move`/`forward`/`swap`/`min`/`max`,
   `thread_local` as static storage, braced and placement `new`, and returned
   temporary materialization across many expression contexts.
+- 64-bit integers on KR32 are a low/high word pair with inline arithmetic and
+  division through runtime helpers ([ADR 0023](docs/decisions/0023-kr32-64-bit-integers.md));
+  the fixture links, its runtime exit code is unobserved.
+- A call to a deleted member function is rejected, and access to a non-public
+  member from a free function is rejected unless it is a friend.
 
 Recent commits worth knowing:
 
@@ -89,6 +92,8 @@ Recent commits worth knowing:
   output found by running the `../kr32` corpus.
 - `4044d9a` — namespace-qualified type names in declarations and `new`.
 - `f24f1be`, `de2c793` — `thread_local` at namespace and block scope.
+- `902968b` — 64-bit integer lowering (ADR 0023).
+- `d71bee9`, `41b58a3` — deleted-function and access-control diagnostics.
 
 ## Important test caveat
 
@@ -130,15 +135,20 @@ value in `implementation.md`. Do not claim a runtime result from CTest alone.
 
 ### Known correctness limits
 
-- **64-bit integers are incomplete.** Constants/operations/division are not
-  fully lowered. `../kr32/examples/cxx_tls.cpp` compiles, but its `long long`
-  division produces the wrong result (observed `R0=0` where 42 was expected).
+- **64-bit integers are lowered, not observed at runtime.** `long long` is a word
+  pair with inline arithmetic and division through runtime helpers, and
+  `krc_link_longlong_arith` links; its exit code has not been run on this machine.
+  Converting a 64-bit integer to or from `float`/`double` still uses the ISA's
+  32-bit conversion, so values outside the 32-bit range convert wrongly.
 - `../kr32/examples/matrix.cpp` is blocked on the KR32 matrix intrinsics
   declared by `kr32/matrix.hpp` (`matrix_mul`, `transpose`, vector ops).
 - `../kr32/examples/FileOpen.cpp` is blocked on `sys_open_dialog`, which is not
   declared or implemented.
-- Some C++ diagnostics are permissive: deleted functions are accepted, access
-  control is not enforced, and `const` correctness is not enforced.
+- Some C++ diagnostics remain permissive: a deleted constructor or destructor
+  used at a construction site is accepted, access is unchecked inside member
+  bodies, friend classes are parsed but not recorded, and `const` correctness is
+  not enforced. Sema checks only free-function bodies; giving out-of-line member
+  bodies class scope and `this` is the work that would widen that.
 
 ## Corpus notes
 
@@ -185,11 +195,14 @@ plus `targets\kr32\runtime\fileio.s` and `targets\kr32\runtime\crt0.s`.
 
 ## Suggested next actions
 
-1. Re-run the debug build/CTest to confirm 460/460 on the new machine.
+1. Run the linked `longlong_arith` fixture under the sibling `../kr32` VM and
+   record its exit code in `implementation.md`; that is the one verification the
+   64-bit lowering is missing.
 2. Pick one coherent M10 or M8/M9 item and implement it end-to-end with a linked
    fixture; prefer closing a named gap over adding more same-shape tests.
-3. High-value candidates: 64-bit integer lowering, matrix/host intrinsics,
-   KR16 libc/file I/O, or the first slice of exceptions/RTTI/templates.
+3. High-value candidates: giving out-of-line member bodies class scope and `this`
+   so Sema can check them, matrix/host intrinsics, KR16 libc/file I/O, or the
+   first slice of exceptions/RTTI/templates.
 4. Run the host gate and record it before pushing.
 
 ## Goal recommendation

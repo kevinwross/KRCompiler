@@ -111,6 +111,7 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 
 - **Doctor:** `pwsh -File .agents/doctor.msvc.ps1` reports whether this machine can build with MSVC, and exits 2 naming each component that is missing. Run it before a host gate, and whenever a build cannot find its compiler. No doctor exists for WSL yet; there, configuring `linux-gcc-debug` is the check. Resolved toolchains and their verification dates live in the Platform targets table above — do not restate them here.
 - CMake 3.25 or newer; C++20; no external runtime dependencies.
+- The Linux presets use the Ninja generator, so `ninja` must exist on the Linux host. A WSL image may ship without it; configuring `linux-gcc-debug` then fails on the missing generator, which is a provisioning gap rather than a broken preset.
 - MSVC on Windows and GCC/Clang on Linux, both with warnings as errors. Sanitizers (ASan/UBSan) are configured on Linux only.
 - doctest is vendored for tests — do not replace it with a fetched framework.
 - Current milestone state lives in `implementation.md`; read it before starting work. Do not restate it here.
