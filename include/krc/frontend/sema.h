@@ -155,6 +155,10 @@ private:
 
     void analyze_declaration(const AstNode& declaration);
     void analyze_function_definition(const AstNode& definition);
+    // Analyses the parameters and body of a function definition in a fresh
+    // scope. A record gives the body class scope, `this`, and its member
+    // initializers.
+    void analyze_function_body(const AstNode& definition, RecordInfo* record);
     void analyze_compound(const AstNode& compound);
     void analyze_statement(const AstNode& statement);
     void analyze_static_assert(const AstNode& assertion);

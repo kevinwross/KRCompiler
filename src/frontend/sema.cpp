@@ -549,6 +549,9 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
             info->base = type_named(label.substr(5));
         }
     }
+    // Bodies are analysed after every member is registered: a member body may
+    // name a member declared later in the class.
+    std::vector<const AstNode*> member_bodies;
     for (const auto& member : specifier.children) {
         if (!member) {
             continue;
@@ -581,10 +584,24 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
                 method_entry.is_virtual = is_virtual;
                 method_entry.access = access;
                 info->methods.push_back(std::move(method_entry));
+                member_bodies.push_back(member.get());
             }
             continue;
         }
         analyze_member_declaration(*member, *info);
+    }
+    for (const auto* definition : member_bodies) {
+        // An in-class body is analysed in the record's scope, like an
+        // out-of-line one, once every member it may name exists.
+        const auto saved_function_name = current_function_name_;
+        const auto saved_enclosing_record = enclosing_record_;
+        const auto* declarator = definition->children[1].get();
+        current_function_name_ =
+            info->tag + "::" + declarator_name(*declarator);
+        enclosing_record_ = info.get();
+        analyze_function_body(*definition, info.get());
+        enclosing_record_ = saved_enclosing_record;
+        current_function_name_ = saved_function_name;
     }
     info->polymorphic =
         std::any_of(info->methods.begin(), info->methods.end(),
@@ -724,6 +741,10 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
             continue;
         }
         if (is_static) {
+            // A static data member lives at class scope whether or not it has
+            // an in-class initializer, so a member body may name it. Only an
+            // initialized one is a definition; the others are completed by an
+            // out-of-class definition.
             bool has_initializer = false;
             for (const auto& member_child : member.children) {
                 if (member_child &&
@@ -732,11 +753,9 @@ void Sema::analyze_member_declaration(const AstNode& member, RecordInfo& record)
                     break;
                 }
             }
-            if (has_initializer) {
-                scopes_.front().ordinary[record.tag + "::" + name] =
-                    Symbol{SymbolKind::Variable, record.tag + "::" + name, type,
-                           child->location, true, 0};
-            }
+            scopes_.front().ordinary[record.tag + "::" + name] =
+                Symbol{SymbolKind::Variable, record.tag + "::" + name, type,
+                       child->location, has_initializer, 0};
             continue;
         }
         for (const auto& existing : record.members) {
@@ -1183,8 +1202,7 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     }
     const auto* specifiers = definition.children[0].get();
     const auto* declarator = definition.children[1].get();
-    const auto* body = definition.children[2].get();
-    if (!specifiers || !declarator || !body) {
+    if (!specifiers || !declarator || !definition.children[2]) {
         return;
     }
     bool is_typedef = false;
@@ -1231,23 +1249,7 @@ void Sema::analyze_function_definition(const AstNode& definition) {
         std::find(specifiers->labels.begin(), specifiers->labels.end(), "auto") !=
         specifiers->labels.end();
     auto_return_type_ = nullptr;
-    push_scope();
-    if (const auto* function = find_function_declarator(*declarator)) {
-        analyze_parameters(*function);
-    }
-    if (enclosing_record_ != nullptr) {
-        const auto record_type_name = lookup_tag(enclosing_record_->tag);
-        if (record_type_name != nullptr && record_type_name->type) {
-            Symbol self;
-            self.kind = SymbolKind::Variable;
-            self.name = "this";
-            self.type = pointer_to(record_type_name->type);
-            self.location = declarator->location;
-            declare_ordinary(std::move(self));
-        }
-    }
-    analyze_compound(*body);
-    pop_scope();
+    analyze_function_body(definition, enclosing_record_);
     if (auto_return_active_ && auto_return_type_ && type->return_type) {
         auto updated = std::make_shared<Type>(*type);
         updated->return_type = auto_return_type_;
@@ -1260,6 +1262,52 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     auto_return_type_ = nullptr;
     current_function_name_ = saved_function_name;
     enclosing_record_ = saved_enclosing_record;
+}
+
+void Sema::analyze_function_body(const AstNode& definition, RecordInfo* record) {
+    const auto* declarator =
+        definition.children.size() > 1 ? definition.children[1].get() : nullptr;
+    if (declarator == nullptr) {
+        return;
+    }
+    push_scope();
+    if (const auto* function = find_function_declarator(*declarator)) {
+        analyze_parameters(*function);
+    }
+    if (record != nullptr) {
+        // A member body sees `this` and its class's members unqualified.
+        auto* tag = lookup_tag(record->tag);
+        if (tag != nullptr && tag->type) {
+            Symbol self;
+            self.kind = SymbolKind::Variable;
+            self.name = "this";
+            self.type = pointer_to(tag->type);
+            self.location = declarator->location;
+            declare_ordinary(std::move(self));
+        }
+        // A constructor's member initializer list is part of its body scope.
+        if (definition.children.size() > 3 && definition.children[3]) {
+            for (const auto& initializer : definition.children[3]->children) {
+                if (!initializer) {
+                    continue;
+                }
+                for (const auto& arguments : initializer->children) {
+                    if (!arguments) {
+                        continue;
+                    }
+                    for (const auto& argument : arguments->children) {
+                        if (argument) {
+                            static_cast<void>(analyze_expression(*argument));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (definition.children.size() > 2 && definition.children[2]) {
+        analyze_compound(*definition.children[2]);
+    }
+    pop_scope();
 }
 
 void Sema::analyze_parameters(const AstNode& function_declarator) {
@@ -1656,7 +1704,13 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             return symbol->type ? symbol->type : int_type_;
         }
         // Inside a member body an unqualified name may be a member of the
-        // defining class or one of its bases.
+        // defining class or one of its bases, or one of its static members.
+        if (enclosing_record_ != nullptr) {
+            if (auto* statics = lookup_ordinary(enclosing_record_->tag + "::" +
+                                                expression.text)) {
+                return statics->type ? statics->type : int_type_;
+            }
+        }
         for (const auto* record = enclosing_record_; record != nullptr;
              record = record->base && record->base->record
                           ? record->base->record.get()
@@ -1898,6 +1952,25 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                 }
             }
             auto* symbol = lookup_ordinary(callee->text);
+            // An unqualified call inside a member body may name a member
+            // function of the defining class or one of its bases.
+            TypePtr member_method;
+            if (!symbol && enclosing_record_ != nullptr) {
+                for (const auto* record = enclosing_record_; record != nullptr;
+                     record = record->base && record->base->record
+                                  ? record->base->record.get()
+                                  : nullptr) {
+                    for (const auto& method : record->methods) {
+                        if (method.name == callee->text && method.type) {
+                            member_method = method.type;
+                            break;
+                        }
+                    }
+                    if (member_method) {
+                        break;
+                    }
+                }
+            }
             if (symbol && symbol->type && symbol->type->kind == TypeKind::Record &&
                 symbol->type->record) {
                 for (auto* record = symbol->type->record.get(); record != nullptr;
@@ -1932,6 +2005,8 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                 callee_type = function_of(int_type_, {int_type_}, false, true);
             } else if (!symbol && callee->text == "__builtin_unreachable") {
                 callee_type = function_of(void_type_, {}, false, true);
+            } else if (!symbol && member_method) {
+                callee_type = member_method;
             } else if (!symbol) {
                 if (profile_.id == target::TargetId::Kr16) {
                     warning(callee->location,
