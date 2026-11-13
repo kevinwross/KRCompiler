@@ -196,6 +196,16 @@ Skip `FileOpen.cpp` when running the corpus in a loop: it now links, and
 its run waits for the host file dialog instead of returning.
 ## Traps that have caused real failures
 
+- **Never rewrite a file with a PowerShell line array.** `New-Object
+  System.Collections.Generic.List[string]` plus a write loop has damaged a
+  source file or document four times: a mistyped type name left the list null
+  and wrote a 2-byte `handoff.md`, empty lines accumulated at EOF, and lines
+  were dropped silently. Use the `edit` tool for text, and when a whole-file
+  rewrite is genuinely needed, print the resulting line count in the same
+  command and compare it against the original.
+- **Check `git status` before trusting a bulk edit.** The 2-byte handoff was
+  caught only because `git status` ran in the same command and showed the file
+  modified; `git checkout -- <path>` restored it and the edit was redone.
 - **Test-name and fixture collisions.** Before adding a fixture or `add_test`,
   run `ctest --preset windows-msvc-debug -N | Select-String <name>` and
   `git ls-files tests/fixtures/c/<name>`. Earlier work accidentally overwrote
