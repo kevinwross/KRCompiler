@@ -282,6 +282,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - [ ] Codegen, frame layout, image writer. Scalar codegen, SP-relative frame layout, the in-tree assembler, global arrays, and the minimal `.kex` writer work for single-unit integer/pointer code; relocatable objects and the full linker remain.
 - [ ] Tier 0–1 C on KR16, including `hello.c` and `sum.c`. `sum.c` runs to exit 55, `hello.c` prints `Hello, KR16!` and exits 0, and a global-array fixture exits 6 through the single-unit `.kex` path; the relocatable object/linker and broader C runtime remain.
 - [x] Gate G7: KR16 C is accepted, assembled, linked, and run, and the suite now proves it on every build. `KRC_KR16_VM` names the sibling VM (`../kr16/build/shell-debug/kr16.exe` on a Windows host) and `cmake/RunKr16Image.cmake` checks the program's exit status and, where it matters, its output. Nineteen executed tests cover the linked images (`hello.c` prints `Hello, KR16!` and exits 0, `sum.c` exits 55, a two-object `lib`/`main` image returns 42, extern data returns 7, struct copies return 81, the string/memory runtime returns 3) plus single-unit images for globals, indexing, `switch`, a call in a loop, shifts, a pointer write, a function pointer, pointer difference, three bit-field forms, and a two-dimensional array.
+- More than three scalar arguments work on KR16 ([ADR 0028](docs/decisions/0028-kr16-stack-arguments.md)): the first three travel in `R1`-`R3` and the rest are pushed last-first in two-byte slots, so the fourth ends at the lowest address and the callee reads argument `n >= 4` at `[R4 + 4 + 2 * (n - 4)]`. The fixture covers five and seven arguments, a call nested in a five-argument call, narrow arguments in stack positions, locals alongside stack arguments, a loop, recursion, and an indirect call with four parameters; `krc_run_kr16_arguments` requires exit 42.
 - A type the IP16 profile cannot represent is rejected where it is named, as `'<type>' is not supported by the kr16 profile` (plan.md §4.3), instead of being lowered to a zero-width integer or to `f32`/`f64`: `krc_kr16_long_long_rejected` covers `long long` and `krc_kr16_float_rejected` covers `float`, `double`, and `long double`, and the same sources still compile for KR32. `<stdlib.h>`, `<math.h>`, and `<time.h>` omit their 64-bit and floating-point declarations under `__kr16__`, so including them stays usable on the profile.
 
 **M7 evidence (2026-11-10T10:36:06-08:00, in progress):**
@@ -491,6 +492,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T12:54:29-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 546/546
+windows-msvc-release  PASS 546/546
+linux-gcc-debug       PASS 511/511
+linux-gcc-release     PASS 511/511
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register thirty-five tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the twenty
+KR16 run tests need the KR16 VM a Linux host does not have. This gate covers
+KR16 stack arguments ([ADR 0028](docs/decisions/0028-kr16-stack-arguments.md)).
+Clean configure and build of all four presets; no warnings in any log.
 
 ### 2026-11-13T12:37:28-08:00 — host gate (Windows)
 
@@ -2638,3 +2655,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T12:37:06-08:00** — Executed the KR16 tests instead of only linking them. `KRC_KR16_VM` names the sibling VM the way `KRC_KR32_VM` does, and `cmake/RunKr16Image.cmake` runs an image and checks the program's exit status and, where it matters, its output. The KR16 `vm` command reports the program's status as its own, so the runner mirrors the KR32 one with `--max-cycles` instead of `--max-steps`.
 - **2026-11-13T12:37:06-08:00** — Nineteen `krc_run_kr16_*` tests now cover the five linked images and fourteen single-unit images: `hello.c` prints `Hello, KR16!` and exits 0 (checked through `EXPECT_OUTPUT`), `sum.c` exits 55, a two-object `lib`/`main` image returns 42, extern data returns 7, local/nested/array struct copies return 81, the string/memory runtime returns 3, and globals, indexing, `switch`, a call in a loop, shifts, a pointer write, a function pointer, pointer difference, three bit-field forms, and a two-dimensional array each exit with the value their fixture computes. Before this, a defect that only appears at run time on KR16 could reach the tree as a passing suite.
 - **2026-11-13T12:37:06-08:00** — Each expectation is the value the fixture's own arithmetic produces, not a recorded observation: `kr16_arith.c` is 49, `kr16_shift.c` is 32, the bit-field fixtures are 22, and the two-object image is 42. The run tests register only when the VM exists, so a host without it stays green, as for KR32. Windows debug CTest is 544/544.
+- **2026-11-13T12:54:01-08:00** — Implemented KR16 stack arguments, the first of the two blockers for `printf` on that target (the other is variadic calls). ADR 0028 freezes the rule: the first three scalar arguments stay in `R1`–`R3`, further arguments are pushed by the caller last-first in two-byte slots so the fourth ends at the lowest address, and the caller releases the area with `LEA SP, [SP + 2 * count]` after `CALL`. The callee reads argument `n >= 4` at `[R4 + 4 + 2 * (n - 4)]` and copies it into its frame slot in the prologue, so the rest of the function still sees one slot per parameter.
+- **2026-11-13T12:54:01-08:00** — The first attempt was wrong in a way only execution showed: each extra was loaded and pushed in one step, and pushing moves `SP`, so the *second* extra was read at a slot offset that had shifted by two bytes. `recurse(1, 1, 2, 3, 4)` returned the wrong sum while `recurse(0, ...)` was right, which localized it to the argument staging. The load helper now takes a `pushed` adjustment and the push loop passes the bytes already pushed, because the staged slots live above `SP` and their SP-relative offsets grow as the area is built.
+- **2026-11-13T12:54:01-08:00** — `tests/fixtures/c/kr16_arguments.c` exercises five arguments, seven arguments, a call whose own argument is a five-argument call, narrow `char` arguments in stack positions, a function with stack arguments and local arrays, repeated calls in a loop, recursion through stack arguments, and an indirect call through a function pointer with four parameters; `krc_run_kr16_arguments` requires exit 42. `docs/abi-kr16.md` now freezes stack arguments and drops "more than three arguments" from the deferred list and the diagnostic list; varargs remains deferred and is the remaining blocker for `printf`. Windows debug CTest is 546/546.
