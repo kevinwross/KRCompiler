@@ -18,16 +18,21 @@ void free(void *pointer);
 int atoi(const char *text);
 double atof(const char *text);
 long atol(const char *text);
-long long atoll(const char *text);
 long strtol(const char *text, char **end, int base);
 unsigned long strtoul(const char *text, char **end, int base);
-long long strtoll(const char *text, char **end, int base);
-unsigned long long strtoull(const char *text, char **end, int base);
 double strtod(const char *text, char **end);
 
 int abs(int value);
 long labs(long value);
+
+/* The IP16 profile has no 64-bit integer type, so `long long` declarations are
+ * absent there and using the type is diagnosed. */
+#ifndef __kr16__
+long long atoll(const char *text);
+long long strtoll(const char *text, char **end, int base);
+unsigned long long strtoull(const char *text, char **end, int base);
 long long llabs(long long value);
+#endif
 
 void qsort(void *base, size_t count, size_t size,
            int (*compare)(const void *, const void *));

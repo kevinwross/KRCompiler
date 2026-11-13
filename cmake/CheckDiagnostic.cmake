@@ -3,13 +3,17 @@
 # and fails this check.
 #
 # Required: EXE, SOURCE, EXPECT (a regular expression matched against stderr)
+# Optional: TARGET (defaults to kr32)
 
 if(NOT DEFINED EXE OR NOT DEFINED SOURCE OR NOT DEFINED EXPECT)
     message(FATAL_ERROR "EXE, SOURCE, and EXPECT are required")
 endif()
+if(NOT DEFINED TARGET)
+    set(TARGET kr32)
+endif()
 
 execute_process(
-    COMMAND "${EXE}" --target=kr32 -fsyntax-only "${SOURCE}"
+    COMMAND "${EXE}" "--target=${TARGET}" -fsyntax-only "${SOURCE}"
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
     RESULT_VARIABLE result)

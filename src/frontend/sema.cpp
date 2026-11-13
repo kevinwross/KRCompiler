@@ -474,6 +474,13 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
         }
         base = int_type_;
     }
+    // plan.md §4.3: a profile without a 64-bit integer type must say so rather
+    // than lower `long long` to a zero-width type. A typedef carries the
+    // diagnostic from its own declaration.
+    if (!typedef_type && base->kind == TypeKind::LongLong && profile_.long_long_bits == 0) {
+        error(specifiers.location, std::string("'long long' is not supported by the ") +
+                                       std::string(profile_.name) + " profile");
+    }
     if (is_const || is_volatile) {
         base = qualify(base, is_const, is_volatile);
     }
