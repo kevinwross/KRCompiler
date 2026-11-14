@@ -77,6 +77,7 @@ What was rejected and why.
 - [0032-class-template-instantiation.md](0032-class-template-instantiation.md) — accepted; instantiates a class template per type as the record Tag__type.
 - [0033-non-type-template-parameters.md](0033-non-type-template-parameters.md) — accepted; a parameter written int N becomes a literal in the instance, tagged Buffer__int__4.
 - [0034-integer-literals-on-narrow-targets.md](0034-integer-literals-on-narrow-targets.md) — accepted; types an integer literal per C11 on a narrow profile and diagnoses one that fits no type, and records that a 64-bit value still cannot be carried.
+- [0035-class-template-member-bodies.md](0035-class-template-member-bodies.md) — proposed; analyses an instance's member bodies against the instance's bindings, so a body no longer sees the pattern's stub type.
 ame__tag.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
