@@ -375,7 +375,8 @@ Three gaps block a complete `std::array`, each with a reproduction:
   class-template branch of type resolution consumed a bare `C` and never
   reached the typedef, and the instance clone now rewrites the injected name to
   the instance's tag (`inherited_class_name.cpp`, ADR 0032).
-- **A range-for over a class.** Only bounded built-in arrays are accepted.
+- ~~A range-for over a class~~ — fixed: the loop uses the class's egin() and
+  nd() and compares pointers, and the reference form writes the elements.
 - **Overloaded member functions.** `class_methods_` holds one function per
   name, so `std::array`'s const and non-const `operator[]` cannot coexist and
   a const member's `(*this)[index]` picks the wrong one (krc crashes). This

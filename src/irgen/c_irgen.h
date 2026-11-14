@@ -172,6 +172,14 @@ private:
                                                    const ir::Function& callee,
                                                    ir::Intrinsic intrinsic);
     [[nodiscard]] Expression emit_subscript(const frontend::AstNode& expression);
+    // The begin()/end() form of a range-for over a class.
+    bool emit_range_for_class(const frontend::AstNode& statement,
+                              ir::Function& begin_method,
+                              ir::Function& end_method,
+                              const std::string& value_name,
+                              bool bound_by_reference,
+                              ir::TypePtr element_ir,
+                              frontend::TypePtr element_type);
     // Calls a record's operator[] with an already-emitted object address, so
     // s[i] and (*this)[i] share one path.
     [[nodiscard]] Expression subscript_operator(ir::Function* function,

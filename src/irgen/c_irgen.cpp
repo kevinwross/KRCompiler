@@ -2756,12 +2756,41 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
                 }
             }
         }
+        const auto value_name = declarator_name(*statement.children[1]);
+        // A class with begin() and end() is iterated through them: the two
+        // calls give a cursor and a limit, and the loop advances the cursor.
+        if (statement.children[2]->kind == frontend::AstKind::Identifier) {
+            if (auto* local = lookup_local(statement.children[2]->text)) {
+                if (local->frontend_type &&
+                    local->frontend_type->kind == frontend::TypeKind::Record &&
+                    local->frontend_type->record) {
+                    const auto methods =
+                        class_methods_.find(local->frontend_type->record->tag);
+                    if (methods != class_methods_.end()) {
+                        const auto begin_method = methods->second.find("begin");
+                        const auto end_method = methods->second.find("end");
+                        if (begin_method != methods->second.end() &&
+                            end_method != methods->second.end() &&
+                            begin_method->second->type->return_type &&
+                            begin_method->second->type->return_type->kind ==
+                                ir::TypeKind::Pointer) {
+                            if (emit_range_for_class(statement, *begin_method->second,
+                                                     *end_method->second, value_name,
+                                                     bound_by_reference, element_ir,
+                                                     element_type)) {
+                                pop_scope();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if (!range.value || count == 0) {
             error(statement.location, "range-for requires a bounded array");
             pop_scope();
             return;
         }
-        const auto value_name = declarator_name(*statement.children[1]);
         auto* value_address = builder_.create_alloca(
             bound_by_reference ? module_->types().pointer_type(element_ir)
                                : element_ir,
@@ -8992,6 +9021,80 @@ CIRGen::Expression CIRGen::subscript_operator(ir::Function* function,
                 function->type->return_type->element};
     }
     return {call, function->type->return_type};
+}
+// Emits the begin()/end() form of a range-for. Returns false when the loop
+// could not be built, so the caller can fall back to the array form.
+bool CIRGen::emit_range_for_class(const frontend::AstNode& statement,
+                                  ir::Function& begin_method,
+                                  ir::Function& end_method,
+                                  const std::string& value_name,
+                                  bool bound_by_reference,
+                                  ir::TypePtr element_ir,
+                                  frontend::TypePtr element_type) {
+    auto self = emit_lvalue(*statement.children[2]);
+    if (!self.value) {
+        return false;
+    }
+    const auto pointer_type = begin_method.type->return_type;
+    auto* cursor = builder_.create_alloca(pointer_type, 0, "range.cursor");
+    auto* limit = builder_.create_alloca(pointer_type, 0, "range.limit");
+    const auto self_argument = [&]() -> ir::Value* {
+        if (self.value->type == begin_method.type->parameters[0]) {
+            return self.value;
+        }
+        return builder_.create(ir::Opcode::BitCast, begin_method.type->parameters[0],
+                               {self.value}, "range.this");
+    };
+    builder_.create_store(
+        create_call_instruction(&begin_method, {self_argument()}, pointer_type,
+                                "range.begin"),
+        cursor);
+    builder_.create_store(
+        create_call_instruction(&end_method, {self_argument()}, pointer_type,
+                                "range.end"),
+        limit);
+    auto* value_address = builder_.create_alloca(
+        bound_by_reference ? module_->types().pointer_type(element_ir) : element_ir, 0,
+        value_name + ".range");
+    declare_local(value_name,
+                  LocalBinding{value_address,
+                               bound_by_reference
+                                   ? module_->types().pointer_type(element_ir)
+                                   : element_ir,
+                               element_type});
+    auto* condition_block = current_function_->add_block("range.cond");
+    auto* body_block = current_function_->add_block("range.body");
+    auto* advance_block = current_function_->add_block("range.inc");
+    auto* end_block = current_function_->add_block("range.end");
+    emit_branch(condition_block);
+    builder_.set_insert_point(condition_block);
+    auto* current = builder_.create_load(pointer_type, cursor, false, 0, "range.at");
+    auto* finished = builder_.create_load(pointer_type, limit, false, 0, "range.stop");
+    auto* condition =
+        builder_.create_icmp(ir::ICmpPredicate::Ne, current, finished, "range.cmp");
+    builder_.create_cond_br(condition, body_block, end_block);
+    builder_.set_insert_point(body_block);
+    if (bound_by_reference) {
+        builder_.create_store(current, value_address);
+    } else {
+        builder_.create_store(
+            builder_.create_load(element_ir, current, false, 0, "range.load"),
+            value_address);
+    }
+    break_targets_.push_back({end_block, local_cleanups_.size()});
+    continue_targets_.push_back({advance_block, local_cleanups_.size()});
+    emit_statement(*statement.children[3]);
+    break_targets_.pop_back();
+    continue_targets_.pop_back();
+    emit_branch(advance_block);
+    builder_.set_insert_point(advance_block);
+    auto* next = builder_.create_gep(
+        element_ir, builder_.create_load(pointer_type, cursor, false, 0, "range.old"),
+        {module_->constant_int(int_type(), 1)}, false, "range.next");
+    builder_.create_store(next, cursor);
+    emit_branch(condition_block);
+    builder_.set_insert_point(end_block);
+    return true;
 }
 CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
     if (expression.children.size() < 2 || !expression.children[0] ||

@@ -45,15 +45,23 @@ int main() {
     values[0] = 5;
     values[3] = 5;
 
-    // Index traversal with the sum of a known array.
+    // A range-for iterates through begin() and end(); the reference form can
+    // write the elements.
     int sum = 0;
-    int index = 0;
-    while (index < 4) {
-        sum += values[index];
-        index = index + 1;
+    for (int value : values) {
+        sum += value;
     }
     if (sum != 20) {
         return 5;
+    }
+    for (int& element : values) {
+        element = element + 1;
+    }
+    if (values[0] != 6 || values[3] != 6) {
+        return 14;
+    }
+    for (int& element : values) {
+        element = 5;
     }
 
     // `data` is the storage itself.
