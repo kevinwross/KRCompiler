@@ -44,12 +44,14 @@ thirty-two-bit multiplier, which only worked because the assembler truncated it.
 - The diagnostic is per translation unit and per profile, so a program that is
   valid on KR32 can be rejected on KR16, which is the intent: the profile cannot
   represent the value.
-- **A sixty-four-bit value still cannot be carried.** A `long` is sixteen bits on
-  KR16, so the literal rule hides the larger defect rather than fixing it: the
-  KR16 ABI as written in [docs/abi-kr16.md](../abi-kr16.md) describes arguments
-  as words, while the backend assigns one register per *parameter*, and a
-  wide immediate has no materialisation at all. Carrying a sixty-four-bit value
-  needs word-based argument assignment and multi-word constant materialisation,
-  which changes the ABI, so it needs its own ADR and a failing fixture before it.
-- `krc_cxx_kr16_integer_too_large` pins the diagnostic. The KR16 run tests do not
-  cover a value wider than sixteen bits, and cannot until the ABI work lands.
+- **KR16 has no 64-bit type, and that is by design.** Its profile declares
+  `short`, `int`, and `long` as sixteen bits and `long_long_bits` as zero, so
+  `long long` is rejected where it is written (`'long long' is not supported by
+  the kr16 profile`) and `long` is one word. One register per parameter is
+  therefore one word per parameter, which is what
+  [docs/abi-kr16.md](../abi-kr16.md) describes, so no ABI change is needed and
+  none is implied here. An earlier reading of these defects as a missing 64-bit
+  ABI was wrong: they were the literal typing and the immediate range, and both
+  are fixed.
+- `krc_cxx_kr16_integer_too_large` pins the diagnostic. A KR16 run test cannot
+  cover a wider value because the profile has no type for one.
