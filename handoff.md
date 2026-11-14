@@ -358,6 +358,16 @@ exist.
 contracts, and what it deliberately does not contain. The `v1.0` tag itself is an
 operator decision; the notes say so rather than implying it exists.
 
+## Next fix: KR16 cannot carry a 64-bit value
+
+`long a = 5000000001L; if ((a >> 16) != 76293) return 1;` exits 1 on KR16.
+The assembly is `MOV R0, #5000000001`, truncated to sixteen bits, and the
+same happens to a `long` argument: the caller puts one low word in a
+register or pushes one word. Nothing diagnoses it, and every existing KR16
+long fixture compares a truncated value against a truncated expectation,
+so the suite passes. The fix is word-based argument assignment plus wide
+immediate materialisation, an ABI change, so it needs an ADR and a failing
+fixture first.
 ## Known front-end gaps
 
 Three gaps block a complete `std::array`, each with a reproduction:
