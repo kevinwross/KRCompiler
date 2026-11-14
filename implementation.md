@@ -500,6 +500,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-14T07:36:28-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 583/583
+windows-msvc-release  PASS 583/583
+linux-gcc-debug       PASS 530/530
+linux-gcc-release     PASS 530/530
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-three tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers a member binary operator resolved off an object operand (`*this ==
+other`). The rows ran one at a time with no stray VM process, clean from deleted
+directories, with no warnings and no compiler crashes in any log.
 ### 2026-11-13T23:23:43-08:00 — host gate (Windows)
 
 ```text
@@ -3078,3 +3094,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T23:23:29-08:00** — `std::array` compares. Subscripting a record through a **reference** was the blocker: the identifier path required `frontend_type->kind == Record`, and a `const array&` is a pointer-to-record with `is_reference`, so `other[index]` fell through to the pointer case and lowered a `getelementptr` into a struct, which crashed krc with an access violation. A `record_object_type` helper unwraps the reference at both subscript sites, so `s[i]` and `s[i] = v` reach `operator[]` through a reference, a const reference, or a direct object. `array` gains `operator==` and `operator!=`, written as element loops through the const `operator[]`; `std_array.cpp` compares equal, unequal, and `!=` both ways.
 - **2026-11-13T23:23:29-08:00** — Two limits the comparison work exposed, recorded rather than fixed. A binary operator does not resolve to a *member* overload: `!(*this == other)` compared the two records as aggregates and the verifier rejected the `icmp`, which is why `operator!=` is written out as a loop. And `class_methods_` keeps one function per name, so the const and non-const `operator[]` share a slot; reads through either reach one of them, which is why the comparison is correct for reads but the two overloads do not yet mangle or dispatch distinctly.
 - **2026-11-13T23:23:29-08:00** — A staged sysroot makes a header edit invisible to the test suite: `krc_link_std_array` compiles against `build/<preset>/stage/sysroot`, so `sysroot/include/array` has to be restaged by rebuilding before the suite sees it. Building the fixture by hand with `-I sysroot/include` hides that.
+- **2026-11-13T23:59:18-08:00** — A binary operator now resolves to a member overload through an operand that is not a name. `!(*this == other)` inside a const member compares two records as aggregates otherwise, which the verifier rejects; the operator path keyed the record off the left operand's *frontend* type, which only an identifier carries. A member operator call is now one `binary_operator_call` helper shared by both paths, and the new path takes the record from the address the left operand names, so `*this == other` and `member == other` both reach the member. `std::array::operator!=` is `!( *this == other )` again, and the fixture compares equal, unequal, and both directions.
+- **2026-11-13T23:59:18-08:00** — The new path is restricted to operands that name an object — a member access or a `*` dereference — because it emits an lvalue to find the record. Without that restriction it fired on `(int)*left - (int)*right` in the C runtime and reported *expression is not an lvalue* for the cast operand, which is how the restriction was found: the target runtime is part of the same build.
+- **2026-11-13T23:59:18-08:00** — `class_methods_` still keeps one function per name, so the const and non-const `operator[]` share a slot; reads through either reach one of them. Distinct const/non-const dispatch and mangling remain the open half.
