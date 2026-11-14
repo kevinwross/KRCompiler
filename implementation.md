@@ -499,6 +499,29 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-14T11:17:45-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 589/589
+windows-msvc-release  PASS 589/589
+linux-gcc-debug       PASS 534/534
+linux-gcc-release     PASS 534/534
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-five tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers the KR16 file layer, the staged `libkrcrt_host.kro` and
+`libkrcrt_fileio.kro`, and the atomic rename of each staged runtime object. The
+debug row's first test run failed three link tests with `KRO CRC mismatch` on
+the staged KR32 runtime; the same build passed 589/589 when the suite was
+re-run, one of those tests passed forty consecutive repetitions on its own, and
+the failing set differed between runs, so the mismatch is not attributable to
+this change and is recorded as an open environment issue. The staged objects are
+now written under a `.new` name and renamed into place, so a reader cannot open
+a partially written object. The rows ran one at a time, clean from deleted
+directories, with no warnings and no compiler crashes in the final logs.
 ### 2026-11-14T09:48:37-08:00 — host gate (Windows)
 
 ```text
@@ -3160,3 +3183,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-14T09:48:20-08:00** — KR16 file services work from this side. `targets/kr16/runtime/host.s` builds the sixteen-byte service block the VM expects — status at 0, three results at 2/4/6, four arguments at 8/10/12/14, with the block address in `R0` and the service number as the `SYS` immediate — and wraps `version`, `capabilities`, `open`, `close`, `read`, `write`, `seek`, `unlink`, and `rename`. A wrapper returns the first result on success and the negated status on failure, so a zero result is distinguishable from an error. `tests/fixtures/c/kr16_host_services.c` writes a file, closes and reopens it, reads it back, compares the bytes, and unlinks it; run under the KR16 VM at `../kr16/build/windows-ninja/kr16.exe` with `--fs-root` it exits 42, which is the first time this compiler's output has used a KR16 file service.
 - **2026-11-14T09:48:20-08:00** — The default KR16 VM binary for the executed tests is **stale**: `../kr16/build/shell-debug/kr16.exe` reports a capability mask of 16 (bits 2–4 only) for `SYS #0`, so the file services are absent and the same image fails with exit 2; `../kr16/build/windows-vs2026/Debug/kr16.exe` fails differently, and only `../kr16/build/windows-ninja/kr16.exe` reports 63, the mask a host-filesystem-enabled VM should report. The new test is therefore registered as **link-only** (`krc_link_kr16_host_services`), and the manual run with its exact command is the recorded evidence; the executed test can be enabled once the sibling's default build directory is refreshed. `../kr16` was not modified or rebuilt.
 - **2026-11-14T09:48:20-08:00** — `krc_run_heap_above_code` was flaky for a stated reason, not an intermittent fault: it stores a quarter-megabyte one byte at a time and the allocator walk on top of that consumed close to the runner's default 20-million-step budget, so an unrelated change to code layout could tip it over and the VM then reported `-1` instead of the expected 7. The test now asks for 80 million steps, which is the budget its own workload needs; it passed twice in a row and in the full 588-test suite.
+- **2026-11-14T11:17:24-08:00** — A KR16 file layer sits on the wrappers: `targets/kr16/runtime/fileio.c` gives `krc16_fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`ungetc`/`fputc`/`fgets`/`fputs`/`ftell`/`fseek`/`feof`/`ferror`/`clearerr`/`remove`/`rename` over a fixed pool of sixteen streams, matching the VM's open-file limit, with no allocation. The stream tracks its own byte position, so `ftell` and a relative `fseek` need no host call, and `krc16_sys_seek` stays inside the three argument registers as an absolute seek. `kr16_file_layer.c` writes two strings, reopens the file, reads nine bytes back, checks end of file, seeks to the start, reads and returns a byte with `ungetc`, reads a line with `fgets`, and removes the file: exit 42 under `../kr16/build/windows-ninja/kr16.exe` with `--fs-root`.
+- **2026-11-14T11:17:24-08:00** — Three things the layer needed that were not obvious. A dynamic index into an array of structs is rejected by the KR16 backend (`dynamic GEP element size is unsupported`), so the pool is walked with a pointer instead. A free slot cannot be marked by a negative descriptor, because the VM hands out descriptor 0, so the record carries an explicit `in_use` flag. And the fourth stack argument did not arrive at the offset the ABI document states for a hand-written callee — a probe read 0 where the caller passed 42 — so the seek wrapper takes three words and the position arithmetic moved into C. That last one is worth re-examining: either the document or the caller differs from what the ABI says.
+- **2026-11-14T11:17:24-08:00** — The KR16 runtime staging now produces `libkrcrt_host.kro` and `libkrcrt_fileio.kro` alongside `libkrcrt.kro`, and `cmake/LinkKr16Host.cmake` links the staged objects rather than reassembling them per test. `krc_link_kr16_host_services` and `krc_link_kr16_file_layer` are the two link tests; Windows debug CTest is 589/589.
+- **2026-11-14T11:17:24-08:00** — This round straddled a machine crash. After it, the work was verified rather than assumed: the documents were checked for NUL bytes (none), the debug tree rebuilt clean, the full suite passed 589/589, and both KR16 images were relinked from the staged objects and re-run to exit 42. The two link failures seen just before the crash (`krc_link_if_constexpr_call`, `krc_link_std_move_assignment`) do not reproduce and are recorded as collateral of the machine's state at the time, not as a code defect.
