@@ -461,12 +461,26 @@ The symbol stays mangled, the KDBG format is unchanged, and display names are
 not unique — a synthesized copy of an inherited method keeps the base's name —
 so anything that resolves still uses the symbol. `krc_debug_names` checks the
 names and `krc_run_debug_names` runs the same image.
+## `<memory>` is blocked on three gaps
+
+`std::unique_ptr` cannot be written yet, and an attempt is recorded in
+`implementation.md` rather than half shipped. Reading a private member through
+an **rvalue-reference parameter** in a template class body fails with *member
+access on a non-record value* when the class also declares a **deleted copy
+constructor**; a **member initializer** cannot read another object's member
+through a reference parameter; and a **template overload set** is unsupported, so
+three `make_unique` arities collide. Do not re-analyse an argument with
+`analyze_expression` from the declaration path to work around the first one — it
+re-enters declaration analysis and **hangs** the compiler on `brace_init.cpp`.
+
 ## KR16 host services
 
-The sibling VM implements only `SYS_VERSION`; every other `SYS #n` service is
-reserved and returns `ENOSYS`. KR16 file I/O therefore cannot be implemented
-from this repository — the plan's "Integrate KR16 `resources/fileio.c`" item
-waits on that VM work, and the M9 checklist says so.
+The KR16 VM implements the file services — `OPEN`, `CLOSE`, `READ`, `WRITE`,
+`SEEK`, `STAT`, `UNLINK`, `RENAME`, `MKDIR`, `READDIR`, `TIME`, `RANDOM`, and
+`FSINFO` over a sixteen-byte block in `R0`. [`docs/host-services.md`](docs/host-services.md)
+owns the protocol. This repository has the wrappers (`targets/kr16/runtime/host.s`)
+and the stream layer (`fileio.c`, declared by `<stdio.h>` under `__kr16__`).
+**A seek leaves the descriptor unreadable**, which is a VM defect recorded above.
 
 KR16 also has no aggregate return convention: the backend rejects one with
 `KR16 aggregate returns are not implemented` rather than storing a truncated
