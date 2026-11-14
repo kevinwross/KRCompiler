@@ -484,6 +484,16 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_host_services.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
 
+    # A literal that does not fit its type is diagnosed instead of narrowed:
+    # on the KR16 profile `long` is sixteen bits, so this constant has no type
+    # that can hold it.
+    add_test(NAME krc_cxx_kr16_integer_too_large
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_integer_too_large.c
+                -DEXPECT=integer constant is too large for its type
+                -DTARGET=kr16
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
     add_test(NAME krc_link_kr16_file_layer
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

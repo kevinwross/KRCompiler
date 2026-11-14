@@ -358,6 +358,15 @@ exist.
 contracts, and what it deliberately does not contain. The `v1.0` tag itself is an
 operator decision; the notes say so rather than implying it exists.
 
+## Sixteen-bit literals are diagnosed; widths are next
+
+An integer literal is typed against the profile and one that fits no type is
+rejected ([ADR 0034](docs/decisions/0034-integer-literals-on-narrow-targets.md)),
+so the truncation cannot ship silently. What remains is the ABI: KR16 assigns one
+register per parameter rather than per word, and a wide immediate has no
+materialisation, so a 64-bit value cannot cross a call. That changes
+`docs/abi-kr16.md`, so it needs an ADR and a failing fixture first.
+
 ## Next fix: KR16 cannot carry a 64-bit value
 
 `long a = 5000000001L; if ((a >> 16) != 76293) return 1;` exits 1 on KR16.

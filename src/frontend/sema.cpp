@@ -2475,10 +2475,61 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                 break;
             }
         }
-        const auto kind = long_count >= 2   ? TypeKind::LongLong
-                          : long_count == 1 ? TypeKind::Long
-                                            : TypeKind::Int;
-        return make_builtin(kind, is_unsigned);
+        // C11 6.4.4.1: an unsuffixed literal takes the first type that holds it,
+        // and a hexadecimal or octal literal may take the unsigned type of the
+        // same width. A suffixed literal must fit the type its suffix names, so
+        // an out-of-range value is diagnosed there instead of being narrowed by
+        // a backend, which is how 5000000001L became 0x2001 on a 16-bit profile.
+        const auto width_of = [&](TypeKind candidate) -> std::uint32_t {
+            switch (candidate) {
+            case TypeKind::Int:
+                return profile_.int_bits;
+            case TypeKind::Long:
+                return profile_.long_bits;
+            case TypeKind::LongLong:
+                return profile_.long_long_bits;
+            default:
+                return 0;
+            }
+        };
+        const auto parsed = parse_integer_literal(expression.text);
+        if (!parsed) {
+            return int_type_;
+        }
+        const auto fits = [&](TypeKind candidate, bool candidate_unsigned) -> bool {
+            const auto bits = width_of(candidate);
+            if (bits == 0 || bits >= 64) {
+                return bits >= 64;
+            }
+            const auto maximum =
+                candidate_unsigned
+                    ? (static_cast<std::int64_t>(1) << bits) - 1
+                    : (static_cast<std::int64_t>(1) << (bits - 1)) - 1;
+            return *parsed <= maximum;
+        };
+        const bool prefixed_base =
+            expression.text.size() > 1 && expression.text.front() == '0';
+        if (long_count > 0 || is_unsigned) {
+            const auto chosen = long_count >= 2   ? TypeKind::LongLong
+                                : long_count == 1 ? TypeKind::Long
+                                                  : TypeKind::Int;
+            if (!fits(chosen, is_unsigned)) {
+                error(expression.location,
+                      "integer constant is too large for its type");
+            }
+            return make_builtin(chosen, is_unsigned);
+        }
+        for (const auto candidate : {TypeKind::Int, TypeKind::Long,
+                                     TypeKind::LongLong}) {
+            if (fits(candidate, false)) {
+                return make_builtin(candidate, false);
+            }
+            if (prefixed_base && fits(candidate, true)) {
+                return make_builtin(candidate, true);
+            }
+        }
+        error(expression.location, "integer constant is too large for its type");
+        return make_builtin(TypeKind::LongLong, true);
     }
     case AstKind::FloatLiteral:
         return !expression.text.empty() &&

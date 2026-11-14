@@ -385,8 +385,10 @@ void srand(unsigned int seed) {
 }
 
 int rand(void) {
-    random_state = random_state * 1103515245u + 12345u;
-    return (int)((random_state >> 16) & 0x7FFF);
+    /* A sixteen-bit target cannot hold the 32-bit multiplier of the usual
+       LCG, so the state is sixteen bits wide and the constants fit a word. */
+    random_state = random_state * 25173u + 13849u;
+    return (int)(random_state & 0x7FFF);
 }
 
 static char *token_cursor;

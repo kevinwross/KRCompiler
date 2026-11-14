@@ -181,6 +181,13 @@ std::optional<EncodedInstruction> encode_mnemonic(
                                     0x0100 + target->second.offset),
                                 error);
             }
+            // A sixteen-bit machine cannot hold a wider literal. Accepting one
+            // and truncating it silently is how a 64-bit constant became 0x2001.
+            if (*immediate < -32768 || *immediate > 65535) {
+                error = "immediate " + std::to_string(*immediate) +
+                        " does not fit in a sixteen-bit word for '" + name + "'";
+                return std::nullopt;
+            }
             if (name == "MOV" && (*immediate < -128 || *immediate > 255)) {
                 return encode_x(XOp::MoveImmediate, *rd, 0,
                                 static_cast<std::uint16_t>(*immediate), error);

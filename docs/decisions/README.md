@@ -76,6 +76,7 @@ What was rejected and why.
 - [0031-function-template-instantiation.md](0031-function-template-instantiation.md) — accepted; deduces a function template's parameters and instantiates it per type.
 - [0032-class-template-instantiation.md](0032-class-template-instantiation.md) — accepted; instantiates a class template per type as the record Tag__type.
 - [0033-non-type-template-parameters.md](0033-non-type-template-parameters.md) — accepted; a parameter written int N becomes a literal in the instance, tagged Buffer__int__4.
+- [0034-integer-literals-on-narrow-targets.md](0034-integer-literals-on-narrow-targets.md) — accepted; types an integer literal per C11 on a narrow profile and diagnoses one that fits no type, and records that a 64-bit value still cannot be carried.
 ame__tag.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
