@@ -431,17 +431,14 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
         return declaration;
     }
 
-    // A record-typed name followed by `(` is a constructor-initialized
-    // declaration unless the parenthesis opens a parameter declaration, which
-    // is the case when its first token names a type.
+    // `T name(expr)` is a declaration with a parenthesized initializer when the
+    // first token inside the parenthesis cannot begin a parameter declaration:
+    // a literal, an operator, or an expression keyword such as `new`. A bare
+    // name is ambiguous and stays a parameter declaration unless the specifier
+    // names a class, which is the constructor-initialized form.
     if (peek().kind == TokenKind::Identifier && peek(1).text == "(" &&
-        peek(2).kind != TokenKind::Keyword && peek(2).kind != TokenKind::Eof &&
-        peek(2).text != ")" && !class_names_.contains(peek(2).text) &&
-        !typedef_names_.contains(peek(2).text) &&
-        std::any_of(specifiers->labels.begin(), specifiers->labels.end(),
-                    [&](const std::string& label) {
-                        return class_names_.contains(label);
-                    })) {
+        peek(2).text != ")" && peek(2).kind != TokenKind::Eof &&
+        paren_is_initializer(*specifiers, 2)) {
         auto declaration = make_ast(AstKind::Declaration, specifiers->location);
         declaration->children.push_back(std::move(specifiers));
         auto init = make_ast(AstKind::InitDeclarator, peek().location, peek().text);
@@ -1570,6 +1567,35 @@ std::unique_ptr<AstNode> Parser::parse_compound_statement() {
     return body;
 }
 
+bool Parser::paren_is_initializer(const AstNode& specifiers,
+                                  std::size_t offset) const {
+    const auto& first = peek(offset);
+    switch (first.kind) {
+    case TokenKind::Integer:
+    case TokenKind::Float:
+    case TokenKind::String:
+    case TokenKind::Char:
+        return true;
+    case TokenKind::Keyword:
+        return first.text == "new" || first.text == "true" ||
+               first.text == "false" || first.text == "nullptr" ||
+               first.text == "this";
+    case TokenKind::Punctuator:
+        return first.text == "-" || first.text == "+" || first.text == "!" ||
+               first.text == "~" || first.text == "(";
+    case TokenKind::Identifier: {
+        const bool class_specifier =
+            std::any_of(specifiers.labels.begin(), specifiers.labels.end(),
+                        [&](const std::string& label) {
+                            return class_names_.contains(label);
+                        });
+        return class_specifier && !class_names_.contains(first.text) &&
+               !typedef_names_.contains(first.text);
+    }
+    default:
+        return false;
+    }
+}
 bool Parser::is_declaration_start() const {
     const Token& token = peek();
     if (token.text == "__extension__") {

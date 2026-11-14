@@ -69,6 +69,10 @@ private:
 
     [[nodiscard]] bool is_declaration_start() const;
     [[nodiscard]] bool is_type_name_start() const;
+    // Whether the parenthesis at `offset` opens a parenthesized initializer
+    // rather than a parameter declaration.
+    [[nodiscard]] bool paren_is_initializer(const AstNode& specifiers,
+                                            std::size_t offset) const;
     [[nodiscard]] bool is_typedef_name(std::string_view name) const;
     [[nodiscard]] bool is_assignment_operator(std::string_view spelling) const;
     [[nodiscard]] int precedence(std::string_view spelling) const;

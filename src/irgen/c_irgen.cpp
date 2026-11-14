@@ -3911,6 +3911,24 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
         }
         if (init->children.size() > 1 && init->children[1] &&
             init->children[1]->kind == frontend::AstKind::ExpressionStatement &&
+            type && type->kind != ir::TypeKind::Struct) {
+            // `int x(7)` initializes a scalar directly from the single value in
+            // the parenthesis.
+            const auto& scalar_arguments = init->children[1]->children;
+            if (scalar_arguments.size() == 1 && scalar_arguments.front()) {
+                auto value = emit_expression(*scalar_arguments.front());
+                if (value.value) {
+                    value.value = promote(value.value, value.type, type);
+                    builder_.create_store(value.value, address);
+                }
+            } else {
+                error(declaration.location,
+                      "parenthesized initializer takes exactly one value");
+            }
+            continue;
+        }
+        if (init->children.size() > 1 && init->children[1] &&
+            init->children[1]->kind == frontend::AstKind::ExpressionStatement &&
             type && type->kind == ir::TypeKind::Struct) {
             const auto record = ir_records_.find(type);
             ir::Function* constructor = nullptr;
