@@ -500,6 +500,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T17:48:21-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 573/573
+windows-msvc-release  PASS 573/573
+linux-gcc-debug       PASS 525/525
+linux-gcc-release     PASS 525/525
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty-eight tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers the per-construction cleanup pads, the non-consuming jump cleanups,
+and the throwing pad of [ADR 0027](docs/decisions/0027-exception-cleanup.md).
+The rows ran one at a time, clean from deleted directories, with no warnings
+and no compiler crashes in any log.
+
 ### 2026-11-13T16:57:55-08:00 — host gate (Windows)
 
 ```text
@@ -2864,3 +2882,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T16:57:35-08:00** — Implemented class templates ([ADR 0032](docs/decisions/0032-class-template-instantiation.md)). `template <typename T> class Box` was only a name with `int` substituted, so `Box<double>` had `int` fields and the two types could not coexist. A tagged class specifier is now recorded as a pattern; `Box<int>` in a declaration parses as a name plus a `template-arg:` list and resolves through `instantiate_class_template`, which binds the parameters, clones the specifier, renames its tag to `Box__int`, renames the instance's constructors and destructor to that tag, and analyses the clone at file scope. Instances are cached by tag, so `Box<int>` and a reference through the parameter inside the instance are one record, and a self-referencing member resolves to the incomplete record instead of instantiating again. `class_templates.cpp` covers two instances with different layouts, a self-referencing member, a pointer to an instance, and `Pair<int, double>` versus `Pair<double, int>`; `krc_run_class_templates` requires exit 42.
 - **2026-11-13T16:57:35-08:00** — Two mistakes in that change were caught before the gate. Taking a member's type from the analysed record was applied to every class, which changed the recorded type of ordinary methods and broke `move_assign`, `move_constructor`, `std_move_constructor`, and `std_forward` with *store type does not match its pointer*; it now applies only when the tag names an instantiation. The pattern's own record keeps its old symbol and layout, so nothing that worked before changed.
 - **2026-11-13T16:57:35-08:00** — A pre-existing defect surfaced and is **not** fixed: a scope holding two or more destructible objects fails the IR verifier (*instruction does not dominate its use*), because the scope's single cleanup pad is created at the first unwinding construction and filled at scope exit, so it destroys objects declared after it. Three ordinary objects reproduce it without templates. Two attempts at a pad per construction point are recorded in [ADR 0027](docs/decisions/0027-exception-cleanup.md): both leave a pad whose resume invokes into a pad that does not dominate it, so the pad chain has to become an explicit stack. The class template fixture is written with one destructible object per scope to avoid tripping it, and the defect is the next round's work.
+- **2026-11-13T17:47:33-08:00** — Fixed the cleanup-pad defect recorded last round: a scope holding two or more destructible objects failed the IR verifier and, once it compiled, kept the wrong destructor list. Pads are now per unwinding point with the cleanups active at that point, the chain is disjoint (a pad destroys only what the enclosing chain has not covered, so nothing runs twice), and a pad no terminator unwinds into is terminated as unreachable instead of carrying destructor calls for objects it cannot dominate. Three objects in one scope now compile and destroy in reverse declaration order.
+- **2026-11-13T17:47:33-08:00** — Two more cleanup bugs surfaced while making the fixture pass. A `return` consumed the scope's cleanup list, so the fall-through path destroyed nothing; it now emits a copy and leaves the list for the scope's exit. `break` and `continue` destroyed nothing at all: a jump target now carries the cleanup count of the loop it leaves, so leaving a loop body runs the destructors of the scopes being exited. A `throw` now creates a pad holding the objects live at the throw site, which is what makes the guarding destructor run before the handler.
+- **2026-11-13T17:47:33-08:00** — `destructor_scopes.cpp` covers three objects in one scope, reverse order, nested scopes, an early return, and a `continue` out of a loop body; both the link and run tests require exit 42. The class-template fixture no longer avoids the shape, [ADR 0027](docs/decisions/0027-exception-cleanup.md) documents the design instead of the defect, and the whole Windows debug suite is 573/573.
