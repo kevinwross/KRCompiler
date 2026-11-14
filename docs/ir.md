@@ -120,7 +120,7 @@ Verifier failures abort code generation with a compiler-bug diagnostic; a malfor
 
 ## Textual dump
 
-The dump is human-facing and not a stable interchange format. It uses:
+The dump is human-facing and not a stable interchange format. It prints the module **before** verification, so a dump can show a defect the verifier would reject; krc -c is what turns that rejection into a diagnostic. It uses:
 
 ```text
 %struct.Node = type { i32, ptr<%struct.Node> }

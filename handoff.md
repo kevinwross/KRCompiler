@@ -403,6 +403,13 @@ the expression again. `return_call_once.c` pins it. A record-valued call with no
 conversion method still falls through that path, and that corner is recorded in
 `implementation.md` rather than fixed.
 
+## The dump precedes verification
+
+`--dump-ir` prints the module before the verifier runs, so a dump can show a
+defect that `krc -c` would reject. Rule 9 of [`docs/ir.md`](docs/ir.md) covers a
+`ret` matching the function's return type, and two unit tests in
+`tests/unit/test_ir.cpp` pin it. Do not infer a missing verifier rule from a dump.
+
 ## Open: an end-relative seek on KR16 positions but does not read
 
 `fseek(stream, -1, SEEK_END)` on a KR16 stream reports the right position

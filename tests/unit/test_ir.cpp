@@ -53,6 +53,38 @@ TEST_CASE("IR builder constructs a verifiable function") {
     CHECK(text.find("ret i32 %sum") != std::string::npos);
 }
 
+TEST_CASE("IR verifier rejects a return of the wrong type") {
+    FunctionFixture fixture;
+    IRBuilder builder(fixture.module.types());
+    builder.set_insert_point(fixture.entry);
+    // A record value returned from a function declared to return an integer is
+    // the shape emit_return produced before it diagnosed a missing conversion.
+    const auto record = fixture.module.types().struct_type(
+        "Plain", {fixture.module.types().int_type(32)});
+    auto* value = builder.create_alloca(record, 0, "plain");
+    builder.create_ret(builder.create_load(record, value, false, 0, "plain.load"));
+
+    Verifier verifier;
+    std::string error;
+    CHECK_FALSE(verifier.verify(fixture.module, error));
+    CHECK(error.find("return type does not match the function") != std::string::npos);
+}
+
+TEST_CASE("IR verifier rejects a void function returning a value") {
+    Module module(krc::target::TargetId::Kr32);
+    const auto void_type = module.types().void_type();
+    auto* function = module.add_function(
+        "test", module.types().function_type(void_type, {}), Linkage::External);
+    auto* entry = function->add_block("entry");
+    IRBuilder builder(module.types());
+    builder.set_insert_point(entry);
+    builder.create_ret(module.constant_int(module.types().int_type(32), 1));
+
+    Verifier verifier;
+    std::string error;
+    CHECK_FALSE(verifier.verify(module, error));
+    CHECK(error.find("void function returns a value") != std::string::npos);
+}
 TEST_CASE("IR verifier rejects mismatched binary types") {
     FunctionFixture fixture;
     IRBuilder builder(fixture.module.types());
