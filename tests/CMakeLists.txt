@@ -494,15 +494,15 @@ if(TARGET krc)
                 -DEXPECT=integer constant is too large for its type
                 -DTARGET=kr16
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
-    add_test(NAME krc_link_kr16_file_layer
+    add_test(NAME krc_link_kr16_stdio
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
                 -DKRLD=$<TARGET_FILE:krld>
                 -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
                 -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
                 -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
-                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_file_layer.c
-                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_file_layer.kex
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_stdio.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_stdio.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
     add_test(NAME krc_link_dereference_operator
         COMMAND ${CMAKE_COMMAND}

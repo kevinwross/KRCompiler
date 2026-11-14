@@ -75,9 +75,17 @@ call, which reports the ABI version and a capability mask; services 1–13 are
 `0x0200` truncate, `0x0400` append, `0x0800` exclusive. A single transfer is
 limited to 4096 bytes, a guest path to 255 bytes, sixteen files may be open at
 once, and a directory entry is 64 bytes with a name of at most 59. The KR16
-runtime still provides string, memory, allocation, and console-output services
-only: the file wrappers and `libc` file layer are the work that remains, not
-the VM side.
+runtime provides string, memory, allocation, console output, and — through
+`targets/kr16/runtime/fileio.c` over `host.s` — the standard stream functions.
+`<stdio.h>` declares a KR16 branch because the stream record is sixteen-bit: the
+profile gets `FILE`, `fopen`, `fclose`, `fread`, `fwrite`, `fgetc`,
+`fputc`, `putc`, `fgets`, `fputs`, `ungetc`, `ftell`,
+`fseek`, `feof`, `ferror`, `clearerr`, `remove`, `rename`, and
+`stdout`/`stderr` as lazily initialised streams over descriptors 1 and 2. A seek
+is absolute or relative to the stream's own position; `SEEK_END` is refused
+because the host offers no size query through the seek service. A data pointer
+whose initialiser needs a relocation is not emitted on this profile, which is why
+`stdout` is a call rather than a global.
 
 ## Linking
 

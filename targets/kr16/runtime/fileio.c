@@ -1,16 +1,13 @@
-/* A file layer for KR16 over the host-service wrappers.
+/* The KR16 standard stream functions over the host-service wrappers.
  *
- * The wrappers in `host.s` speak the VM's service block protocol; this file
- * gives them a stream interface so a KR16 program can open, read, write, and
- * seek a file without knowing the block layout. Descriptors 1 and 2 are the
- * console, which the VM writes directly, so a stream over them does not open a
- * file.
- *
- * A stream is a fixed-size record: no allocation, and `fopen` hands out a slot
- * from a static pool, so a program that leaks a stream cannot exhaust the heap.
- * Sixteen streams are the pool, matching the VM's open-file limit.
+ * `<stdio.h>` declares these for the KR16 profile. The wrappers in `host.s`
+ * speak the VM's service block protocol; this file gives them a stream
+ * interface, so a KR16 program uses `fopen`/`fread`/`fwrite` like any other C
+ * program. Descriptors 1 and 2 are the console, which the VM writes directly,
+ * so a stream over them opens no file.
  */
 
+#include <stdio.h>
 #include <krc/kr16_file.h>
 
 int krc16_sys_open(const char* path, unsigned flags);
@@ -22,23 +19,60 @@ int krc16_sys_unlink(const char* path);
 int krc16_sys_rename(const char* from, const char* to);
 
 #define KRC16_STREAM_COUNT 16
-#define KRC16_SEEK_SET 0
-#define KRC16_SEEK_CUR 1
-#define KRC16_SEEK_END 2
 
-static krc16_file streams[KRC16_STREAM_COUNT];
+static struct krc16_file streams[KRC16_STREAM_COUNT];
 
-/* A console stream is addressed by its descriptor and never closed. */
-static krc16_file console_out = {1, 1, 1, 0, 0, -1};
-static krc16_file console_err = {1, 2, 1, 0, 0, -1};
+/* The console streams are initialised on first use: a static record in the
+   image is zero-filled, while a pointer initialiser would need a relocation
+   this profile does not emit. */
+static struct krc16_file console_out;
+static struct krc16_file console_err;
 
-krc16_file* krc16_stdout(void) { return &console_out; }
-krc16_file* krc16_stderr(void) { return &console_err; }
+static void open_console(struct krc16_file* stream, int descriptor) {
+    if (!stream->in_use) {
+        stream->in_use = 1;
+        stream->descriptor = descriptor;
+        stream->writable = 1;
+        stream->pushback = -1;
+        stream->position = 0;
+    }
+}
 
-static krc16_file* allocate_stream(void) {
+FILE* __krc16_stdout(void) {
+    open_console(&console_out, 1);
+    return &console_out;
+}
+
+FILE* __krc16_stderr(void) {
+    open_console(&console_err, 2);
+    return &console_err;
+}
+
+/* Translates a mode string into the VM's open flags: read, write with create
+ * and truncate, append with create, and any of them with `+` for read-write. */
+static unsigned mode_flags(const char* mode) {
+    if (mode == 0 || mode[0] == 0) {
+        return KRC16_OPEN_READ;
+    }
+    unsigned flags = 0;
+    int index = 0;
+    while (mode[index] != 0) {
+        if (mode[index] == '+') {
+            flags = KRC16_OPEN_READ_WRITE;
+        } else if (mode[index] == 'w') {
+            flags = KRC16_OPEN_WRITE | KRC16_OPEN_CREATE | KRC16_OPEN_TRUNCATE;
+        } else if (mode[index] == 'a') {
+            flags = KRC16_OPEN_WRITE | KRC16_OPEN_CREATE | KRC16_OPEN_APPEND;
+        }
+        index++;
+    }
+    return flags;
+}
+
+static FILE* allocate_stream(void) {
     /* Walk with a pointer: the KR16 backend scales a struct step but not a
        dynamic index into an array of structs. */
-    krc16_file* stream = streams;
+    struct krc16_file* stream = streams;
     int index = 0;
     while (index < KRC16_STREAM_COUNT) {
         if (!stream->in_use) {
@@ -46,6 +80,7 @@ static krc16_file* allocate_stream(void) {
             stream->error = 0;
             stream->end_of_file = 0;
             stream->pushback = -1;
+            stream->position = 0;
             return stream;
         }
         stream++;
@@ -54,12 +89,13 @@ static krc16_file* allocate_stream(void) {
     return 0;
 }
 
-krc16_file* krc16_fopen(const char* path, unsigned flags) {
-    int descriptor = krc16_sys_open(path, flags & 0x0FFF);
+FILE* fopen(const char* path, const char* mode) {
+    const unsigned flags = mode_flags(mode);
+    int descriptor = krc16_sys_open(path, flags);
     if (descriptor < 0) {
         return 0;
     }
-    krc16_file* stream = allocate_stream();
+    FILE* stream = allocate_stream();
     if (stream == 0) {
         krc16_sys_close(descriptor);
         return 0;
@@ -69,10 +105,10 @@ krc16_file* krc16_fopen(const char* path, unsigned flags) {
     return stream;
 }
 
-int krc16_fclose(krc16_file* stream) {
-    if (stream == 0 || !stream->in_use || stream == &console_out ||
-        stream == &console_err) {
-        return -1;
+int fclose(FILE* stream) {
+    if (stream == 0 || !stream->in_use || stream == __krc16_stdout() ||
+        stream == __krc16_stderr()) {
+        return EOF;
     }
     int result = krc16_sys_close(stream->descriptor);
     stream->in_use = 0;
@@ -81,17 +117,17 @@ int krc16_fclose(krc16_file* stream) {
     stream->error = 0;
     stream->end_of_file = 0;
     stream->pushback = -1;
-    return result < 0 ? -1 : 0;
+    stream->position = 0;
+    return result < 0 ? EOF : 0;
 }
 
-unsigned krc16_fread(void* buffer, unsigned size, unsigned count,
-                     krc16_file* stream) {
+size_t fread(void* buffer, size_t size, size_t count, FILE* stream) {
     if (stream == 0 || !stream->in_use || size == 0 || count == 0) {
         return 0;
     }
     unsigned char* destination = (unsigned char*)buffer;
-    unsigned total = size * count;
-    unsigned filled = 0;
+    const size_t total = size * count;
+    size_t filled = 0;
     /* The pushback slot holds one byte that was read ahead. */
     if (stream->pushback >= 0) {
         destination[filled++] = (unsigned char)stream->pushback;
@@ -102,7 +138,8 @@ unsigned krc16_fread(void* buffer, unsigned size, unsigned count,
         if (chunk > 4096u) {
             chunk = 4096u;
         }
-        int read_count = krc16_sys_read(stream->descriptor, destination + filled, chunk);
+        int read_count =
+            krc16_sys_read(stream->descriptor, destination + filled, chunk);
         if (read_count < 0) {
             stream->error = 1;
             break;
@@ -117,14 +154,13 @@ unsigned krc16_fread(void* buffer, unsigned size, unsigned count,
     return filled / size;
 }
 
-unsigned krc16_fwrite(const void* buffer, unsigned size, unsigned count,
-                      krc16_file* stream) {
+size_t fwrite(const void* buffer, size_t size, size_t count, FILE* stream) {
     if (stream == 0 || !stream->in_use || size == 0 || count == 0) {
         return 0;
     }
     const unsigned char* source = (const unsigned char*)buffer;
-    unsigned total = size * count;
-    unsigned written = 0;
+    const size_t total = size * count;
+    size_t written = 0;
     while (written < total) {
         unsigned chunk = total - written;
         if (chunk > 4096u) {
@@ -142,9 +178,9 @@ unsigned krc16_fwrite(const void* buffer, unsigned size, unsigned count,
     return written / size;
 }
 
-int krc16_fgetc(krc16_file* stream) {
+int fgetc(FILE* stream) {
     if (stream == 0 || !stream->in_use) {
-        return -1;
+        return EOF;
     }
     if (stream->pushback >= 0) {
         int value = stream->pushback;
@@ -160,15 +196,15 @@ int krc16_fgetc(krc16_file* stream) {
         } else {
             stream->end_of_file = 1;
         }
-        return -1;
+        return EOF;
     }
     stream->position += 1;
     return (int)byte;
 }
 
-int krc16_ungetc(int character, krc16_file* stream) {
+int ungetc(int character, FILE* stream) {
     if (stream == 0 || !stream->in_use || character < 0) {
-        return -1;
+        return EOF;
     }
     stream->pushback = character;
     stream->end_of_file = 0;
@@ -176,27 +212,29 @@ int krc16_ungetc(int character, krc16_file* stream) {
     return character;
 }
 
-int krc16_fputc(int character, krc16_file* stream) {
+int fputc(int character, FILE* stream) {
     if (stream == 0 || !stream->in_use) {
-        return -1;
+        return EOF;
     }
     unsigned char byte = (unsigned char)character;
     int write_count = krc16_sys_write(stream->descriptor, &byte, 1);
     if (write_count <= 0) {
         stream->error = 1;
-        return -1;
+        return EOF;
     }
     stream->position += 1;
     return (int)byte;
 }
 
-char* krc16_fgets(char* buffer, int capacity, krc16_file* stream) {
+int putc(int character, FILE* stream) { return fputc(character, stream); }
+
+char* fgets(char* buffer, int capacity, FILE* stream) {
     if (buffer == 0 || capacity <= 0 || stream == 0) {
         return 0;
     }
     int written = 0;
     while (written < capacity - 1) {
-        int character = krc16_fgetc(stream);
+        int character = fgetc(stream);
         if (character < 0) {
             break;
         }
@@ -212,37 +250,37 @@ char* krc16_fgets(char* buffer, int capacity, krc16_file* stream) {
     return buffer;
 }
 
-int krc16_fputs(const char* text, krc16_file* stream) {
+int fputs(const char* text, FILE* stream) {
     if (text == 0) {
-        return -1;
+        return EOF;
     }
     int written = 0;
     while (text[written] != 0) {
-        if (krc16_fputc(text[written], stream) < 0) {
-            return -1;
+        if (fputc(text[written], stream) < 0) {
+            return EOF;
         }
         written++;
     }
     return written;
 }
 
-long krc16_ftell(krc16_file* stream) {
+long ftell(FILE* stream) {
     if (stream == 0 || !stream->in_use) {
         return -1;
     }
     return stream->position;
 }
 
-int krc16_fseek(krc16_file* stream, long offset, int origin) {
+int fseek(FILE* stream, long offset, int origin) {
     if (stream == 0 || !stream->in_use) {
         return -1;
     }
     long target = offset;
-    if (origin == KRC16_SEEK_CUR) {
+    if (origin == SEEK_CUR) {
         target = stream->position + offset;
-    } else if (origin != KRC16_SEEK_SET) {
+    } else if (origin != SEEK_SET) {
         /* The host offers an absolute seek, and a seek from the end would need
-           the file size first, so the end origin is not supported. */
+           the file size first, so SEEK_END is not supported. */
         return -1;
     }
     if (target < 0) {
@@ -258,25 +296,19 @@ int krc16_fseek(krc16_file* stream, long offset, int origin) {
     return 0;
 }
 
-int krc16_feof(krc16_file* stream) {
-    return stream != 0 && stream->end_of_file != 0 ? 1 : 0;
-}
+int feof(FILE* stream) { return stream != 0 && stream->end_of_file != 0 ? 1 : 0; }
 
-int krc16_ferror(krc16_file* stream) {
-    return stream != 0 && stream->error != 0 ? 1 : 0;
-}
+int ferror(FILE* stream) { return stream != 0 && stream->error != 0 ? 1 : 0; }
 
-void krc16_clearerr(krc16_file* stream) {
+void clearerr(FILE* stream) {
     if (stream != 0) {
         stream->error = 0;
         stream->end_of_file = 0;
     }
 }
 
-int krc16_remove(const char* path) {
-    return krc16_sys_unlink(path) < 0 ? -1 : 0;
-}
+int remove(const char* path) { return krc16_sys_unlink(path) < 0 ? -1 : 0; }
 
-int krc16_rename(const char* from, const char* to) {
+int rename(const char* from, const char* to) {
     return krc16_sys_rename(from, to) < 0 ? -1 : 0;
 }

@@ -383,6 +383,15 @@ fits no type, and the assembler rejects an immediate outside `-32768..65535`.
 No ABI change is needed, and the earlier note here that KR16 needed word-based
 argument assignment was wrong.
 
+## KR16 streams use the standard names
+
+`<stdio.h>` declares a KR16 branch: `FILE` is the sixteen-bit
+`struct krc16_file`, and `fopen`/`fclose`/`fread`/`fwrite`/`fgetc`/`fputc`/
+`putc`/`fgets`/`fputs`/`ungetc`/`ftell`/`fseek`/`feof`/`ferror`/`clearerr`/
+`remove`/`rename` come from `targets/kr16/runtime/fileio.c` over `host.s`.
+`stdout` and `stderr` are accessor calls, not globals, because a data pointer
+whose initialiser needs a relocation is not emitted on this profile. `SEEK_END`
+is refused: the host's seek is absolute and nothing exposes the size.
 ## Known front-end gaps
 
 Three gaps block a complete `std::array`, each with a reproduction:

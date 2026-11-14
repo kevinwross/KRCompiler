@@ -4,7 +4,14 @@
 #include <stddef.h>
 #include <stdarg.h>
 
+#ifdef __kr16__
+/* The KR16 profile has its own stream record and a subset of the stream
+   functions; targets/kr16/runtime/fileio.c provides them over the host
+   services. The set that is missing is named at the end of this header. */
+#include <krc/kr16_file.h>
+#else
 typedef struct FILE FILE;
+#endif
 
 #define EOF (-1)
 #define SEEK_SET 0
@@ -14,6 +21,40 @@ typedef struct FILE FILE;
 #define TMP_MAX 25
 #define BUFSIZ 512
 
+#ifdef __kr16__
+/* The KR16 profile provides the console functions from the runtime library and
+   the stream functions from targets/kr16/runtime/fileio.c. A function that is
+   not declared here does not exist on this profile; `stdin` is read with
+   getchar, and there is no formatted stream output beyond printf. */
+int printf(const char *format, ...);
+int sprintf(char *buffer, const char *format, ...);
+int snprintf(char *buffer, size_t size, const char *format, ...);
+int vsprintf(char *buffer, const char *format, va_list args);
+int vsnprintf(char *buffer, size_t size, const char *format, va_list args);
+int putchar(int c);
+int puts(const char *s);
+int getchar(void);
+FILE *fopen(const char *path, const char *mode);
+int fclose(FILE *stream);
+size_t fread(void *buffer, size_t size, size_t count, FILE *stream);
+size_t fwrite(const void *buffer, size_t size, size_t count, FILE *stream);
+int fseek(FILE *stream, long offset, int origin);
+long ftell(FILE *stream);
+char *fgets(char *buffer, int size, FILE *stream);
+int fgetc(FILE *stream);
+int fputc(int c, FILE *stream);
+int putc(int c, FILE *stream);
+int fputs(const char *s, FILE *stream);
+int ungetc(int c, FILE *stream);
+int feof(FILE *stream);
+int ferror(FILE *stream);
+void clearerr(FILE *stream);
+int remove(const char *path);
+int rename(const char *old_path, const char *new_path);
+
+#define stdout (__krc16_stdout())
+#define stderr (__krc16_stderr())
+#else
 FILE *__krc_stdin_stream(void);
 FILE *__krc_stdout_stream(void);
 FILE *__krc_stderr_stream(void);
@@ -80,4 +121,5 @@ void clearerr(FILE *stream);
    path into buffer. Returns the length written, or -1 when cancelled. */
 int sys_open_dialog(char *buffer, int size);
 
+#endif  /* __kr16__ */
 #endif
