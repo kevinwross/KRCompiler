@@ -352,6 +352,12 @@ registered to run at exit. IRGen's block-scope path accepts `static`,
 thread-local object was emitted as an automatic and re-initialized on every
 call. `<threads.h>` still refuses to be included because guest threads do not
 exist.
+## Release notes
+
+`docs/release-notes.md` states what v1.0 contains, how to build it, the compatibility
+contracts, and what it deliberately does not contain. The `v1.0` tag itself is an
+operator decision; the notes say so rather than implying it exists.
+
 ## Known front-end gaps
 
 Three gaps block a complete `std::array`, each with a reproduction:
