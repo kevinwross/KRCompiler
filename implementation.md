@@ -500,6 +500,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T21:03:28-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 579/579
+windows-msvc-release  PASS 579/579
+linux-gcc-debug       PASS 528/528
+linux-gcc-release     PASS 528/528
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-one tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers materializing a temporary for an rvalue bound to a `const T&`
+parameter, which fixes a compiler crash on a free function and a rejection on a
+member function. The rows ran one at a time, clean from deleted directories,
+with no warnings and no compiler crashes in any log.
+
 ### 2026-11-13T20:11:48-08:00 — host gate (Windows)
 
 ```text
@@ -2973,3 +2991,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T20:40:27-08:00** — The tree is at the previous commit's state, builds clean, and the host gate recorded at `2026-11-13T20:11:48-08:00` covers exactly this code (579/579, 579/579, 528/528, 528/528). This round's change is documentation only.
 - **2026-11-13T20:48:17-08:00** — Wrote the v1.0 release notes ([docs/release-notes.md](docs/release-notes.md)): what the release contains, how to build and test it, what the compatibility promises are, and an explicit list of what it does *not* contain — KR64 codegen, native Linux and ARM64 CI, threads, a debugger UI, the template subset beyond what is recorded, and the containers that stay partial. The M8 checklist item is now "notes written, tag is an operator decision" rather than a bare unchecked box; the notes point at `implementation.md` and the specifications instead of restating their counts.
 - **2026-11-13T20:48:17-08:00** — Two more attempts at the front-end gaps were tried and reverted, and the negative result is worth recording. Making `emit_lvalue` return a reference-returning call's address produced a verifier error even with a diagnostic added, because the `as_address` plumbing broke the function body faster than it could be repaired. Falling back from a label to a record *tag* in Sema's specifier resolution did nothing: the parser does not emit a label for the injected class name in a template body at all, so the failure happens before that lookup. Both the parser and Sema were returned to their committed state and the suite re-ran green (579/579).
+- **2026-11-13T21:03:11-08:00** — Fixed a crash: passing an rvalue to a `const T&` parameter. `int use(const int& v); use(41)` **crashed the compiler** with an access violation for a free function (Sema accepted it, IRGen dereferenced nothing) and was rejected with *expression is not an lvalue* for a member function — `values.fill(5)` failed that way. Both argument paths now bind only an addressable argument (identifier, member, subscript, dereference) and otherwise materialize a temporary the caller owns, which is what the standard requires for a const reference. `krc_run_std_array` now calls `fill(5)` with a literal, and the whole Windows debug suite stays 579/579.
+- **2026-11-13T21:03:11-08:00** — This closes two of the "known front-end gaps" entries: the literal-to-const-reference case was one of the reasons `<array>`'s API looked partial. What remains open there is assignment **through** a reference-returning call (`values.front() = 11`), the injected class name in a template class body, and a range-for over a class.
+- **2026-11-13T21:03:11-08:00** — The injected-class-name gap was investigated again and the search space narrowed. An AST comparison shows the parser *does* emit the label for `C* self()` (`DeclSpecifiers [C]`) and a tag and typedef are both declared at `record_type`'s start (traced: `tag 'C' new, ordinary=null`, then the typedef branch runs), yet the member's lookup of `C` fails and the instance's analysis fails the same way. So the failure is in the *scope* the member analysis runs in, not in symbol declaration — the next probe should print `scopes_.size()` and the current scope's symbol names at the failing lookup.
