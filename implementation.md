@@ -500,6 +500,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T20:11:48-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 579/579
+windows-msvc-release  PASS 579/579
+linux-gcc-debug       PASS 528/528
+linux-gcc-release     PASS 528/528
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-one tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers the reference-return value path and the `std::array` fixture that
+now reads through `front`, `back`, and `at`. The rows ran one at a time, clean
+from deleted directories, with no warnings and no compiler crashes in any log.
+
 ### 2026-11-13T19:40:40-08:00 — host gate (Windows)
 
 ```text
@@ -2948,3 +2965,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T19:40:22-08:00** — `std::array<T, N>` exists in `sysroot/include/array`, built on the class-template and value-parameter forms: the element storage is a plain array member, so the instance has the layout of `T[N]`. `operator[]`, `data`, `size`, `empty`, and `fill` work for `int` and `double` bounds; `std_array.cpp` requires exit 42. `sysroot/include/stdexcept` joined it, with `logic_error`/`runtime_error` and the four classes derived from them, because `at` reports a bad index that way.
 - **2026-11-13T19:40:22-08:00** — Three front-end gaps blocked a fuller `std::array` and are recorded rather than papered over. **(1)** A member function that returns `T&` is not dereferenced when read as a value: `struct S { int value; int& get() { return value; } }; s.get() == 7` is false, while `int& r = x; r == 7` and `operator[]` both work — the reference-return value path is missing. **(2)** The injected class name inside a *template* class body is not a type: `template <typename T> class C { bool same(const C&); };` fails with *declaration requires a type specifier*, while `const C<T>&` in a plain class works. **(3)** A range-for over a class (`for (int& e : array)`) is rejected; only bounded built-in arrays are accepted.
 - **2026-11-13T19:40:22-08:00** — The parser learned two shapes `std::array` needs: a template parameter written with a typedef-named type (`size_t N`), and a qualified template-id in type position (`std::array<int, 4> x;`), including the declaration-start test that decides between a declaration and an expression. Windows debug CTest is 579/579.
+- **2026-11-13T20:11:29-08:00** — Fixed the reference-return value path: a call to a function or member declared to return `T&` now yields the referent, not the address it returns. `struct S { int value; int& get() { return value; } }; s.get() == 7` was false because the comparison saw a pointer; it is true now. Every return site in `emit_call` passes the resolved callee and its result through `reference_result`, which consults the callee's recorded front-end type: a pointer result is loaded when that type's return type is a reference, and returned unchanged otherwise. This is what makes `std::array::front`, `back`, and `at` usable as values.
+- **2026-11-13T20:11:29-08:00** — The `std_array.cpp` fixture now reads through `front()`, `back()`, and `at()` as well as `operator[]`, and the class-template, template, and RTTI suites are unchanged at 579/579 on Windows debug. The remaining half of the shape is **not** fixed: assigning *through* a reference-returning call (`values.front() = 11`) still writes a temporary, because `emit_lvalue` builds one for every call; that path needs the same distinction `reference_result` now makes, which requires threading the callee into the lvalue call path rather than the result path.
+- **2026-11-13T20:11:29-08:00** — Two other gaps from the previous round stand unchanged: the injected class name inside a *template* class body is not a type (`template <typename T> class C { bool same(const C&); }`), and a range-for over a class is rejected. Both have reproductions in the round-21 log entry.
