@@ -2629,6 +2629,19 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             if (decayed && decayed->kind == TypeKind::Pointer && decayed->element) {
                 return decayed->element;
             }
+            // A class may overload dereference, which *owner uses.
+            if (operand && operand->kind == TypeKind::Record && operand->record) {
+                for (auto* record = operand->record.get(); record != nullptr;
+                     record = record->base && record->base->record
+                                  ? record->base->record.get()
+                                  : nullptr) {
+                    for (const auto& method : record->methods) {
+                        if (method.name == "operator*" && method.type) {
+                            return method.type->return_type;
+                        }
+                    }
+                }
+            }
             if (operand && operand->kind == TypeKind::Function) {
                 return operand;
             }

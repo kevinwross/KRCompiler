@@ -182,6 +182,10 @@ private:
                               frontend::TypePtr element_type);
     // Calls a record's operator[] with an already-emitted object address, so
     // s[i] and (*this)[i] share one path.
+    [[nodiscard]] Expression unary_operator_call(ir::Function* method_function,
+                                              Expression self,
+                                              bool as_address);
+    [[nodiscard]] ir::Function* dereference_overload(const Expression& object);
     [[nodiscard]] Expression binary_operator_call(ir::Function* method_function,
                                                  Expression self,
                                                  const frontend::AstNode& right);

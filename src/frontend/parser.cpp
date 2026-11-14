@@ -1582,7 +1582,8 @@ bool Parser::paren_is_initializer(const AstNode& specifiers,
                first.text == "this";
     case TokenKind::Punctuator:
         return first.text == "-" || first.text == "+" || first.text == "!" ||
-               first.text == "~" || first.text == "(";
+               first.text == "~" || first.text == "(" || first.text == "&" ||
+               first.text == "*";
     case TokenKind::Identifier: {
         const bool class_specifier =
             std::any_of(specifiers.labels.begin(), specifiers.labels.end(),

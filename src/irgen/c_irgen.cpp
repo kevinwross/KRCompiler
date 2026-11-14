@@ -6353,6 +6353,11 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
     if (expression.text == "*") {
         auto pointer = emit_expression(*expression.children.front());
         if (!pointer.value || !pointer.type || pointer.type->kind != ir::TypeKind::Pointer) {
+            // A class may overload dereference, so *owner calls the member.
+            if (auto* overload = dereference_overload(pointer)) {
+                auto object = emit_lvalue(*expression.children.front());
+                return unary_operator_call(overload, object, false);
+            }
             error(expression.location, "dereference of a non-pointer");
             return {};
         }
@@ -7400,6 +7405,12 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
         auto pointer = emit_expression(*expression.children.front());
         if (!pointer.value || !pointer.type ||
             pointer.type->kind != ir::TypeKind::Pointer) {
+            // (*owner).member writes the object the overloaded dereference
+            // refers to.
+            if (auto* overload = dereference_overload(pointer)) {
+                auto object = emit_lvalue(*expression.children.front());
+                return unary_operator_call(overload, object, true);
+            }
             error(expression.location, "dereference of a non-pointer lvalue");
             return {};
         }
@@ -9017,6 +9028,52 @@ CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {   
 // Calls a member operator with the already-emitted object address, so a
 // binary operator resolves the same way whether its left operand is a name or
 // an expression such as `*this`.
+// Calls a member operator that takes no argument, such as `operator*`, on an
+// already-emitted object address. `as_address` returns the address the operator
+// produced when it returns a reference, which is what an lvalue context needs.
+CIRGen::Expression CIRGen::unary_operator_call(ir::Function* method_function,
+                                               Expression self,
+                                               bool as_address) {
+    if (!self.value || method_function->type->parameters.empty()) {
+        return {};
+    }
+    if (self.value->type != method_function->type->parameters[0]) {
+        self.value = builder_.create(ir::Opcode::BitCast,
+                                     method_function->type->parameters[0],
+                                     {self.value}, "op.this");
+    }
+    auto* call = create_call_instruction(method_function, {self.value},
+                                         method_function->type->return_type,
+                                         "operator.call");
+    const auto returned = method_function->type->return_type;
+    if (returned && returned->kind == ir::TypeKind::Pointer && returned->element) {
+        if (as_address) {
+            return {call, returned->element};
+        }
+        return {builder_.create_load(returned->element, call, false, 0,
+                                     "operator.load"),
+                returned->element};
+    }
+    return {call, returned};
+}
+
+// A record that overloads `operator*` answers a dereference with that member;
+// `nullptr` means the operand is not such a record.
+ir::Function* CIRGen::dereference_overload(const Expression& object) {
+    if (!object.value || !object.type) {
+        return nullptr;
+    }
+    const auto record = ir_records_.find(object.type);
+    if (record == ir_records_.end() || !record->second) {
+        return nullptr;
+    }
+    const auto methods = class_methods_.find(record->second->tag);
+    if (methods == class_methods_.end()) {
+        return nullptr;
+    }
+    const auto method = methods->second.find("operator*");
+    return method == methods->second.end() ? nullptr : method->second;
+}
 CIRGen::Expression CIRGen::binary_operator_call(ir::Function* method_function,
                                                 Expression self,
                                                 const frontend::AstNode& right) {
