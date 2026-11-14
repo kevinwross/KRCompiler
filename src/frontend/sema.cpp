@@ -1873,16 +1873,64 @@ void Sema::analyze_declaration(const AstNode& declaration) {
             if (init->children[1] &&
                 init->children[1]->kind == AstKind::ExpressionStatement) {
                 // `T x(a, b)` calls the constructor whose arity matches, so a
-                // deleted one of that arity is refused here.
-                if (type && type->kind == TypeKind::Record && type->record) {
+                // deleted one of that arity is refused here. One arity can hold
+                // several constructors, so the argument's shape narrows it:
+                // `unique_ptr<T> p(new T)` passes a fresh allocation and
+                // `T y(static_cast<T&&>(x))` an rvalue, and neither is the
+                // deleted copy constructor of the same arity. The argument is
+                // classified by its node kind only, because analysing it here
+                // re-enters declaration analysis.
+                const auto& arguments = init->children[1]->children;
+                bool selects_the_record = true;
+                bool argument_rvalue = false;
+                if (arguments.size() == 1 && arguments.front()) {
+                    const auto* argument = arguments.front().get();
+                    if (argument->kind == AstKind::UnaryExpression &&
+                        (argument->text == "new" || argument->text == "&")) {
+                        selects_the_record = false;
+                    } else if (argument->kind == AstKind::CastExpression &&
+                               argument->children.size() > 1 &&
+                               argument->children[0]) {
+                        const auto cast_type =
+                            type_from_type_name(*argument->children[0]);
+                        argument_rvalue =
+                            cast_type && cast_type->is_rvalue_reference;
+                    }
+                }
+                if (selects_the_record && type && type->kind == TypeKind::Record &&
+                    type->record) {
                     const auto key = type->record->tag + "#" +
-                                     std::to_string(init->children[1]->children.size());
+                                     std::to_string(arguments.size());
                     for (const auto& constructor : type->record->methods) {
-                        if (constructor.name == key && constructor.is_deleted) {
-                            error(declarator->location,
-                                  "call to deleted constructor '" +
-                                      type->record->tag + "::" + type->record->tag + "'");
+                        if (constructor.name != key || !constructor.is_deleted) {
+                            continue;
                         }
+                        // A deleted move constructor is chosen for an rvalue and
+                        // a deleted copy constructor for an lvalue. The recorded
+                        // type carries the parameter, so the categories must
+                        // agree before this is the constructor being called.
+                        const auto& parameters = constructor.type
+                                                     ? constructor.type->parameters
+                                                     : std::vector<TypePtr>{};
+                        const TypePtr* reference_parameter = nullptr;
+                        for (const auto& parameter : parameters) {
+                            if (parameter && parameter->is_reference) {
+                                reference_parameter = &parameter;
+                                break;
+                            }
+                        }
+                        // A deleted constructor whose type was not recorded
+                        // is treated as a copy, which is what = delete on a
+                        // reference parameter nearly always is.
+                        const bool parameter_rvalue =
+                            reference_parameter != nullptr &&
+                            (*reference_parameter)->is_rvalue_reference;
+                        if (parameter_rvalue != argument_rvalue) {
+                            continue;
+                        }
+                        error(declarator->location,
+                              "call to deleted constructor '" +
+                                  type->record->tag + "::" + type->record->tag + "'");
                     }
                 }
                 for (const auto& argument : init->children[1]->children) {
