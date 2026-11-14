@@ -395,8 +395,8 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 ### M10 — v1.1 language/runtime completion (8–10 weeks)
 
 - [x] Table-driven exceptions and unwinding; RTTI/`dynamic_cast`/`typeid`. Table-driven descriptors and the unwinder with destructor cleanup ([ADR 0026](docs/decisions/0026-exception-descriptors.md), [ADR 0027](docs/decisions/0027-exception-cleanup.md)), and RTTI with `typeid`, pointer and reference `dynamic_cast` ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)).
-- [ ] Templates: function templates deduce and instantiate per type ([ADR 0031](docs/decisions/0031-function-template-instantiation.md)) — one level of `T`, `T*`, `T&`, `const T&` — while class templates, variadic templates, fold expressions, explicit template arguments, and partial specialization remain.
-- [ ] Variadic templates and fold expressions.
+- [ ] Templates: function templates deduce and instantiate per type, and class templates instantiate per type ([ADR 0032](docs/decisions/0032-class-template-instantiation.md)); one destructible object per scope remains the limit until the cleanup-pad defect recorded in ADR 0027 is fixed.
+
 - [ ] Dynamic `thread_local` initialization/destruction.
 - [ ] `memory`, `tuple`, `functional`, `array`.
 
@@ -499,6 +499,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T16:57:55-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 571/571
+windows-msvc-release  PASS 571/571
+linux-gcc-debug       PASS 524/524
+linux-gcc-release     PASS 524/524
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty-seven tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers class template instantiation
+([ADR 0032](docs/decisions/0032-class-template-instantiation.md)). The rows ran
+one at a time, clean from deleted directories, with no warnings and no compiler
+crashes in any log.
 
 ### 2026-11-13T16:15:48-08:00 — host gate (Windows)
 
@@ -2843,3 +2861,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T15:43:11-08:00** — Supported deduction is one level deep (`T`, `T*`, `T&`, `const T&`, with array decay for pointer parameters); every template parameter must be deduced, and explicit template arguments parse but do not influence deduction, so `add<double>(1, 2)` still deduces `int`. Those limits, and the untried class and variadic templates, are recorded in the ADR rather than approximated.
 - **2026-11-13T16:15:36-08:00** — Explicit template arguments override deduction. The parser used to skip `<double>` and discard it, so `add<double>(1, 2)` deduced `int` from its arguments; the call now keeps each argument as a `template-arg:<spelling>` label, and Sema binds the named parameters to those types while deducing the rest, so `convert<int>(2.75)` instantiates `convert__int_double`. A spelling is resolved through the same specifier table the declaration path uses, so `unsigned long` works as one argument.
 - **2026-11-13T16:15:36-08:00** — `template_functions.cpp` grew a two-parameter template and four explicit-argument checks (`add<double>(1, 2)`, `add<int>(2.5, 3.5)`, `convert<int>(2.75)`, `convert<double>(7)`) for fourteen checks in total; `krc_run_template_functions` still requires exit 42, and the whole Windows debug suite is 569/569. A spelling that does not resolve to a type instantiates nothing and the call falls back to the int definition, which the ADR records rather than approximating an error.
+- **2026-11-13T16:57:35-08:00** — Implemented class templates ([ADR 0032](docs/decisions/0032-class-template-instantiation.md)). `template <typename T> class Box` was only a name with `int` substituted, so `Box<double>` had `int` fields and the two types could not coexist. A tagged class specifier is now recorded as a pattern; `Box<int>` in a declaration parses as a name plus a `template-arg:` list and resolves through `instantiate_class_template`, which binds the parameters, clones the specifier, renames its tag to `Box__int`, renames the instance's constructors and destructor to that tag, and analyses the clone at file scope. Instances are cached by tag, so `Box<int>` and a reference through the parameter inside the instance are one record, and a self-referencing member resolves to the incomplete record instead of instantiating again. `class_templates.cpp` covers two instances with different layouts, a self-referencing member, a pointer to an instance, and `Pair<int, double>` versus `Pair<double, int>`; `krc_run_class_templates` requires exit 42.
+- **2026-11-13T16:57:35-08:00** — Two mistakes in that change were caught before the gate. Taking a member's type from the analysed record was applied to every class, which changed the recorded type of ordinary methods and broke `move_assign`, `move_constructor`, `std_move_constructor`, and `std_forward` with *store type does not match its pointer*; it now applies only when the tag names an instantiation. The pattern's own record keeps its old symbol and layout, so nothing that worked before changed.
+- **2026-11-13T16:57:35-08:00** — A pre-existing defect surfaced and is **not** fixed: a scope holding two or more destructible objects fails the IR verifier (*instruction does not dominate its use*), because the scope's single cleanup pad is created at the first unwinding construction and filled at scope exit, so it destroys objects declared after it. Three ordinary objects reproduce it without templates. Two attempts at a pad per construction point are recorded in [ADR 0027](docs/decisions/0027-exception-cleanup.md): both leave a pad whose resume invokes into a pad that does not dominate it, so the pad chain has to become an explicit stack. The class template fixture is written with one destructible object per scope to avoid tripping it, and the defect is the next round's work.
