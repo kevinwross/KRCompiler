@@ -2022,6 +2022,12 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     bool is_static = false;
     auto base = base_type_from_specifiers(*specifiers, is_typedef, is_extern, is_static);
     auto type = build_declarator_type(*declarator, base);
+    // Recorded while an instance's bindings are active: code generation reads it
+    // back after they are gone, and a reference return would otherwise look like
+    // a value return (ADR 0035).
+    if (type != nullptr) {
+        declarator_types_.emplace(declarator, type);
+    }
         if (!is_typedef && type && type->kind == TypeKind::Record && type->record &&
             record_is_abstract(*type->record)) {
             error(declarator->location,

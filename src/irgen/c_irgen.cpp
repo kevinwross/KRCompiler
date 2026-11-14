@@ -7406,6 +7406,19 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
         const auto target =
             sema_.type_from_type_name(*expression.children.front());
         if (target && target->is_reference && target->element) {
+            // A static cast to a reference names its operand, so the address is
+            // the operand's: the cast itself yields a value for a non-record
+            // reference. A dynamic cast is different -- it checks the object at
+            // run time and answers with its own address.
+            const bool dynamic = !expression.labels.empty() &&
+                                 expression.labels.front() == "dynamic_cast";
+            if (!dynamic) {
+                auto address = emit_lvalue(*expression.children[1]);
+                if (address.value) {
+                    return {address.value, map_type(target->element)};
+                }
+                return {};
+            }
             auto cast = emit_cast(expression);
             if (cast.value) {
                 return {cast.value, map_type(target->element)};
@@ -9896,6 +9909,17 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {    i
         target_frontend->element) {
         auto address = emit_lvalue(*expression.children[1]);
         if (address.value) {
+            // A reference to a record travels as its address, which is what a
+            // record value is here. A reference to anything smaller is a value
+            // in an expression: `int moved = static_cast<int&&>(first)` copies
+            // the integer, and handing back the address put a pointer in it.
+            const auto element = map_type(target_frontend->element);
+            if (element && element->kind != ir::TypeKind::Struct &&
+                element->kind != ir::TypeKind::Array) {
+                return {builder_.create_load(element, address.value, false, 0,
+                                             "reference.load"),
+                        element};
+            }
             return {address.value, target};
         }
         return {};
