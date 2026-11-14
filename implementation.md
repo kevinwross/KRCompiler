@@ -499,6 +499,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-14T08:30:12-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 585/585
+windows-msvc-release  PASS 585/585
+linux-gcc-debug       PASS 531/531
+linux-gcc-release     PASS 531/531
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-four tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers a parenthesized initializer — `int x(7)`, `Holder<Item>
+owner(new Item(7))` — in the parser and in IR generation. The rows ran one at a
+time, clean from deleted directories, with no warnings and no compiler crashes
+in any log.
 ### 2026-11-14T07:36:28-08:00 — host gate (Windows)
 
 ```text
@@ -3096,3 +3113,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T23:59:18-08:00** — A binary operator now resolves to a member overload through an operand that is not a name. `!(*this == other)` inside a const member compares two records as aggregates otherwise, which the verifier rejects; the operator path keyed the record off the left operand's *frontend* type, which only an identifier carries. A member operator call is now one `binary_operator_call` helper shared by both paths, and the new path takes the record from the address the left operand names, so `*this == other` and `member == other` both reach the member. `std::array::operator!=` is `!( *this == other )` again, and the fixture compares equal, unequal, and both directions.
 - **2026-11-13T23:59:18-08:00** — The new path is restricted to operands that name an object — a member access or a `*` dereference — because it emits an lvalue to find the record. Without that restriction it fired on `(int)*left - (int)*right` in the C runtime and reported *expression is not an lvalue* for the cast operand, which is how the restriction was found: the target runtime is part of the same build.
 - **2026-11-13T23:59:18-08:00** — `class_methods_` still keeps one function per name, so the const and non-const `operator[]` share a slot; reads through either reach one of them. Distinct const/non-const dispatch and mangling remain the open half.
+- **2026-11-14T08:29:56-08:00** — A parenthesized initializer declares a variable: `int x(7)`, `Holder<Item> owner(new Item(7))`, `int negative(-5)`, and `int nested((x))` all parse and run. The declaration path treated `name(` as a function declarator unless the specifier named a class, so a builtin with a literal argument was read as a K&R parameter list and `new` as a parameter type. It now asks whether the first token inside the parenthesis *can* begin a parameter declaration — a literal, an operator, or one of `new`/`true`/`false`/`nullptr`/`this` cannot — and a bare name still resolves as a parameter unless the specifier is a class. IR generation gained the matching scalar case, which stores the single value; `tests/fixtures/c/paren_initializer.cpp` covers every form plus an unaffected function declaration, and `krc_run_paren_initializer` requires exit 42.
+- **2026-11-14T08:29:56-08:00** — `<memory>` was the probe that found this: a hand-rolled `unique_ptr`-shaped owner failed at its own construction, which is why the parser fix came first. The remaining blocker for a real `std::unique_ptr` is recorded rather than worked around: `(*owner).read()` on a member declared to return `T&` fails with *cannot dereference a non-pointer value*, the same reference-result-in-an-lvalue-context gap that keeps `values.front() = 11` from working.
