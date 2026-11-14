@@ -500,6 +500,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T22:47:00-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 583/583
+windows-msvc-release  PASS 583/583
+linux-gcc-debug       PASS 530/530
+linux-gcc-release     PASS 530/530
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-three tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers the `begin()`/`end()` form of a range-for over a class. The rows
+ran one at a time, clean from deleted directories, with no warnings and no
+compiler crashes in any log.
 ### 2026-11-13T22:16:06-08:00 — host gate (Windows)
 
 ```text
@@ -3035,3 +3051,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T22:15:50-08:00** — `(*this)[index]` and `(*pointer)[index]` now reach a record's `operator[]`. The base was not an identifier, so both the value and the lvalue subscript paths fell through to the pointer case and reported *subscripted value is not a pointer* (value) or *subscripted lvalue is not a pointer* (assignment). Both paths now recognise a `*` operand, take the object's address from `emit_lvalue` rather than a loaded copy, and share one `subscript_operator` helper with the identifier path. `this_subscript.cpp` writes and reads through `(*this)[i]` and through `(*pointer)[i]`; `krc_run_this_subscript` requires exit 42.
 - **2026-11-13T22:15:50-08:00** — Two related findings, recorded rather than fixed. An lvalue result is an address typed as the element it names, so the operator result has to carry `return_type->element` and not the pointer — the verifier caught that as *store type does not match its pointer*. And `std::array`'s comparison operators still cannot be defined: `operator[]` is overloaded const/non-const, and `class_methods_` holds one function per name, so a const member's `(*this)[index]` picks the wrong overload and krc crashes. Overloaded member functions need real overload sets before `<array>` can compare.
 - **2026-11-13T22:15:50-08:00** — Windows debug CTest is 583/583.
+- **2026-11-13T22:46:47-08:00** — A range-for over a class now iterates through `begin()` and `end()`. `for (T x : values)` and `for (T& x : values)` over `std::array` work, and the reference form writes the elements. The loop keeps the array path untouched: it is taken only when the range is an identifier whose frontend type is a record with both members, and the cursor and limit calls feed a pointer comparison instead of an integer index.
+- **2026-11-13T22:46:47-08:00** — The loop variable has to carry the declaration's frontend type into `declare_local`, not `nullptr`: with a null frontend type the identifier path treated `element` as the pointer it is stored as, so `element * 2` multiplied a `ptr<i32>`, which the verifier reported as *integer binary operation has mismatched types*. The `std_array` fixture now uses both loop forms where it used to walk an index.
+- **2026-11-13T22:46:47-08:00** — This closes the range-for entry in the handoff's known-gaps list; the remaining entries are assignment through a reference-returning call and overloaded member functions.
