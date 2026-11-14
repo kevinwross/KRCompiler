@@ -473,6 +473,15 @@ if(TARGET krc)
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/non_type_templates_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    add_test(NAME krc_link_kr16_host_services
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s
+                -DHOST=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/host.s
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_host_services.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_host_services.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
     add_test(NAME krc_link_dereference_operator
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -965,6 +974,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR32_VM}
                     -DIMAGE=${KRC_TEST_OUTPUT_DIR}/heap_above_code_linked.k32
                     -DEXPECT_EXIT=7
+                    -DMAX_STEPS=80000000
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_heap_above_code PROPERTIES
             DEPENDS krc_link_heap_above_code)
