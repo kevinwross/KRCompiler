@@ -3304,6 +3304,13 @@ void CIRGen::note_scope_cleanup() {
     if (scope_pads_.empty() || !current_function_) {
         return;
     }
+    // A target without exceptions has nothing to unwind into, so a cleanup pad
+    // would only turn ordinary calls into invokes the backend cannot lower. The
+    // destructors still run on every normal exit, through
+    // emit_cleanups_for_exit.
+    if (!profile_.has_eh) {
+        return;
+    }
     // The pad covers the objects that exist now, not the ones the scope will
     // declare later: a construction point can unwind before they exist.
     CleanupPad pad;
