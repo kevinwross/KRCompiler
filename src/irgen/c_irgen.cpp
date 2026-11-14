@@ -1580,15 +1580,50 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                                                         member->children[1].get());
             if (frontend_type && frontend_type->kind == frontend::TypeKind::Function &&
                 sema_.is_class_instance(record->tag)) {
+                // A class can record several methods under one name and arity: a
+                // copy constructor and a move constructor are both `Box#1`. The
+                // declaration's own declarator says which one this is, so the
+                // recorded type is matched on the parameter's value category.
+                // Without that, both declarations took the first recorded type
+                // and emitted the same `_rvalue` symbol, so the copy constructor
+                // was never generated (build/corpus/dup4.cpp).
+                bool declared_rvalue = false;
                 std::size_t declared_parameters = 0;
                 for (const auto* cursor = member->children[1].get(); cursor != nullptr;) {
                     if (cursor->kind == frontend::AstKind::FunctionDeclarator) {
                         for (const auto& parameter : cursor->children) {
-                            if (parameter &&
-                                parameter->kind ==
+                            if (!parameter ||
+                                parameter->kind !=
                                     frontend::AstKind::ParameterDeclaration) {
-                                ++declared_parameters;
+                                continue;
                             }
+                            if (declared_parameters == 0) {
+                                // The reference declarator sits beside the
+                                // specifiers, so the whole subtree is walked.
+                                const auto marks_rvalue =
+                                    [](const frontend::AstNode* node,
+                                       const auto& self) -> bool {
+                                    if (node == nullptr) {
+                                        return false;
+                                    }
+                                    if (node->kind ==
+                                            frontend::AstKind::ReferenceDeclarator &&
+                                        std::find(node->labels.begin(),
+                                                  node->labels.end(),
+                                                  "rvalue") != node->labels.end()) {
+                                        return true;
+                                    }
+                                    for (const auto& child_node : node->children) {
+                                        if (self(child_node.get(), self)) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                };
+                                declared_rvalue =
+                                    marks_rvalue(parameter.get(), marks_rvalue);
+                            }
+                            ++declared_parameters;
                         }
                         break;
                     }
@@ -1601,6 +1636,13 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                         continue;
                     }
                     if (recorded.type->parameters.size() != declared_parameters) {
+                        continue;
+                    }
+                    const bool recorded_rvalue =
+                        !recorded.type->parameters.empty() &&
+                        recorded.type->parameters.front() &&
+                        recorded.type->parameters.front()->is_rvalue_reference;
+                    if (recorded_rvalue != declared_rvalue) {
                         continue;
                     }
                     frontend_type = recorded.type;

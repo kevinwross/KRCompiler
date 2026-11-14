@@ -453,21 +453,18 @@ Three gaps block a complete `std::array`, each with a reproduction:
 argument to resolve through the stub binding, which is the missing piece for
 free comparison operators on `std::array`.
 
-## A class with a copy and a move constructor loses one
+## A copy and a move constructor of one arity
 
-Twelve lines reproduce it: a class template with `Box()`, `Box(Box&&)`, and
-`Box(const Box&)` generates `Box__int_ctor_1_rvalue` **twice** and never generates
-`Box__int_ctor_1_lvalue`, while the pattern correctly emits both kinds. So the
-copy constructor is not generated, the move constructor is, twice, and `krld`
-keeps one of the two — which is why a move that clears its source silently did
-nothing.
-
-The AST is correct before instantiation (`ReferenceDeclarator [rvalue]` on the
-move, `DeclSpecifiers [const] [Box]` on the copy). The collapse is in the
-instantiated record: constructors are keyed by name and arity (`Box#1`) and the
-value-category suffix is computed later per generated function instead of being
-part of the key. Fix that keying in Sema's recorded methods and look them up with
-it in IR generation. `build/corpus/dup4.cpp` is the reproduction.
+Two constructors of the same name and arity are both recorded as `Box#1`, so the
+member generation must match the **declaration's own** parameter category: it
+walks the first `ParameterDeclaration`'s whole subtree for a `ReferenceDeclarator`
+labelled `rvalue` and takes only the recorded type with the same category.
+Matching on name and arity alone took the first recorded type for both, emitted
+the move constructor twice, never generated the copy constructor, and left
+whichever body the linker kept — a move that cleared its source silently did
+nothing. A first-child walk is not enough: the reference declarator sits beside
+the specifiers, not under the first child, and the duplicate just moves to the
+other suffix. `tests/fixtures/c/copy_and_move_constructors.cpp` pins the pair.
 
 ## Debug display names
 
