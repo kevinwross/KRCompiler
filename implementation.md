@@ -364,7 +364,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 - [ ] Standard `printf` with length modifiers and `%p`; float formatting on KR32. `%p`, `%ld`/`%lu`/`%zu`, unsigned values, `%o`, width/zero/left alignment, integer precision, `+`/space signs, `*` width/precision, and `%.Ns`/`%Ns` strings work; `%f`/`%e`/`%g` with explicit precision are covered by linked fixtures; the locale-aware set remains.
 - `atexit` registers handlers that run at normal return and at `exit`; a linked fixture returns 7. `_Exit` terminates without running them; a linked fixture returns 7. `at_quick_exit` handlers run from `quick_exit`; a linked fixture returns 7. `getenv`/`setenv`/`unsetenv` maintain a runtime table; a linked fixture returns 0.
 - [ ] Common host-service ABI and per-VM shims; kernel profile.
-- [ ] Integrate KR16 `libc.s`/`resources/fileio.c`. Blocked on the sibling VM: it implements only `SYS_VERSION`, with the other host services reserved, so no file service exists to call. A C string/memory runtime (`strlen`, `strcmp`, `strncmp`, `strcpy`, `strncpy`, `strcat`, `strncat`, `strchr`, `strrchr`, `strstr`, `memcpy`, `memset`, `memcmp`, `atoi`, `strtol`, `strtoul`, `abs`, `putchar`, `malloc`, `free`, `calloc`, `realloc`, `strdup`, `rand`, `srand`, `strtok`) builds to `libkrcrt.kro` and links with the startup object; file I/O and the existing assembly libc remain.
+- [ ] Integrate KR16 `libc.s`/`resources/fileio.c`. The sibling VM now implements the file services — `OPEN`, `CLOSE`, `READ`, `WRITE`, `SEEK`, `STAT`, `UNLINK`, `RENAME`, `MKDIR`, `READDIR`, `TIME`, `RANDOM`, and `FSINFO` over the service block in `R0` — so what remains is this side: the KR16 host wrappers and the `libc` file layer over them. A C string/memory runtime (`strlen`, `strcmp`, `strncmp`, `strcpy`, `strncpy`, `strcat`, `strncat`, `strchr`, `strrchr`, `strstr`, `memcpy`, `memset`, `memcmp`, `atoi`, `strtol`, `strtoul`, `abs`, `putchar`, `malloc`, `free`, `calloc`, `realloc`, `strdup`, `rand`, `srand`, `strtok`) builds to `libkrcrt.kro` and links with the startup object; file I/O and the existing assembly libc remain.
 - [ ] Gate G9 partial: Tier 3 runtime baseline.
 
 **M9 evidence (2026-11-11, in progress):**
@@ -499,6 +499,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-14T09:09:32-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 587/587
+windows-msvc-release  PASS 587/587
+linux-gcc-debug       PASS 532/532
+linux-gcc-release     PASS 532/532
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-five tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers an overloaded dereference in both contexts — `*object` as a value
+and `(*object).member = v` as an lvalue — and the widened parenthesized
+initializer. The rows ran one at a time, clean from deleted directories, with no
+warnings and no compiler crashes in any log.
 ### 2026-11-14T08:30:12-08:00 — host gate (Windows)
 
 ```text
@@ -3115,3 +3132,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T23:59:18-08:00** — `class_methods_` still keeps one function per name, so the const and non-const `operator[]` share a slot; reads through either reach one of them. Distinct const/non-const dispatch and mangling remain the open half.
 - **2026-11-14T08:29:56-08:00** — A parenthesized initializer declares a variable: `int x(7)`, `Holder<Item> owner(new Item(7))`, `int negative(-5)`, and `int nested((x))` all parse and run. The declaration path treated `name(` as a function declarator unless the specifier named a class, so a builtin with a literal argument was read as a K&R parameter list and `new` as a parameter type. It now asks whether the first token inside the parenthesis *can* begin a parameter declaration — a literal, an operator, or one of `new`/`true`/`false`/`nullptr`/`this` cannot — and a bare name still resolves as a parameter unless the specifier is a class. IR generation gained the matching scalar case, which stores the single value; `tests/fixtures/c/paren_initializer.cpp` covers every form plus an unaffected function declaration, and `krc_run_paren_initializer` requires exit 42.
 - **2026-11-14T08:29:56-08:00** — `<memory>` was the probe that found this: a hand-rolled `unique_ptr`-shaped owner failed at its own construction, which is why the parser fix came first. The remaining blocker for a real `std::unique_ptr` is recorded rather than worked around: `(*owner).read()` on a member declared to return `T&` fails with *cannot dereference a non-pointer value*, the same reference-result-in-an-lvalue-context gap that keeps `values.front() = 11` from working.
+- **2026-11-14T09:09:15-08:00** — A class that overloads dereference answers `*object`, in a value context, in an lvalue context, and as a receiver. Sema rejected `*owner` on a record before IRGen could see it — the operand is not a pointer, so `(*owner).read()` reported *cannot dereference a non-pointer value* — and it now resolves a member `operator*` through the record's bases. IR generation calls that member through one `unary_operator_call` helper, which loads the referent in a value context and returns its address in an lvalue context, so `(*reference).value = 9` writes the object the dereference names instead of a temporary. `dereference_operator.cpp` reads, writes, calls a member through the dereference, and checks a second owner stays independent; `krc_run_dereference_operator` requires exit 42.
+- **2026-11-14T09:09:15-08:00** — The same round widened the parenthesized-initializer predicate to accept `&` and `*` as expression starters, which is what `Ref<Item> reference(&item)` needs; neither can begin a parameter declaration.
+- **2026-11-14T09:09:15-08:00** — The KR16 VM's file services are implemented, verified against `../kr16/src/vm/host.cpp` rather than taken on report. The dispatch has version (`SYS #0`, results in the block's first two result words), then `OPEN`=1, `CLOSE`=2, `READ`=3, `WRITE`=4, `SEEK`=5, `STAT`=6, `UNLINK`=7, `RENAME`=8, `MKDIR`=9, `READDIR`=10, `TIME`=11, `RANDOM`=12, `FSINFO`=13, with open flags `0`/`1`/`2` plus `0x0100` create, `0x0200` truncate, `0x0400` append, `0x0800` exclusive, a 4096-byte transfer cap, 255-byte paths, sixteen open files, and 64-byte directory entries. `docs/host-services.md` and the M9 item now say what remains is on this side — the KR16 wrappers and the `libc` file layer — instead of claiming the VM blocks it.

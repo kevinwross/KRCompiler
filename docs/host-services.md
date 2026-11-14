@@ -1,7 +1,7 @@
 # Host services
 
-**Status:** KR32 wrappers are implemented; KR16 file services are deferred by
-the KR16 VM.
+**Status:** KR32 wrappers are implemented. The KR16 VM now implements the file
+services; the KR16 wrappers are not written.
 
 ## KR32
 
@@ -66,10 +66,18 @@ UTF-8 and are passed through unchanged.
 
 ## KR16
 
-The KR16 VM exposes `SYS #n` with `R0` as the service block. Version 1 implements
-only `SYS_VERSION`; `SYS_OPEN`/`SYS_CLOSE`/`SYS_READ`/`SYS_WRITE`/`SYS_SEEK`/
-`SYS_STAT` are deferred. The current KR16 runtime therefore provides string,
-memory, allocation, and console-output services only.
+The KR16 VM exposes `SYS #n` with the service block in `R0`. The block holds
+four 16-bit arguments followed by four 16-bit results. Service 0 is the version
+call, which reports the ABI version and a capability mask; services 1–13 are
+`OPEN`, `CLOSE`, `READ`, `WRITE`, `SEEK`, `STAT`, `UNLINK`, `RENAME`,
+`MKDIR`, `READDIR`, `TIME`, `RANDOM`, and `FSINFO`. Open flags are
+`0` read-only, `1` write-only, `2` read-write, or optionally `0x0100` create,
+`0x0200` truncate, `0x0400` append, `0x0800` exclusive. A single transfer is
+limited to 4096 bytes, a guest path to 255 bytes, sixteen files may be open at
+once, and a directory entry is 64 bytes with a name of at most 59. The KR16
+runtime still provides string, memory, allocation, and console-output services
+only: the file wrappers and `libc` file layer are the work that remains, not
+the VM side.
 
 ## Linking
 
