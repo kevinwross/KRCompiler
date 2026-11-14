@@ -500,6 +500,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T19:12:08-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 577/577
+windows-msvc-release  PASS 577/577
+linux-gcc-debug       PASS 527/527
+linux-gcc-release     PASS 527/527
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty tests fewer: the executed tests need a runnable
+VM and are not registered where none is configured, and the twenty-five KR16 run
+tests need the KR16 VM a Linux host does not have. This gate covers the
+short-circuit lowering of `&&` and `||` and the `alloca` slot that carries the
+result across the branch. The rows ran one at a time, clean from deleted
+directories, with no warnings and no compiler crashes in any log.
+
 ### 2026-11-13T18:41:07-08:00 — host gate (Windows)
 
 ```text
@@ -2908,3 +2925,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T18:40:48-08:00** — Value parameters need the number at three moments, which is why the substitution is a rewrite rather than a binding: while the pattern's own record is analysed the parser's `const int N = 1;` stub is bound and a folded identifier is recorded so code generation can emit it; the instance's clone replaces the identifier outright. Recording the fold was also the fix for an IRGen crash on `return N;` — the identifier had no binding at code generation time.
 - **2026-11-13T18:40:48-08:00** — Two defects surfaced while testing this and are fixed. `!call()` emitted the call twice (a struct-result probe ran before the type was known), so a side effect in `!f()` ran twice; the value is now emitted once and reused. And the C thread-local fixture wrote the same image name as the C++ `thread_local` fixture, so a parallel suite could run the wrong image; its output is now `thread_local_storage_linked.k32`. Windows debug CTest is 575/575.
 - **2026-11-13T18:40:48-08:00** — Known gap, not fixed: `&&` and `||` lower to a bitwise operation over both operands, so neither short-circuits and a side effect on the right of a false `&&` still runs. The fixture avoids depending on it; the operator needs a branch-and-merge lowering.
+- **2026-11-13T19:11:51-08:00** — `&&` and `||` now short-circuit. Both operands were emitted before the operator and combined with a bitwise `and`/`or`, so a side effect on the right of a false `&&` ran anyway — a correctness bug in ordinary C, not specific to templates. The lowering now evaluates the left operand, branches, emits the right operand inside its own block, and carries the result across the branch in an `alloca` slot. `logical_operators.c` checks a skipped and a taken right operand for each operator, the operator's value used as a value, nesting, and a `while` condition; `krc_run_logical_operators` requires exit 42.
+- **2026-11-13T19:11:51-08:00** — The first attempt carried the result in a `phi` node, which produced a program that ran but returned the wrong value: neither backend lowers `phi` (it is parsed, printed, and verified, but has no instruction selection). `docs/ir.md` now states that a value crossing a branch travels in an `alloca` slot and that `select` cannot carry a one-sided value. The gap was invisible until a program exercised it, which is why the IR verifier's phi rules read as supported.
+- **2026-11-13T19:11:51-08:00** — The class-template and non-type-template fixtures no longer have to avoid `&&`/`||` in their checks, and the short-circuit note added to `handoff.md` last round is replaced by the fix. Windows debug CTest is 577/577.
