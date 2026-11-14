@@ -500,6 +500,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T22:16:06-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 583/583
+windows-msvc-release  PASS 583/583
+linux-gcc-debug       PASS 530/530
+linux-gcc-release     PASS 530/530
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-three tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers subscripting through `*this` and `*pointer`, which the value and
+lvalue paths now both route through one `subscript_operator`. The rows ran one
+at a time, clean from deleted directories, with no warnings and no compiler
+crashes in any log.
 ### 2026-11-13T21:37:28-08:00 — host gate (Windows)
 
 ```text
@@ -3015,3 +3032,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T21:37:09-08:00** — Fixed the injected class name inside a template class body, the gap that had resisted three earlier attempts. The cause was in `type_from_specifiers`: the class-template branch matched **any** name in `templates_`, and a bare `C` — which carries no `template-arg:` labels — fell into it, hit the "no arguments" path and `continue`d, so the label was consumed without ever reaching the typedef lookup. The branch now requires an actual argument list, and a bare class-template name resolves through the ordinary typedef the pattern's record declares.
 - **2026-11-13T21:37:09-08:00** — Two follow-on corrections. The instance clone now rewrites every label and identifier equal to the pattern's tag into the instance's tag, so `C* self()` and `const C& other` inside `C<int>` mean `C__int` — without it the member resolved to the *pattern's* type. And the branch refuses to re-enter a pattern whose instance is under construction (`class_instances_` holds the in-progress marker): without that guard `Box<T>` inside `Box`'s own body recursed until krc exhausted its stack, which `class_templates.cpp` caught as *krc -c failed with Stack overflow*.
 - **2026-11-13T21:37:09-08:00** — `injected_class_name.cpp` covers the injected name in a return type, a parameter type, the const overload, and a second element type; `krc_run_injected_class_name` requires exit 42. ADR 0032 records both rules. Windows debug CTest is 581/581.
+- **2026-11-13T22:15:50-08:00** — `(*this)[index]` and `(*pointer)[index]` now reach a record's `operator[]`. The base was not an identifier, so both the value and the lvalue subscript paths fell through to the pointer case and reported *subscripted value is not a pointer* (value) or *subscripted lvalue is not a pointer* (assignment). Both paths now recognise a `*` operand, take the object's address from `emit_lvalue` rather than a loaded copy, and share one `subscript_operator` helper with the identifier path. `this_subscript.cpp` writes and reads through `(*this)[i]` and through `(*pointer)[i]`; `krc_run_this_subscript` requires exit 42.
+- **2026-11-13T22:15:50-08:00** — Two related findings, recorded rather than fixed. An lvalue result is an address typed as the element it names, so the operator result has to carry `return_type->element` and not the pointer — the verifier caught that as *store type does not match its pointer*. And `std::array`'s comparison operators still cannot be defined: `operator[]` is overloaded const/non-const, and `class_methods_` holds one function per name, so a const member's `(*this)[index]` picks the wrong overload and krc crashes. Overloaded member functions need real overload sets before `<array>` can compare.
+- **2026-11-13T22:15:50-08:00** — Windows debug CTest is 583/583.
