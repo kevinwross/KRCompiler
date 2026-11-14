@@ -499,6 +499,28 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-14T09:48:37-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 588/588
+windows-msvc-release  PASS 588/588
+linux-gcc-debug       PASS 533/533
+linux-gcc-release     PASS 533/533
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-five tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers the KR16 host-service wrappers, the explicit step budget for the
+heap test, and the parenthesized-initializer and dereference work. Two
+disturbances, both traced and neither a code defect: the release build's first
+attempt crashed `CL.exe` with an access violation while generating code and
+compiled cleanly when rebuilt, and the release suite reported one `KRO CRC
+mismatch` because two `ctest` processes from the failed attempt were still
+running; the suite passed 588/588 on a clean re-run. The rows ran one at a time,
+clean from deleted directories, with no warnings and no compiler crashes in the
+final logs.
 ### 2026-11-14T09:09:32-08:00 — host gate (Windows)
 
 ```text
@@ -3135,3 +3157,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-14T09:09:15-08:00** — A class that overloads dereference answers `*object`, in a value context, in an lvalue context, and as a receiver. Sema rejected `*owner` on a record before IRGen could see it — the operand is not a pointer, so `(*owner).read()` reported *cannot dereference a non-pointer value* — and it now resolves a member `operator*` through the record's bases. IR generation calls that member through one `unary_operator_call` helper, which loads the referent in a value context and returns its address in an lvalue context, so `(*reference).value = 9` writes the object the dereference names instead of a temporary. `dereference_operator.cpp` reads, writes, calls a member through the dereference, and checks a second owner stays independent; `krc_run_dereference_operator` requires exit 42.
 - **2026-11-14T09:09:15-08:00** — The same round widened the parenthesized-initializer predicate to accept `&` and `*` as expression starters, which is what `Ref<Item> reference(&item)` needs; neither can begin a parameter declaration.
 - **2026-11-14T09:09:15-08:00** — The KR16 VM's file services are implemented, verified against `../kr16/src/vm/host.cpp` rather than taken on report. The dispatch has version (`SYS #0`, results in the block's first two result words), then `OPEN`=1, `CLOSE`=2, `READ`=3, `WRITE`=4, `SEEK`=5, `STAT`=6, `UNLINK`=7, `RENAME`=8, `MKDIR`=9, `READDIR`=10, `TIME`=11, `RANDOM`=12, `FSINFO`=13, with open flags `0`/`1`/`2` plus `0x0100` create, `0x0200` truncate, `0x0400` append, `0x0800` exclusive, a 4096-byte transfer cap, 255-byte paths, sixteen open files, and 64-byte directory entries. `docs/host-services.md` and the M9 item now say what remains is on this side — the KR16 wrappers and the `libc` file layer — instead of claiming the VM blocks it.
+- **2026-11-14T09:48:20-08:00** — KR16 file services work from this side. `targets/kr16/runtime/host.s` builds the sixteen-byte service block the VM expects — status at 0, three results at 2/4/6, four arguments at 8/10/12/14, with the block address in `R0` and the service number as the `SYS` immediate — and wraps `version`, `capabilities`, `open`, `close`, `read`, `write`, `seek`, `unlink`, and `rename`. A wrapper returns the first result on success and the negated status on failure, so a zero result is distinguishable from an error. `tests/fixtures/c/kr16_host_services.c` writes a file, closes and reopens it, reads it back, compares the bytes, and unlinks it; run under the KR16 VM at `../kr16/build/windows-ninja/kr16.exe` with `--fs-root` it exits 42, which is the first time this compiler's output has used a KR16 file service.
+- **2026-11-14T09:48:20-08:00** — The default KR16 VM binary for the executed tests is **stale**: `../kr16/build/shell-debug/kr16.exe` reports a capability mask of 16 (bits 2–4 only) for `SYS #0`, so the file services are absent and the same image fails with exit 2; `../kr16/build/windows-vs2026/Debug/kr16.exe` fails differently, and only `../kr16/build/windows-ninja/kr16.exe` reports 63, the mask a host-filesystem-enabled VM should report. The new test is therefore registered as **link-only** (`krc_link_kr16_host_services`), and the manual run with its exact command is the recorded evidence; the executed test can be enabled once the sibling's default build directory is refreshed. `../kr16` was not modified or rebuilt.
+- **2026-11-14T09:48:20-08:00** — `krc_run_heap_above_code` was flaky for a stated reason, not an intermittent fault: it stores a quarter-megabyte one byte at a time and the allocator walk on top of that consumed close to the runner's default 20-million-step budget, so an unrelated change to code layout could tip it over and the VM then reported `-1` instead of the expected 7. The test now asks for 80 million steps, which is the budget its own workload needs; it passed twice in a row and in the full 588-test suite.
