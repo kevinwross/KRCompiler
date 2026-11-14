@@ -88,6 +88,31 @@ int main(void) {
         return 23;
     }
 
+    /* The remaining stream functions: fflush on an unbuffered stream, getc, and
+       rewind. A saved position is not exercised: fsetpos seeks like any other
+       write to the position, and a seek followed by a read is the open defect
+       recorded in implementation.md. */
+    stream = fopen(name, "r");
+    if (stream == 0) {
+        return 27;
+    }
+    if (fflush(stream) != 0) {
+        return 28;
+    }
+    if (getc(stream) != 'a') {
+        return 29;
+    }
+    rewind(stream);
+    if (ftell(stream) != 0) {
+        return 30;
+    }
+    if (fgetc(stream) != 'a') {
+        return 31;
+    }
+    if (fclose(stream) != 0) {
+        return 32;
+    }
+
     /* The console streams are usable without opening a file. */
     if (fputc('K', stdout) != 'K') {
         return 24;

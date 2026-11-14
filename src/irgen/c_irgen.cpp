@@ -4704,6 +4704,17 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
         statement.children.front()->kind ==
             frontend::AstKind::CallExpression) {
         auto value = emit_expression(*statement.children.front());
+        if (value.value && (!value.type ||
+                            value.type->kind != ir::TypeKind::Struct)) {
+            // The call already produced the value. Emitting it again here ran
+            // its side effects twice: `return bump();` incremented twice, which
+            // is how a forwarding wrapper read the wrong byte.
+            auto converted = promote(value.value, value.type,
+                                     current_function_->type->return_type);
+            emit_cleanups_for_exit(0);
+            builder_.create_ret(converted);
+            return;
+        }
         if (value.value && value.type &&
             value.type->kind == ir::TypeKind::Struct) {
             auto* storage = builder_.create_alloca(value.type, 0,

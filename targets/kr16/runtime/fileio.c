@@ -296,6 +296,41 @@ int fseek(FILE* stream, long offset, int origin) {
     return 0;
 }
 
+int getc(FILE* stream) { return fgetc(stream); }
+
+/* The stream keeps its own position, so a position value is that number. */
+int fgetpos(FILE* stream, long* position) {
+    if (stream == 0 || !stream->in_use || position == 0) {
+        return -1;
+    }
+    *position = stream->position;
+    return 0;
+}
+
+int fsetpos(FILE* stream, const long* position) {
+    if (position == 0) {
+        return -1;
+    }
+    return fseek(stream, *position, SEEK_SET);
+}
+
+/* The streams are unbuffered: every transfer reaches the host immediately, so
+   there is nothing to flush. The function exists because a portable program
+   calls it. */
+int fflush(FILE* stream) {
+    if (stream == 0) {
+        return 0;
+    }
+    return stream->in_use ? 0 : -1;
+}
+
+void rewind(FILE* stream) {
+    if (stream == 0 || !stream->in_use) {
+        return;
+    }
+    clearerr(stream);
+    fseek(stream, 0, SEEK_SET);
+}
 int feof(FILE* stream) { return stream != 0 && stream->end_of_file != 0 ? 1 : 0; }
 
 int ferror(FILE* stream) { return stream != 0 && stream->error != 0 ? 1 : 0; }

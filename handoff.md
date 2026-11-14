@@ -393,6 +393,16 @@ argument assignment was wrong.
 whose initialiser needs a relocation is not emitted on this profile. `SEEK_END`
 is refused; see the entry below.
 
+## A returned call runs once
+
+`int forward(void) { return bump(); }` used to emit the call twice and return
+the second result, so a forwarding wrapper ran its callee's side effects twice
+and `getc` read the file's second byte. `emit_return` now returns a non-record
+call result directly instead of falling through to the generic tail that emitted
+the expression again. `return_call_once.c` pins it. A record-valued call with no
+conversion method still falls through that path, and that corner is recorded in
+`implementation.md` rather than fixed.
+
 ## Open: an end-relative seek on KR16 positions but does not read
 
 `fseek(stream, -1, SEEK_END)` on a KR16 stream reports the right position
