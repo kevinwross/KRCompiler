@@ -500,6 +500,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T23:23:43-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 583/583
+windows-msvc-release  PASS 583/583
+linux-gcc-debug       PASS 530/530
+linux-gcc-release     PASS 530/530
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-three tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers subscripting a record through a reference, which is what `std::array`
+needed to compare. The first debug run failed `krc_run_heap_above_code` with
+`expected exit 7, got -1` while a stale `kr32` process from the preceding round
+was still running; the same clean build passed 583/583 when the suite was re-run
+with nothing else on the machine, and the release row passed first time. The
+rows ran one at a time, clean from deleted directories, with no warnings and no
+compiler crashes in any log.
+
 ### 2026-11-13T22:47:00-08:00 — host gate (Windows)
 
 ```text
@@ -3054,3 +3075,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T22:46:47-08:00** — A range-for over a class now iterates through `begin()` and `end()`. `for (T x : values)` and `for (T& x : values)` over `std::array` work, and the reference form writes the elements. The loop keeps the array path untouched: it is taken only when the range is an identifier whose frontend type is a record with both members, and the cursor and limit calls feed a pointer comparison instead of an integer index.
 - **2026-11-13T22:46:47-08:00** — The loop variable has to carry the declaration's frontend type into `declare_local`, not `nullptr`: with a null frontend type the identifier path treated `element` as the pointer it is stored as, so `element * 2` multiplied a `ptr<i32>`, which the verifier reported as *integer binary operation has mismatched types*. The `std_array` fixture now uses both loop forms where it used to walk an index.
 - **2026-11-13T22:46:47-08:00** — This closes the range-for entry in the handoff's known-gaps list; the remaining entries are assignment through a reference-returning call and overloaded member functions.
+- **2026-11-13T23:23:29-08:00** — `std::array` compares. Subscripting a record through a **reference** was the blocker: the identifier path required `frontend_type->kind == Record`, and a `const array&` is a pointer-to-record with `is_reference`, so `other[index]` fell through to the pointer case and lowered a `getelementptr` into a struct, which crashed krc with an access violation. A `record_object_type` helper unwraps the reference at both subscript sites, so `s[i]` and `s[i] = v` reach `operator[]` through a reference, a const reference, or a direct object. `array` gains `operator==` and `operator!=`, written as element loops through the const `operator[]`; `std_array.cpp` compares equal, unequal, and `!=` both ways.
+- **2026-11-13T23:23:29-08:00** — Two limits the comparison work exposed, recorded rather than fixed. A binary operator does not resolve to a *member* overload: `!(*this == other)` compared the two records as aggregates and the verifier rejected the `icmp`, which is why `operator!=` is written out as a loop. And `class_methods_` keeps one function per name, so the const and non-const `operator[]` share a slot; reads through either reach one of them, which is why the comparison is correct for reads but the two overloads do not yet mangle or dispatch distinctly.
+- **2026-11-13T23:23:29-08:00** — A staged sysroot makes a header edit invisible to the test suite: `krc_link_std_array` compiles against `build/<preset>/stage/sysroot`, so `sysroot/include/array` has to be restaged by rebuilding before the suite sees it. Building the fixture by hand with `-I sysroot/include` hides that.
