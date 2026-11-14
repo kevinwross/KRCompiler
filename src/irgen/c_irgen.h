@@ -182,6 +182,9 @@ private:
                               frontend::TypePtr element_type);
     // Calls a record's operator[] with an already-emitted object address, so
     // s[i] and (*this)[i] share one path.
+    [[nodiscard]] Expression binary_operator_call(ir::Function* method_function,
+                                                 Expression self,
+                                                 const frontend::AstNode& right);
     [[nodiscard]] Expression subscript_operator(ir::Function* function,
                                                  Expression self,
                                                  const frontend::AstNode& index_node,

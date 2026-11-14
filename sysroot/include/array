@@ -68,18 +68,7 @@ public:
         }
         return true;
     }
-    // Written out rather than as !(other == *this): a binary operator does
-    // not resolve to a member overload yet.
-    bool operator!=(const array& other) const {
-        size_t index = 0;
-        while (index < N) {
-            if ((*this)[index] != other[index]) {
-                return true;
-            }
-            index = index + 1;
-        }
-        return false;
-    }
+    bool operator!=(const array& other) const { return !(*this == other); }
 private:
     T __elements[N];
 };

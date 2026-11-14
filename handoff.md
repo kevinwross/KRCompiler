@@ -377,9 +377,9 @@ Three gaps block a complete `std::array`, each with a reproduction:
   the instance's tag (`inherited_class_name.cpp`, ADR 0032).
 - ~~A range-for over a class~~ — fixed: the loop uses the class's egin() and
   nd() and compares pointers, and the reference form writes the elements.
-- **Binary operators do not resolve to member overloads.** `a == b` compares
-  the two records as aggregates, so `operator!=` has to be written out rather
-  than as `!(a == b)`. `std::array`'s comparison works around it.
+- ~~Binary operators do not resolve to member overloads~~ — fixed for an
+  operand that names an object (`*this`, a member access): the record comes
+  from the address the operand names. A cast operand is not attempted.
 - **Overloaded member functions.** `class_methods_` keeps one function per
   name and the two `operator[]` overloads share a symbol, so const and
   non-const dispatch is not distinct. Reads work through either.

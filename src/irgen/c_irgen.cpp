@@ -5849,6 +5849,33 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
             }
         }
     }
+    // An operand that is not a name still resolves a member operator through
+    // the record its address names, so *this == other calls the member.
+    const auto left_kind = expression.children[0]->kind;
+    const bool left_names_object =
+        left_kind == frontend::AstKind::MemberExpression ||
+        (left_kind == frontend::AstKind::UnaryExpression &&
+         expression.children[0]->text == "*");
+    if (left_names_object) {
+        const auto method_name = "operator" + expression.text;
+        auto self = emit_lvalue(*expression.children[0]);
+        if (self.value && self.type) {
+            const auto record = ir_records_.find(self.type);
+            if (record != ir_records_.end() && record->second) {
+                const auto methods = class_methods_.find(record->second->tag);
+                if (methods != class_methods_.end()) {
+                    const auto found = methods->second.find(method_name);
+                    if (found != methods->second.end()) {
+                        auto result = binary_operator_call(
+                            found->second, self, *expression.children[1]);
+                        if (result.value) {
+                            return result;
+                        }
+                    }
+                }
+            }
+        }
+    }
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(expression.children[0]->text)) {
             if (local->frontend_type &&
@@ -5872,35 +5899,10 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                 }
                 if (method_function) {
                     auto self = emit_lvalue(*expression.children[0]);
-                    const auto ast_type = function_ast_types_.find(method_function);
-                    const bool reference_argument =
-                        ast_type != function_ast_types_.end() && ast_type->second &&
-                        !ast_type->second->parameters.empty() &&
-                        ast_type->second->parameters.front() &&
-                        ast_type->second->parameters.front()->is_reference;
-                    auto argument = reference_argument
-                                        ? emit_lvalue(*expression.children[1])
-                                        : emit_expression(*expression.children[1]);
-                    if (!self.value || !argument.value) {
-                        return {};
+                    if (self.value) {
+                        return binary_operator_call(method_function, self,
+                                                   *expression.children[1]);
                     }
-                    if (reference_argument && argument.value->type) {
-                        argument.type = argument.value->type;
-                    }
-                    if (self.value->type != method_function->type->parameters[0]) {
-                        self.value = builder_.create(
-                            ir::Opcode::BitCast, method_function->type->parameters[0],
-                            {self.value}, "op.this");
-                    }
-                    if (method_function->type->parameters.size() > 1) {
-                        argument.value = promote(
-                            argument.value, argument.type,
-                            method_function->type->parameters[1]);
-                    }
-                    auto* call = create_call_instruction(
-                        method_function, {self.value, argument.value},
-                        method_function->type->return_type, "operator.call");
-                    return {call, method_function->type->return_type};
                 }
                 if (auto* free_function = lookup_function(method_name)) {
                     const auto ast_type = function_ast_types_.find(free_function);
@@ -8994,6 +8996,39 @@ CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {   
             address.type};
 }
 
+// Calls a member operator with the already-emitted object address, so a
+// binary operator resolves the same way whether its left operand is a name or
+// an expression such as `*this`.
+CIRGen::Expression CIRGen::binary_operator_call(ir::Function* method_function,
+                                                Expression self,
+                                                const frontend::AstNode& right) {
+    const auto ast_type = function_ast_types_.find(method_function);
+    const bool reference_argument =
+        ast_type != function_ast_types_.end() && ast_type->second &&
+        !ast_type->second->parameters.empty() &&
+        ast_type->second->parameters.front() &&
+        ast_type->second->parameters.front()->is_reference;
+    auto argument = reference_argument ? emit_lvalue(right) : emit_expression(right);
+    if (!self.value || !argument.value) {
+        return {};
+    }
+    if (reference_argument && argument.value->type) {
+        argument.type = argument.value->type;
+    }
+    if (self.value->type != method_function->type->parameters[0]) {
+        self.value = builder_.create(ir::Opcode::BitCast,
+                                     method_function->type->parameters[0],
+                                     {self.value}, "op.this");
+    }
+    if (method_function->type->parameters.size() > 1) {
+        argument.value = promote(argument.value, argument.type,
+                                 method_function->type->parameters[1]);
+    }
+    auto* call = create_call_instruction(
+        method_function, {self.value, argument.value},
+        method_function->type->return_type, "operator.call");
+    return {call, method_function->type->return_type};
+}
 CIRGen::Expression CIRGen::subscript_operator(ir::Function* function,
                                               Expression self,
                                               const frontend::AstNode& index_node,
