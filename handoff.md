@@ -391,7 +391,18 @@ argument assignment was wrong.
 `remove`/`rename` come from `targets/kr16/runtime/fileio.c` over `host.s`.
 `stdout` and `stderr` are accessor calls, not globals, because a data pointer
 whose initialiser needs a relocation is not emitted on this profile. `SEEK_END`
-is refused: the host's seek is absolute and nothing exposes the size.
+is refused; see the entry below.
+
+## Open: an end-relative seek on KR16 positions but does not read
+
+`fseek(stream, -1, SEEK_END)` on a KR16 stream reports the right position
+(`ftell` gives 13 of a fourteen-byte file) and the following `fgetc`/`fread`
+returns end of file, while `fseek(stream, 13, SEEK_SET)` on the same file reads
+the byte correctly. `SEEK_END` is therefore refused. The next probe calls
+`krc16_sys_seek` and `krc16_sys_read` directly to separate the wrapper from the
+stream layer; the three probes already run are recorded in `implementation.md`
+under 2026-11-14T12:30:52-08:00.
+
 ## Known front-end gaps
 
 Three gaps block a complete `std::array`, each with a reproduction:
