@@ -1,6 +1,7 @@
 #include "irgen/c_irgen.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -3919,21 +3920,29 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 Expression target;
                 if (init->children[1]->kind ==
                     frontend::AstKind::CallExpression) {
+                    // A record value is its address, and a reference-returning
+                    // call answers with one, so the binding names the object
+                    // rather than a copy of it (ADR 0036).
                     auto value = emit_expression(*init->children[1]);
                     if (value.value && value.type &&
-                        value.type->kind == ir::TypeKind::Struct) {
-                        auto* storage = builder_.create_alloca(
-                            value.type, 0, "reference.temp");
-                        builder_.create_store(value.value, storage);
-                        target.value = storage;
+                        (value.type->kind == ir::TypeKind::Struct ||
+                         (address->type && address->type->element &&
+                          ir::same_type(value.type,
+                                         address->type->element)))) {
+                        target.value = value.value;
                         target.type = value.type;
                     }
                 } else {
                     target = emit_lvalue(*init->children[1]);
                 }
                 if (target.value) {
+                    // The slot is a pointer to the referenced type, so the value
+                    // stored into it is compared with the slot's element. Two
+                    // structurally identical IR types are the same type even when
+                    // the pointers differ (ADR 0036).
                     if (address->type && address->type->element &&
-                        target.value->type != address->type->element) {
+                        !ir::same_type(target.value->type,
+                                       address->type->element)) {
                         target.value = builder_.create(
                             ir::Opcode::BitCast, address->type->element,
                             {target.value}, "reference.cast");
@@ -7871,7 +7880,15 @@ CIRGen::Expression CIRGen::reference_result(ir::Value* call, ir::Function* calle
         !ast_type->second->return_type->is_reference) {
         return {call, result_type};
     }
-    // The callee returned the address of a reference; a value context reads it.
+    // A reference-returning call answers with the address of the object (ADR
+    // 0036). A record value is its address in this IR, so a record keeps it;
+    // only a scalar or floating element is read, because a value context wants
+    // the value there.
+    if (result_type->element &&
+        (result_type->element->kind == ir::TypeKind::Struct ||
+         result_type->element->kind == ir::TypeKind::Array)) {
+        return {call, result_type};
+    }
     return {builder_.create_load(result_type->element, call, false, 0,
                                  "reference.result"),
             result_type->element};
@@ -8212,14 +8229,19 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             } else {
                 if (member.children.front()->kind ==
                     frontend::AstKind::CallExpression) {
+                    // A record value is its address, and a reference-returning
+                    // call answers with one, so the member is read through it
+                    // rather than through a copy (ADR 0036).
                     auto value = emit_expression(*member.children.front());
-                    if (value.value && value.type &&
-                        value.type->kind == ir::TypeKind::Struct) {
-                        auto* storage = builder_.create_alloca(
-                            value.type, 0, "this.temp");
-                        builder_.create_store(value.value, storage);
-                        base.value = storage;
-                        base.type = value.type;
+                    if (value.value && value.type) {
+                        base.value = value.value;
+                        base.type = value.type->kind == ir::TypeKind::Pointer &&
+                                            value.type->element
+                                        ? value.type->element
+                                        : value.type;
+                        if (base.type && base.type->kind != ir::TypeKind::Struct) {
+                            base = {};
+                        }
                     }
                 } else {
                     base = emit_lvalue(*member.children.front());
@@ -8696,14 +8718,16 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
     } else {
         if (expression.children.front()->kind ==
             frontend::AstKind::CallExpression) {
+            // A record value is its address here, and a reference-returning
+            // call answers with one, so the member is read through the object
+            // the call named (ADR 0036).
             auto value = emit_expression(*expression.children.front());
-            if (value.value && value.type &&
-                value.type->kind == ir::TypeKind::Struct) {
-                auto* storage =
-                    builder_.create_alloca(value.type, 0, "member.temp");
-                builder_.create_store(value.value, storage);
-                base.value = storage;
-                base.type = value.type;
+            if (value.value && value.type) {
+                base.value = value.value;
+                base.type = value.type->kind == ir::TypeKind::Pointer &&
+                                    value.type->element
+                                ? value.type->element
+                                : value.type;
             }
         } else {
             base = emit_lvalue(*expression.children.front());

@@ -1,10 +1,6 @@
-// A function that returns a reference hands the caller the object it names: a
-// caller that copies gets the value, and a template that does the same works the
-// same way. Returns 42.
-//
-// Binding a reference variable to such a call is a recorded defect: the binding
-// names a copy rather than the object, so this fixture reads through a returned
-// reference without storing one.
+// A function that returns a reference hands the caller the object it names, so a
+// binding aliases it and a write through the call reaches it. A copy of the
+// return is the value. ADR 0036. Returns 42.
 
 int& first_of(int* values) { return values[0]; }
 
@@ -38,15 +34,28 @@ int main() {
         return 3;
     }
 
-    // A record reference return reads the object it names.
+    // A binding names the object, so a change through the object is visible.
     Item item;
     item.value = 11;
-    if (pick(item).value != 11) {
+    Item& named = pick(item);
+    if (named.value != 11) {
         return 4;
     }
     item.value = 13;
-    if (pick(item).value != 13) {
+    if (named.value != 13) {
         return 5;
+    }
+
+    // A write through the binding reaches the object.
+    named.value = 17;
+    if (item.value != 17) {
+        return 6;
+    }
+
+    // A write through the call itself reaches it too.
+    pick(item).value = 19;
+    if (item.value != 19) {
+        return 7;
     }
     return 42;
 }

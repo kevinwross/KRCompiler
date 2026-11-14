@@ -1,6 +1,6 @@
 # 0036 — How a reference is represented
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-14
 - Decision: what a record value is in IR, what a reference slot holds, and what a
   reference-returning call answers with
@@ -41,6 +41,17 @@ the expression outside its scopes.
    floating element, where a value context genuinely wants the value.
 4. Type comparisons in IR generation that decide whether a cast is needed use
    `ir::same_type`, never `TypePtr` equality.
+
+## Implementation note
+
+The missing piece was one level of indirection: a reference slot's type is
+`ptr<ptr<T>>`, so the value stored into it is compared with `address->type->element`.
+Four attempts compared or cast at `address->type` and produced no store at all.
+With the comparison at the element, `Item& named = pick(item)` aliases its object,
+`pick(item).value = 9` writes it, and the recorded gap in `handoff.md` --
+assignment through a reference-returning call -- is closed. Both member paths that
+read or address a member of such a call had to stop allocating a temporary for a
+record the call already answered with.
 
 ## Consequences
 
