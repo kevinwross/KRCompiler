@@ -1,0 +1,49 @@
+#pragma once
+
+// The standard exception classes the subset needs, each holding a message and
+// reporting it from `what()`. They derive from `std::exception`, so a handler
+// that catches `std::exception&` also catches these.
+
+#include <exception>
+
+namespace std {
+
+class logic_error : public exception {
+public:
+    explicit logic_error(const char* message) : __message(message) {}
+    const char* what() const override { return __message; }
+
+private:
+    const char* __message;
+};
+
+class runtime_error : public exception {
+public:
+    explicit runtime_error(const char* message) : __message(message) {}
+    const char* what() const override { return __message; }
+
+private:
+    const char* __message;
+};
+
+class out_of_range : public logic_error {
+public:
+    explicit out_of_range(const char* message) : logic_error(message) {}
+};
+
+class invalid_argument : public logic_error {
+public:
+    explicit invalid_argument(const char* message) : logic_error(message) {}
+};
+
+class length_error : public logic_error {
+public:
+    explicit length_error(const char* message) : logic_error(message) {}
+};
+
+class overflow_error : public runtime_error {
+public:
+    explicit overflow_error(const char* message) : runtime_error(message) {}
+};
+
+}  // namespace std

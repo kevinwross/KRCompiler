@@ -446,6 +446,15 @@ if(TARGET krc)
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/destructor_scopes_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    add_test(NAME krc_link_std_array
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/std_array.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/std_array_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
     add_test(NAME krc_link_logical_operators
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -1006,6 +1015,14 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_destructor_scopes PROPERTIES
             DEPENDS krc_link_destructor_scopes)
+        add_test(NAME krc_run_std_array
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/std_array_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_std_array PROPERTIES
+            DEPENDS krc_link_std_array)
         add_test(NAME krc_run_logical_operators
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}

@@ -171,6 +171,14 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
                     is_value = true;
                     ++position_;
                 }
+                // A type named by a typedef before the parameter's own name
+                // (size_t N) is a value parameter too.
+                if (peek().kind == TokenKind::Identifier &&
+                    is_typedef_name(peek().text) &&
+                    peek(1).kind == TokenKind::Identifier) {
+                    is_value = true;
+                    ++position_;
+                }
                 if (peek().kind == TokenKind::Identifier &&
                     (peek().text == "typename" || peek().text == "class")) {
                     ++position_;
@@ -729,13 +737,23 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             const bool type_position =
                 after.kind == TokenKind::Identifier || after.is("*") ||
                 after.is("&") || after.is("const") ||
-                after.is("volatile");
+                after.is("volatile") ||
+                (after.is("<") &&
+                 class_names_.count(peek(offset).text) != 0);
             if (type_position &&
                 is_typedef_name(peek(offset).text) &&
                 peek(offset).text != token.text) {
                 auto qualified = peek(offset).text;
                 position_ += offset + 1;
                 node->labels.push_back(std::move(qualified));
+                // std::array<int, 4> is a qualified template-id (ADR 0033).
+                if (check("<")) {
+                    const auto arguments = parse_template_argument_list();
+                    node->labels.push_back("template-id");
+                    for (const auto& argument : arguments) {
+                        node->labels.push_back("template-arg:" + argument);
+                    }
+                }
                 saw_specifier = true;
                 continue;
             }
@@ -1581,6 +1599,9 @@ bool Parser::is_declaration_start() const {
             offset += 2;
         }
         const auto& after = peek(offset + 1);
+        if (after.is("<") && class_names_.count(peek(offset).text) != 0) {
+            return true;
+        }
         return after.kind == TokenKind::Identifier || after.is("*") ||
                after.is("&") || after.is("const") ||
                after.is("volatile");
@@ -1614,7 +1635,22 @@ bool Parser::is_type_name_start() const {
         (is_type_specifier(token.text) || is_qualifier(token.text) || token.text == "_Alignas")) {
         return true;
     }
-    return token.kind == TokenKind::Identifier && is_typedef_name(token.text);
+    if (token.kind == TokenKind::Identifier && is_typedef_name(token.text)) {
+        return true;
+    }
+    // std::array<int, 4> starts a declaration when the last component of the
+    // qualified name is a class and a < follows it.
+    if (cxx_mode_ && token.kind == TokenKind::Identifier && peek(1).is("::")) {
+        std::size_t offset = 2;
+        while (peek(offset + 1).is("::") &&
+               peek(offset + 2).kind == TokenKind::Identifier) {
+            offset += 2;
+        }
+        return peek(offset).kind == TokenKind::Identifier &&
+               class_names_.count(peek(offset).text) != 0 &&
+               peek(offset + 1).is("<");
+    }
+    return false;
 }
 
 std::unique_ptr<AstNode> Parser::parse_statement() {

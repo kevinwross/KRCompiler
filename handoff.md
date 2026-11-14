@@ -306,6 +306,18 @@ A scope may hold several destructible objects: each unwinding point protects
 the objects built before it, a return, break, or continue destroys the scopes it
 leaves without consuming them, and the pad chain is disjoint so nothing is
 destroyed twice ([ADR 0027](docs/decisions/0027-exception-cleanup.md)).
+## std::array
+
+`std::array<T, N>` lives in `sysroot/include/array` and is built on the class
+template and value-parameter forms: the storage is a plain array member, so its
+layout is `T[N]`. `operator[]`, `data`, `size`, `empty`, and `fill` work.
+`<stdexcept>` provides `logic_error`, `runtime_error`, `out_of_range`,
+`invalid_argument`, `length_error`, and `overflow_error`.
+
+Three front-end gaps keep it from being complete, each reproduced in the log:
+a member function returning `T&` is not dereferenced when read as a value, the
+injected class name inside a template class body is not a type, and a range-for
+over a class is rejected.
 ## Non-type template parameters
 
 `template <typename T, int N>` works for class templates: the parameter is
