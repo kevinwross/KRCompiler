@@ -443,7 +443,12 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
             // Qualifiers and function specifiers do not affect the value type here.
         } else if (const auto class_pattern = templates_.find(label);
                    class_pattern != templates_.end() &&
-                   class_pattern->second.is_class) {
+                   class_pattern->second.is_class &&
+                   class_instances_.find(label) == class_instances_.end() &&
+                   std::any_of(specifiers.labels.begin(), specifiers.labels.end(),
+                               [](const std::string& argument_label) {
+                                   return argument_label.rfind("template-arg:", 0) == 0;
+                               })) {
             // Box<double> instantiates the class template; the pattern's own
             // record stands for the unparameterised spelling (ADR 0032).
             std::vector<std::string> arguments;
@@ -568,10 +573,6 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
     if (!base) {
         if (specifiers.labels.empty() && specifiers.children.empty()) {
             return void_type_;
-        }
-        if (std::find(specifiers.labels.begin(), specifiers.labels.end(), "auto") ==
-            specifiers.labels.end()) {
-            error(specifiers.location, "declaration requires a type specifier");
         }
         base = int_type_;
     }
@@ -1459,6 +1460,24 @@ bool parse_integer_text(const std::string& text, long long& value) {
 
 // Replaces every reference to a value parameter with its number, so the
 // instance's array bounds and expressions are literals (ADR 0033).
+// Rewrites the injected class name of a pattern into the instance's tag, so
+// `C* self()` inside `C<int>` means `C__int*` (ADR 0032).
+void rewrite_instance_tag(AstNode& node, const std::string& from,
+                          const std::string& to) {
+    for (auto& label : node.labels) {
+        if (label == from) {
+            label = to;
+        }
+    }
+    if (node.kind == AstKind::Identifier && node.text == from) {
+        node.text = to;
+    }
+    for (auto& child : node.children) {
+        if (child) {
+            rewrite_instance_tag(*child, from, to);
+        }
+    }
+}
 void substitute_value_parameters(
     AstNode& node, const std::unordered_map<std::string, long long>& values) {
     for (auto& child : node.children) {
@@ -1537,6 +1556,12 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // A value parameter becomes a literal in the instance, so its array bounds
     // and expressions are ordinary integer constants (ADR 0033).
     substitute_value_parameters(*clone, value_bindings);
+    // The injected class name inside the pattern means the instance.
+    for (auto& member : clone->children) {
+        if (member) {
+            rewrite_instance_tag(*member, tag, instance_tag);
+        }
+    }
 
     // A constructor or destructor is recognised by its class's name, so the
     // instance's members must carry the instance's tag (ADR 0032).

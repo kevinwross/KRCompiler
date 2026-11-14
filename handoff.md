@@ -371,12 +371,10 @@ Three gaps block a complete `std::array`, each with a reproduction:
   returned the call's address from `emit_lvalue` produced *store type does not
   match its pointer* in a fixture that otherwise compiles; the failing store was
   not identified, so the change was reverted.
-- **The injected class name inside a template class body.**
-  `template <typename T> class C { public: C* self(); };` fails with
-  *declaration requires a type specifier*; the same body in a plain class
-  compiles. The parser registers the name (traced) and Sema's `record_type`
-  declares the tag and typedef before members, so the cause is elsewhere;
-  instrument `base_type_from_specifiers` next.
+- ~~The injected class name inside a template class body~~ — fixed: the
+  class-template branch of type resolution consumed a bare `C` and never
+  reached the typedef, and the instance clone now rewrites the injected name to
+  the instance's tag (`inherited_class_name.cpp`, ADR 0032).
 - **A range-for over a class.** Only bounded built-in arrays are accepted.
 
 `array<T, N>` written in a template *signature* also needs a pattern's value

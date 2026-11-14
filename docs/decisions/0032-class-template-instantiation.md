@@ -36,6 +36,15 @@ types, which is the only moment an instance's bindings are active.
   (`Box__int`, `~Box__int`). A constructor or destructor is recognised by
   comparing its name with its class's name, so an unrenamed instance would get
   an ordinary member function instead of construction or destruction.
+- The injected class name inside the pattern means the *instance*: the clone
+  rewrites every label and identifier equal to the pattern's tag into the
+  instance's tag, so C* self() and const C& other in C<int> name
+  C__int. Before that rewrite the member resolved to the pattern's own type.
+- A class-template name with no template arguments is not an instantiation: the
+  label resolves through the ordinary typedef the pattern's record declares.
+  Without that distinction a bare C consumed the label and left the
+  declaration with no type, and re-entering a pattern whose instance is already
+  being built recursed until the stack overflowed.
 - Instances are cached by their tag, not by the spelled arguments, so `Box<int>`
   and a reference through the parameter (`Box<T>` inside the instance) are one
   record. The tag is entered in the cache before the analysis so a member that
