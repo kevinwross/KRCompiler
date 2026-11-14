@@ -452,6 +452,18 @@ Three gaps block a complete `std::array`, each with a reproduction:
 `array<T, N>` written in a template *signature* also needs a pattern's value
 argument to resolve through the stub binding, which is the missing piece for
 free comparison operators on `std::array`.
+## Two open defects in class templates
+
+A class template's **pattern emits its members under the instantiated name**: the
+generated assembly for `build/corpus/mt.cpp` contains
+`Box__int_ctor_1_rvalue` twice, and `krld` resolves the duplicate without a
+diagnostic. Separately, a **move constructor does not clear its source**:
+`Box(Box&& other) { value = other.value; other.value = 0; }` leaves the caller's
+object unchanged, although the IR and the assembly both contain the store
+through `%other.ref` and the caller passes the address of the original object.
+Start from the duplicate definition; the argument binding and the stream layer
+are both correct in the IR.
+
 ## Debug display names
 
 `.debug_info` `F` records carry a display name, so a C++ dump shows
