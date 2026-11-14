@@ -362,7 +362,10 @@ operator decision; the notes say so rather than implying it exists.
 
 Three gaps block a complete `std::array`, each with a reproduction:
 
-- **Assignment through a reference-returning call.** `values.front() = 11`
+- **Assignment through a reference-returning call.**
+  (The literal-to-const T& case that used to sit here is fixed: a temporary
+  is materialized, so alues.fill(5) works.)
+ `values.front() = 11`
   writes a temporary; `emit_lvalue` builds one for every call. The value form
   works, so reads through `front`, `back`, and `at` are fine. An attempt that
   returned the call's address from `emit_lvalue` produced *store type does not

@@ -27,10 +27,9 @@ int main() {
         return 3;
     }
 
-    // `fill` writes every element; the value is an object because a literal
-    // cannot bind to a reference parameter yet.
-    int five = 5;
-    values.fill(five);
+    // `fill` writes every element; the literal binds to its const reference
+    // through a temporary.
+    values.fill(5);
     if (values[0] != 5 || values[3] != 5) {
         return 4;
     }

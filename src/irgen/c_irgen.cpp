@@ -8093,9 +8093,33 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                         ast_type->second->parameters[index]->is_reference) {
                         reference_parameter = true;
                     }
-                    auto argument = reference_parameter
-                                        ? emit_lvalue(*argument_nodes[index])
-                                        : emit_expression(*argument_nodes[index]);
+                    Expression argument;
+                    if (reference_parameter) {
+                        // Only an addressable argument is bound directly; an
+                        // rvalue bound to a const reference lives in a temporary.
+                        const auto kind = argument_nodes[index]->kind;
+                        const bool addressable =
+                            kind == frontend::AstKind::Identifier ||
+                            kind == frontend::AstKind::MemberExpression ||
+                            kind == frontend::AstKind::SubscriptExpression ||
+                            (kind == frontend::AstKind::UnaryExpression &&
+                             argument_nodes[index]->text == "*");
+                        if (addressable) {
+                            argument = emit_lvalue(*argument_nodes[index]);
+                        }
+                        if (!argument.value) {
+                            auto value = emit_expression(*argument_nodes[index]);
+                            if (value.value && value.type) {
+                                auto* storage =
+                                    builder_.create_alloca(value.type, 0,
+                                                       "argument.temporary");
+                                builder_.create_store(value.value, storage);
+                                argument = {storage, value.type};
+                            }
+                        }
+                    } else {
+                        argument = emit_expression(*argument_nodes[index]);
+                    }
                     if (!argument.value) {
                         return {};
                     }
@@ -8361,7 +8385,27 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     argument.type = value.type;
                 }
             } else {
-                argument = emit_lvalue(*argument_nodes[index]);
+                // Only an addressable argument is bound directly; an rvalue
+                // bound to a const reference lives in a temporary.
+                const auto kind = argument_nodes[index]->kind;
+                const bool addressable =
+                    kind == frontend::AstKind::Identifier ||
+                    kind == frontend::AstKind::MemberExpression ||
+                    kind == frontend::AstKind::SubscriptExpression ||
+                    (kind == frontend::AstKind::UnaryExpression &&
+                     argument_nodes[index]->text == "*");
+                if (addressable) {
+                    argument = emit_lvalue(*argument_nodes[index]);
+                }
+                if (!argument.value) {
+                    auto value = emit_expression(*argument_nodes[index]);
+                    if (value.value && value.type) {
+                        auto* storage = builder_.create_alloca(value.type, 0,
+                                                             "argument.temporary");
+                        builder_.create_store(value.value, storage);
+                        argument = {storage, value.type};
+                    }
+                }
             }
         } else {
             argument = emit_expression(*argument_nodes[index]);
