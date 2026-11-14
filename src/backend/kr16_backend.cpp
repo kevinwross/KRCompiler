@@ -516,6 +516,13 @@ void Kr16Backend::emit_function(std::string& out,
                 }
                 out += "    JMP .L" + function.name + ".ret\n";
                 break;
+            case ir::Opcode::Unreachable:
+                // Nothing branches here. Jumping to the function's return keeps
+                // the instruction stream well formed, and a path that reaches it
+                // is a program that had no defined behaviour anyway. A 	hrow`r
+                // in a header such as <stdexcept> ends its function this way.
+                out += "    JMP .L" + function.name + ".ret\n";
+                break;
             default:
                 error = "KR16 backend does not support opcode " +
                         std::string(ir::opcode_name(instruction->opcode));
