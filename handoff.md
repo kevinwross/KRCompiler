@@ -410,15 +410,18 @@ defect that `krc -c` would reject. Rule 9 of [`docs/ir.md`](docs/ir.md) covers a
 `ret` matching the function's return type, and two unit tests in
 `tests/unit/test_ir.cpp` pin it. Do not infer a missing verifier rule from a dump.
 
-## Open: an end-relative seek on KR16 positions but does not read
+## Open: a KR16 seek leaves the descriptor unreadable
 
-`fseek(stream, -1, SEEK_END)` on a KR16 stream reports the right position
-(`ftell` gives 13 of a fourteen-byte file) and the following `fgetc`/`fread`
-returns end of file, while `fseek(stream, 13, SEEK_SET)` on the same file reads
-the byte correctly. `SEEK_END` is therefore refused. The next probe calls
-`krc16_sys_seek` and `krc16_sys_read` directly to separate the wrapper from the
-stream layer; the three probes already run are recorded in `implementation.md`
-under 2026-11-14T12:30:52-08:00.
+A seek on a KR16 file descriptor is accepted and then the following read returns
+zero bytes. `krc16_sys_seek(fd, 0)` reports success (status 0, position 0) and
+`krc16_sys_read(fd, buffer, 1)` then returns 0 on a five-byte file; a read before
+any seek returns its byte. That is the **host service**, not this compiler: the
+probe calls the wrappers directly with no stream layer, and the wrappers already
+pass `fd`, the offset low and high words, and a zero whence in the service block.
+The sibling VM is a read-only input, so it is reported rather than fixed; the
+reproduction is `build/corpus/rawseek2.c` in a working tree of this commit.
+`SEEK_END` and `fsetpos` stay refused until it works, and the size they need is
+available from `SYS #6` (STAT) at offsets 4 and 6.
 
 ## Known front-end gaps
 
