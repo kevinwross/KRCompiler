@@ -453,7 +453,7 @@ Three gaps block a complete `std::array`, each with a reproduction:
 argument to resolve through the stub binding, which is the missing piece for
 free comparison operators on `std::array`.
 
-## A class-template body resolves its parameters to the stub
+## A class-template body's declarations resolve to the stub
 
 Inside a class template's member body, a template argument is deduced from the
 **pattern's stub type**, not from the instance's. `~unique_ptr()` calls
@@ -468,9 +468,13 @@ destructor to a function template still destroys nothing because the delegation
 is instantiated with `i16`. A class-template destructor that only counts is
 unaffected.
 
-This is the stub-binding limitation ADR 0032 records, with its consequence for
-owning class templates: `std::unique_ptr` cannot be correct until a
-class-template body resolves template arguments from the instance.
+This was the stub-binding limitation ADR 0032 records. It is **fixed for
+declarations**: Sema records the type each declaration resolved to while the
+binding is active and `declaration_type` returns it, so `T local;` inside
+`Holder<Item>` is six bytes rather than two. [ADR 0035](docs/decisions/0035-class-template-member-bodies.md)
+records the cause and the fix, and `<memory>` works as a result. One case is
+still open: `delete` on a **member** of type `T*` frees without destroying,
+while copying the member into a local first destroys correctly.
 
 ## A copy and a move constructor of one arity
 

@@ -54,7 +54,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 
 **This section authorises local commits without asking, and authorises pushing when a gate passes.**
 
-- Commit after each coherent change, once the tier it required is green. Local commits need no permission.
+- Batch local commits rather than committing each change: hold a commit until five functional changes have accumulated, or the change to source and tests passes 180 lines, whichever comes first. Documentation (implementation.md, handoff.md, docs/) does not count toward that total. A batch is committed once the tier it required is green, and the regression tests covering the batch are run before the commit. Local commits need no permission.
 - **Push when — and only when — a host gate passes.** A gate is tier 3 above: clean builds for every configuration this host can reach. Do not push on a working change, a partial matrix, or a judgement that it "looks good".
 - A tier 2 change stays local until the next gate, unless the operator asks for it to be published.
 - **Tidy unpublished history before pushing** if that produces a clearer record — squash fixups, reorder, reword. That rewrites only commits nobody has seen.

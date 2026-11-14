@@ -1290,6 +1290,12 @@ std::optional<Sema::GlobalSymbol> Sema::global_symbol(std::string_view name) con
 }
 
 TypePtr Sema::declaration_type(const AstNode& specifiers, const AstNode* declarator) {
+    if (declarator != nullptr) {
+        if (const auto recorded = declarator_types_.find(declarator);
+            recorded != declarator_types_.end() && recorded->second) {
+            return recorded->second;
+        }
+    }
     bool is_typedef = false;
     bool is_extern = false;
     bool is_static = false;
@@ -1822,6 +1828,9 @@ void Sema::analyze_declaration(const AstNode& declaration) {
             declaration_base = analyze_initializer(*init->children[1], nullptr);
         }
         auto type = build_declarator_type(*declarator, declaration_base);
+        // Recorded while the bindings are active, for a later reader that would
+        // otherwise see the pattern's stub (ADR 0035).
+        declarator_types_.emplace(declarator, type);
         if (!is_typedef && type && type->kind == TypeKind::Record && type->record &&
             record_is_abstract(*type->record)) {
             error(declarator->location,

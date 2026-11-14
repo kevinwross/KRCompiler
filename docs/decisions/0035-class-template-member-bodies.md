@@ -1,6 +1,6 @@
 # 0035 — A class-template instance's member bodies resolve its parameters
 
-- Status: proposed
+- Status: accepted (implementation note below)
 - Date: 2026-11-14
 - Decision: a member body of a class-template instance is analysed against the
   instance's bindings, not the pattern's stub
@@ -51,6 +51,23 @@ The analysis has one pass per instantiation, keyed by the instance's AST nodes,
 so the pattern's own analysis of the same body cannot supply the instance's
 types. The pattern keeps its stub analysis, which is what makes a pattern usable
 through its bare name.
+
+## Implementation note
+
+The defect was a **re-derivation**, not a missing analysis. `record_type` does
+analyse an instance's member bodies while the binding is active, but IR
+generation then asks for a local declaration's type again, after the bindings are
+gone, and the second answer — the pattern's stub — is the one the backend sees.
+Sema now records the type a declaration resolved to and `declaration_type`
+returns it, which is what ADR 0032 already promised for member types. With that,
+`T local;` inside `Holder<Item>` is six bytes rather than two, and
+`std::unique_ptr` destroys its object: `tests/fixtures/c/unique_ptr.cpp` returns
+42 on KR16 and `krc_link_unique_ptr` links it for KR32.
+
+One case remains open: `delete` on a **member** of type `T*` inside a class
+template still frees without destroying (a probe that copies the member into a
+local first destroys correctly). The object destructor itself is right; the
+remaining gap is in how the delete operand's type is read for a member access.
 
 ## Consequences
 

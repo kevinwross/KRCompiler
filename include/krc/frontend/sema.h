@@ -206,6 +206,10 @@ private:
     bool auto_return_active_ = false;
     TypePtr auto_return_type_;
     std::unordered_map<const AstNode*, TypePtr> expression_types_;
+    // The type a declaration resolved to while its bindings were active. A
+    // class-template instance's body is analysed then, so re-deriving the type
+    // later would resolve a parameter to the pattern's stub (ADR 0035).
+    std::unordered_map<const AstNode*, TypePtr> declarator_types_;
     // The type each `typeid` operand was analysed with. IR generation runs
     // after the function's scopes are gone, so it cannot re-analyse the
     // operand and must read the recorded type.
