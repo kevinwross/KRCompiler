@@ -4760,6 +4760,15 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                     }
                 }
             }
+            // A record with no conversion is not a return value. Reporting it
+            // here keeps the call from being emitted a second time by the
+            // generic path below, which returned a record from an integer
+            // function and left invalid IR behind.
+            error(statement.location,
+                  "the returned record has no conversion to the return type");
+            emit_cleanups();
+            builder_.create_ret(nullptr);
+            return;
         }
     }
     if (current_function_->type && current_function_->type->return_type &&

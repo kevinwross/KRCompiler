@@ -496,6 +496,23 @@ if(TARGET krc)
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
     # A call in a return statement runs once. The forwarding wrapper in the
     # fixture is the shape that exposed a second, discarded call.
+    add_test(NAME krc_link_side_effects_once
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/side_effects_once.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/side_effects_once_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+    add_test(NAME krc_cxx_return_record_no_conversion
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/return_record_no_conversion.cpp
+                -DEXPECT=the returned record has no conversion to the return type
+                -DOBJECT=${KRC_TEST_OUTPUT_DIR}/return_record_no_conversion.kro
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
     add_test(NAME krc_link_return_call_once
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -1199,6 +1216,14 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_div_and_vsprintf PROPERTIES
             DEPENDS krc_link_div_and_vsprintf)
+        add_test(NAME krc_run_side_effects_once
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/side_effects_once_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_side_effects_once PROPERTIES
+            DEPENDS krc_link_side_effects_once)
         add_test(NAME krc_run_return_call_once
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}
