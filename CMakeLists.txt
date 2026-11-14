@@ -144,11 +144,18 @@ if(KRC_BUILD_TOOLS)
     krc_apply_sanitizers(krc_extract_fixtures)
 
     if(KRC_BUILD_TARGET_RUNTIME)
+        # Each staged object is written under a temporary name and renamed into
+        # place. A reader that opens the final path must never see a partially
+        # written object: a truncated read makes `krld` report a KRO CRC
+        # mismatch on a runtime that is in fact correct.
         add_custom_target(krc_target_runtime_kr32 ALL
             COMMAND ${CMAKE_COMMAND} -E make_directory "${KRC_STAGE_RUNTIME}"
             COMMAND $<TARGET_FILE:krc> --target=kr32 -c
                     "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr32/runtime/libc.c"
-                    -o "${KRC_STAGE_RUNTIME}/libkrcrt.kro"
+                    -o "${KRC_STAGE_RUNTIME}/libkrcrt.kro.new"
+            COMMAND ${CMAKE_COMMAND} -E rename
+                    "${KRC_STAGE_RUNTIME}/libkrcrt.kro.new"
+                    "${KRC_STAGE_RUNTIME}/libkrcrt.kro"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr32/runtime/crt0.s"
                     "${KRC_STAGE_RUNTIME}/crt0.s"
@@ -160,10 +167,25 @@ if(KRC_BUILD_TOOLS)
             COMMAND ${CMAKE_COMMAND} -E make_directory "${KRC_STAGE_RUNTIME_KR16}"
             COMMAND $<TARGET_FILE:krc> --target=kr16 -c --emit-object
                     "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr16/runtime/libc.c"
-                    -o "${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro"
+                    -o "${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro.new"
+            COMMAND ${CMAKE_COMMAND} -E rename
+                    "${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro.new"
+                    "${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr16/runtime/crt0.s"
                     "${KRC_STAGE_RUNTIME_KR16}/crt0.s"
+            COMMAND $<TARGET_FILE:krc> --target=kr16 -c --emit-object
+                    "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr16/runtime/host.s"
+                    -o "${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro.new"
+            COMMAND ${CMAKE_COMMAND} -E rename
+                    "${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro.new"
+                    "${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro"
+            COMMAND $<TARGET_FILE:krc> --target=kr16 -c --emit-object
+                    "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr16/runtime/fileio.c"
+                    -o "${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro.new"
+            COMMAND ${CMAKE_COMMAND} -E rename
+                    "${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro.new"
+                    "${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro"
             COMMENT "Building the staged KR16 runtime"
             VERBATIM)
         add_dependencies(krc_target_runtime_kr16 krc krc_stage_sysroot)

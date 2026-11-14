@@ -9,8 +9,10 @@
 ; on failure, so a caller can distinguish a value of zero from an error. Status
 ; zero is success; the file services report errors 1..13.
 ;
-; Arguments follow the KR16 scalar ABI: the first three travel in R1-R3 and the
-; result returns in R0.
+; Arguments follow the KR16 scalar ABI: the first three words travel in R1-R3 and
+; the result returns in R0. Every wrapper therefore stays inside three argument
+; words, which is why krc16_sys_seek is absolute only: a relative seek is the
+; caller's own arithmetic against the stream position.
 
         .text
 
@@ -134,7 +136,7 @@ krc16_sys_write:
         POP R4
         RET
 
-; long krc16_sys_seek(int fd, long offset, int whence);
+; long krc16_sys_seek(int fd, long offset);
 ; The offset travels as a low and a high word, and the position returns as two
 ; words, so a caller declares a 32-bit long.
         .global krc16_sys_seek
@@ -145,10 +147,8 @@ krc16_sys_seek:
         ST [R4 - 8], R1
         ST [R4 - 6], R2
         ST [R4 - 4], R3
-        ; The fourth argument arrives on the stack, two bytes above the saved
-        ; frame pointer.
-        LD R0, [R4 + 4]
-        ST [R4 - 2], R0
+        MOV R1, #0
+        ST [R4 - 2], R1
         LEA R0, [R4 - 16]
         SYS #5
         LD R1, [R4 - 16]
