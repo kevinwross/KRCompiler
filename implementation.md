@@ -395,10 +395,9 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 ### M10 — v1.1 language/runtime completion (8–10 weeks)
 
 - [x] Table-driven exceptions and unwinding; RTTI/`dynamic_cast`/`typeid`. Table-driven descriptors and the unwinder with destructor cleanup ([ADR 0026](docs/decisions/0026-exception-descriptors.md), [ADR 0027](docs/decisions/0027-exception-cleanup.md)), and RTTI with `typeid`, pointer and reference `dynamic_cast` ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)).
-- [ ] Templates: function templates deduce and instantiate per type, and class templates instantiate per type ([ADR 0032](docs/decisions/0032-class-template-instantiation.md)); one destructible object per scope remains the limit until the cleanup-pad defect recorded in ADR 0027 is fixed.
-
+- [x] Templates: function templates deduce and instantiate per type, class templates instantiate per type ([ADR 0032](docs/decisions/0032-class-template-instantiation.md)), and non-type parameters are carried as values ([ADR 0033](docs/decisions/0033-non-type-template-parameters.md)). The injected class name resolves to the instance. Still open: variadic templates and fold expressions, partial specialisation, member templates, and explicit template arguments on a class template.
 - [ ] Dynamic `thread_local` initialization/destruction.
-- [ ] `memory`, `tuple`, `functional`, `array`.
+- [ ] `memory`, `tuple`, `functional`. `array` is complete for this milestone: `operator[]` in both constness, `at` with `out_of_range`, `front`, `back`, `data`, `size`, `empty`, `fill`, `begin`/`end`, and `==`/`!=`.
 
 **M10 evidence (in progress):**
 
