@@ -2282,6 +2282,7 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     local_cleanups_.clear();
     cleanup_marks_.clear();
     scope_pads_.clear();
+    cleanup_pads_.clear();
     current_landing_pad_ = nullptr;
 
     frontend::TypePtr frontend_function_type;
@@ -2575,6 +2576,10 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
         }
     }
 
+    // Every pad is emitted now that the body's blocks exist; a pad's cleanups
+    // are the objects that existed at the point it was created.
+    emit_cleanup_pads();
+
     pop_scope();
     scopes_.clear();
     current_function_ = nullptr;
@@ -2669,8 +2674,8 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         auto* condition = emit_condition(*statement.children[0]);
         builder_.create_cond_br(condition, body_block, end_block);
         builder_.set_insert_point(body_block);
-        break_targets_.push_back(end_block);
-        continue_targets_.push_back(condition_block);
+        break_targets_.push_back({end_block, local_cleanups_.size()});
+        continue_targets_.push_back({condition_block, local_cleanups_.size()});
         emit_statement(*statement.children[1]);
         break_targets_.pop_back();
         continue_targets_.pop_back();
@@ -2688,8 +2693,8 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         auto* end_block = current_function_->add_block("do.end");
         emit_branch(body_block);
         builder_.set_insert_point(body_block);
-        break_targets_.push_back(end_block);
-        continue_targets_.push_back(condition_block);
+        break_targets_.push_back({end_block, local_cleanups_.size()});
+        continue_targets_.push_back({condition_block, local_cleanups_.size()});
         emit_statement(*statement.children[0]);
         break_targets_.pop_back();
         continue_targets_.pop_back();
@@ -2794,8 +2799,8 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
                 builder_.create_load(element_ir, element, false, 0, "range.load");
             builder_.create_store(loaded, value_address);
         }
-        break_targets_.push_back(end_block);
-        continue_targets_.push_back(increment_block);
+        break_targets_.push_back({end_block, local_cleanups_.size()});
+        continue_targets_.push_back({increment_block, local_cleanups_.size()});
         emit_statement(*statement.children[3]);
         break_targets_.pop_back();
         continue_targets_.pop_back();
@@ -2837,8 +2842,8 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
             builder_.create_br(body_block);
         }
         builder_.set_insert_point(body_block);
-        break_targets_.push_back(end_block);
-        continue_targets_.push_back(increment_block);
+        break_targets_.push_back({end_block, local_cleanups_.size()});
+        continue_targets_.push_back({increment_block, local_cleanups_.size()});
         emit_statement(*statement.children[3]);
         break_targets_.pop_back();
         continue_targets_.pop_back();
@@ -2856,14 +2861,16 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         if (break_targets_.empty()) {
             error(statement.location, "break outside a loop");
         } else {
-            emit_branch(break_targets_.back());
+            emit_cleanups_for_exit(break_targets_.back().mark);
+            emit_branch(break_targets_.back().block);
         }
         break;
     case frontend::AstKind::ContinueStatement:
         if (continue_targets_.empty()) {
             error(statement.location, "continue outside a loop");
         } else {
-            emit_branch(continue_targets_.back());
+            emit_cleanups_for_exit(continue_targets_.back().mark);
+            emit_branch(continue_targets_.back().block);
         }
         break;
     case frontend::AstKind::NullStatement:
@@ -2971,7 +2978,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         push_scope();
         const auto mark = local_cleanups_.size();
         cleanup_marks_.push_back(mark);
-        break_targets_.push_back(end_block);
+        break_targets_.push_back({end_block, local_cleanups_.size()});
         for (const auto& child : body->children) {
             if (!child) {
                 continue;
@@ -3103,6 +3110,14 @@ void CIRGen::emit_cleanups_to(std::size_t mark) {
     emit_cleanup_sequence(cleanups);
 }
 
+void CIRGen::emit_cleanups_for_exit(std::size_t mark) {
+    std::vector<LocalCleanup> cleanups;
+    for (std::size_t index = local_cleanups_.size(); index > mark; --index) {
+        cleanups.push_back(local_cleanups_[index - 1]);
+    }
+    emit_cleanup_sequence(cleanups);
+}
+
 void CIRGen::emit_cleanup_sequence(const std::vector<LocalCleanup>& cleanups) {
     for (const auto& cleanup : cleanups) {
         if (!cleanup.address || !cleanup.destructor ||
@@ -3165,7 +3180,7 @@ void CIRGen::emit_compound(const frontend::AstNode& compound) {
     push_scope();
     const auto mark = local_cleanups_.size();
     cleanup_marks_.push_back(mark);
-    scope_pads_.push_back({mark, nullptr, owned_landing_pad(current_landing_pad_)});
+    scope_pads_.push_back({mark, owned_landing_pad(current_landing_pad_)});
     std::function<bool(const frontend::AstNode&)> contains_label =
         [&](const frontend::AstNode& node) {
         if (node.kind == frontend::AstKind::LabelStatement) {
@@ -3188,30 +3203,6 @@ void CIRGen::emit_compound(const frontend::AstNode& compound) {
         }
     }
     auto& scope = scope_pads_.back();
-    if (scope.pad) {
-        // Emit the scope's cleanup pad before the normal path consumes the
-        // entries: it runs the same destructors in reverse construction order
-        // and continues unwinding.
-        std::vector<LocalCleanup> cleanups;
-        for (std::size_t index = local_cleanups_.size(); index > mark; --index) {
-            cleanups.push_back(local_cleanups_[index - 1]);
-        }
-        auto* previous_block = builder_.insert_block();
-        builder_.set_insert_point(scope.pad);
-        auto* landing = builder_.create_landingpad("cleanup.exception");
-        const auto byte_type = module_->types().int_type(8);
-        const auto byte_pointer = module_->types().pointer_type(byte_type);
-        auto* object_slot = builder_.create_gep(
-            byte_type, landing, {module_->constant_int(int_type(), 0)}, false,
-            "cleanup.object.slot");
-        object_slot->type = module_->types().pointer_type(byte_pointer);
-        auto* exception = builder_.create_load(byte_pointer, object_slot, false, 0,
-                                               "cleanup.exception");
-        current_landing_pad_ = scope.enclosing;
-        emit_cleanup_sequence(cleanups);
-        emit_resume(exception);
-        builder_.set_insert_point(previous_block);
-    }
     // Destructor calls on the normal path are protected by the enclosing pad:
     // this scope's own pad exists for unwinding into, not for the exit path.
     current_landing_pad_ = scope.enclosing;
@@ -3231,16 +3222,82 @@ ir::BasicBlock* CIRGen::owned_landing_pad(ir::BasicBlock* pad) const {
 }
 
 void CIRGen::note_scope_cleanup() {
-    if (scope_pads_.empty()) {
+    if (scope_pads_.empty() || !current_function_) {
         return;
     }
-    auto& scope = scope_pads_.back();
-    if (scope.pad) {
+    // The pad covers the objects that exist now, not the ones the scope will
+    // declare later: a construction point can unwind before they exist.
+    CleanupPad pad;
+    pad.block = current_function_->add_block("cleanup.pad");
+    pad.enclosing = owned_landing_pad(current_landing_pad_);
+    // The enclosing chain already destroys what it covers, so this pad takes the
+    // rest; without that, one object would be destroyed twice.
+    std::size_t base = 0;
+    for (const auto& existing : cleanup_pads_) {
+        if (existing.block == pad.enclosing) {
+            base = existing.covered;
+            break;
+        }
+    }
+    for (std::size_t index = local_cleanups_.size(); index > base; --index) {
+        pad.cleanups.push_back(local_cleanups_[index - 1]);
+    }
+    pad.covered = local_cleanups_.size();
+    current_landing_pad_ = pad.block;
+    cleanup_pads_.push_back(std::move(pad));
+}
+
+void CIRGen::emit_cleanup_pads() {
+    if (!current_function_) {
+        cleanup_pads_.clear();
         return;
     }
-    scope.enclosing = owned_landing_pad(current_landing_pad_);
-    scope.pad = current_function_->add_block("cleanup.pad");
-    current_landing_pad_ = scope.pad;
+    // A pad that no terminator unwinds into is dead: it has no predecessors, so
+    // nothing in the function dominates it and its destructor calls would use
+    // values from the entry block. It still needs a terminator.
+    std::unordered_set<const ir::BasicBlock*> targeted;
+    for (const auto& block : current_function_->blocks) {
+        const auto* terminator = block->terminator();
+        if (!terminator) {
+            continue;
+        }
+        for (const auto* successor : terminator->successors) {
+            if (successor) {
+                targeted.insert(successor);
+            }
+        }
+        if (terminator->default_successor) {
+            targeted.insert(terminator->default_successor);
+        }
+    }
+    for (auto& pad : cleanup_pads_) {
+        if (!pad.block) {
+            continue;
+        }
+        if (targeted.count(pad.block) == 0) {
+            auto* previous_block = builder_.insert_block();
+            builder_.set_insert_point(pad.block);
+            builder_.create_unreachable();
+            builder_.set_insert_point(previous_block);
+            continue;
+        }
+        auto* previous_block = builder_.insert_block();
+        builder_.set_insert_point(pad.block);
+        auto* landing = builder_.create_landingpad("cleanup.exception");
+        const auto byte_type = module_->types().int_type(8);
+        const auto byte_pointer = module_->types().pointer_type(byte_type);
+        auto* object_slot = builder_.create_gep(
+            byte_type, landing, {module_->constant_int(int_type(), 0)}, false,
+            "cleanup.object.slot");
+        object_slot->type = module_->types().pointer_type(byte_pointer);
+        auto* exception = builder_.create_load(byte_pointer, object_slot, false, 0,
+                                               "cleanup.exception");
+        current_landing_pad_ = pad.enclosing;
+        emit_cleanup_sequence(pad.cleanups);
+        emit_resume(exception);
+        builder_.set_insert_point(previous_block);
+    }
+    cleanup_pads_.clear();
 }
 
 void CIRGen::emit_resume(ir::Value* exception) {
@@ -4581,7 +4638,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                                         current_function_->type->return_type,
                                         {value}, "reference.return");
             }
-            emit_cleanups();
+            emit_cleanups_for_exit(0);
             builder_.create_ret(value);
             return;
         }
@@ -4631,7 +4688,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                         auto* converted = promote(
                             call, method->second->type->return_type,
                             return_type);
-                        emit_cleanups();
+                        emit_cleanups_for_exit(0);
                         builder_.create_ret(converted);
                         return;
                     }
@@ -4681,7 +4738,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                             auto* converted = promote(
                                 call, method->second->type->return_type,
                                 current_function_->type->return_type);
-                            emit_cleanups();
+                            emit_cleanups_for_exit(0);
                             builder_.create_ret(converted);
                             return;
                         }
@@ -4701,7 +4758,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
             auto* loaded = builder_.create_load(
                 current_function_->type->return_type, storage, false, 0,
                 "return.record");
-            emit_cleanups();
+            emit_cleanups_for_exit(0);
             builder_.create_ret(loaded);
             return;
         }
@@ -4739,7 +4796,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
                         auto* loaded = builder_.create_load(
                             current_function_->type->return_type, storage,
                             false, 0, "return.record");
-                        emit_cleanups();
+                        emit_cleanups_for_exit(0);
                         builder_.create_ret(loaded);
                         return;
                     }
@@ -4751,7 +4808,7 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
     auto* converted = promote(value.value, value.type,
                               current_function_->type ? current_function_->type->return_type
                                                       : nullptr);
-    emit_cleanups();
+    emit_cleanups_for_exit(0);
     builder_.create_ret(converted);
 }
 
@@ -9119,6 +9176,7 @@ void CIRGen::emit_throw(const frontend::AstNode& statement) {
     const auto byte_pointer = module_->types().pointer_type(byte_type);
     if (statement.children.empty() || !statement.children.front()) {
         auto* rethrow = ensure_runtime_function("__cxa_rethrow", void_type, {});
+        note_scope_cleanup();
         create_call_instruction(rethrow, {}, void_type, "rethrow");
         builder_.create_unreachable();
         return;
@@ -9148,6 +9206,9 @@ void CIRGen::emit_throw(const frontend::AstNode& statement) {
     auto* typeinfo = builder_.create(ir::Opcode::BitCast, byte_pointer,
                                      {ensure_typeinfo(*record->second)},
                                      "exception.type");
+    // The throw unwinds through the objects that are live here, so its call site
+    // needs a pad holding them (ADR 0027).
+    note_scope_cleanup();
     create_call_instruction(throw_function,
                             {object, typeinfo, module_->constant_null(byte_pointer)},
                             void_type, "throw");

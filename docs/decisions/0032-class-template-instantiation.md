@@ -64,10 +64,9 @@ types, which is the only moment an instance's bindings are active.
   specialisation, and a member template are not supported. Each is a separate
   decision, and none is approximated: the parser consumes `Box<int, 4>` but the
   instantiation rejects the argument that has no type.
-- The instance's destructor participates in the ordinary cleanup machinery, so
-  the pre-existing defect that a scope holding two or more destructible objects
-  fails the IR verifier applies to instances too. It is recorded against
-  [ADR 0027](0027-destructor-cleanup.md) rather than worked around here.
+- The instance's destructor participates in the ordinary cleanup machinery of
+  [ADR 0027](0027-destructor-cleanup.md), so a scope may hold several instances
+  and their destructors run in reverse construction order.
 
 ## Alternatives considered
 

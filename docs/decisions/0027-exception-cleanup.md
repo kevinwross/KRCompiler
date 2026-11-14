@@ -51,25 +51,23 @@ the return address at the resume call site.
   that check a generated constructor branched to a block of the caller's
   function and failed the verifier.
 
-## Known defect
+## Pads are per construction point
 
-A scope holding two or more destructible objects does not compile: the scope's
-cleanup pad is created at the first construction that can unwind and filled at
-scope exit, so an invoke emitted for the second object unwinds into a pad that
-destroys objects declared after it, and the IR verifier reports *instruction
-does not dominate its use*. Three ordinary objects reproduce it without
-templates:
+A pad protects exactly the objects built before the point that can unwind, not
+the whole scope: it is created when a construction needs protection and its
+snapshot is the cleanups active at that moment. A single pad per scope cannot
+work, because it would be filled with locals declared after the invoke that
+targets it — the IR verifier rejects the use of an alloca from a block the pad
+does not dominate, and destroying them would be wrong anyway. Pads are emitted
+once the function's blocks exist, and one that no terminator unwinds into is
+terminated as unreachable: it has no predecessors, so nothing dominates it and
+its destructors would reference the entry block.
 
-```cpp
-struct Box { int value; Box() : value(0) {} ~Box() {} };
-int main() { Box a; Box b; Box c; return 0; }
-```
+`destructor_scopes.cpp` holds three objects in one scope, nested scopes, an
+early return, and a loop whose body is left by `continue`. A `return`, `break`,
+or `continue` emits the cleanups of the scopes it exits **without consuming
+them**; the fall-through path still reaches the scope's exit and runs its own.
 
-The fix is a pad per construction point whose snapshot is the objects built
-before it. A first attempt (one pad per construction, emitted eagerly) and a
-second (one pad per construction, emitted at scope exit) both left a pad whose
-resume invokes into a pad that does not dominate it, so the change needs the pad
-chain rebuilt as an explicit stack instead of the single `enclosing` field.
 ## Consequences
 
 - `try`/`throw` runs live destructors during unwinding: reverse order, nested

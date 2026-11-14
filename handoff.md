@@ -302,10 +302,10 @@ take its own instance by reference, and `Pair<int, double>` and
 outside the class body, a non-type parameter, a default argument, partial
 specialisation, and a member template.
 
-A scope with two or more destructible objects does not compile — a
-pre-existing cleanup-pad defect recorded in
-[ADR 0027](docs/decisions/0027-exception-cleanup.md), not a template problem;
-three ordinary objects reproduce it.
+A scope may hold several destructible objects: each unwinding point protects
+the objects built before it, a return, break, or continue destroys the scopes it
+leaves without consuming them, and the pad chain is disjoint so nothing is
+destroyed twice ([ADR 0027](docs/decisions/0027-exception-cleanup.md)).
 ## Function templates
 
 `template <typename T>` deduces and instantiates: an all-int call still resolves

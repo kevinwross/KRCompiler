@@ -117,10 +117,24 @@ private:
     struct LocalCleanup;
     struct ScopePad {
         std::size_t mark = 0;
-        ir::BasicBlock* pad = nullptr;
         ir::BasicBlock* enclosing = nullptr;
     };
     std::vector<ScopePad> scope_pads_;
+    // One pad per point that can unwind, each with the cleanups active at that
+    // point. A single pad per scope cannot work: it is created before the later
+    // locals exist and would destroy them from a block they do not dominate.
+    struct CleanupPad {
+        ir::BasicBlock* block = nullptr;
+        std::vector<LocalCleanup> cleanups;
+        ir::BasicBlock* enclosing = nullptr;
+        // How many entries of local_cleanups_ this pad and its chain cover,
+        // so a later pad destroys only what the chain has not covered yet.
+        std::size_t covered = 0;
+    };
+    std::vector<CleanupPad> cleanup_pads_;
+    // Emits every pad's landing pad, its destructors, and its resume, once the
+    // function's blocks are known.
+    void emit_cleanup_pads();
     // Creates the current scope's pad on its first destructible local, so a
     // call before that point is still protected by the enclosing pad.
     void note_scope_cleanup();
@@ -130,6 +144,10 @@ private:
     [[nodiscard]] ir::BasicBlock* owned_landing_pad(ir::BasicBlock* pad) const;
     // Runs a list of cleanups in the given (already reverse-declaration) order.
     void emit_cleanup_sequence(const std::vector<LocalCleanup>& cleanups);
+    // Emits the cleanups from mark to the end without consuming them: a
+    // return path destroys what is live but leaves the list for the fall-through
+    // path, which still reaches the scope's exit.
+    void emit_cleanups_for_exit(std::size_t mark);
     // Continues unwinding from a pad: into the enclosing pad when there is one,
     // otherwise out of the frame.
     void emit_resume(ir::Value* exception);
@@ -277,8 +295,14 @@ private:
     bool in_constructor_ = false;
     std::vector<const frontend::AstNode*> definitions_;
     std::vector<std::unordered_map<std::string, LocalBinding>> scopes_;
-    std::vector<ir::BasicBlock*> break_targets_;
-    std::vector<ir::BasicBlock*> continue_targets_;
+    // A jump target also names the cleanup count at the loop it leaves, so a
+    // break or continue destroys the objects of the scopes it exits.
+    struct JumpTarget {
+        ir::BasicBlock* block = nullptr;
+        std::size_t mark = 0;
+    };
+    std::vector<JumpTarget> break_targets_;
+    std::vector<JumpTarget> continue_targets_;
     std::unordered_map<std::string, ir::BasicBlock*> labels_;
     ir::Function* current_function_ = nullptr;
     ir::IRBuilder builder_;
