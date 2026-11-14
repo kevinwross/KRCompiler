@@ -78,6 +78,7 @@ What was rejected and why.
 - [0033-non-type-template-parameters.md](0033-non-type-template-parameters.md) — accepted; a parameter written int N becomes a literal in the instance, tagged Buffer__int__4.
 - [0034-integer-literals-on-narrow-targets.md](0034-integer-literals-on-narrow-targets.md) — accepted; types an integer literal per C11 on a narrow profile and diagnoses one that fits no type, and records that a 64-bit value still cannot be carried.
 - [0035-class-template-member-bodies.md](0035-class-template-member-bodies.md) — accepted; a declaration records the type it resolved to while the instance's bindings are active, so a body no longer sees the pattern's stub type.
+- [0036-reference-representation.md](0036-reference-representation.md) — proposed; a record value is its address, a reference slot holds an address, and a reference-returning call answers with one, so binding names the object.
 ame__tag.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
