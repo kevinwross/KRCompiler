@@ -296,11 +296,10 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 `template <typename T>` deduces and instantiates: an all-int call still resolves
 to the definition the parser substituted, and any other deduced type clones the
 body into `name__tag` (`add__double`) ([ADR 0031](docs/decisions/0031-function-template-instantiation.md)).
-Deduction is one level (`T`, `T*`, `T&`, `const T&`, array decay for pointers),
-every parameter must be deduced, and explicit template arguments
-(`add<double>(1, 2)`) are parsed but do not influence deduction. Class
-templates, variadic templates, fold expressions, and partial specialization are
-not implemented.
+Deduction is one level (`T`, `T*`, `T&`, `const T&`, array decay for pointers)
+and every parameter must be deduced unless an explicit argument list binds it:`add<double>(1, 2)` and `convert<int>(2.75)` instantiate the named type and
+deduce the rest. Class templates, variadic templates, fold expressions, and
+partial specialization are not implemented.
 ## Thread storage
 
 C++ `thread_local` and C11 `_Thread_local` share static storage on the

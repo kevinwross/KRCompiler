@@ -2185,16 +2185,41 @@ std::unique_ptr<AstNode> Parser::parse_postfix_tail(std::unique_ptr<AstNode> exp
             expression->kind == AstKind::Identifier) {
             const auto saved = position_;
             ++position_;
+            // Explicit template arguments are kept on the call so a deduction
+            // can be overridden: dd<double>(1, 2) instantiates for double
+            // (ADR 0031). Each argument is the token text between commas.
+            std::vector<std::string> explicit_arguments;
+            std::string current;
             int depth = 1;
             while (!at_end() && depth > 0) {
                 if (check("<")) {
                     ++depth;
                 } else if (check(">")) {
                     --depth;
+                    if (depth == 0) {
+                        ++position_;
+                        break;
+                    }
+                } else if (check(",") && depth == 1) {
+                    explicit_arguments.push_back(current);
+                    current.clear();
+                    ++position_;
+                    continue;
                 }
+                if (!current.empty()) {
+                    current += " ";
+                }
+                current += peek().text;
                 ++position_;
             }
+            if (!current.empty()) {
+                explicit_arguments.push_back(current);
+            }
             if (depth == 0 && check("(")) {
+                expression->labels.push_back("template-id");
+                for (const auto& argument : explicit_arguments) {
+                    expression->labels.push_back("template-arg:" + argument);
+                }
                 continue;
             }
             position_ = saved;

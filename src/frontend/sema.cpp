@@ -1333,8 +1333,33 @@ const AstNode* function_name_declarator(const AstNode& declarator) {
 
 }  // namespace
 
-std::string Sema::instantiate_template_call(const AstNode& callee,
-                                            const std::vector<TypePtr>& arguments) {
+TypePtr Sema::template_argument_type(const std::string& spelling) const {
+    // The spelling is turned back into specifier labels so the one place that
+    // maps labels to types stays authoritative.
+    auto specifiers = make_ast(AstKind::DeclSpecifiers, SourceLocation{});
+    std::string word;
+    for (const auto character : spelling) {
+        if (character == ' ') {
+            if (!word.empty()) {
+                specifiers->labels.push_back(word);
+                word.clear();
+            }
+            continue;
+        }
+        word += character;
+    }
+    if (!word.empty()) {
+        specifiers->labels.push_back(word);
+    }
+    if (specifiers->labels.empty()) {
+        return nullptr;
+    }
+    return const_cast<Sema*>(this)->type_from_specifiers(*specifiers);
+}
+
+std::string Sema::instantiate_template_call(
+    const AstNode& callee, const std::vector<std::string>& explicit_arguments,
+    const std::vector<TypePtr>& arguments) {
     const auto pattern = templates_.find(callee.text);
     if (pattern == templates_.end() || !pattern->second.definition ||
         pattern->second.definition->children.size() < 2 ||
@@ -1343,6 +1368,20 @@ std::string Sema::instantiate_template_call(const AstNode& callee,
     }
     const auto& parameters = pattern->second.definition->children[1]->children;
     std::unordered_map<std::string, TypePtr> bindings;
+    // An explicit argument list overrides deduction: parameter i is bound to
+    // the spelled type, and only the rest are deduced from the call.
+    std::unordered_set<std::string> explicit_bound;
+    for (std::size_t index = 0;
+         index < explicit_arguments.size() &&
+         index < pattern->second.parameters.size();
+         ++index) {
+        const auto bound = template_argument_type(explicit_arguments[index]);
+        if (!bound) {
+            return {};
+        }
+        bindings.emplace(pattern->second.parameters[index], bound);
+        explicit_bound.insert(pattern->second.parameters[index]);
+    }
     std::size_t argument_index = 0;
     for (std::size_t index = 1; index < parameters.size(); ++index) {
         const auto* parameter = parameters[index].get();
@@ -1359,6 +1398,10 @@ std::string Sema::instantiate_template_call(const AstNode& callee,
                                  label) != pattern->second.parameters.end();
             });
         if (template_parameter == labels.end()) {
+            argument_index++;
+            continue;
+        }
+        if (explicit_bound.count(*template_parameter) != 0) {
             argument_index++;
             continue;
         }
@@ -2603,8 +2646,15 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         // A template callee with a non-int deduction instantiates its pattern
         // and the call targets that definition (ADR 0031).
         if (callee && callee->kind == AstKind::Identifier) {
+            std::vector<std::string> explicit_arguments;
+            for (const auto& label : callee->labels) {
+                constexpr std::string_view prefix = "template-arg:";
+                if (label.rfind(prefix, 0) == 0) {
+                    explicit_arguments.push_back(label.substr(prefix.size()));
+                }
+            }
             const auto instantiated =
-                instantiate_template_call(*callee, argument_types);
+                instantiate_template_call(*callee, explicit_arguments, argument_types);
             if (!instantiated.empty()) {
                 call_targets_[&expression] = instantiated;
                 if (const auto* instantiated_symbol = lookup_ordinary(instantiated)) {

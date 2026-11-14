@@ -230,7 +230,11 @@ private:
     // returns the instantiated function's name, or empty when the callee is not
     // a template or the pattern is outside the supported subset (ADR 0031).
     [[nodiscard]] std::string instantiate_template_call(
-        const AstNode& callee, const std::vector<TypePtr>& arguments);
+        const AstNode& callee, const std::vector<std::string>& explicit_arguments,
+        const std::vector<TypePtr>& arguments);
+    // Resolves the spelling of an explicit template argument (double) to a
+    // type, or null when it is not a type this front end knows.
+    [[nodiscard]] TypePtr template_argument_type(const std::string& spelling) const;
     // Non-zero while a catch body is being analysed; `throw;` needs a handler.
     int handler_depth_ = 0;
     void check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr source);

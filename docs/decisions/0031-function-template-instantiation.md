@@ -46,6 +46,11 @@ by AST node, so two instances cannot share one body: each needs its own copy.
   `ptr_<tag>`, arrays `array_<tag>`. Instances are weak definitions like other
   inline functions, so two translation units that instantiate the same type
   agree.
+- An explicit argument list is kept on the call as `template-arg:<spelling>`
+  labels; a named parameter is bound to that type and the parameters the list
+  does not name are deduced from the arguments. The spelling is resolved through
+  the same specifier table the declaration path uses, so `unsigned long` and a
+  class name both work.
 - The call records the resolved instance, and code generation emits a direct
   call to it and generates the instantiation's definition.
 
@@ -53,14 +58,16 @@ by AST node, so two instances cannot share one body: each needs its own copy.
 
 - `add`, `maximum`, `doubled`, and `first_of` work for `int`, `double`, and
   `char` in one translation unit, and `krc_run_template_functions` requires exit
-  art 42 across ten checks. Two templates may share the name `T`.
+  status 42 across fourteen checks. Two templates may share the name `T`.
 - The int instance keeps its old symbol (`add`), so existing objects and the
   fixtures that relied on the substitution still link.
+- An explicit argument list binds the parameters it names, and the rest are
+  still deduced, so `convert<int>(2.75)` instantiates `convert__int_double`. A
+  spelling that does not resolve to a type instantiates nothing and the call
+  falls back to the int definition.
 - The supported deduction is one level deep: a parameter that needs a nested
-  pattern (`T**`, `T* const*`, `const T&` returning through a conversion) is not
-  matched. Explicit template arguments (`add<double>(1, 2)`) are parsed and
-  ignored, so such a call deduces from the argument types instead. Both are
-  recorded as limitations rather than approximated.
+  pattern (`T**`, `T* const*`, or a deduction through a conversion) is not
+  matched. That limit is recorded rather than approximated.
 - Class templates, partial specialization, variadic templates, and fold
   expressions are separate decisions.
 

@@ -23,6 +23,11 @@ T first_of(T* values) {
     return values[0];
 }
 
+template <typename To, typename From>
+To convert(From value) {
+    return (To)value;
+}
+
 int main() {
     // The all-int call uses the definition the parser substitutes.
     if (add(3, 4) != 7) {
@@ -66,6 +71,21 @@ int main() {
     reals[1] = 2.5;
     if (first_of(reals) != 1.5) {
         return 9;
+    }
+
+    // An explicit argument list overrides deduction, and the parameters the
+    // list does not name are still deduced.
+    if (add<double>(1, 2) != 3.0) {
+        return 11;
+    }
+    if (add<int>(2.5, 3.5) != 5) {
+        return 12;
+    }
+    if (convert<int>(2.75) != 2) {
+        return 13;
+    }
+    if (convert<double>(7) != 7.0) {
+        return 14;
     }
 
     // Calling an instance again reuses it rather than defining another.
