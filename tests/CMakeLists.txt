@@ -496,6 +496,15 @@ if(TARGET krc)
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
     # A call in a return statement runs once. The forwarding wrapper in the
     # fixture is the shape that exposed a second, discarded call.
+    add_test(NAME krc_link_arrow_operator
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/arrow_operator.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/arrow_operator_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
     add_test(NAME krc_link_side_effects_once
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -1216,6 +1225,14 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_div_and_vsprintf PROPERTIES
             DEPENDS krc_link_div_and_vsprintf)
+        add_test(NAME krc_run_arrow_operator
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/arrow_operator_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_arrow_operator PROPERTIES
+            DEPENDS krc_link_arrow_operator)
         add_test(NAME krc_run_side_effects_once
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}

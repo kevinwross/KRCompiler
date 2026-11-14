@@ -3077,6 +3077,31 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         const bool arrow = !expression.labels.empty() && expression.labels.front() == "->";
         if (arrow) {
             base = decay(base);
+            // A class may overload the arrow; the member then lives in the
+            // record the operator returns.
+            if (base && base->kind == TypeKind::Record && base->record) {
+                for (const auto* record = base->record.get(); record != nullptr;
+                     record = record->base && record->base->record
+                                  ? record->base->record.get()
+                                  : nullptr) {
+                    bool found = false;
+                    for (const auto& method : record->methods) {
+                        if (method.name != "operator->" || !method.type ||
+                            !method.type->return_type) {
+                            continue;
+                        }
+                        const auto returned = method.type->return_type;
+                        base = returned->kind == TypeKind::Pointer && returned->element
+                                   ? returned->element
+                                   : returned;
+                        found = true;
+                        break;
+                    }
+                    if (found) {
+                        break;
+                    }
+                }
+            }
             if (base && base->kind == TypeKind::Pointer) {
                 base = base->element;
             }

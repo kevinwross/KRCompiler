@@ -8141,9 +8141,11 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             Expression base;
             ir::TypePtr record_type = nullptr;
             if (arrow) {
-                base = emit_expression(*member.children.front());
-                if (base.type && base.type->kind == ir::TypeKind::Pointer) {
-                    record_type = base.type->element;
+                base = arrow_base(*member.children.front(), record_type);
+                if (!base.value) {
+                    error(expression.location,
+                          "member access on a non-record pointer");
+                    return {};
                 }
             } else {
                 if (member.children.front()->kind ==
@@ -8579,13 +8581,11 @@ CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expressio
     ir::Value* record_address = nullptr;
     const frontend::RecordInfo* source_record = nullptr;
     if (arrow) {
-        base = emit_expression(*expression.children.front());
-        if (!base.value || !base.type || base.type->kind != ir::TypeKind::Pointer ||
-            !base.type->element || base.type->element->kind != ir::TypeKind::Struct) {
+        base = arrow_base(*expression.children.front(), record_type);
+        if (!base.value) {
             error(expression.location, "member access on a non-record pointer");
             return {};
         }
-        record_type = base.type->element;
         record_address = base.value;
         if (expression.children.front()->kind ==
             frontend::AstKind::Identifier) {
@@ -9094,6 +9094,64 @@ ir::Function* CIRGen::dereference_overload(const Expression& object) {
     const auto method = methods->second.find("operator*");
     return method == methods->second.end() ? nullptr : method->second;
 }
+
+// A record that overloads `operator->` answers `owner->member` with that member;
+// `nullptr` means the operand is not such a record.
+ir::Function* CIRGen::arrow_overload(const Expression& object) {
+    if (!object.value || !object.type) {
+        return nullptr;
+    }
+    const auto record = ir_records_.find(object.type);
+    if (record == ir_records_.end() || !record->second) {
+        return nullptr;
+    }
+    const auto methods = class_methods_.find(record->second->tag);
+    if (methods == class_methods_.end()) {
+        return nullptr;
+    }
+    const auto method = methods->second.find("operator->");
+    return method == methods->second.end() ? nullptr : method->second;
+}
+
+// Resolves the base of `a->member`: a pointer to a record, or the call an
+// overloaded `operator->` makes. `record_type` receives the record whose member
+// is named. Returns an empty expression when the base is neither.
+CIRGen::Expression CIRGen::arrow_base(const frontend::AstNode& operand,
+                                      ir::TypePtr& record_type) {
+    auto base = emit_expression(operand);
+    if (!base.value || !base.type) {
+        return {};
+    }
+    if (base.type->kind == ir::TypeKind::Pointer && base.type->element &&
+        base.type->element->kind == ir::TypeKind::Struct) {
+        record_type = base.type->element;
+        return base;
+    }
+    auto* overload = arrow_overload(base);
+    if (overload == nullptr || overload->type->parameters.empty()) {
+        return {};
+    }
+    auto object = emit_lvalue(operand);
+    if (!object.value) {
+        return {};
+    }
+    if (object.value->type != overload->type->parameters[0]) {
+        object.value = builder_.create(ir::Opcode::BitCast,
+                                       overload->type->parameters[0],
+                                       {object.value}, "arrow.this");
+    }
+    base.value = create_call_instruction(overload, {object.value},
+                                         overload->type->return_type,
+                                         "arrow.call");
+    base.type = overload->type->return_type;
+    if (base.type && base.type->kind == ir::TypeKind::Pointer &&
+        base.type->element && base.type->element->kind == ir::TypeKind::Struct) {
+        record_type = base.type->element;
+        return base;
+    }
+    return {};
+}
+
 CIRGen::Expression CIRGen::binary_operator_call(ir::Function* method_function,
                                                 Expression self,
                                                 const frontend::AstNode& right) {

@@ -185,6 +185,9 @@ private:
     [[nodiscard]] Expression unary_operator_call(ir::Function* method_function,
                                               Expression self,
                                               bool as_address);
+    [[nodiscard]] ir::Function* arrow_overload(const Expression& object);
+    [[nodiscard]] Expression arrow_base(const frontend::AstNode& operand,
+                                      ir::TypePtr& record_type);
     [[nodiscard]] ir::Function* dereference_overload(const Expression& object);
     [[nodiscard]] Expression binary_operator_call(ir::Function* method_function,
                                                  Expression self,
