@@ -452,17 +452,22 @@ Three gaps block a complete `std::array`, each with a reproduction:
 `array<T, N>` written in a template *signature* also needs a pattern's value
 argument to resolve through the stub binding, which is the missing piece for
 free comparison operators on `std::array`.
-## Two open defects in class templates
 
-A class template's **pattern emits its members under the instantiated name**: the
-generated assembly for `build/corpus/mt.cpp` contains
-`Box__int_ctor_1_rvalue` twice, and `krld` resolves the duplicate without a
-diagnostic. Separately, a **move constructor does not clear its source**:
-`Box(Box&& other) { value = other.value; other.value = 0; }` leaves the caller's
-object unchanged, although the IR and the assembly both contain the store
-through `%other.ref` and the caller passes the address of the original object.
-Start from the duplicate definition; the argument binding and the stream layer
-are both correct in the IR.
+## A class with a copy and a move constructor loses one
+
+Twelve lines reproduce it: a class template with `Box()`, `Box(Box&&)`, and
+`Box(const Box&)` generates `Box__int_ctor_1_rvalue` **twice** and never generates
+`Box__int_ctor_1_lvalue`, while the pattern correctly emits both kinds. So the
+copy constructor is not generated, the move constructor is, twice, and `krld`
+keeps one of the two — which is why a move that clears its source silently did
+nothing.
+
+The AST is correct before instantiation (`ReferenceDeclarator [rvalue]` on the
+move, `DeclSpecifiers [const] [Box]` on the copy). The collapse is in the
+instantiated record: constructors are keyed by name and arity (`Box#1`) and the
+value-category suffix is computed later per generated function instead of being
+part of the key. Fix that keying in Sema's recorded methods and look them up with
+it in IR generation. `build/corpus/dup4.cpp` is the reproduction.
 
 ## Debug display names
 
