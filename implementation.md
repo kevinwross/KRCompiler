@@ -500,6 +500,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T16:15:48-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 569/569
+windows-msvc-release  PASS 569/569
+linux-gcc-debug       PASS 523/523
+linux-gcc-release     PASS 523/523
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty-six tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers explicit template arguments ([ADR 0031](docs/decisions/0031-function-template-instantiation.md))
+and the extended template fixture. The rows ran one at a time, clean from
+deleted directories, with no warnings and no compiler crashes in any log.
+
 ### 2026-11-13T15:51:38-08:00 — host gate (Windows)
 
 ```text
@@ -2824,3 +2841,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T15:43:11-08:00** — Implemented function template deduction and instantiation ([ADR 0031](docs/decisions/0031-function-template-instantiation.md)). The parser still substitutes `int` for each parameter, so an all-int call resolves to the definition as before, and now also tags the definition with its parameter names; Sema keeps that pattern and, when a call deduces a different type, clones the body, binds the parameter, analyzes the clone at file scope, and names it `add__double`. The clone is needed because the recorded expression types are keyed by AST node. `template_functions.cpp` holds one template instantiated for `int`, `double`, and `char`, a pointer pattern deduced through array decay, a conditional whose branches are variables, and a repeated call that reuses an instance; `krc_run_template_functions` requires exit 42.
 - **2026-11-13T15:43:11-08:00** — Fixed two latent bugs the instances exposed. The conditional operator's temporary was an `i32` because its lowering inferred the result type from the operand shapes instead of asking Sema, so `left > right ? left : right` with doubles truncated through `fptosi`; Sema now records the operator's analysed type and code generation uses it. Two `template <typename T>` declarations in one translation unit collided on the substituted `typedef int T`, so the parser emits each stub once per name.
 - **2026-11-13T15:43:11-08:00** — Supported deduction is one level deep (`T`, `T*`, `T&`, `const T&`, with array decay for pointer parameters); every template parameter must be deduced, and explicit template arguments parse but do not influence deduction, so `add<double>(1, 2)` still deduces `int`. Those limits, and the untried class and variadic templates, are recorded in the ADR rather than approximated.
+- **2026-11-13T16:15:36-08:00** — Explicit template arguments override deduction. The parser used to skip `<double>` and discard it, so `add<double>(1, 2)` deduced `int` from its arguments; the call now keeps each argument as a `template-arg:<spelling>` label, and Sema binds the named parameters to those types while deducing the rest, so `convert<int>(2.75)` instantiates `convert__int_double`. A spelling is resolved through the same specifier table the declaration path uses, so `unsigned long` works as one argument.
+- **2026-11-13T16:15:36-08:00** — `template_functions.cpp` grew a two-parameter template and four explicit-argument checks (`add<double>(1, 2)`, `add<int>(2.5, 3.5)`, `convert<int>(2.75)`, `convert<double>(7)`) for fourteen checks in total; `krc_run_template_functions` still requires exit 42, and the whole Windows debug suite is 569/569. A spelling that does not resolve to a type instantiates nothing and the call falls back to the int definition, which the ADR records rather than approximating an error.
