@@ -500,6 +500,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T18:41:07-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 575/575
+windows-msvc-release  PASS 575/575
+linux-gcc-debug       PASS 526/526
+linux-gcc-release     PASS 526/526
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty-nine tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers non-type template parameters
+([ADR 0033](docs/decisions/0033-non-type-template-parameters.md)), the
+single-emission `!call()` fix, and the thread-local image rename that two tests
+shared. The rows ran one at a time, clean from deleted directories, with no
+warnings and no compiler crashes in any log.
+
 ### 2026-11-13T17:48:21-08:00 — host gate (Windows)
 
 ```text
@@ -2885,3 +2904,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T17:47:33-08:00** — Fixed the cleanup-pad defect recorded last round: a scope holding two or more destructible objects failed the IR verifier and, once it compiled, kept the wrong destructor list. Pads are now per unwinding point with the cleanups active at that point, the chain is disjoint (a pad destroys only what the enclosing chain has not covered, so nothing runs twice), and a pad no terminator unwinds into is terminated as unreachable instead of carrying destructor calls for objects it cannot dominate. Three objects in one scope now compile and destroy in reverse declaration order.
 - **2026-11-13T17:47:33-08:00** — Two more cleanup bugs surfaced while making the fixture pass. A `return` consumed the scope's cleanup list, so the fall-through path destroyed nothing; it now emits a copy and leaves the list for the scope's exit. `break` and `continue` destroyed nothing at all: a jump target now carries the cleanup count of the loop it leaves, so leaving a loop body runs the destructors of the scopes being exited. A `throw` now creates a pad holding the objects live at the throw site, which is what makes the guarding destructor run before the handler.
 - **2026-11-13T17:47:33-08:00** — `destructor_scopes.cpp` covers three objects in one scope, reverse order, nested scopes, an early return, and a `continue` out of a loop body; both the link and run tests require exit 42. The class-template fixture no longer avoids the shape, [ADR 0027](docs/decisions/0027-exception-cleanup.md) documents the design instead of the defect, and the whole Windows debug suite is 573/573.
+- **2026-11-13T18:40:48-08:00** — Implemented non-type template parameters ([ADR 0033](docs/decisions/0033-non-type-template-parameters.md)). A parameter written with a type before its name (`int N`) is now tagged as a value parameter, and an instance substitutes every reference to it with an integer literal before analysis, so `T data[N]` is an array of the bound and `return N;` returns it. The instance's tag carries the number — `Buffer__int__4`, `Buffer__double__2` — so two sizes of one element type are distinct records. `non_type_templates.cpp` checks the capacities, the enforced bound, and the second instance; `krc_run_non_type_templates` requires exit 42.
+- **2026-11-13T18:40:48-08:00** — Value parameters need the number at three moments, which is why the substitution is a rewrite rather than a binding: while the pattern's own record is analysed the parser's `const int N = 1;` stub is bound and a folded identifier is recorded so code generation can emit it; the instance's clone replaces the identifier outright. Recording the fold was also the fix for an IRGen crash on `return N;` — the identifier had no binding at code generation time.
+- **2026-11-13T18:40:48-08:00** — Two defects surfaced while testing this and are fixed. `!call()` emitted the call twice (a struct-result probe ran before the type was known), so a side effect in `!f()` ran twice; the value is now emitted once and reused. And the C thread-local fixture wrote the same image name as the C++ `thread_local` fixture, so a parallel suite could run the wrong image; its output is now `thread_local_storage_linked.k32`. Windows debug CTest is 575/575.
+- **2026-11-13T18:40:48-08:00** — Known gap, not fixed: `&&` and `||` lower to a bitwise operation over both operands, so neither short-circuits and a side effect on the right of a false `&&` still runs. The fixture avoids depending on it; the operator needs a branch-and-merge lowering.
