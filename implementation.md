@@ -500,6 +500,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T19:40:40-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 579/579
+windows-msvc-release  PASS 579/579
+linux-gcc-debug       PASS 528/528
+linux-gcc-release     PASS 528/528
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-one tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers `std::array`, `<stdexcept>`, and the parser's qualified template-id
+and typedef-named value parameter forms. The rows ran one at a time, clean from
+deleted directories, with no warnings and no compiler crashes in any log.
+
 ### 2026-11-13T19:12:08-08:00 — host gate (Windows)
 
 ```text
@@ -2928,3 +2945,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T19:11:51-08:00** — `&&` and `||` now short-circuit. Both operands were emitted before the operator and combined with a bitwise `and`/`or`, so a side effect on the right of a false `&&` ran anyway — a correctness bug in ordinary C, not specific to templates. The lowering now evaluates the left operand, branches, emits the right operand inside its own block, and carries the result across the branch in an `alloca` slot. `logical_operators.c` checks a skipped and a taken right operand for each operator, the operator's value used as a value, nesting, and a `while` condition; `krc_run_logical_operators` requires exit 42.
 - **2026-11-13T19:11:51-08:00** — The first attempt carried the result in a `phi` node, which produced a program that ran but returned the wrong value: neither backend lowers `phi` (it is parsed, printed, and verified, but has no instruction selection). `docs/ir.md` now states that a value crossing a branch travels in an `alloca` slot and that `select` cannot carry a one-sided value. The gap was invisible until a program exercised it, which is why the IR verifier's phi rules read as supported.
 - **2026-11-13T19:11:51-08:00** — The class-template and non-type-template fixtures no longer have to avoid `&&`/`||` in their checks, and the short-circuit note added to `handoff.md` last round is replaced by the fix. Windows debug CTest is 577/577.
+- **2026-11-13T19:40:22-08:00** — `std::array<T, N>` exists in `sysroot/include/array`, built on the class-template and value-parameter forms: the element storage is a plain array member, so the instance has the layout of `T[N]`. `operator[]`, `data`, `size`, `empty`, and `fill` work for `int` and `double` bounds; `std_array.cpp` requires exit 42. `sysroot/include/stdexcept` joined it, with `logic_error`/`runtime_error` and the four classes derived from them, because `at` reports a bad index that way.
+- **2026-11-13T19:40:22-08:00** — Three front-end gaps blocked a fuller `std::array` and are recorded rather than papered over. **(1)** A member function that returns `T&` is not dereferenced when read as a value: `struct S { int value; int& get() { return value; } }; s.get() == 7` is false, while `int& r = x; r == 7` and `operator[]` both work — the reference-return value path is missing. **(2)** The injected class name inside a *template* class body is not a type: `template <typename T> class C { bool same(const C&); };` fails with *declaration requires a type specifier*, while `const C<T>&` in a plain class works. **(3)** A range-for over a class (`for (int& e : array)`) is rejected; only bounded built-in arrays are accepted.
+- **2026-11-13T19:40:22-08:00** — The parser learned two shapes `std::array` needs: a template parameter written with a typedef-named type (`size_t N`), and a qualified template-id in type position (`std::array<int, 4> x;`), including the declaration-start test that decides between a declaration and an expression. Windows debug CTest is 579/579.
