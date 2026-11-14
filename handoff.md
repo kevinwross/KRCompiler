@@ -314,10 +314,12 @@ layout is `T[N]`. `operator[]`, `data`, `size`, `empty`, and `fill` work.
 `<stdexcept>` provides `logic_error`, `runtime_error`, `out_of_range`,
 `invalid_argument`, `length_error`, and `overflow_error`.
 
-Three front-end gaps keep it from being complete, each reproduced in the log:
-a member function returning `T&` is not dereferenced when read as a value, the
-injected class name inside a template class body is not a type, and a range-for
-over a class is rejected.
+A member function returning `T&` is dereferenced when read as a value, so
+`front()`, `back()`, and `at()` work in expressions; assigning *through* such a
+call (`values.front() = 11`) still writes a temporary and is not fixed. Two
+other gaps remain: the injected class name inside a template class body is not a
+type, and a range-for over a class is rejected. Each has a reproduction in
+`implementation.md`.
 ## Non-type template parameters
 
 `template <typename T, int N>` works for class templates: the parameter is

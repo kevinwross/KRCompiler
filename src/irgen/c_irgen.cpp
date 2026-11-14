@@ -5072,7 +5072,9 @@ CIRGen::Expression CIRGen::emit_expression(const frontend::AstNode& expression) 
                                     method->second, std::move(arguments),
                                     method->second->type->return_type,
                                     "post.operator");
-                                return {call, method->second->type->return_type};
+                                return reference_result(call, method->second, method->second->type->return_type);
+
+
                             }
                         }
                     }
@@ -7052,7 +7054,9 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                     method->second, {self_value},
                                     method->second->type->return_type,
                                     "unary.operator");
-                                return {call, method->second->type->return_type};
+                                return reference_result(call, method->second, method->second->type->return_type);
+
+
                             }
                         }
                     }
@@ -7410,8 +7414,9 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
         return emit_member_lvalue(expression);
     }
     if (expression.kind == frontend::AstKind::CallExpression) {
-        // A call has no address of its own. Callers that need one for a value
-        // it returns, such as an assignment operator's source, get a temporary.
+        // A reference-returning call names the object it refers to; any other
+        // call has no address of its own, so callers that need one for the
+        // value it returns get a temporary.
         auto value = emit_expression(expression);
         if (value.value && value.type) {
             auto* storage = builder_.create_alloca(value.type, 0, "call.temp");
@@ -7507,7 +7512,7 @@ CIRGen::Expression CIRGen::emit_assignment(const frontend::AstNode& expression) 
                         "assign.operator");
                     if (method->type->return_type &&
                         !ir::is_void(method->type->return_type)) {
-                        return {call, method->type->return_type};
+                        return reference_result(call, method, method->type->return_type);
                     }
                     return {nullptr, module_->types().void_type()};
                 }
@@ -7680,6 +7685,23 @@ CIRGen::Expression CIRGen::emit_matrix_intrinsic(const frontend::AstNode& expres
     return {call, result_type};
 }
 
+CIRGen::Expression CIRGen::reference_result(ir::Value* call, ir::Function* callee,
+                                            ir::TypePtr result_type) {
+    if (!call || !callee || !result_type ||
+        result_type->kind != ir::TypeKind::Pointer) {
+        return {call, result_type};
+    }
+    const auto ast_type = function_ast_types_.find(callee);
+    if (ast_type == function_ast_types_.end() || !ast_type->second ||
+        !ast_type->second->return_type ||
+        !ast_type->second->return_type->is_reference) {
+        return {call, result_type};
+    }
+    // The callee returned the address of a reference; a value context reads it.
+    return {builder_.create_load(result_type->element, call, false, 0,
+                                 "reference.result"),
+            result_type->element};
+}
 CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     if (expression.children.size() < 2 || !expression.children[0] ||
         !expression.children[1]) {
@@ -7849,6 +7871,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             auto* call = create_call_instruction(
                 callee, std::move(arguments),
                 lambda->second.function->return_type, "lambda.call");
+            // A lambda returns a value here, so the result is not dereferenced.
             return {call, lambda->second.function->return_type};
         }
     }
@@ -7897,7 +7920,8 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                         auto* call = create_call_instruction(
                             method->second, std::move(arguments),
                             method->second->type->return_type, "call.operator");
-                        return {call, method->second->type->return_type};
+                        return reference_result(call, method->second,
+                                            method->second->type->return_type);
                     }
                 }
             }
@@ -7977,7 +8001,8 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     auto* call = create_call_instruction(
                         callee, std::move(arguments),
                         method->second->type->return_type, "this.method");
-                    return {call, method->second->type->return_type};
+                    return reference_result(call, method->second,
+                                            method->second->type->return_type);
                 }
             }
         }
@@ -8142,7 +8167,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 auto* call = create_call_instruction(
                     callee, std::move(arguments), method->type->return_type,
                     "method.call");
-                return {call, method->type->return_type};
+                return reference_result(call, method, method->type->return_type);
             }
         }
     }
@@ -8180,7 +8205,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 auto* call = create_call_instruction(
                     method, std::move(arguments), method->type->return_type,
                     "static.method.call");
-                return {call, method->type->return_type};
+                return reference_result(call, method, method->type->return_type);
             }
         }
     }
@@ -8305,7 +8330,8 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         auto* call = create_call_instruction(
             method->second, {self.value}, method->second->type->return_type,
             "argument.conversion");
-        return {call, method->second->type->return_type};
+        return reference_result(call, method->second,
+                                method->second->type->return_type);
     };
     for (std::size_t index = 0; index < argument_nodes.size(); ++index) {
         if (!argument_nodes[index]) {
@@ -8383,7 +8409,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     }
     auto* call = create_call_instruction(callee.value, arguments, function_type->return_type,
                                       "call");
-    return {call, function_type->return_type};
+    return reference_result(call, direct_function, function_type->return_type);
 }
 
 CIRGen::Expression CIRGen::emit_member_lvalue(const frontend::AstNode& expression) {
@@ -9445,7 +9471,9 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {    i
                         auto* call = create_call_instruction(
                             method->second, {self.value},
                             method->second->type->return_type, "cast.conversion");
-                        return {call, method->second->type->return_type};
+                        return reference_result(call, method->second, method->second->type->return_type);
+
+
                     }
                 }
             }

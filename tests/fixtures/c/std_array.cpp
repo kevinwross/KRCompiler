@@ -35,6 +35,17 @@ int main() {
         return 4;
     }
 
+    // A member that returns `T&` is read as the object it refers to.
+    values[3] = 9;
+    if (values.front() != 5 || values.back() != 9) {
+        return 12;
+    }
+    if (values.at(0) != 5 || values.at(3) != 9) {
+        return 13;
+    }
+    values[0] = 5;
+    values[3] = 5;
+
     // Index traversal with the sum of a known array.
     int sum = 0;
     int index = 0;

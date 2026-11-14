@@ -163,6 +163,11 @@ private:
     [[nodiscard]] Expression emit_unary(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_assignment(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_call(const frontend::AstNode& expression);
+    // A call whose declared return type is a reference yields the referent, not
+    // the address it returns: rray.at(0) == 5 compares values.
+    [[nodiscard]] Expression reference_result(ir::Value* call,
+                                                 ir::Function* callee,
+                                                 ir::TypePtr result_type);
     [[nodiscard]] Expression emit_matrix_intrinsic(const frontend::AstNode& expression,
                                                    const ir::Function& callee,
                                                    ir::Intrinsic intrinsic);
