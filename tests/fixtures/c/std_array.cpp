@@ -64,6 +64,24 @@ int main() {
         element = 5;
     }
 
+    // Comparison compares the elements, through the const operator[] inside a
+    // const member.
+    std::array<int, 4> same;
+    same.fill(5);
+    if (!(values == same)) {
+        return 15;
+    }
+    if (values != same) {
+        return 16;
+    }
+    same[2] = 9;
+    if (values == same) {
+        return 17;
+    }
+    if (!(values != same)) {
+        return 18;
+    }
+
     // `data` is the storage itself.
     int* raw = values.data();
     if (raw[0] != 5) {

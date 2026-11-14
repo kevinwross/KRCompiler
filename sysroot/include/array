@@ -58,6 +58,28 @@ public:
     const T* begin() const { return __elements; }
     const T* end() const { return __elements + N; }
 
+    bool operator==(const array& other) const {
+        size_t index = 0;
+        while (index < N) {
+            if ((*this)[index] != other[index]) {
+                return false;
+            }
+            index = index + 1;
+        }
+        return true;
+    }
+    // Written out rather than as !(other == *this): a binary operator does
+    // not resolve to a member overload yet.
+    bool operator!=(const array& other) const {
+        size_t index = 0;
+        while (index < N) {
+            if ((*this)[index] != other[index]) {
+                return true;
+            }
+            index = index + 1;
+        }
+        return false;
+    }
 private:
     T __elements[N];
 };

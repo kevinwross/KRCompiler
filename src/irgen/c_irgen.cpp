@@ -11,6 +11,14 @@
 #include <vector>
 
 namespace krc::irgen {
+// A reference to a record names the record it refers to.
+frontend::TypePtr record_object_type(frontend::TypePtr type) {
+    if (type && type->is_reference && type->element) {
+        return type->element;
+    }
+    return type;
+}
+
 
 namespace {
 
@@ -4730,11 +4738,12 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
          ir::is_float(current_function_->type->return_type)) &&
         statement.children.front()->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(statement.children.front()->text)) {
-            if (local->frontend_type &&
-                local->frontend_type->kind == frontend::TypeKind::Record &&
-                local->frontend_type->record) {
-                const auto methods =
-                    class_methods_.find(local->frontend_type->record->tag);
+            // A reference to a record names the record, so s[i] on a
+            // reference parameter reaches operator[] like a direct object.
+            const auto object_type = record_object_type(local->frontend_type);
+            if (object_type && object_type->kind == frontend::TypeKind::Record &&
+                object_type->record) {
+                const auto methods = class_methods_.find(object_type->record->tag);
                 if (methods != class_methods_.end()) {
                     const char* conversion = nullptr;
                     if (ir::is_integer(
@@ -7193,11 +7202,12 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
         expression.children.front() &&
         expression.children.front()->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(expression.children.front()->text)) {
-            if (local->frontend_type &&
-                local->frontend_type->kind == frontend::TypeKind::Record &&
-                local->frontend_type->record) {
-                const auto methods =
-                    class_methods_.find(local->frontend_type->record->tag);
+            // A reference to a record names the record, so s[i] on a
+            // reference parameter reaches operator[] like a direct object.
+            const auto object_type = record_object_type(local->frontend_type);
+            if (object_type && object_type->kind == frontend::TypeKind::Record &&
+                object_type->record) {
+                const auto methods = class_methods_.find(object_type->record->tag);
                 if (methods != class_methods_.end()) {
                     auto method = methods->second.find("operator bool");
                     if (method == methods->second.end()) {
@@ -7402,11 +7412,13 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
         if (expression.children[0] &&
             expression.children[0]->kind == frontend::AstKind::Identifier) {
             if (auto* local = lookup_local(expression.children[0]->text)) {
-                if (local->frontend_type &&
-                    local->frontend_type->kind == frontend::TypeKind::Record &&
-                    local->frontend_type->record) {
-                    const auto methods = class_methods_.find(
-                        local->frontend_type->record->tag);
+                const auto object_type =
+                    record_object_type(local->frontend_type);
+                if (object_type &&
+                    object_type->kind == frontend::TypeKind::Record &&
+                    object_type->record) {
+                    const auto methods =
+                        class_methods_.find(object_type->record->tag);
                     if (methods != class_methods_.end()) {
                         const auto method = methods->second.find("operator[]");
                         if (method != methods->second.end()) {
@@ -7926,11 +7938,12 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(expression.children[0]->text)) {
-            if (local->frontend_type &&
-                local->frontend_type->kind == frontend::TypeKind::Record &&
-                local->frontend_type->record) {
-                const auto methods =
-                    class_methods_.find(local->frontend_type->record->tag);
+            // A reference to a record names the record, so s[i] on a
+            // reference parameter reaches operator[] like a direct object.
+            const auto object_type = record_object_type(local->frontend_type);
+            if (object_type && object_type->kind == frontend::TypeKind::Record &&
+                object_type->record) {
+                const auto methods = class_methods_.find(object_type->record->tag);
                 if (methods != class_methods_.end()) {
                     const auto method = methods->second.find("operator()");
                     if (method != methods->second.end()) {
@@ -9103,11 +9116,12 @@ CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {
         if (auto* local = lookup_local(expression.children[0]->text)) {
-            if (local->frontend_type &&
-                local->frontend_type->kind == frontend::TypeKind::Record &&
-                local->frontend_type->record) {
-                const auto methods =
-                    class_methods_.find(local->frontend_type->record->tag);
+            // A reference to a record names the record, so s[i] on a
+            // reference parameter reaches operator[] like a direct object.
+            const auto object_type = record_object_type(local->frontend_type);
+            if (object_type && object_type->kind == frontend::TypeKind::Record &&
+                object_type->record) {
+                const auto methods = class_methods_.find(object_type->record->tag);
                 if (methods != class_methods_.end()) {
                     const auto method = methods->second.find("operator[]");
                     if (method != methods->second.end()) {

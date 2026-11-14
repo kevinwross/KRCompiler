@@ -377,10 +377,12 @@ Three gaps block a complete `std::array`, each with a reproduction:
   the instance's tag (`inherited_class_name.cpp`, ADR 0032).
 - ~~A range-for over a class~~ — fixed: the loop uses the class's egin() and
   nd() and compares pointers, and the reference form writes the elements.
-- **Overloaded member functions.** `class_methods_` holds one function per
-  name, so `std::array`'s const and non-const `operator[]` cannot coexist and
-  a const member's `(*this)[index]` picks the wrong one (krc crashes). This
-  blocks the array comparison operators.
+- **Binary operators do not resolve to member overloads.** `a == b` compares
+  the two records as aggregates, so `operator!=` has to be written out rather
+  than as `!(a == b)`. `std::array`'s comparison works around it.
+- **Overloaded member functions.** `class_methods_` keeps one function per
+  name and the two `operator[]` overloads share a symbol, so const and
+  non-const dispatch is not distinct. Reads work through either.
 
 `array<T, N>` written in a template *signature* also needs a pattern's value
 argument to resolve through the stub binding, which is the missing piece for
