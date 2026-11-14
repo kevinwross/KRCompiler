@@ -7080,11 +7080,15 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             }
         }
     }
+    // A !call() emits the call once and keeps the value: the generic path
+    // below would emit it again, running its side effects twice.
+    std::optional<Expression> unary_operand;
     if (expression.text == "!" && !expression.children.empty() &&
         expression.children.front() &&
         expression.children.front()->kind ==
             frontend::AstKind::CallExpression) {
         auto record_value = emit_expression(*expression.children.front());
+        unary_operand = record_value;
         if (record_value.value && record_value.type &&
             record_value.type->kind == ir::TypeKind::Struct) {
             auto* storage = builder_.create_alloca(record_value.type, 0,
@@ -7161,7 +7165,8 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             }
         }
     }
-    auto operand = emit_expression(*expression.children.front());
+    auto operand = unary_operand ? *unary_operand
+                                  : emit_expression(*expression.children.front());
     if (!operand.value) {
         return {};
     }

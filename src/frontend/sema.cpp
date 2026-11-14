@@ -486,7 +486,22 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
             continue;
         }
         if (child->kind == AstKind::StructSpecifier) {
+            // A class template whose parameters include a value needs that
+            // value while its own record is analysed; the stub the parser emits
+            // names it, and the instance replaces it with a literal (ADR 0033).
+            std::vector<std::string> value_stubs;
+            for (const auto& label : child->labels) {
+                constexpr std::string_view value_prefix = "template-value-param:";
+                if (label.rfind(value_prefix, 0) == 0) {
+                    const auto name = label.substr(value_prefix.size());
+                    value_stubs.push_back(name);
+                    template_value_bindings_.emplace(name, 1);
+                }
+            }
             base = record_type(*child, false);
+            for (const auto& stub : value_stubs) {
+                template_value_bindings_.erase(stub);
+            }
             if ((cxx_mode_ ||
                  std::find(child->labels.begin(), child->labels.end(), "class") !=
                      child->labels.end()) &&
@@ -592,9 +607,15 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
     // the unparameterised record as before (ADR 0032).
     {
         std::vector<std::string> template_parameters;
+        std::unordered_set<std::string> record_type_value_parameters;
         for (const auto& label : specifier.labels) {
             constexpr std::string_view prefix = "template-param:";
-            if (label.rfind(prefix, 0) == 0) {
+            constexpr std::string_view value_prefix = "template-value-param:";
+            if (label.rfind(value_prefix, 0) == 0) {
+                const auto name = label.substr(value_prefix.size());
+                template_parameters.push_back(name);
+                record_type_value_parameters.insert(name);
+            } else if (label.rfind(prefix, 0) == 0) {
                 template_parameters.push_back(label.substr(prefix.size()));
             }
         }
@@ -605,6 +626,7 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
             info.definition = &specifier;
             info.name = specifier.text;
             info.is_class = true;
+            info.value_parameters = std::move(record_type_value_parameters);
             templates_.emplace(specifier.text, std::move(info));
         }
     }
@@ -1297,6 +1319,11 @@ std::uint64_t Sema::align_of_type(TypePtr type) const {
 }
 
 bool Sema::evaluate_constant_expression(const AstNode& expression, long long& value) {
+    if (const auto folded = constant_folds_.find(&expression);
+        folded != constant_folds_.end()) {
+        value = folded->second;
+        return true;
+    }
     return evaluate_constant(expression, value);
 }
 
@@ -1381,14 +1408,72 @@ namespace {
 // The mangled tag for an instantiated class: `Box__double` (ADR 0032).
 std::string class_instance_tag(const std::string& tag,
                                const std::vector<std::string>& parameters,
-                               const std::unordered_map<std::string, TypePtr>& bindings) {
+                               const std::unordered_map<std::string, TypePtr>& bindings,
+                               const std::unordered_map<std::string, long long>& values) {
     std::string name = tag;
     for (const auto& parameter : parameters) {
         name += "__";
+        if (const auto value = values.find(parameter); value != values.end()) {
+            name += std::to_string(value->second);
+            continue;
+        }
         const auto bound = bindings.find(parameter);
         name += bound == bindings.end() ? "unknown" : template_type_tag(bound->second);
     }
     return name;
+}
+
+// Reads an integer literal, decimal or 0x-prefixed hexadecimal.
+bool parse_integer_text(const std::string& text, long long& value) {
+    std::string trimmed;
+    for (const auto character : text) {
+        if (character != ' ' && character != '\t') {
+            trimmed += character;
+        }
+    }
+    if (trimmed.empty()) {
+        return false;
+    }
+    std::size_t used = 0;
+    try {
+        const auto unsigned_text = trimmed[0] == '-' ? trimmed.substr(1) : trimmed;
+        if (unsigned_text.rfind("0x", 0) == 0 || unsigned_text.rfind("0X", 0) == 0) {
+            value = std::stoll(unsigned_text.substr(2), &used, 16);
+            if (used + 2 != unsigned_text.size()) {
+                return false;
+            }
+        } else {
+            value = std::stoll(unsigned_text, &used, 10);
+            if (used != unsigned_text.size()) {
+                return false;
+            }
+        }
+    } catch (const std::exception&) {
+        return false;
+    }
+    if (trimmed[0] == '-') {
+        value = -value;
+    }
+    return true;
+}
+
+// Replaces every reference to a value parameter with its number, so the
+// instance's array bounds and expressions are literals (ADR 0033).
+void substitute_value_parameters(
+    AstNode& node, const std::unordered_map<std::string, long long>& values) {
+    for (auto& child : node.children) {
+        if (!child) {
+            continue;
+        }
+        if (child->kind == AstKind::Identifier) {
+            const auto found = values.find(child->text);
+            if (found != values.end()) {
+                child->kind = AstKind::IntegerLiteral;
+                child->text = std::to_string(found->second);
+            }
+        }
+        substitute_value_parameters(*child, values);
+    }
 }
 
 }  // namespace
@@ -1404,12 +1489,21 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
         return nullptr;
     }
     std::unordered_map<std::string, TypePtr> bindings;
+    std::unordered_map<std::string, long long> value_bindings;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
+        const auto parameter = pattern->second.parameters[index];
+        if (pattern->second.value_parameters.count(parameter) != 0) {
+            long long value = 0;
+            if (!parse_integer_text(arguments[index], value)) {
+                return nullptr;
+            }
+            value_bindings.emplace(parameter, value);
+            continue;
+        }
         const auto bound = template_argument_type(arguments[index]);
         if (!bound) {
             return nullptr;
         }
-        const auto parameter = pattern->second.parameters[index];
         if (const auto existing = bindings.find(parameter); existing != bindings.end()) {
             if (existing->second != bound) {
                 return nullptr;
@@ -1422,7 +1516,8 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // The cache is keyed by the instance's tag, not the spelled arguments: a
     // reference through a template parameter (Box<T>) and one through the
     // type (Box<int>) name the same instance.
-    const auto instance_tag = class_instance_tag(tag, pattern->second.parameters, bindings);
+    const auto instance_tag =
+        class_instance_tag(tag, pattern->second.parameters, bindings, value_bindings);
     if (const auto cached = class_instances_.find(instance_tag);
         cached != class_instances_.end()) {
         if (cached->second) {
@@ -1439,6 +1534,10 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     clone->text = instance_tag;
     // Code generation collects a class's methods from its declaration
     // specifiers, so the instantiation is kept in a holder of that shape.
+    // A value parameter becomes a literal in the instance, so its array bounds
+    // and expressions are ordinary integer constants (ADR 0033).
+    substitute_value_parameters(*clone, value_bindings);
+
     // A constructor or destructor is recognised by its class's name, so the
     // instance's members must carry the instance's tag (ADR 0032).
     for (auto& member : clone->children) {
@@ -1808,9 +1907,15 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     // Record the template pattern the parser tagged, then analyze the
     // int-substituted definition exactly as before. (ADR 0031)
     std::vector<std::string> template_parameters;
+    std::unordered_set<std::string> template_value_parameters;
     for (const auto& label : definition.labels) {
         constexpr std::string_view prefix = "template-param:";
-        if (label.rfind(prefix, 0) == 0) {
+        constexpr std::string_view value_prefix = "template-value-param:";
+        if (label.rfind(value_prefix, 0) == 0) {
+            const auto name = label.substr(value_prefix.size());
+            template_parameters.push_back(name);
+            template_value_parameters.insert(name);
+        } else if (label.rfind(prefix, 0) == 0) {
             template_parameters.push_back(label.substr(prefix.size()));
         }
     }
@@ -2422,6 +2527,13 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         return result;
     }
     case AstKind::Identifier:
+        // A value parameter used as a value folds here, so code generation can
+        // still see the number after the bindings are gone (ADR 0033).
+        if (const auto bound = template_value_bindings_.find(expression.text);
+            bound != template_value_bindings_.end()) {
+            constant_folds_[&expression] = bound->second;
+            return int_type_;
+        }
         if (expression.text == "__func__") {
             if (current_function_name_.empty()) {
                 error(expression.location, "'__func__' is only valid inside a function");
@@ -3297,6 +3409,12 @@ bool Sema::evaluate_constant(const AstNode& expression, long long& value) {
         return true;
     }
     case AstKind::Identifier:
+        if (const auto bound = template_value_bindings_.find(expression.text);
+            bound != template_value_bindings_.end()) {
+            value = bound->second;
+            constant_folds_[&expression] = value;
+            return true;
+        }
         if (const auto local = constant_locals_.find(expression.text);
             local != constant_locals_.end()) {
             value = local->second;

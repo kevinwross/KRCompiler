@@ -225,10 +225,19 @@ private:
         // A class template's definition is its StructSpecifier; a function
         // template's is its FunctionDefinition.
         bool is_class = false;
+        // Parameters written with a type before the name (int N) stand for a
+        // number, and are substituted by a literal in the instance (ADR 0033).
+        std::unordered_set<std::string> value_parameters;
     };
     std::unordered_map<std::string, TemplateInfo> templates_;
     // Template parameter bindings active while an instantiation is analyzed.
     std::unordered_map<std::string, TypePtr> template_bindings_;
+    // Value parameters bound while a pattern's fallback or an instance is
+    // analysed, so a bound name folds to its number (ADR 0033).
+    std::unordered_map<std::string, long long> template_value_bindings_;
+    // A constant an expression folded to, keyed by its node: code generation
+    // runs after the bindings are gone and reads the value here (ADR 0033).
+    std::unordered_map<const AstNode*, long long> constant_folds_;
     // Definitions created by instantiation, in the order they were created.
     std::vector<const AstNode*> instantiations_;
     // The function a call resolves to when the callee is a template name.

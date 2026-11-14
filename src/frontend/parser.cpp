@@ -159,17 +159,28 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
         const auto location = peek().location;
         ++position_;
         std::vector<std::string> parameters;
+        // A parameter written with a type before its name (int N) is a value
+        // parameter: N stands for a number, not a type (ADR 0033).
+        std::vector<bool> parameter_is_value;
         if (match("<")) {
             while (!check(">") && !at_end()) {
-                if (peek().kind == TokenKind::Keyword && peek().text == "class") {
+                bool is_value = false;
+                while (peek().kind == TokenKind::Keyword &&
+                       is_decl_specifier_keyword(peek().text) &&
+                       peek().text != "class") {
+                    is_value = true;
                     ++position_;
-                } else if (peek().kind == TokenKind::Identifier &&
-                           (peek().text == "typename" || peek().text == "class")) {
+                }
+                if (peek().kind == TokenKind::Identifier &&
+                    (peek().text == "typename" || peek().text == "class")) {
                     ++position_;
                 }
                 if (peek().kind == TokenKind::Identifier) {
                     parameters.push_back(peek().text);
-                    typedef_names_.insert(peek().text);
+                    parameter_is_value.push_back(is_value);
+                    if (!is_value) {
+                        typedef_names_.insert(peek().text);
+                    }
                     ++position_;
                 } else {
                     ++position_;
@@ -206,8 +217,12 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
             // below does not cover. The typedef stubs stay for the common
             // all-int call, which resolves to the definition itself.
             const auto tag_labels = [&](AstNode& node) {
-                for (const auto& parameter : parameters) {
-                    node.labels.push_back("template-param:" + parameter);
+                for (std::size_t index = 0; index < parameters.size(); ++index) {
+                    const bool is_value =
+                        index < parameter_is_value.size() && parameter_is_value[index];
+                    node.labels.push_back(
+                        (is_value ? "template-value-param:" : "template-param:") +
+                        parameters[index]);
                 }
             };
             const auto tag_definition = [&](AstNode& definition) {

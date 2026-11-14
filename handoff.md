@@ -306,6 +306,18 @@ A scope may hold several destructible objects: each unwinding point protects
 the objects built before it, a return, break, or continue destroys the scopes it
 leaves without consuming them, and the pad chain is disjoint so nothing is
 destroyed twice ([ADR 0027](docs/decisions/0027-exception-cleanup.md)).
+## Non-type template parameters
+
+`template <typename T, int N>` works for class templates: the parameter is
+substituted by its number in the instance, so `Buffer<int, 4>` is the record
+`Buffer__int__4` with a `[4 x i32]` member
+([ADR 0033](docs/decisions/0033-non-type-template-parameters.md)). Only an
+integer literal is accepted as a value argument; a value parameter on a function
+template is not implemented.
+
+`&&` and `||` do not short-circuit (both operands are always evaluated), so a
+side effect on the right of a false `&&` runs. That is an IRGen defect, not a
+template one.
 ## Function templates
 
 `template <typename T>` deduces and instantiates: an all-int call still resolves
