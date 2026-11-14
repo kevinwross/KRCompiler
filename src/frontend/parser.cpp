@@ -183,6 +183,12 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
         }
         auto block = make_ast(AstKind::TranslationUnit, location);
         for (const auto& parameter : parameters) {
+            // The int substitution exists once per name: every template that
+            // names its parameter T shares one stub, which is only the fallback
+            // for an all-int call (ADR 0031).
+            if (!template_stubs_.insert(parameter).second) {
+                continue;
+            }
             auto specifiers = make_ast(AstKind::DeclSpecifiers, location);
             specifiers->labels.push_back("typedef");
             specifiers->labels.push_back("int");
@@ -195,6 +201,24 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
         }
         auto body = parse_external_declaration();
         if (body) {
+            // The parameter names are recorded on each definition so Sema can
+            // instantiate the pattern for argument types the int substitution
+            // below does not cover. The typedef stubs stay for the common
+            // all-int call, which resolves to the definition itself.
+            const auto tag_definition = [&](AstNode& definition) {
+                if (definition.kind != AstKind::FunctionDefinition) {
+                    return;
+                }
+                for (const auto& parameter : parameters) {
+                    definition.labels.push_back("template-param:" + parameter);
+                }
+            };
+            tag_definition(*body);
+            for (auto& child : body->children) {
+                if (child) {
+                    tag_definition(*child);
+                }
+            }
             if (body->kind == AstKind::TranslationUnit) {
                 for (auto& child : body->children) {
                     block->children.push_back(std::move(child));

@@ -1352,6 +1352,19 @@ std::string CIRGen::parameter_name(const frontend::AstNode& parameter,
 }
 
 void CIRGen::collect_declarations() {
+    // Template instantiations are analyzed outside the translation unit's
+    // children, so they are registered before the definitions are generated
+    // (ADR 0031).
+    for (const auto* definition : sema_.instantiations()) {
+        if (!definition || definition->children.size() < 3 ||
+            !definition->children[0] || !definition->children[1] ||
+            !definition->children[2]) {
+            continue;
+        }
+        collect_function(*definition->children[0], *definition->children[1], true,
+                         definition->children[2].get());
+        definitions_.push_back(definition);
+    }
     for (const auto& child : unit_.children) {
         if (!child) {
             continue;
@@ -5491,7 +5504,13 @@ CIRGen::Expression CIRGen::emit_condition_expression(
         }
         return preferred ? preferred : fallback;
     };
-    const auto result_type = map_type(pick_result(then_frontend, else_frontend));
+    // The analysed result type is authoritative: the local inference picks int
+    // for a branch that names a variable, which would truncate an f64 or a
+    // pointer into an i32 temporary.
+    auto result_type = map_type(sema_.expression_type(expression));
+    if (!result_type) {
+        result_type = map_type(pick_result(then_frontend, else_frontend));
+    }
     if (!result_type) {
         return {};
     }
@@ -8038,7 +8057,12 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     // use, and a tile intrinsic must not reference the symbol it replaces.
     ir::Function* direct_function = nullptr;
     if (expression.children[0]->kind == frontend::AstKind::Identifier) {
-        direct_function = lookup_function(expression.children[0]->text);
+        // A template callee with a non-int deduction resolved to an
+        // instantiated definition at analysis time (ADR 0031).
+        const auto target = sema_.call_target(expression);
+        direct_function = lookup_function(target.empty()
+                                           ? expression.children[0]->text
+                                           : std::string_view(target));
     }
     if (direct_function) {
         const auto intrinsic = matrix_intrinsic(*direct_function);

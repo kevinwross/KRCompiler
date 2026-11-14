@@ -84,6 +84,8 @@ private:
     std::string current_class_name_;
     bool specifiers_have_typedef_ = false;
     bool cxx_mode_ = false;
+    // Template parameter names whose int substitution has been emitted.
+    std::unordered_set<std::string> template_stubs_;
     bool had_error_ = false;
 };
 

@@ -441,6 +441,14 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
         } else if (label == "_Alignas" || label == "__inline" || label == "inline" ||
                    label == "_Noreturn") {
             // Qualifiers and function specifiers do not affect the value type here.
+        } else if (const auto binding = template_bindings_.find(label);
+                   binding != template_bindings_.end()) {
+            // A template parameter shadows the file-scope name while an
+            // instantiation is analyzed (ADR 0031).
+            if (typedef_type) {
+                error(specifiers.location, "multiple type names in declaration");
+            }
+            typedef_type = binding->second;
         } else if (auto* symbol = lookup_ordinary(label);
                    symbol != nullptr && symbol->kind == SymbolKind::Typedef) {
             if (typedef_type) {
@@ -1249,6 +1257,184 @@ bool Sema::evaluate_constant_expression(const AstNode& expression, long long& va
     return evaluate_constant(expression, value);
 }
 
+namespace {
+
+// The name a template instantiation is mangled with: the source type name, so
+// `max(1.5, 2.5)` becomes `max__double` (docs/abi.md, ADR 0031).
+std::string template_type_tag(const TypePtr& type) {
+    if (!type) {
+        return "void";
+    }
+    switch (type->kind) {
+    case TypeKind::Void:
+        return "void";
+    case TypeKind::Bool:
+        return "bool";
+    case TypeKind::Char:
+        return type->is_unsigned ? "uchar" : "char";
+    case TypeKind::Short:
+        return type->is_unsigned ? "ushort" : "short";
+    case TypeKind::Int:
+        return type->is_unsigned ? "uint" : "int";
+    case TypeKind::Long:
+        return type->is_unsigned ? "ulong" : "long";
+    case TypeKind::LongLong:
+        return type->is_unsigned ? "ullong" : "llong";
+    case TypeKind::Float:
+        return "float";
+    case TypeKind::Double:
+        return "double";
+    case TypeKind::LongDouble:
+        return "longdouble";
+    case TypeKind::Pointer:
+        return std::string("ptr_") + template_type_tag(type->element);
+    case TypeKind::Array:
+        return std::string("array_") + template_type_tag(type->element);
+    case TypeKind::Record:
+        return type->record ? type->record->tag : "record";
+    case TypeKind::Enum:
+        return type->enum_info ? type->enum_info->tag : "enum";
+    case TypeKind::Function:
+        return "function";
+    }
+    return "unknown";
+}
+
+// True when the declarator wraps its named type in a pointer or reference.
+bool declarator_has_indirection(const AstNode& declarator) {
+    if (declarator.kind == AstKind::PointerDeclarator ||
+        declarator.kind == AstKind::ReferenceDeclarator) {
+        return true;
+    }
+    for (const auto& child : declarator.children) {
+        if (child && declarator_has_indirection(*child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The declarator that names the function. The name is the front child chain
+// of the function declarator, the same walk ind_function_declarator makes;
+// descending into every child would reach a parameter's name instead.
+const AstNode* function_name_declarator(const AstNode& declarator) {
+    const AstNode* current = &declarator;
+    while (current != nullptr) {
+        if (current->kind == AstKind::Declarator) {
+            return current;
+        }
+        if (current->children.empty()) {
+            return nullptr;
+        }
+        current = current->children.front().get();
+    }
+    return nullptr;
+}
+
+}  // namespace
+
+std::string Sema::instantiate_template_call(const AstNode& callee,
+                                            const std::vector<TypePtr>& arguments) {
+    const auto pattern = templates_.find(callee.text);
+    if (pattern == templates_.end() || !pattern->second.definition ||
+        pattern->second.definition->children.size() < 2 ||
+        !pattern->second.definition->children[1]) {
+        return {};
+    }
+    const auto& parameters = pattern->second.definition->children[1]->children;
+    std::unordered_map<std::string, TypePtr> bindings;
+    std::size_t argument_index = 0;
+    for (std::size_t index = 1; index < parameters.size(); ++index) {
+        const auto* parameter = parameters[index].get();
+        if (!parameter || parameter->kind != AstKind::ParameterDeclaration ||
+            parameter->children.size() < 2 || !parameter->children[0] ||
+            argument_index >= arguments.size()) {
+            continue;
+        }
+        const auto& labels = parameter->children[0]->labels;
+        const auto template_parameter =
+            std::find_if(labels.begin(), labels.end(), [&](const std::string& label) {
+                return std::find(pattern->second.parameters.begin(),
+                                 pattern->second.parameters.end(),
+                                 label) != pattern->second.parameters.end();
+            });
+        if (template_parameter == labels.end()) {
+            argument_index++;
+            continue;
+        }
+        TypePtr bound = arguments[argument_index];
+        if (!bound) {
+            return {};
+        }
+        if (declarator_has_indirection(*parameter->children[1])) {
+            // `T*` and `T&` deduce from a pointer, a reference, or an array
+            // that decays to a pointer; a value argument cannot deduce either.
+            if (bound->kind == TypeKind::Array && bound->element) {
+                bound = bound->element;
+            } else if (bound->kind == TypeKind::Pointer && bound->element) {
+                bound = bound->element;
+            } else {
+                return {};
+            }
+        }
+        // A by-value `const T` still deduces T without the qualifier.
+        const auto existing = bindings.find(*template_parameter);
+        if (existing != bindings.end()) {
+            if (existing->second != bound) {
+                return {};
+            }
+        } else {
+            bindings.emplace(*template_parameter, bound);
+        }
+        argument_index++;
+    }
+    if (bindings.empty()) {
+        return {};
+    }
+    // The parser instantiates the all-int case as the definition itself, so a
+    // call that deduces only `int` needs no clone.
+    if (bindings.size() == 1 && bindings.begin()->second->kind == TypeKind::Int &&
+        !bindings.begin()->second->is_unsigned) {
+        return {};
+    }
+    std::string mangled = pattern->second.name;
+    for (const auto& name : pattern->second.parameters) {
+        const auto binding = bindings.find(name);
+        mangled += "__";
+        mangled += binding == bindings.end() ? "unknown"
+                                             : template_type_tag(binding->second);
+    }
+    if (instantiated_names_.count(mangled) != 0) {
+        return mangled;
+    }
+
+    auto clone = clone_ast(*pattern->second.definition);
+    clone->labels.erase(
+        std::remove_if(clone->labels.begin(), clone->labels.end(),
+                       [](const std::string& label) {
+                           return label.rfind("template-param:", 0) == 0;
+                       }),
+        clone->labels.end());
+    if (auto* named = const_cast<AstNode*>(function_name_declarator(*clone->children[1]))) {
+        named->text = mangled;
+    }
+    clone->text = mangled;
+
+    // Analyze the clone at file scope: a template body sees its own scope and
+    // the file's, never the caller's.
+    auto saved_scopes = std::move(scopes_);
+    scopes_.clear();
+    scopes_.push_back(std::move(saved_scopes.front()));
+    template_bindings_ = bindings;
+    instantiated_names_.insert(mangled);
+    analyze_function_definition(*clone);
+    template_bindings_.clear();
+    saved_scopes.front() = std::move(scopes_.front());
+    scopes_ = std::move(saved_scopes);
+    instantiations_.push_back(clone.get());
+    instantiation_storage_.push_back(std::move(clone));
+    return mangled;
+}
 void Sema::analyze_declaration(const AstNode& declaration) {
     if (declaration.children.empty()) {
         return;
@@ -1423,6 +1609,23 @@ void Sema::analyze_declaration(const AstNode& declaration) {
 }
 
 void Sema::analyze_function_definition(const AstNode& definition) {
+    // Record the template pattern the parser tagged, then analyze the
+    // int-substituted definition exactly as before. (ADR 0031)
+    std::vector<std::string> template_parameters;
+    for (const auto& label : definition.labels) {
+        constexpr std::string_view prefix = "template-param:";
+        if (label.rfind(prefix, 0) == 0) {
+            template_parameters.push_back(label.substr(prefix.size()));
+        }
+    }
+    if (!template_parameters.empty() && !definition.text.empty() &&
+        templates_.find(definition.text) == templates_.end()) {
+        TemplateInfo info;
+        info.parameters = template_parameters;
+        info.definition = &definition;
+        info.name = definition.text;
+        templates_.emplace(definition.text, std::move(info));
+    }
     if (definition.children.size() < 3) {
         return;
     }
@@ -2226,11 +2429,15 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         analyze_expression(*expression.children[0]);
         auto when_true = analyze_expression(*expression.children[1]);
         auto when_false = analyze_expression(*expression.children[2]);
-        if (when_true && when_false && is_arithmetic(*when_true) &&
-            is_arithmetic(*when_false)) {
-            return usual_arithmetic(when_true, when_false);
-        }
-        return when_true ? when_true : when_false;
+        // Code generation needs the operator's own type: the branches may be
+        // names it cannot infer, and re-analysis is impossible once the
+        // function's scopes are gone.
+        auto conditional_type = (when_true && when_false && is_arithmetic(*when_true) &&
+                                 is_arithmetic(*when_false))
+                                    ? usual_arithmetic(when_true, when_false)
+                                    : (when_true ? when_true : when_false);
+        expression_types_[&expression] = conditional_type;
+        return conditional_type;
     }
     case AstKind::CommaExpression:
         if (expression.children.size() >= 2 && expression.children[0] &&
@@ -2391,6 +2598,18 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
         for (const auto& argument : expression.children[1]->children) {
             if (argument) {
                 argument_types.push_back(analyze_expression(*argument));
+            }
+        }
+        // A template callee with a non-int deduction instantiates its pattern
+        // and the call targets that definition (ADR 0031).
+        if (callee && callee->kind == AstKind::Identifier) {
+            const auto instantiated =
+                instantiate_template_call(*callee, argument_types);
+            if (!instantiated.empty()) {
+                call_targets_[&expression] = instantiated;
+                if (const auto* instantiated_symbol = lookup_ordinary(instantiated)) {
+                    callee_type = instantiated_symbol->type;
+                }
             }
         }
 

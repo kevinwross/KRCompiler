@@ -155,6 +155,18 @@ std::unique_ptr<AstNode> make_ast(AstKind kind, SourceLocation location, std::st
     return node;
 }
 
+std::unique_ptr<AstNode> clone_ast(const AstNode& node) {
+    auto copy = std::make_unique<AstNode>();
+    copy->kind = node.kind;
+    copy->location = node.location;
+    copy->text = node.text;
+    copy->labels = node.labels;
+    copy->children.reserve(node.children.size());
+    for (const auto& child : node.children) {
+        copy->children.push_back(child ? clone_ast(*child) : nullptr);
+    }
+    return copy;
+}
 void dump_ast(const AstNode& node, std::ostream& out, int indent) {
     for (int i = 0; i < indent; ++i) {
         out << "  ";

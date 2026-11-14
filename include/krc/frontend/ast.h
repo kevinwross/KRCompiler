@@ -93,5 +93,9 @@ struct AstNode {
 [[nodiscard]] std::unique_ptr<AstNode> make_ast(AstKind kind, SourceLocation location,
                                                 std::string text = {});
 void dump_ast(const AstNode& node, std::ostream& out, int indent = 0);
+// A deep copy of a subtree. A template instantiation analyzes its own copy so
+// that the recorded expression types of one instance do not collide with
+// another's (ADR 0031).
+[[nodiscard]] std::unique_ptr<AstNode> clone_ast(const AstNode& node);
 
 }  // namespace krc::frontend

@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "krc/frontend/ast.h"
@@ -22,6 +23,15 @@ public:
     ~Sema();
 
     void analyze(const AstNode& translation_unit);
+    // The definitions produced by instantiation, for code generation.
+    [[nodiscard]] const std::vector<const AstNode*>& instantiations() const {
+        return instantiations_;
+    }
+    // The name a call resolved to when its callee was a template, or empty.
+    [[nodiscard]] std::string call_target(const AstNode& call) const {
+        const auto found = call_targets_.find(&call);
+        return found == call_targets_.end() ? std::string{} : found->second;
+    }
     void break_cycles();
     [[nodiscard]] bool had_error() const { return had_error_; }
 
@@ -196,6 +206,31 @@ private:
     // reason. Other named casts lower from the AST directly.
     std::unordered_map<const AstNode*, TypePtr> cast_targets_;
     std::unordered_map<const AstNode*, TypePtr> cast_operands_;
+    // A function template pattern: its parameter names and the definition the
+    // parser recorded. The definition is also analyzed with the int
+    // substitution the parser installs, so an all-int call needs no
+    // instantiation. (ADR 0031)
+    struct TemplateInfo {
+        std::vector<std::string> parameters;
+        const AstNode* definition = nullptr;
+        std::string name;
+    };
+    std::unordered_map<std::string, TemplateInfo> templates_;
+    // Template parameter bindings active while an instantiation is analyzed.
+    std::unordered_map<std::string, TypePtr> template_bindings_;
+    // Definitions created by instantiation, in the order they were created.
+    std::vector<const AstNode*> instantiations_;
+    // The function a call resolves to when the callee is a template name.
+    std::unordered_map<const AstNode*, std::string> call_targets_;
+    // Instantiated names, so a repeated call reuses one definition.
+    std::unordered_set<std::string> instantiated_names_;
+    // Keeps each instantiated definition alive for the lifetime of Sema.
+    std::vector<std::unique_ptr<AstNode>> instantiation_storage_;
+    // Analyzes a clone of the named template with the deduced bindings and
+    // returns the instantiated function's name, or empty when the callee is not
+    // a template or the pattern is outside the supported subset (ADR 0031).
+    [[nodiscard]] std::string instantiate_template_call(
+        const AstNode& callee, const std::vector<TypePtr>& arguments);
     // Non-zero while a catch body is being analysed; `throw;` needs a handler.
     int handler_depth_ = 0;
     void check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr source);
