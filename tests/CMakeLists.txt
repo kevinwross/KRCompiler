@@ -473,6 +473,15 @@ if(TARGET krc)
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/non_type_templates_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    add_test(NAME krc_link_this_subscript
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/this_subscript.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/this_subscript_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
     add_test(NAME krc_link_injected_class_name
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -1048,6 +1057,14 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_non_type_templates PROPERTIES
             DEPENDS krc_link_non_type_templates)
+        add_test(NAME krc_run_this_subscript
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/this_subscript_linked.k32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_this_subscript PROPERTIES
+            DEPENDS krc_link_this_subscript)
         add_test(NAME krc_run_injected_class_name
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}

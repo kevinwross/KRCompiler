@@ -376,6 +376,10 @@ Three gaps block a complete `std::array`, each with a reproduction:
   reached the typedef, and the instance clone now rewrites the injected name to
   the instance's tag (`inherited_class_name.cpp`, ADR 0032).
 - **A range-for over a class.** Only bounded built-in arrays are accepted.
+- **Overloaded member functions.** `class_methods_` holds one function per
+  name, so `std::array`'s const and non-const `operator[]` cannot coexist and
+  a const member's `(*this)[index]` picks the wrong one (krc crashes). This
+  blocks the array comparison operators.
 
 `array<T, N>` written in a template *signature* also needs a pattern's value
 argument to resolve through the stub binding, which is the missing piece for

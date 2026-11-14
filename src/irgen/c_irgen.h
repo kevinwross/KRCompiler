@@ -172,6 +172,12 @@ private:
                                                    const ir::Function& callee,
                                                    ir::Intrinsic intrinsic);
     [[nodiscard]] Expression emit_subscript(const frontend::AstNode& expression);
+    // Calls a record's operator[] with an already-emitted object address, so
+    // s[i] and (*this)[i] share one path.
+    [[nodiscard]] Expression subscript_operator(ir::Function* function,
+                                                 Expression self,
+                                                 const frontend::AstNode& index_node,
+                                                 bool as_address = false);
     [[nodiscard]] Expression emit_member(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_member_lvalue(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_implicit_member(std::string_view name);

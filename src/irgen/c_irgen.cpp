@@ -7350,6 +7350,26 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
         if (expression.children.size() < 2) {
             return {};
         }
+        // (*this)[i] = v writes the object the operand refers to, so the
+        // record's operator[] receives that address.
+        if (expression.children[0] &&
+            expression.children[0]->kind == frontend::AstKind::UnaryExpression &&
+            expression.children[0]->text == "*") {
+            auto self = emit_lvalue(*expression.children[0]);
+            if (self.value && self.type) {
+                const auto record = ir_records_.find(self.type);
+                if (record != ir_records_.end() && record->second) {
+                    const auto methods = class_methods_.find(record->second->tag);
+                    if (methods != class_methods_.end()) {
+                        const auto method = methods->second.find("operator[]");
+                        if (method != methods->second.end()) {
+                            return subscript_operator(method->second, self,
+                                                     *expression.children[1], true);
+                        }
+                    }
+                }
+            }
+        }
         if (expression.children[0] &&
             expression.children[0]->kind == frontend::AstKind::Identifier) {
             if (auto* local = lookup_local(expression.children[0]->text)) {
@@ -8932,6 +8952,47 @@ CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {   
             address.type};
 }
 
+CIRGen::Expression CIRGen::subscript_operator(ir::Function* function,
+                                              Expression self,
+                                              const frontend::AstNode& index_node,
+                                              bool as_address) {
+    auto index = emit_expression(index_node);
+    if (!self.value || !index.value) {
+        return {};
+    }
+    if (self.value->type != function->type->parameters[0]) {
+        self.value = builder_.create(ir::Opcode::BitCast,
+                                     function->type->parameters[0], {self.value},
+                                     "subscript.this");
+    }
+    std::vector<ir::Value*> arguments{self.value};
+    if (index.value->type != function->type->parameters[1]) {
+        index.value = promote(index.value, index.type, function->type->parameters[1]);
+    }
+    arguments.push_back(index.value);
+    auto* call = create_call_instruction(function, std::move(arguments),
+                                         function->type->return_type, "subscript.call");
+    if (function->type->return_type &&
+        function->type->return_type->kind != ir::TypeKind::Pointer) {
+        error(index_node.location, "operator[] does not return a reference");
+        return {};
+    }
+    if (as_address) {
+        // An lvalue result is an address typed as the element it names, the
+        // same shape emit_lvalue produces for a member or an array element.
+        return {call, function->type->return_type->element};
+    }
+    const auto ast_type = function_ast_types_.find(function);
+    if (ast_type != function_ast_types_.end() && ast_type->second &&
+        ast_type->second->return_type &&
+        ast_type->second->return_type->is_reference &&
+        function->type->return_type->kind == ir::TypeKind::Pointer) {
+        return {builder_.create_load(function->type->return_type->element, call,
+                                     false, 0, "subscript.load"),
+                function->type->return_type->element};
+    }
+    return {call, function->type->return_type};
+}
 CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
     if (expression.children.size() < 2 || !expression.children[0] ||
         !expression.children[1]) {
@@ -8985,6 +9046,25 @@ CIRGen::Expression CIRGen::emit_subscript(const frontend::AstNode& expression) {
                             }
                             return {call, function->type->return_type};
                         }
+                    }
+                }
+            }
+        }
+    }
+    // (*this)[i] and (*p)[i] name the object the operand refers to, so the
+    // record's operator[] receives that address rather than a loaded copy.
+    if (expression.children[0]->kind == frontend::AstKind::UnaryExpression &&
+        expression.children[0]->text == "*") {
+        auto self = emit_lvalue(*expression.children[0]);
+        if (self.value && self.type) {
+            const auto record = ir_records_.find(self.type);
+            if (record != ir_records_.end() && record->second) {
+                const auto methods = class_methods_.find(record->second->tag);
+                if (methods != class_methods_.end()) {
+                    const auto method = methods->second.find("operator[]");
+                    if (method != methods->second.end()) {
+                        return subscript_operator(method->second, self,
+                                                 *expression.children[1]);
                     }
                 }
             }
