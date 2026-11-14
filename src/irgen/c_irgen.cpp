@@ -8212,15 +8212,24 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     if (reference_parameter) {
                         // Only an addressable argument is bound directly; an
                         // rvalue bound to a const reference lives in a temporary.
-                        const auto kind = argument_nodes[index]->kind;
+                        // static_cast<T&&>(x) and static_cast<const T&>(x) name
+                        // x, so the parameter binds to it rather than to a copy:
+                        // a write through the parameter must reach the caller's
+                        // object.
+                        const frontend::AstNode* bound = argument_nodes[index].get();
+                        if (bound->kind == frontend::AstKind::CastExpression &&
+                            bound->children.size() > 1 && bound->children[1]) {
+                            bound = bound->children[1].get();
+                        }
+                        const auto kind = bound->kind;
                         const bool addressable =
                             kind == frontend::AstKind::Identifier ||
                             kind == frontend::AstKind::MemberExpression ||
                             kind == frontend::AstKind::SubscriptExpression ||
                             (kind == frontend::AstKind::UnaryExpression &&
-                             argument_nodes[index]->text == "*");
+                             bound->text == "*");
                         if (addressable) {
-                            argument = emit_lvalue(*argument_nodes[index]);
+                            argument = emit_lvalue(*bound);
                         }
                         if (!argument.value) {
                             auto value = emit_expression(*argument_nodes[index]);
@@ -8502,15 +8511,22 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             } else {
                 // Only an addressable argument is bound directly; an rvalue
                 // bound to a const reference lives in a temporary.
-                const auto kind = argument_nodes[index]->kind;
+                // The same binding rule as a member call: a cast to a reference
+                // names the operand, so the parameter aliases it.
+                const frontend::AstNode* bound = argument_nodes[index].get();
+                if (bound->kind == frontend::AstKind::CastExpression &&
+                    bound->children.size() > 1 && bound->children[1]) {
+                    bound = bound->children[1].get();
+                }
+                const auto kind = bound->kind;
                 const bool addressable =
                     kind == frontend::AstKind::Identifier ||
                     kind == frontend::AstKind::MemberExpression ||
                     kind == frontend::AstKind::SubscriptExpression ||
                     (kind == frontend::AstKind::UnaryExpression &&
-                     argument_nodes[index]->text == "*");
+                     bound->text == "*");
                 if (addressable) {
-                    argument = emit_lvalue(*argument_nodes[index]);
+                    argument = emit_lvalue(*bound);
                 }
                 if (!argument.value) {
                     auto value = emit_expression(*argument_nodes[index]);
