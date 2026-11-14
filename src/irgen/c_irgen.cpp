@@ -5902,9 +5902,14 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
             }
         }
     }
+    // `&&` and `||` short-circuit, so the right operand must not be lowered
+    // here: it is emitted inside the branch its own block below, so a side
+    // effect it carries runs only when the left operand does not decide.
+    const bool short_circuit =
+        expression.text == "&&" || expression.text == "||";
     auto left = emit_expression(*expression.children[0]);
-    auto right = emit_expression(*expression.children[1]);
-    if (!left.value || !right.value) {
+    auto right = short_circuit ? Expression{} : emit_expression(*expression.children[1]);
+    if (!left.value || (!short_circuit && !right.value)) {
         return {};
     }
     const bool left_record =
@@ -6035,11 +6040,36 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
                 module_->constant_int(value.type, 0), "tobool");
         };
         auto* left_bool = truth(left, *expression.children[0]);
-        auto* right_bool = truth(right, *expression.children[1]);
-        const auto opcode = operation == "&&" ? ir::Opcode::And : ir::Opcode::Or;
-        auto* value = builder_.create(opcode, module_->types().bool_type(),
-                                      {left_bool, right_bool}, "logic");
-        return {value, module_->types().bool_type()};
+        if (!left_bool) {
+            return {};
+        }
+        const bool is_and = operation == "&&";
+        const auto bool_type = module_->types().bool_type();
+        // The result crosses the branch in a slot: the target backends lower
+        // allocas and loads and have no phi.
+        auto* slot = builder_.create_alloca(bool_type, 0, "logic.slot");
+        builder_.create_store(
+            module_->constant_int(bool_type, is_and ? 0 : 1), slot);
+        auto* right_block = current_function_->add_block("logic.rhs");
+        auto* merge_block = current_function_->add_block("logic.end");
+        builder_.create_cond_br(left_bool, is_and ? right_block : merge_block,
+                                is_and ? merge_block : right_block);
+        // The right operand is lowered inside its own block, so its side
+        // effects run only when the left operand does not decide the result.
+        builder_.set_insert_point(right_block);
+        auto right_value = emit_expression(*expression.children[1]);
+        if (!right_value.value) {
+            return {};
+        }
+        auto* right_bool = truth(right_value, *expression.children[1]);
+        if (!right_bool) {
+            return {};
+        }
+        builder_.create_store(right_bool, slot);
+        emit_branch(merge_block);
+        builder_.set_insert_point(merge_block);
+        auto* merged = builder_.create_load(bool_type, slot, false, 0, "logic");
+        return {merged, bool_type};
     }
     if (operation == "==" || operation == "!=" || operation == "<" ||
         operation == ">" || operation == "<=" || operation == ">=") {

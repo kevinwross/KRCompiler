@@ -77,6 +77,12 @@ Control: `br`, `condbr`, `switch`, `ret`, `unreachable`.
 
 SSA and aggregates: `phi`, `select`, `extractvalue`, `insertvalue`.
 
+The KR32 and KR16 backends lower allocas, loads, stores, and `select`, and have
+no `phi` lowering: a value that has to cross a branch is carried in an
+`alloca` slot (`select` evaluates both operands, so it cannot carry a
+value computed in one branch only). `emit_binary` does that for `&&` and
+`||` and `emit_condition_expression` for `?:`.
+
 Calls: `call` has a callee operand (function or function pointer), arguments, and an explicit result type. Variadic calls name the fixed signature and pass the remaining arguments in order. `sret` is expressed by an explicit pointer argument, not a hidden IR convention.
 
 Intrinsics: `intrinsic` names a target operation that has no portable instruction form ([ADR 0024](decisions/0024-kr32-tile-intrinsics.md)). The operation is named by an `Intrinsic` value, not by the target, and the operands are the operation's arguments. The implemented set is `matrix.multiply`, `matrix.multiply_add`, `matrix.transpose`, `matrix.transform`, `vector.dot`, `transform.push`, `transform.pop`, and `transform.drop`, all taking record pointers. A value-returning intrinsic carries its result type — a 4x4 `f32` tile, a 4-lane `f32` vector, or `f32` — and a stack operation produces `void`. A backend that does not implement an operation rejects it; a target whose profile lacks the capability refuses it before lowering.

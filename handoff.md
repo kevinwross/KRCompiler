@@ -315,9 +315,10 @@ substituted by its number in the instance, so `Buffer<int, 4>` is the record
 integer literal is accepted as a value argument; a value parameter on a function
 template is not implemented.
 
-`&&` and `||` do not short-circuit (both operands are always evaluated), so a
-side effect on the right of a false `&&` runs. That is an IRGen defect, not a
-template one.
+`&&` and `||` short-circuit: the right operand is lowered inside the block
+its own branch guards, and the deciding value crosses the branch in an allocation
+slot because neither backend lowers `phi` ([ADR 0027](docs/decisions/0027-exception-cleanup.md)
+uses the same rule for cleanup); `docs/ir.md` states the constraint.
 ## Function templates
 
 `template <typename T>` deduces and instantiates: an all-int call still resolves
