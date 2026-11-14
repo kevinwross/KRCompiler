@@ -352,6 +352,27 @@ registered to run at exit. IRGen's block-scope path accepts `static`,
 thread-local object was emitted as an automatic and re-initialized on every
 call. `<threads.h>` still refuses to be included because guest threads do not
 exist.
+## Known front-end gaps
+
+Three gaps block a complete `std::array`, each with a reproduction:
+
+- **Assignment through a reference-returning call.** `values.front() = 11`
+  writes a temporary; `emit_lvalue` builds one for every call. The value form
+  works, so reads through `front`, `back`, and `at` are fine. An attempt that
+  returned the call's address from `emit_lvalue` produced *store type does not
+  match its pointer* in a fixture that otherwise compiles; the failing store was
+  not identified, so the change was reverted.
+- **The injected class name inside a template class body.**
+  `template <typename T> class C { public: C* self(); };` fails with
+  *declaration requires a type specifier*; the same body in a plain class
+  compiles. The parser registers the name (traced) and Sema's `record_type`
+  declares the tag and typedef before members, so the cause is elsewhere;
+  instrument `base_type_from_specifiers` next.
+- **A range-for over a class.** Only bounded built-in arrays are accepted.
+
+`array<T, N>` written in a template *signature* also needs a pattern's value
+argument to resolve through the stub binding, which is the missing piece for
+free comparison operators on `std::array`.
 ## Debug display names
 
 `.debug_info` `F` records carry a display name, so a C++ dump shows
