@@ -441,6 +441,29 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
         } else if (label == "_Alignas" || label == "__inline" || label == "inline" ||
                    label == "_Noreturn") {
             // Qualifiers and function specifiers do not affect the value type here.
+        } else if (const auto class_pattern = templates_.find(label);
+                   class_pattern != templates_.end() &&
+                   class_pattern->second.is_class) {
+            // Box<double> instantiates the class template; the pattern's own
+            // record stands for the unparameterised spelling (ADR 0032).
+            std::vector<std::string> arguments;
+            for (const auto& argument_label : specifiers.labels) {
+                constexpr std::string_view prefix = "template-arg:";
+                if (argument_label.rfind(prefix, 0) == 0) {
+                    arguments.push_back(argument_label.substr(prefix.size()));
+                }
+            }
+            if (arguments.empty()) {
+                continue;
+            }
+            const auto instance = instantiate_class_template(label, arguments);
+            if (!instance) {
+                continue;
+            }
+            if (typedef_type) {
+                error(specifiers.location, "multiple type names in declaration");
+            }
+            typedef_type = instance;
         } else if (const auto binding = template_bindings_.find(label);
                    binding != template_bindings_.end()) {
             // A template parameter shadows the file-scope name while an
@@ -565,6 +588,26 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
 }
 
 TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
+    // A tagged specifier is a class template pattern: remember it, then analyse
+    // the unparameterised record as before (ADR 0032).
+    {
+        std::vector<std::string> template_parameters;
+        for (const auto& label : specifier.labels) {
+            constexpr std::string_view prefix = "template-param:";
+            if (label.rfind(prefix, 0) == 0) {
+                template_parameters.push_back(label.substr(prefix.size()));
+            }
+        }
+        if (!template_parameters.empty() && !specifier.text.empty() &&
+            templates_.find(specifier.text) == templates_.end()) {
+            TemplateInfo info;
+            info.parameters = template_parameters;
+            info.definition = &specifier;
+            info.name = specifier.text;
+            info.is_class = true;
+            templates_.emplace(specifier.text, std::move(info));
+        }
+    }
     const auto& tag = specifier.text;
     std::shared_ptr<RecordInfo> info;
     TypePtr type;
@@ -1333,6 +1376,116 @@ const AstNode* function_name_declarator(const AstNode& declarator) {
 
 }  // namespace
 
+namespace {
+
+// The mangled tag for an instantiated class: `Box__double` (ADR 0032).
+std::string class_instance_tag(const std::string& tag,
+                               const std::vector<std::string>& parameters,
+                               const std::unordered_map<std::string, TypePtr>& bindings) {
+    std::string name = tag;
+    for (const auto& parameter : parameters) {
+        name += "__";
+        const auto bound = bindings.find(parameter);
+        name += bound == bindings.end() ? "unknown" : template_type_tag(bound->second);
+    }
+    return name;
+}
+
+}  // namespace
+
+TypePtr Sema::instantiate_class_template(const std::string& tag,
+                                         const std::vector<std::string>& arguments) {
+    const auto pattern = templates_.find(tag);
+    if (pattern == templates_.end() || !pattern->second.is_class ||
+        !pattern->second.definition) {
+        return nullptr;
+    }
+    if (arguments.size() != pattern->second.parameters.size()) {
+        return nullptr;
+    }
+    std::unordered_map<std::string, TypePtr> bindings;
+    for (std::size_t index = 0; index < arguments.size(); ++index) {
+        const auto bound = template_argument_type(arguments[index]);
+        if (!bound) {
+            return nullptr;
+        }
+        const auto parameter = pattern->second.parameters[index];
+        if (const auto existing = bindings.find(parameter); existing != bindings.end()) {
+            if (existing->second != bound) {
+                return nullptr;
+            }
+        } else {
+            bindings.emplace(parameter, bound);
+        }
+    }
+
+    // The cache is keyed by the instance's tag, not the spelled arguments: a
+    // reference through a template parameter (Box<T>) and one through the
+    // type (Box<int>) name the same instance.
+    const auto instance_tag = class_instance_tag(tag, pattern->second.parameters, bindings);
+    if (const auto cached = class_instances_.find(instance_tag);
+        cached != class_instances_.end()) {
+        if (cached->second) {
+            return cached->second;
+        }
+        // The instance is being built and one of its members refers to it: the
+        // tag already names the record, so a reference resolves to the
+        // incomplete type instead of starting a second instantiation.
+        return type_named(instance_tag);
+    }
+    // The null entry marks the instance as in progress for that self-reference.
+    class_instances_.emplace(instance_tag, nullptr);
+    auto clone = clone_ast(*pattern->second.definition);
+    clone->text = instance_tag;
+    // Code generation collects a class's methods from its declaration
+    // specifiers, so the instantiation is kept in a holder of that shape.
+    // A constructor or destructor is recognised by its class's name, so the
+    // instance's members must carry the instance's tag (ADR 0032).
+    for (auto& member : clone->children) {
+        if (!member || (member->kind != AstKind::FunctionDefinition &&
+                        member->kind != AstKind::MemberDeclaration) ||
+            member->children.size() < 2 || !member->children[1]) {
+            continue;
+        }
+        auto* named = const_cast<AstNode*>(
+            function_name_declarator(*member->children[1]));
+        if (!named) {
+            continue;
+        }
+        if (named->text == tag) {
+            named->text = instance_tag;
+        } else if (named->text == "~" + tag) {
+            named->text = "~" + instance_tag;
+        }
+    }
+    auto holder = make_ast(AstKind::DeclSpecifiers, clone->location);
+    auto* specifier = clone.get();
+    holder->children.push_back(std::move(clone));
+    clone = std::move(holder);
+    clone->labels.erase(
+        std::remove_if(clone->labels.begin(), clone->labels.end(),
+                       [](const std::string& label) {
+                           return label.rfind("template-param:", 0) == 0;
+                       }),
+        clone->labels.end());
+
+    // The instance is analysed at file scope with only its own bindings active,
+    // so the pattern's own names cannot leak into it and vice versa.
+    auto saved_scopes = std::move(scopes_);
+    scopes_.clear();
+    scopes_.push_back(std::move(saved_scopes.front()));
+    template_bindings_ = bindings;
+    auto type = record_type(*specifier, false);
+    template_bindings_.clear();
+    saved_scopes.front() = std::move(scopes_.front());
+    scopes_ = std::move(saved_scopes);
+    class_instantiations_.push_back(clone.get());
+    class_instantiation_storage_.push_back(std::move(clone));
+    if (type) {
+        class_instances_.emplace(instance_tag, type);
+    }
+    return type;
+}
 TypePtr Sema::template_argument_type(const std::string& spelling) const {
     // The spelling is turned back into specifier labels so the one place that
     // maps labels to types stays authoritative.

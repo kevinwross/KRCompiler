@@ -51,6 +51,25 @@ the return address at the resume call site.
   that check a generated constructor branched to a block of the caller's
   function and failed the verifier.
 
+## Known defect
+
+A scope holding two or more destructible objects does not compile: the scope's
+cleanup pad is created at the first construction that can unwind and filled at
+scope exit, so an invoke emitted for the second object unwinds into a pad that
+destroys objects declared after it, and the IR verifier reports *instruction
+does not dominate its use*. Three ordinary objects reproduce it without
+templates:
+
+```cpp
+struct Box { int value; Box() : value(0) {} ~Box() {} };
+int main() { Box a; Box b; Box c; return 0; }
+```
+
+The fix is a pad per construction point whose snapshot is the objects built
+before it. A first attempt (one pad per construction, emitted eagerly) and a
+second (one pad per construction, emitted at scope exit) both left a pad whose
+resume invokes into a pad that does not dominate it, so the change needs the pad
+chain rebuilt as an explicit stack instead of the single `enclosing` field.
 ## Consequences
 
 - `try`/`throw` runs live destructors during unwinding: reverse order, nested

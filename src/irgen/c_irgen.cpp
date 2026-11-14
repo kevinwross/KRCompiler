@@ -1355,6 +1355,13 @@ void CIRGen::collect_declarations() {
     // Template instantiations are analyzed outside the translation unit's
     // children, so they are registered before the definitions are generated
     // (ADR 0031).
+    // An instantiated class's method bodies live in the clone, not in the
+    // translation unit's children (ADR 0032).
+    for (const auto* specifiers : sema_.class_instantiations()) {
+        if (specifiers) {
+            collect_class_methods(*specifiers);
+        }
+    }
     for (const auto* definition : sema_.instantiations()) {
         if (!definition || definition->children.size() < 3 ||
             !definition->children[0] || !definition->children[1] ||
@@ -1557,8 +1564,41 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                  methods.contains(method_name))) {
                 continue;
             }
-            auto frontend_type =
-                sema_.declaration_type(*member->children[0], member->children[1].get());
+            // The record's method type was resolved when the class was
+            // analysed, which is the only time a template instance's bindings
+            // are active; re-deriving it here would resolve T to the
+            // pattern's stub (ADR 0032).
+            auto frontend_type = sema_.declaration_type(*member->children[0],
+                                                        member->children[1].get());
+            if (frontend_type && frontend_type->kind == frontend::TypeKind::Function &&
+                sema_.is_class_instance(record->tag)) {
+                std::size_t declared_parameters = 0;
+                for (const auto* cursor = member->children[1].get(); cursor != nullptr;) {
+                    if (cursor->kind == frontend::AstKind::FunctionDeclarator) {
+                        for (const auto& parameter : cursor->children) {
+                            if (parameter &&
+                                parameter->kind ==
+                                    frontend::AstKind::ParameterDeclaration) {
+                                ++declared_parameters;
+                            }
+                        }
+                        break;
+                    }
+                    cursor = cursor->children.empty() ? nullptr
+                                                      : cursor->children.front().get();
+                }
+                for (const auto& recorded : record->methods) {
+                    if (recorded.name != method_name || !recorded.type ||
+                        recorded.type->kind != frontend::TypeKind::Function) {
+                        continue;
+                    }
+                    if (recorded.type->parameters.size() != declared_parameters) {
+                        continue;
+                    }
+                    frontend_type = recorded.type;
+                    break;
+                }
+            }
             if (!frontend_type || frontend_type->kind != frontend::TypeKind::Function) {
                 continue;
             }

@@ -291,6 +291,21 @@ no unimplemented capability left. `FileOpen.cpp` stays interactive by design.
 - Exception state is a single global; the VM is single-threaded for the
   supported subset.
 
+## Class templates
+
+`template <typename T> class Box` instantiates per type: `Box<int>` names the
+record `Box__int` with its own layout, constructors, destructor, and members,
+and `Box<double>` alongside it is a different record
+([ADR 0032](docs/decisions/0032-class-template-instantiation.md)). A member may
+take its own instance by reference, and `Pair<int, double>` and
+`Pair<double, int>` are different types. Not implemented: a member defined
+outside the class body, a non-type parameter, a default argument, partial
+specialisation, and a member template.
+
+A scope with two or more destructible objects does not compile — a
+pre-existing cleanup-pad defect recorded in
+[ADR 0027](docs/decisions/0027-exception-cleanup.md), not a template problem;
+three ordinary objects reproduce it.
 ## Function templates
 
 `template <typename T>` deduces and instantiates: an all-int call still resolves

@@ -57,7 +57,7 @@ LP64: `int` 32, `long` 64, `long long` 64, pointer 64, `short` 16, `char` 8, `fl
 
 Itanium-like grammar with the `_Z` prefix; `extern "C"` unmangled; `_ZTV`/`_ZTI`/`_ZTS` for vtable/typeinfo/name. The grammar, substitutions, builtin codes, and operator names are frozen here before M5.
 
-A function template instance is named `<name>__<tag>` for each template parameter in declaration order, where the tag is the type's source spelling: `add__double`, `doubled__char`, `first_of__int`. Pointers use `ptr_<tag>` and arrays `array_<tag>`; a class instance uses its tag. Instances are weak definitions, so two translation units that instantiate the same type agree ([ADR 0031](decisions/0031-function-template-instantiation.md)). The all-int instance keeps the template's own symbol.
+A function or class template instance is named `<name>__<tag>` for each template parameter in declaration order, where the tag is the type's source spelling: `add__double`, `doubled__char`, `first_of__int`. Pointers use `ptr_<tag>` and arrays `array_<tag>`; a class instance uses its tag. Instances are weak definitions, so two translation units that instantiate the same type agree ([ADR 0031](decisions/0031-function-template-instantiation.md)). The all-int instance keeps the template's own symbol. A class instance is a record whose tag is that name and whose constructors and destructor are renamed to it, so Box<int> and Box<double> are two records ([ADR 0032](decisions/0032-class-template-instantiation.md)).
 
 ## Vtables, RTTI, exceptions
 

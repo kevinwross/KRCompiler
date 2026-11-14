@@ -74,6 +74,7 @@ What was rejected and why.
 - [0029-kr16-variadic-calls.md](0029-kr16-variadic-calls.md) — accepted; freezes how KR16 passes and reads a variadic argument list.
 - [0030-debug-display-names.md](0030-debug-display-names.md) — accepted; gives IR functions a debug display name used in the F record.
 - [0031-function-template-instantiation.md](0031-function-template-instantiation.md) — accepted; deduces a function template's parameters and instantiates it per type.
+- [0032-class-template-instantiation.md](0032-class-template-instantiation.md) — accepted; instantiates a class template per type as the record Tag__type.
 ame__tag.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.

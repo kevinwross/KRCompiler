@@ -35,6 +35,9 @@ private:
     [[nodiscard]] std::unique_ptr<AstNode> parse_external_declaration();
     [[nodiscard]] std::unique_ptr<AstNode> parse_declaration();
     [[nodiscard]] std::unique_ptr<AstNode> parse_decl_specifiers();
+    // Consumes <...> after a template name and returns each argument's token
+    // text, joined by single spaces (ADR 0031, ADR 0032).
+    std::vector<std::string> parse_template_argument_list();
     [[nodiscard]] std::unique_ptr<AstNode> parse_declarator(bool allow_abstract);
     [[nodiscard]] std::unique_ptr<AstNode> parse_initializer();
     [[nodiscard]] std::unique_ptr<AstNode> parse_initializer_list();

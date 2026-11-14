@@ -205,12 +205,26 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
             // instantiate the pattern for argument types the int substitution
             // below does not cover. The typedef stubs stay for the common
             // all-int call, which resolves to the definition itself.
+            const auto tag_labels = [&](AstNode& node) {
+                for (const auto& parameter : parameters) {
+                    node.labels.push_back("template-param:" + parameter);
+                }
+            };
             const auto tag_definition = [&](AstNode& definition) {
-                if (definition.kind != AstKind::FunctionDefinition) {
+                if (definition.kind == AstKind::FunctionDefinition) {
+                    tag_labels(definition);
                     return;
                 }
-                for (const auto& parameter : parameters) {
-                    definition.labels.push_back("template-param:" + parameter);
+                // A class template's specifier carries the same labels, so the
+                // type path can record the pattern (ADR 0032).
+                if (!definition.children.empty() && definition.children.front()) {
+                    for (auto& specifier : definition.children.front()->children) {
+                        if (specifier &&
+                            (specifier->kind == AstKind::StructSpecifier ||
+                             specifier->kind == AstKind::UnionSpecifier)) {
+                            tag_labels(*specifier);
+                        }
+                    }
                 }
             };
             tag_definition(*body);
@@ -532,6 +546,39 @@ std::unique_ptr<AstNode> Parser::parse_declaration() {
     return declaration;
 }
 
+std::vector<std::string> Parser::parse_template_argument_list() {
+    std::vector<std::string> arguments;
+    if (!match("<")) {
+        return arguments;
+    }
+    std::string current;
+    int depth = 1;
+    while (!at_end() && depth > 0) {
+        if (check("<")) {
+            ++depth;
+        } else if (check(">")) {
+            --depth;
+            if (depth == 0) {
+                ++position_;
+                break;
+            }
+        } else if (check(",") && depth == 1) {
+            arguments.push_back(current);
+            current.clear();
+            ++position_;
+            continue;
+        }
+        if (!current.empty()) {
+            current += " ";
+        }
+        current += peek().text;
+        ++position_;
+    }
+    if (!current.empty()) {
+        arguments.push_back(current);
+    }
+    return arguments;
+}
 std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
     specifiers_have_typedef_ = false;
     auto node = make_ast(AstKind::DeclSpecifiers, peek().location);
@@ -682,6 +729,14 @@ std::unique_ptr<AstNode> Parser::parse_decl_specifiers() {
             !(cxx_mode_ && peek(1).is("::"))) {
             node->labels.push_back(token.text);
             ++position_;
+            // Box<int> names an instantiated class template (ADR 0032).
+            if (cxx_mode_ && class_names_.count(token.text) != 0 && check("<")) {
+                const auto arguments = parse_template_argument_list();
+                node->labels.push_back("template-id");
+                for (const auto& argument : arguments) {
+                    node->labels.push_back("template-arg:" + argument);
+                }
+            }
             saw_specifier = true;
             continue;
         }

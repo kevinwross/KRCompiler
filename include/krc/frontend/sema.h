@@ -27,6 +27,14 @@ public:
     [[nodiscard]] const std::vector<const AstNode*>& instantiations() const {
         return instantiations_;
     }
+    // The instantiated class specifiers, for code generation.
+    [[nodiscard]] const std::vector<const AstNode*>& class_instantiations() const {
+        return class_instantiations_;
+    }
+    // True when the tag names an instantiated class template.
+    [[nodiscard]] bool is_class_instance(std::string_view tag) const {
+        return class_instances_.count(std::string(tag)) != 0;
+    }
     // The name a call resolved to when its callee was a template, or empty.
     [[nodiscard]] std::string call_target(const AstNode& call) const {
         const auto found = call_targets_.find(&call);
@@ -214,6 +222,9 @@ private:
         std::vector<std::string> parameters;
         const AstNode* definition = nullptr;
         std::string name;
+        // A class template's definition is its StructSpecifier; a function
+        // template's is its FunctionDefinition.
+        bool is_class = false;
     };
     std::unordered_map<std::string, TemplateInfo> templates_;
     // Template parameter bindings active while an instantiation is analyzed.
@@ -226,6 +237,15 @@ private:
     std::unordered_set<std::string> instantiated_names_;
     // Keeps each instantiated definition alive for the lifetime of Sema.
     std::vector<std::unique_ptr<AstNode>> instantiation_storage_;
+    // Instantiated class specifiers, kept alive for code generation, and the
+    // (tag, arguments) to type map that makes a repeat reference reuse one.
+    std::vector<const AstNode*> class_instantiations_;
+    std::vector<std::unique_ptr<AstNode>> class_instantiation_storage_;
+    std::unordered_map<std::string, TypePtr> class_instances_;
+    // Builds (or finds) the record for 	ag<arguments> from the class template
+    // pattern, or returns null when the pattern or an argument is unusable.
+    [[nodiscard]] TypePtr instantiate_class_template(
+        const std::string& tag, const std::vector<std::string>& arguments);
     // Analyzes a clone of the named template with the deduced bindings and
     // returns the instantiated function's name, or empty when the callee is not
     // a template or the pattern is outside the supported subset (ADR 0031).
