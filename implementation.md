@@ -395,6 +395,7 @@ x formats into a caller buffer through the same formatter as `printf`; `sprintf(
 ### M10 — v1.1 language/runtime completion (8–10 weeks)
 
 - [x] Table-driven exceptions and unwinding; RTTI/`dynamic_cast`/`typeid`. Table-driven descriptors and the unwinder with destructor cleanup ([ADR 0026](docs/decisions/0026-exception-descriptors.md), [ADR 0027](docs/decisions/0027-exception-cleanup.md)), and RTTI with `typeid`, pointer and reference `dynamic_cast` ([ADR 0025](docs/decisions/0025-rtti-vtable-typeinfo.md)).
+- [ ] Templates: function templates deduce and instantiate per type ([ADR 0031](docs/decisions/0031-function-template-instantiation.md)) — one level of `T`, `T*`, `T&`, `const T&` — while class templates, variadic templates, fold expressions, explicit template arguments, and partial specialization remain.
 - [ ] Variadic templates and fold expressions.
 - [ ] Dynamic `thread_local` initialization/destruction.
 - [ ] `memory`, `tuple`, `functional`, `array`.
@@ -498,6 +499,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 Most recent first.
+
+### 2026-11-13T15:51:38-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 569/569
+windows-msvc-release  PASS 569/569
+linux-gcc-debug       PASS 523/523
+linux-gcc-release     PASS 523/523
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register forty-six tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers function template deduction and instantiation
+([ADR 0031](docs/decisions/0031-function-template-instantiation.md)), the
+conditional operator's recorded result type, and the once-per-name template
+substitution. The rows ran one at a time, clean from deleted directories, with
+no warnings and no compiler crashes in any log.
 
 ### 2026-11-13T15:16:49-08:00 — host gate (Windows)
 
@@ -2801,3 +2821,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T15:16:34-08:00** — Implemented C11 thread storage duration. `_Thread_local` was rejected with "`_Thread_local` is not supported"; it is now accepted as the C spelling of C++'s `thread_local`, and a block-scope thread-local declaration takes the local-static path: static storage plus a guarded initializer, so it is created on first use, once, and survives for the rest of the run. `<threads.h>` still refuses to be included, because guest threads do not exist; the storage class is what the VM can honour.
 - **2026-11-13T15:16:34-08:00** — The guard was missing for both spellings: IRGen's block-scope path tested only for the `static` label, so a `thread_local` object was emitted as an automatic and re-initialized on every call. The path now accepts `static`, `thread_local`, and `_Thread_local`. A C++ probe confirmed the same bug for `thread_local` and now observes one initialization across two calls.
 - **2026-11-13T15:16:34-08:00** — `tests/fixtures/c/thread_local_storage.c` covers a file-scope object that persists, a block-scope object with a dynamic initializer that runs once, and a never-called function whose object is never initialized; `krc_run_thread_local_storage` and `krc_run_kr16_thread_local_storage` require exit 42 on both targets. Destructor registration already worked: a `thread_local` object's destructor runs at exit, which a marker-file probe confirmed. Windows debug CTest is 567/567.
+- **2026-11-13T15:43:11-08:00** — Implemented function template deduction and instantiation ([ADR 0031](docs/decisions/0031-function-template-instantiation.md)). The parser still substitutes `int` for each parameter, so an all-int call resolves to the definition as before, and now also tags the definition with its parameter names; Sema keeps that pattern and, when a call deduces a different type, clones the body, binds the parameter, analyzes the clone at file scope, and names it `add__double`. The clone is needed because the recorded expression types are keyed by AST node. `template_functions.cpp` holds one template instantiated for `int`, `double`, and `char`, a pointer pattern deduced through array decay, a conditional whose branches are variables, and a repeated call that reuses an instance; `krc_run_template_functions` requires exit 42.
+- **2026-11-13T15:43:11-08:00** — Fixed two latent bugs the instances exposed. The conditional operator's temporary was an `i32` because its lowering inferred the result type from the operand shapes instead of asking Sema, so `left > right ? left : right` with doubles truncated through `fptosi`; Sema now records the operator's analysed type and code generation uses it. Two `template <typename T>` declarations in one translation unit collided on the substituted `typedef int T`, so the parser emits each stub once per name.
+- **2026-11-13T15:43:11-08:00** — Supported deduction is one level deep (`T`, `T*`, `T&`, `const T&`, with array decay for pointer parameters); every template parameter must be deduced, and explicit template arguments parse but do not influence deduction, so `add<double>(1, 2)` still deduces `int`. Those limits, and the untried class and variadic templates, are recorded in the ADR rather than approximated.
