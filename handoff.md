@@ -453,6 +453,27 @@ Three gaps block a complete `std::array`, each with a reproduction:
 argument to resolve through the stub binding, which is the missing piece for
 free comparison operators on `std::array`.
 
+## A class-template body resolves its parameters to the stub
+
+Inside a class template's member body, a template argument is deduced from the
+**pattern's stub type**, not from the instance's. `~unique_ptr()` calls
+`destroy_owned(pointer)` and the IR for `unique_ptr<Item>` names the callee
+`destroy_owned(ptr<i16>)`, so `delete` runs on an integer and destroys nothing.
+
+Probes that separate "the destructor ran" from "its delete destroyed the object"
+(`10 + entries * 2 + items`) locate it exactly: `delete` in `main` destroys,
+`delete` in a *function* template destroys, `delete` in a *class-template*
+destructor runs the destructor and destroys nothing, and delegating that
+destructor to a function template still destroys nothing because the delegation
+is instantiated with `i16`. A class-template destructor that only counts is
+unaffected.
+
+This is the stub-binding limitation ADR 0032 records, with its consequence for
+owning class templates: `std::unique_ptr` cannot be correct until a
+class-template body resolves template arguments from the instance.
+
+## A copy and a move constructor of one arity
+
 ## A copy and a move constructor of one arity
 
 Two constructors of the same name and arity are both recorded as `Box#1`, so the
