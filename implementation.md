@@ -500,6 +500,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 Most recent first.
 
+### 2026-11-13T21:37:28-08:00 — host gate (Windows)
+
+```text
+windows-msvc-debug    PASS 581/581
+windows-msvc-release  PASS 581/581
+linux-gcc-debug       PASS 529/529
+linux-gcc-release     PASS 529/529
+not verified: native Linux x64, Linux ARM64
+```
+
+The Linux rows register fifty-two tests fewer: the executed tests need a
+runnable VM and are not registered where none is configured, and the
+twenty-five KR16 run tests need the KR16 VM a Linux host does not have. This
+gate covers the injected class name inside a template class body, the instance
+tag rewrite of [ADR 0032](docs/decisions/0032-class-template-instantiation.md),
+and the guard that stops a pattern re-entering an instance under construction.
+The rows ran one at a time, clean from deleted directories, with no warnings
+and no compiler crashes in any log.
 ### 2026-11-13T21:03:28-08:00 — host gate (Windows)
 
 ```text
@@ -2994,3 +3012,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-13T21:03:11-08:00** — Fixed a crash: passing an rvalue to a `const T&` parameter. `int use(const int& v); use(41)` **crashed the compiler** with an access violation for a free function (Sema accepted it, IRGen dereferenced nothing) and was rejected with *expression is not an lvalue* for a member function — `values.fill(5)` failed that way. Both argument paths now bind only an addressable argument (identifier, member, subscript, dereference) and otherwise materialize a temporary the caller owns, which is what the standard requires for a const reference. `krc_run_std_array` now calls `fill(5)` with a literal, and the whole Windows debug suite stays 579/579.
 - **2026-11-13T21:03:11-08:00** — This closes two of the "known front-end gaps" entries: the literal-to-const-reference case was one of the reasons `<array>`'s API looked partial. What remains open there is assignment **through** a reference-returning call (`values.front() = 11`), the injected class name in a template class body, and a range-for over a class.
 - **2026-11-13T21:03:11-08:00** — The injected-class-name gap was investigated again and the search space narrowed. An AST comparison shows the parser *does* emit the label for `C* self()` (`DeclSpecifiers [C]`) and a tag and typedef are both declared at `record_type`'s start (traced: `tag 'C' new, ordinary=null`, then the typedef branch runs), yet the member's lookup of `C` fails and the instance's analysis fails the same way. So the failure is in the *scope* the member analysis runs in, not in symbol declaration — the next probe should print `scopes_.size()` and the current scope's symbol names at the failing lookup.
+- **2026-11-13T21:37:09-08:00** — Fixed the injected class name inside a template class body, the gap that had resisted three earlier attempts. The cause was in `type_from_specifiers`: the class-template branch matched **any** name in `templates_`, and a bare `C` — which carries no `template-arg:` labels — fell into it, hit the "no arguments" path and `continue`d, so the label was consumed without ever reaching the typedef lookup. The branch now requires an actual argument list, and a bare class-template name resolves through the ordinary typedef the pattern's record declares.
+- **2026-11-13T21:37:09-08:00** — Two follow-on corrections. The instance clone now rewrites every label and identifier equal to the pattern's tag into the instance's tag, so `C* self()` and `const C& other` inside `C<int>` mean `C__int` — without it the member resolved to the *pattern's* type. And the branch refuses to re-enter a pattern whose instance is under construction (`class_instances_` holds the in-progress marker): without that guard `Box<T>` inside `Box`'s own body recursed until krc exhausted its stack, which `class_templates.cpp` caught as *krc -c failed with Stack overflow*.
+- **2026-11-13T21:37:09-08:00** — `injected_class_name.cpp` covers the injected name in a return type, a parameter type, the const overload, and a second element type; `krc_run_injected_class_name` requires exit 42. ADR 0032 records both rules. Windows debug CTest is 581/581.
