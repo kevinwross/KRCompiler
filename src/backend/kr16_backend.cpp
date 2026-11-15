@@ -263,6 +263,10 @@ void Kr16Backend::emit_function(std::string& out,
 
     if (function.linkage == ir::Linkage::External) {
         out += ".global " + function.name + "\n";
+    } else if (function.linkage == ir::Linkage::Weak) {
+        // A template or inline definition: visible, overridable, and duplicated
+        // across objects without a duplicate-symbol error.
+        out += ".weak " + function.name + "\n";
     }
     out += function.name + ":\n";
     out += "    PUSH R4\n";
@@ -668,7 +672,8 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
             dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
         if (global->name.empty() || global->name.front() != '.') {
             if (!global->internal) {
-                out += "    .global " + global->name + "\n";
+                out += (global->weak ? "    .weak " : "    .global ") +
+                       global->name + "\n";
             }
         }
         out += global->name + ":\n";

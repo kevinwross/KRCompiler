@@ -37,8 +37,10 @@ bool make_object(const AssemblyResult& assembly,
         }
         linker::KroSymbol output;
         output.name = symbol.name;
-        output.binding = symbol.global ? linker::KroSymbolBinding::Global
-                                       : linker::KroSymbolBinding::Local;
+        output.binding = symbol.weak
+                             ? linker::KroSymbolBinding::Weak
+                             : (symbol.global ? linker::KroSymbolBinding::Global
+                                              : linker::KroSymbolBinding::Local);
         output.type = linker::KroSymbolType::Function;
         output.section = 0;
         output.value = symbol.offset;

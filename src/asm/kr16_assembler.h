@@ -13,6 +13,9 @@ struct AssembledSymbol {
     std::uint64_t offset = 0;
     bool global = false;
     bool external = false;
+    // A weak definition is visible outside its object but may be overridden by a
+    // strong one, and duplicated across objects without being an error.
+    bool weak = false;
 };
 
 struct AssembledRelocation {

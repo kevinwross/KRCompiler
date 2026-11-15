@@ -543,6 +543,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
     std::vector<Line> lines;
     std::map<std::string, Label> labels;
     std::vector<std::string> globals;
+    std::vector<std::string> weaks;
     std::vector<std::string> externs;
 
     std::uint32_t section = 0;
@@ -580,6 +581,11 @@ bool assemble(std::string_view source, AssemblyResult& result,
             } else if (name == ".global") {
                 std::string symbol;
                 directive >> symbol;
+                globals.push_back(symbol);
+            } else if (name == ".weak") {
+                std::string symbol;
+                directive >> symbol;
+                weaks.push_back(symbol);
                 globals.push_back(symbol);
             } else if (name == ".extern") {
                 std::string symbol;
@@ -710,12 +716,14 @@ bool assemble(std::string_view source, AssemblyResult& result,
     for (const auto& entry : labels) {
         const bool global = std::find(globals.begin(), globals.end(),
                                       entry.first) != globals.end();
+        const bool weak = std::find(weaks.begin(), weaks.end(),
+                                 entry.first) != weaks.end();
         result.symbols.push_back(AssembledSymbol{
             entry.first, entry.second.section, entry.second.offset, global,
-            false});
+            false, weak});
     }
     for (const auto& name : externs) {
-        result.symbols.push_back(AssembledSymbol{name, 0, 0, false, true});
+        result.symbols.push_back(AssembledSymbol{name, 0, 0, false, true, false});
     }
     return true;
 }

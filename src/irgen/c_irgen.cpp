@@ -1537,6 +1537,22 @@ void CIRGen::collect_declarations() {
             }
             collect_function(*child->children[0], *child->children[1], true,
                              child->children[2].get());
+            // A template's definition is emitted weak even when it is the
+            // pattern: two translation units that instantiate the same all-int
+            // case both define it, and a strong symbol in each is a duplicate.
+            const bool template_definition =
+                std::any_of(child->labels.begin(), child->labels.end(),
+                            [](const std::string& label) {
+                                return label.rfind("template-param:", 0) == 0 ||
+                                       label.rfind("template-value-param:", 0) == 0;
+                            });
+            if (template_definition) {
+                const auto defined = functions_.find(
+                    declarator_name(*child->children[1]));
+                if (defined != functions_.end() && defined->second) {
+                    defined->second->linkage = ir::Linkage::Weak;
+                }
+            }
             definitions_.push_back(child.get());
         } else if (child->kind == frontend::AstKind::Declaration) {
             if (child->children.empty()) {
