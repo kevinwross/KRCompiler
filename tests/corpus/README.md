@@ -57,3 +57,19 @@ syntax-only rather than link-and-run.
 Not extracted, because the KR16 profile rejects what they use: `types.c` and
 `libc-test.c` (`double`, `float`) and `varargs.c` (`double`). They compile for
 KR32 and belong to a KR32-only tier-1 set when that exists.
+
+## Tier 2, added after measuring the C++ examples
+
+| Files | Targets | Notes |
+|---|---|---|
+| `balanced-tree.cpp`, `cxx_libc.cpp`, `FileOpen.cpp` | KR32 and KR16 | syntax-only |
+| `cxx_tls.cpp`, `floats.c` | KR32 only | `long long` and `double`, which the KR16 profile rejects |
+
+`matrix.cpp` is **not** extracted: it includes `kr32/matrix.hpp`, which this
+sysroot does not carry. That is a dependency gap rather than a compiler one, and
+it is the reason the plan's "six example files, only three substantial" is worth
+reading carefully — one of the six needs a header we do not ship.
+
+`libcpp.cpp` compiles on neither target: KR32 rejects variable length arrays at
+line 2265 and KR16 rejects `long long` at line 30. Both are recorded compiler
+limits, not corpus problems.

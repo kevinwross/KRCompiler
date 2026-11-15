@@ -737,6 +737,41 @@ if(TARGET krc)
     # not provide -- so it stays syntax-only, and types.c, varargs.c and
     # libc-test.c use double or float, which the KR16 profile rejects, so they
     # are KR32-only and not registered here.
+    # Tier 2 sources. The first three compile on both targets; floats.c and
+    # cxx_tls.cpp use double and long long, which the KR16 profile rejects, so
+    # they are KR32-only. matrix.cpp is not extracted: it needs kr32/matrix.hpp,
+    # which this sysroot does not carry.
+    foreach(corpus_source IN ITEMS
+            corpus/extracted/tier2/balanced-tree.cpp
+            corpus/extracted/tier2/cxx_libc.cpp
+            corpus/extracted/tier2/FileOpen.cpp)
+        string(REPLACE "/" "_" corpus_name "${corpus_source}")
+        string(REPLACE ".cpp" "" corpus_name "${corpus_name}")
+        foreach(corpus_target IN ITEMS kr32 kr16)
+            set(corpus_flags -fsyntax-only)
+            if(corpus_target STREQUAL "kr16")
+                set(corpus_flags -fsyntax-only --target=kr16)
+            endif()
+            add_test(NAME krc_corpus_${corpus_target}_${corpus_name}
+                COMMAND $<TARGET_FILE:krc> ${corpus_flags}
+                        -I ${CMAKE_SOURCE_DIR}/sysroot/include
+                        --sysroot ${KRC_STAGE_SYSROOT}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source})
+        endforeach()
+    endforeach()
+
+    foreach(corpus_source IN ITEMS
+            corpus/extracted/tier2/cxx_tls.cpp
+            corpus/extracted/tier1/floats.c)
+        string(REPLACE "/" "_" corpus_name "${corpus_source}")
+        string(REPLACE ".cpp" "" corpus_name "${corpus_name}")
+        string(REPLACE ".c" "" corpus_name "${corpus_name}")
+        add_test(NAME krc_corpus_kr32_${corpus_name}
+            COMMAND $<TARGET_FILE:krc> -fsyntax-only
+                    -I ${CMAKE_SOURCE_DIR}/sysroot/include
+                    --sysroot ${KRC_STAGE_SYSROOT}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source})
+    endforeach()
     foreach(corpus_case IN ITEMS hello:corpus/extracted/tier0/hello.c
                                  mainentry:corpus/extracted/tier1/mainentry.c
                                  binarytree:corpus/extracted/tier1/binarytree.c
