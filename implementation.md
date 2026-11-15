@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-14T23:31:03-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 626/626
+windows-msvc-release  PASS 626/626
+linux-gcc-debug       PASS 555/555
+linux-gcc-release     PASS 555/555
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-14T17:18:58-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 612/612
@@ -3482,3 +3490,4 @@ not verified: native Linux x64, Linux ARM64
   `<typeinfo>` now says so at the source: `typeid(type)` and every member are correct on both targets, only the dynamic form is affected, and it is why the fixtures that compare descriptors use the static form.
 - **2026-11-14T23:30:36-08:00** — What P2.7 does have, all of it verified and tested: the reference-comparison fix (`typeid(a) == typeid(b)` through references), `before()`, `raw_name()`, static `typeid` on both targets, vtable and descriptor data reaching the assembler with symbols instead of zeros, the three-layer `.short`-with-relocation path, the assembler no longer treating a symbol operand as zero, and the object writer honouring the relocation section. The one piece missing is a data object's address surviving the KR16 link.
 - **2026-11-14T23:30:36-08:00** — Suite **626/626**. The objective stays open: P1, P2.4, P2.5 and P2.6 are complete and tested; P2.7 is complete except this one documented limitation.
+- **2026-11-14T23:49:47-08:00** — Host gate, 26 commits waiting: `windows-msvc-debug` **626/626**, `windows-msvc-release` **626/626**, `linux-gcc-debug` **555/555**, `linux-gcc-release` **555/555**, every row from an empty build directory and no warnings in the Linux logs. The Linux rows run 555 rather than 626 because the 71 executed tests are registered only on a Windows host, which is by construction rather than a gap.
