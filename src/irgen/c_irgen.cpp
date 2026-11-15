@@ -7608,6 +7608,10 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
     if (expression.kind == frontend::AstKind::MemberExpression) {
         return emit_member_lvalue(expression);
     }
+    if (is_move_call(expression)) {
+        // A move names its argument, so its lvalue is the argument's.
+        return emit_lvalue(*expression.children[1]->children.front());
+    }
     if (expression.kind == frontend::AstKind::CallExpression) {
         // A reference-returning call names the object it refers to; any other
         // call has no address of its own, so callers that need one for the
@@ -7922,6 +7926,26 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     if (expression.children.size() < 2 || !expression.children[0] ||
         !expression.children[1]) {
         return {};
+    }
+    if (is_move_call(expression)) {
+        // `std::move(x)` and `std::forward<T>(x)` name x and are typed as an
+        // rvalue reference, so in a value context a scalar move is the
+        // referent's value. A record keeps its address -- a record value is its
+        // address here -- and the ordinary call path already answers correctly
+        // for that, so this branch only settles the scalar case.
+        auto address = emit_lvalue(*expression.children[1]->children.front());
+        if (address.value) {
+            auto* element = address.value->type &&
+                                    address.value->type->kind == ir::TypeKind::Pointer
+                                ? address.value->type->element
+                                : nullptr;
+            if (element && element->kind != ir::TypeKind::Struct &&
+                element->kind != ir::TypeKind::Array) {
+                return {builder_.create_load(element, address.value, false, 0,
+                                             "move.value"),
+                        element};
+            }
+        }
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier &&
         (expression.children[0]->text == "std::min" ||
