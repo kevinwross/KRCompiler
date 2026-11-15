@@ -3491,3 +3491,18 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-14T23:30:36-08:00** — What P2.7 does have, all of it verified and tested: the reference-comparison fix (`typeid(a) == typeid(b)` through references), `before()`, `raw_name()`, static `typeid` on both targets, vtable and descriptor data reaching the assembler with symbols instead of zeros, the three-layer `.short`-with-relocation path, the assembler no longer treating a symbol operand as zero, and the object writer honouring the relocation section. The one piece missing is a data object's address surviving the KR16 link.
 - **2026-11-14T23:30:36-08:00** — Suite **626/626**. The objective stays open: P1, P2.4, P2.5 and P2.6 are complete and tested; P2.7 is complete except this one documented limitation.
 - **2026-11-14T23:49:47-08:00** — Host gate, 26 commits waiting: `windows-msvc-debug` **626/626**, `windows-msvc-release` **626/626**, `linux-gcc-debug` **555/555**, `linux-gcc-release` **555/555**, every row from an empty build directory and no warnings in the Linux logs. The Linux rows run 555 rather than 626 because the 71 executed tests are registered only on a Windows host, which is by construction rather than a gap.
+- **2026-11-14T23:56:26-08:00** — The side-by-side comparison cleared the object completely and put the fault in the **linker's placement**. From one run, for one translation unit:
+
+  ```
+  SYM   _ZTVFirst value=1142   _ZTSFirst value=1226   _ZTIFirst value=1232
+  RELOC off=1142 sym=_ZTIFirst                    <- vtable slot 0
+  RELOC off=1144 sym=__krc_member_dtor_First      <- vtable slot 1
+  RELOC off=1234 sym=_ZTSFirst                    <- descriptor's name field
+  LINK  off=27238 val=27578                       <- what lands in the slot
+  LINK  off=27474 val=27722                       <- the name's address
+  run:  vptr=27642  [vptr-2]=27578  [vptr]=28790  name addr=27722
+  ```
+
+  Every object-side number is consistent: the vtable's first word names `_ZTIFirst`, the second names the destructor, the descriptor's name field is two bytes after the descriptor's start, and the offsets differ by exactly the sizes involved. The linked image then puts the descriptor at **27472** (its name field at 27474, holding 27722 — which the runtime `name()` agrees with) while writing **27578** into the vtable slot. So `[vptr-2]` holds 27578, whose bytes are not the descriptor, and the dynamic read lands elsewhere.
+- **2026-11-14T23:56:26-08:00** — That is a different bug from anything recorded so far, and it is a **linker section-placement** bug rather than an assembler or object-format one: the values written into relocations do not agree with the addresses the same linker assigns to the symbols. KR16 objects carry a single section, so the likely mechanism is the per-object offset the linker adds when merging one object's section into the image — the relocation target and the symbol's final address being computed from two different offsets.
+- **2026-11-14T23:56:26-08:00** — Suite **626/626**, traces removed, tree at the committed state. This is the hand-over point: the object is provably correct, the linker is provably inconsistent with it, and the next probe is `symbol address` versus `relocation target` for the same symbol inside the linker, which is one print in `resolve` and one in the relocation loop.
