@@ -497,6 +497,15 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-14T17:18:58-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 612/612
+windows-msvc-release  PASS 612/612
+linux-gcc-debug       PASS 548/548
+linux-gcc-release     PASS 548/548
+not verified: native Linux x64, Linux ARM64
+
+
 Most recent first.
 
 ### 2026-11-14T11:17:45-08:00 — host gate (Windows)
@@ -3316,3 +3325,8 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-14T17:29:43-08:00** — **Retraction, and the stale-image trap for the third time.** The claims that `<memory>` "works on KR16" and that `unique_ptr.cpp` "returns 42 on KR16" (rounds 52, 53, 56, 65) are **wrong**. `unique_ptr.cpp` returns **7** on KR16 with a freshly built image, and 7 is *destroyed != 1* — the destructor never destroys. Every one of those earlier 42s came from a `.kex` left behind by a failed link. The lesson was already written down here and I still repeated it: a link that fails leaves the previous image in place, and running it reports the *old* program.
 - **2026-11-14T17:29:43-08:00** — The gate, now that both VMs can be run: the copied binaries live at `build/vm/krc_kr32.exe` and `build/vm/krc_kr16.exe` (with `SDL2.dll`), and `CMakeLists.txt` prefers them over the sibling checkouts. `windows-msvc-debug` builds clean from an empty directory and passes **610 of 612**. The two failures are executed tests that had **never run** before: `krc_run_exception_cleanup` (expected 42, got 1) and `krc_run_unique_ptr` (expected 42, got 7).
 - **2026-11-14T17:29:43-08:00** — The `unique_ptr` failure is a real defect with a precise shape: `delete` inside a **class-template member body** emits only `free`, while `delete` on the same type in `main` emits `call @__krc_member_dtor_Item`. So the destructor runs for a delete in ordinary code and not for one in a template body — the expression's type still comes from the pattern's **stub**, which is what round 56 fixed for declarations only. That is priority-list item 2 (lazy member instantiation) in its narrowest form, and it is why `unique_ptr` leaks on every target.
+- **2026-11-14T18:08:28-08:00** — **Gate passed, and the KR32 executed tests ran for the first time.** With private copies of both VMs (`build/vm/krc_kr32.exe`, `krc_kr16.exe`, plus `SDL2.dll`) the executed rows are reachable, and they immediately found two real defects, both now fixed:
+  - **`delete` inside a class-template member body freed without destroying.** `ensure_member_destructor` required the owned type's destructor to have a generated body already, so a class template whose `T` destructor came later in the unit emitted only `free`; `unique_ptr<T>` leaked on every target. It now accepts a destructor whose body has not been generated yet, and `krc_run_unique_ptr` passes.
+  - **KR32 had `has_eh = false`** in its profile, so the KR16-motivated gate that skips cleanup pads on a target without exceptions silently removed them from KR32 as well, and `krc_run_exception_cleanup` found destructors no longer running during propagation. [ADR 0038](docs/decisions/0038-kr32-has-exceptions.md) records the correction: KR32 has exceptions, KR16 does not.
+- **2026-11-14T18:08:28-08:00** — Two process lessons, both paid for. A failing link leaves the previous image in place, and running it reports the *old* program — that is how three separate "42" results for `unique_ptr.cpp` were believed. And a CTest run filtered to `krc_run_x` does **not** rebuild the image that `krc_link_x` produces, so a filtered run can report a stale result; run the pair.
+- **2026-11-14T18:08:28-08:00** — Gate record: `windows-msvc-debug` 612/612, `windows-msvc-release` 612/612, `linux-gcc-debug` 548/548, `linux-gcc-release` 548/548, each from an empty build directory. The 64 executed tests are Windows-only by construction: the presets register them only on `WIN32`, so the Linux rows run 548.
