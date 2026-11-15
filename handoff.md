@@ -478,7 +478,6 @@ while copying the member into a local first destroys correctly.
 
 ## A copy and a move constructor of one arity
 
-## A copy and a move constructor of one arity
 
 Two constructors of the same name and arity are both recorded as `Box#1`, so the
 member generation must match the **declaration's own** parameter category: it
