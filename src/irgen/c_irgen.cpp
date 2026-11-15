@@ -364,7 +364,15 @@ ir::Function* CIRGen::ensure_member_destructor(
     if (cached != member_destructors_.end()) {
         return cached->second;
     }
-    const auto record_type = record_types_.find(record);
+    auto record_type = record_types_.find(record);
+    if (record_type == record_types_.end()) {
+        // The record may not have been mapped yet: a template argument names a
+        // type without mapping its record, so a class template that owns one
+        // and deletes it found nothing here and emitted only the free. Mapping
+        // it now is what makes `unique_ptr<T>` call T's destructor.
+        static_cast<void>(map_record(*record));
+        record_type = record_types_.find(record);
+    }
     if (record_type == record_types_.end()) {
         return nullptr;
     }
@@ -425,9 +433,13 @@ ir::Function* CIRGen::ensure_member_destructor(
     const auto own_methods = class_methods_.find(record->tag);
     if (own_methods != class_methods_.end()) {
         const auto found = own_methods->second.find("~" + record->tag);
+        // A destructor whose body has not been generated yet is still the one to
+        // call: the call is emitted now and the body follows when its method is
+        // generated. Requiring a non-empty body here made a class template's
+        // `delete` free its object without destroying it whenever the owned
+        // type's destructor came later in the translation unit.
         if (found != own_methods->second.end() &&
-            !found->second->declaration &&
-            !found->second->blocks.empty()) {
+            !found->second->declaration) {
             own_destructor = found->second;
         }
     }

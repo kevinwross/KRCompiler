@@ -33,7 +33,7 @@ constexpr TargetProfile kKr32{
     true,
     true,
     true,
-    false,
+    /*has_eh=*/true,
     false,
     true,
     true,

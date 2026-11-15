@@ -1,6 +1,6 @@
 # 0037 — A verifier rule names the module's pointer width
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-14
 - Decision: a rule about an address-shaped constant asks the module's target for
   the pointer width instead of naming a number
