@@ -3403,3 +3403,13 @@ not verified: native Linux x64, Linux ARM64
   - Evidence: `_ZTVFirst` now reads `.short _ZTIFirst / .short __krc_member_dtor_First` and `_ZTIFirst` reads `.short 0 / .short _ZTSFirst / ...`, where both were `.byte 0, 0, 0, 0`.
 - **2026-11-14T22:21:37-08:00** — **Still not working, and the symptom has not moved**: with the relocations emitted and applied, `typeid(object) == typeid(First)` still fails (exit 4) on KR16. So the descriptor pointer reaches the vtable slot but the *value compared* still differs. The remaining suspects are the slot offset (now pointer-sized, `-2`, but the layout puts the typeinfo at `_ZTVFirst + 0` and the pointer loaded is the *vtable address*, so the slot read is one word before it) and the typeinfo object's own first word, which the descriptor layout writes as zero. The next step is to read the two addresses at runtime rather than infer them — one probe comparing `typeid(object)` and `typeid(First)` as pointers.
 - **2026-11-14T22:21:37-08:00** — Suite **624/624** with all three layers in, so the mechanism is safe to keep even though the feature it was built for is not yet demonstrated.
+- **2026-11-14T22:22:35-08:00** — The runtime probe answered the question the last two rounds were inferring, and the answer is not the slot offset. On KR16, for one polymorphic object:
+
+  ```
+  static=27740   dynamic=27670   same=0
+  vptr=27734     at_vptr=26950   at_vptr_minus_2=27670
+  ```
+
+  `at_vptr_minus_2` **is** the dynamic value, so the slot is read at the right place and the vtable's typeinfo word holds 27670. `at_vptr` is 26950, a plausible code address, so the destructor slot is relocated. The fault is therefore in the **value the relocation produced**: the compiler computes `_ZTIFirst` as 27740 for `typeid(First)`, while the linker resolved the symbol to **27670** — the same object, 70 bytes apart.
+- **2026-11-14T22:22:35-08:00** — So the next question is the symbol's recorded offset, not the vtable: a data symbol's `value` in the object disagrees with where its bytes actually land, and the assembler's offset counter is where that kind of disagreement comes from — instructions advance it by encoded words times two, `.byte` by operand count, and a mixed stream is easy to get wrong by a small amount. 70 bytes is small enough to be a miscount of one region rather than a layout error, and `_ZTSFirst`'s 8-byte block plus a few short words is the right order of magnitude.
+- **2026-11-14T22:22:35-08:00** — Recorded rather than guessed at: the check to run next is the object's symbol table — `kr16 debug` on the object, or comparing `_ZTIFirst`'s recorded value against `_ZTVFirst`'s and `_ZTSFirst`'s. That comparison needs no runtime at all, which is where this should have started.
