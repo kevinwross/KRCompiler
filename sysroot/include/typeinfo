@@ -41,6 +41,12 @@ private:
     unsigned int __flags;
 };
 
+// Known limitation: on KR16 the vtable's descriptor slot does not survive the
+// link, so 	ypeid(expression) of a polymorphic object reads an address that
+// is not this descriptor. 	ypeid(type) and every member below are correct on
+// both targets; only the dynamic form is affected, and it is why the fixtures
+// that compare descriptors use the static form.
+
 // Thrown by a reference dynamic_cast whose check fails. Catching it by
 // `std::exception&` works because the typeinfo chain records the base class.
 class bad_cast : public exception {
