@@ -64,7 +64,9 @@ bool make_object(const AssemblyResult& assembly,
             object.symbols.push_back(std::move(external));
         }
         linker::KroRelocation output;
-        output.section = 0;
+        // The section comes from the assembler: a data word holding a symbol -- a
+        // vtable's typeinfo or destructor pointer -- patches .data, not .text.
+        output.section = relocation.section;
         output.type = linker::KroRelocationType::Abs16;
         output.width = 2;
         output.offset = relocation.offset;

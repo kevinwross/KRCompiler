@@ -584,6 +584,35 @@ bool assemble(std::string_view source, AssemblyResult& result,
                 std::string symbol;
                 directive >> symbol;
                 externs.push_back(symbol);
+            } else if (name == ".short") {
+                // A data word holds either a number or a symbol. A symbol needs a
+                // relocation at this offset in the data section, which is what
+                // fills a vtable's typeinfo and destructor pointers.
+                Line data;
+                data.mnemonic = ".short";
+                data.operands = split_operands(trim(line.substr(6)));
+                for (const auto& operand : data.operands) {
+                    if (parse_number(operand)) {
+                        continue;
+                    }
+                    const auto symbol = trim(operand);
+                    const auto name_of = [](std::string_view text) {
+                        return std::all_of(
+                            text.begin(), text.end(), [](char character) {
+                                return std::isalnum(
+                                           static_cast<unsigned char>(character)) != 0 ||
+                                       character == '_' || character == '.' ||
+                                       character == '$';
+                            });
+                    };
+                    if (symbol.empty() || !name_of(symbol)) {
+                        error = "invalid .short operand on line " +
+                                std::to_string(line_number);
+                        return false;
+                    }
+                }
+                offset += data.operands.size() * 2;
+                lines.push_back(std::move(data));
             } else if (name == ".byte") {
                 Line data;
                 data.mnemonic = ".byte";
@@ -623,6 +652,26 @@ bool assemble(std::string_view source, AssemblyResult& result,
     section = 0;
     offset = 0;
     for (const auto& line : lines) {
+        if (line.mnemonic == ".short") {
+            for (const auto& operand : line.operands) {
+                const auto value = parse_number(operand);
+                if (value) {
+                    const auto word = static_cast<std::uint16_t>(*value & 0xFFFF);
+                    result.text.push_back(static_cast<std::uint8_t>(word & 0xFF));
+                    result.text.push_back(static_cast<std::uint8_t>(word >> 8));
+                    offset += 2;
+                    continue;
+                }
+                const auto symbol = trim(operand);
+                result.text.push_back(0);
+                result.text.push_back(0);
+                // This object has one section: the offset is absolute within
+                // it, which is where the linker patches the symbol.
+                result.relocations.push_back(AssembledRelocation{symbol, 0, offset});
+                offset += 2;
+            }
+            continue;
+        }
         if (line.mnemonic == ".byte") {
             for (const auto& operand : line.operands) {
                 const auto value = parse_number(operand);

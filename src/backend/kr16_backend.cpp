@@ -672,6 +672,22 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
             }
         }
         out += global->name + ":\n";
+        // A table of addresses -- a vtable, a typeinfo descriptor -- needs the
+        // symbol in the data, not a zero: the assembler records a relocation at
+        // that offset and the linker fills it.
+        if (const auto* addresses =
+                dynamic_cast<const ir::ConstantAddressArray*>(
+                    global->initializer)) {
+            for (const auto* element : addresses->elements) {
+                if (element && (element->kind == ir::ValueKind::Function ||
+                                element->kind == ir::ValueKind::Global)) {
+                    out += "    .short " + element->name + "\n";
+                } else {
+                    out += "    .short 0\n";
+                }
+            }
+            continue;
+        }
         if (data) {
             out += "    .byte ";
             for (std::size_t index = 0; index < data->bytes.size(); ++index) {
