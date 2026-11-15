@@ -739,7 +739,8 @@ if(TARGET krc)
     # are KR32-only and not registered here.
     foreach(corpus_case IN ITEMS hello:corpus/extracted/tier0/hello.c
                                  mainentry:corpus/extracted/tier1/mainentry.c
-                                 binarytree:corpus/extracted/tier1/binarytree.c)
+                                 binarytree:corpus/extracted/tier1/binarytree.c
+                                 strings:corpus/extracted/tier1/strings.c)
         string(FIND "${corpus_case}" ":" separator)
         string(SUBSTRING "${corpus_case}" 0 ${separator} corpus_name)
         math(EXPR after "${separator} + 1")
@@ -768,7 +769,6 @@ if(TARGET krc)
     endforeach()
 
     foreach(corpus_source IN ITEMS
-            corpus/extracted/tier1/strings.c
             corpus/extracted/tier1/hello.cpp)
         string(REPLACE "/" "_" corpus_name "${corpus_source}")
         string(REPLACE ".c" "" corpus_name "${corpus_name}")

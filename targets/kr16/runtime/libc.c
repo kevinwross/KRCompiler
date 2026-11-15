@@ -56,6 +56,28 @@ void *memcpy(void *destination, const void *source, unsigned int count) {
     return destination;
 }
 
+/* Overlapping copies copy backwards when the destination is above the source,
+   which is the one difference from memcpy. The KR32 runtime has had this all
+   along; the KR16 one did not, so corpus code calling memmove could not link. */
+void *memmove(void *destination, const void *source, unsigned int count) {
+    unsigned char *to = (unsigned char *)destination;
+    const unsigned char *from = (const unsigned char *)source;
+    if (to < from) {
+        unsigned int index = 0;
+        while (index < count) {
+            to[index] = from[index];
+            index++;
+        }
+    } else if (to > from) {
+        unsigned int index = count;
+        while (index > 0) {
+            index--;
+            to[index] = from[index];
+        }
+    }
+    return destination;
+}
+
 void *memset(void *destination, int value, unsigned int count) {
     unsigned char *out = (unsigned char *)destination;
     while (count > 0) {
@@ -755,4 +777,18 @@ int printf(const char *format, ...) {
     const int written = vsnprintf(0, 0, format, arguments);
     va_end(arguments);
     return written;
+}
+/* The KR32 runtime has had this all along; the KR16 one did not, so corpus code
+   calling it could not link. */
+void *memchr(const void *memory, int character, unsigned int count) {
+    const unsigned char *bytes = (const unsigned char *)memory;
+    const unsigned char target = (unsigned char)character;
+    unsigned int index = 0;
+    while (index < count) {
+        if (bytes[index] == target) {
+            return (void *)(bytes + index);
+        }
+        index++;
+    }
+    return 0;
 }
