@@ -83,5 +83,6 @@ What was rejected and why.
 - [0038-kr32-has-exceptions.md](0038-kr32-has-exceptions.md) — accepted; KR32 has exception handling, so its profile reports it and cleanup pads are created for it again.
 - [0039-lazy-member-bodies.md](0039-lazy-member-bodies.md) — proposed; a class template instance's member bodies are analysed and generated when used, so an unused body cannot reject a valid program.
 - [0040-weak-template-definitions.md](0040-weak-template-definitions.md) — accepted; a template's definition is emitted weak, the KR16 assembler accepts .weak, and the object writer records the binding, so two translation units can define the same template.
+- [0041-function-sections.md](0041-function-sections.md) — proposed; each KR16 function gets its own section, so section GC can drop the ones nothing references.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
