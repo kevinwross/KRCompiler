@@ -8370,12 +8370,67 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                                 return {};
                             }
                             const auto parameter_index = index + 1;
-                            if (parameter_index <
-                                method->second->type->parameters.size()) {
-                                argument.value = promote(
-                                    argument.value, argument.type,
-                                    method->second->type
-                                        ->parameters[parameter_index]);
+                            const ir::TypePtr parameter_type =
+                                parameter_index <
+                                        method->second->type->parameters.size()
+                                    ? method->second->type->parameters[parameter_index]
+                                    : nullptr;
+                            if (parameter_type &&
+                                parameter_type->kind == ir::TypeKind::Pointer &&
+                                argument.value->type &&
+                                argument.value->type->kind != ir::TypeKind::Pointer) {
+                                // A reference parameter is a pointer, so the caller
+                                // passes the object's address rather than a load of
+                                // it; promoting the loaded value to a pointer is
+                                // what made a const T& operator() receive zero.
+                                // A literal bound to a const reference needs storage,
+                                // so it is materialised rather than rejected.
+                                auto* stored = static_cast<ir::Value*>(nullptr);
+                                const auto& argument_node =
+                                    *argument_nodes[index];
+                                const bool argument_is_lvalue =
+                                    argument_node.kind ==
+                                        frontend::AstKind::Identifier ||
+                                    argument_node.kind ==
+                                        frontend::AstKind::MemberExpression ||
+                                    argument_node.kind ==
+                                        frontend::AstKind::SubscriptExpression ||
+                                    (argument_node.kind ==
+                                         frontend::AstKind::UnaryExpression &&
+                                     argument_node.text == "*");
+                                if (argument_is_lvalue) {
+                                    auto reference =
+                                        emit_lvalue(*argument_nodes[index]);
+                                    if (!reference.value) {
+                                        return {};
+                                    }
+                                    stored = reference.value;
+                                } else {
+                                    auto element_type =
+                                        parameter_type->element
+                                            ? parameter_type->element
+                                            : int_type();
+                                    auto* temporary = builder_.create_alloca(
+                                        element_type, 0, "call.operator.temp");
+                                    auto held =
+                                        emit_expression(*argument_nodes[index]);
+                                    if (!held.value) {
+                                        return {};
+                                    }
+                                    builder_.create_store(held.value, temporary);
+                                    stored = temporary;
+                                }
+                                if (stored->type != parameter_type) {
+                                    stored = builder_.create(
+                                        ir::Opcode::BitCast, parameter_type,
+                                        {stored}, "call.operator.reference");
+                                }
+                                arguments.push_back(stored);
+                                continue;
+                            }
+                            if (parameter_type) {
+                                argument.value = promote(argument.value, argument.type,
+                                                         parameter_type);
                             }
                             arguments.push_back(argument.value);
                         }
