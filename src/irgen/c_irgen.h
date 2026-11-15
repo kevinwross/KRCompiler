@@ -165,6 +165,9 @@ private:
     [[nodiscard]] Expression emit_call(const frontend::AstNode& expression);
     // A call whose declared return type is a reference yields the referent, not
     // the address it returns: rray.at(0) == 5 compares values.
+    // The address a reference-returning call answered with, so an assignment
+    // through `front()` can write the element rather than a temporary.
+    ir::Value* last_reference_address_ = nullptr;
     [[nodiscard]] Expression reference_result(ir::Value* call,
                                                  ir::Function* callee,
                                                  ir::TypePtr result_type);

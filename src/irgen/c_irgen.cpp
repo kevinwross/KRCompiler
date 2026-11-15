@@ -7599,8 +7599,17 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
     if (expression.kind == frontend::AstKind::CallExpression) {
         // A reference-returning call names the object it refers to; any other
         // call has no address of its own, so callers that need one for the
-        // value it returns get a temporary.
+        // value it returns get a temporary. `reference_result` records the
+        // address it answered with, which is the lvalue for `front() = 11`.
+        last_reference_address_ = nullptr;
         auto value = emit_expression(expression);
+        if (last_reference_address_ != nullptr) {
+            auto* address = last_reference_address_;
+            last_reference_address_ = nullptr;
+            return {address, address->type && address->type->element
+                                 ? address->type->element
+                                 : value.type};
+        }
         if (value.value && value.type) {
             auto* storage = builder_.create_alloca(value.type, 0, "call.temp");
             builder_.create_store(value.value, storage);
@@ -7881,9 +7890,13 @@ CIRGen::Expression CIRGen::reference_result(ir::Value* call, ir::Function* calle
         return {call, result_type};
     }
     // A reference-returning call answers with the address of the object (ADR
-    // 0036). A record value is its address in this IR, so a record keeps it;
-    // only a scalar or floating element is read, because a value context wants
-    // the value there.
+    // 0036). The address is kept aside as well as returned: a value context
+    // wants the loaded value, and the assignment path needs the address, so
+    // `values.front() = 11` can write the element instead of a temporary.
+    last_reference_address_ = call;
+    // A record value is its address in this IR, so a record keeps it; only a
+    // scalar or floating element is read, because a value context wants the
+    // value there.
     if (result_type->element &&
         (result_type->element->kind == ir::TypeKind::Struct ||
          result_type->element->kind == ir::TypeKind::Array)) {
