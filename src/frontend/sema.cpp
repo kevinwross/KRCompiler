@@ -2869,6 +2869,12 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             return int_type_;
         }
         if (operation == "&") {
+            // The address of a reference variable is the address of its
+            // referent, so the pointer's element is the referent's type; taking
+            // the reference itself yields ptr<T&> and nothing can use it.
+            if (operand && operand->is_reference && operand->element) {
+                return pointer_to(operand->element);
+            }
             return pointer_to(operand);
         }
         if (operation == "!") {

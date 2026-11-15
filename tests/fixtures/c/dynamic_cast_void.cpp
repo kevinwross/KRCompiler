@@ -10,6 +10,12 @@ int main() {
     void* complete = dynamic_cast<void*>(base);
     if (complete != &object) { return 1; }
 
+    // The address of a reference variable names its referent.
+    Base& reference = object;
+    if (dynamic_cast<void*>(&reference) != &object) {
+        return 3;
+    }
+
     // A null source yields null.
     Base* missing = 0;
     if (dynamic_cast<void*>(missing) != 0) { return 2; }

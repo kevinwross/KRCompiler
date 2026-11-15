@@ -4178,17 +4178,34 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             }
             if (!constructor) {
                 if (argument_nodes.size() == 1 && argument_nodes.front()) {
+                    // A record is copied field by field from its own address. A
+                    // whole-record load and store moves only the first word in
+                    // the backends, which is why a two-field copy kept its first
+                    // field and zeroed the rest. A temporary has no address, so
+                    // the value path below still handles it.
+                    // Only an expression that names a place can be copied from an
+                    // address; mit_lvalue reports an error on anything else, so
+                    // the shape is checked first and a literal argument keeps the
+                    // value path.
+                    const auto argument_kind = argument_nodes.front()->kind;
+                    const bool lvalue_shaped =
+                        argument_kind == frontend::AstKind::Identifier ||
+                        argument_kind == frontend::AstKind::MemberExpression ||
+                        argument_kind == frontend::AstKind::CallExpression ||
+                        (argument_kind == frontend::AstKind::UnaryExpression &&
+                         argument_nodes.front()->text == "*");
+                    if (lvalue_shaped &&
+                        (type->kind == ir::TypeKind::Struct ||
+                         type->kind == ir::TypeKind::Array)) {
+                        auto source = emit_lvalue(*argument_nodes.front());
+                        if (source.value) {
+                            emit_copy(address, source.value, type);
+                            continue;
+                        }
+                    }
                     auto value = emit_expression(*argument_nodes.front());
                     if (value.value && value.type == type) {
-                        // A move names its argument, so the value is the source
-                        // record's address and the copy is field-wise. Storing the
-                        // address would put the pointer in the first field. A
-                        // plain copy keeps its own path.
-                        if (is_move_call(*argument_nodes.front())) {
-                            emit_copy(address, value.value, type);
-                        } else {
-                            builder_.create_store(value.value, address);
-                        }
+                        builder_.create_store(value.value, address);
                         continue;
                     }
                 }
