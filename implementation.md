@@ -3425,3 +3425,14 @@ not verified: native Linux x64, Linux ARM64
   A `delete` on `int*` is a free and nothing else, which is why `destroyed` stays put. So the real P1 blocker is that an **instance's field types are recorded from the pattern**: the member `pointer` is declared `T*` in the pattern and is still `i16*` in the instance, whatever the body analysis does. Round 10's hypothesis (a cached null destructor) was wrong: `member_destructors_` only ever stores a produced function.
 - **2026-11-14T22:36:50-08:00** — That reframes both open items. Deferring analysis cannot help while the *declaration* still says `T`; ADR 0035 fixed exactly this for declarations of ordinary variables and did not reach class-template **members**. The next unit of work for P1 is therefore the instance's member declaration types, not its bodies — and the two may not both be needed, since a correctly typed field makes `delete` emit the destructor call with no deferral at all.
 - **2026-11-14T22:36:50-08:00** — Deferral reverted; suite **624/624** at `acbd864`. Also recorded above: the P2.7 dynamic-`typeid` parking note, including that neither `kr16 debug` nor `kr16 dis` can show an object's symbol table, and that the vtable's stored value sits before the descriptor where `_ZTSFirst` lives — a symbol-index mixup, not an offset miscount.
+- **2026-11-14T22:46:06-08:00** — **Correction to the previous entry**: an instance's member declarations *are* re-resolved with the template's bindings. Two traces on a minimal `Holder<T> { T* pointer; int read() { return pointer->value; } }`:
+
+  ```
+  MEMBER Holder.pointer        kind=10  bindings=0
+  MEMBER Holder__Item.pointer  kind=10  bindings=1
+  TID Holder -> Holder__Item
+  ```
+
+  So the instance record exists, its member is re-analysed with one binding active, and the field is a pointer. The previous entry's conclusion — "member declaration types come from the pattern" — is **not supported**; the declaration path is fine.
+- **2026-11-14T22:46:06-08:00** — What still fails is the *body*: `pointer->value` reports *member access on a non-record value* even though `pointer`'s declared type is a pointer recorded with a binding. So the fault is downstream of the field type — either the pointer's element is still the stub (the trace did not print `type->element->record`, which is what a pointer needs) or `->` inside an instance body resolves differently. The next probe is one line: print the element's tag for a pointer member.
+- **2026-11-14T22:46:06-08:00** — The minimal reproduction now exists as `build/corpus/fieldtype.cpp` (a class template with a `T*` member, no `<memory>`), which is a far better target than `unique_ptr`: it fails in one line and needs no header. Traces removed; suite **624/624** at `5bcd63f`.
