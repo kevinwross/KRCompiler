@@ -7,6 +7,11 @@ int count(Ts... values) {
     return sizeof...(values);
 }
 
+template <typename... Ts>
+int with_fallback(int fallback, Ts... values) {
+    return sizeof...(values) == 0 ? fallback : sizeof...(values);
+}
+
 int main() {
     // Three arities of one pattern.
     if (count(1, 2, 3) != 3) {
@@ -19,8 +24,18 @@ int main() {
         return 3;
     }
 
-    // A pack beside an ordinary parameter, and a pack with no arguments, are
-    // recorded gaps: the instance's signature is expanded from the pack alone.
+    // A zero-arity pack is an instance with no parameters of its own.
+    if (count() != 0) {
+        return 4;
+    }
+
+    // A pack beside an ordinary parameter counts only its own arguments.
+    if (with_fallback(9) != 9) {
+        return 5;
+    }
+    if (with_fallback(9, 1, 2) != 2) {
+        return 6;
+    }
     return 42;
     return 42;
 }

@@ -1736,8 +1736,15 @@ std::string Sema::instantiate_template_call(
     for (std::size_t index = 1; index < parameters.size(); ++index) {
         const auto* parameter = parameters[index].get();
         if (!parameter || parameter->kind != AstKind::ParameterDeclaration ||
-            parameter->children.size() < 2 || !parameter->children[0] ||
-            argument_index >= arguments.size()) {
+            parameter->children.size() < 2 || !parameter->children[0]) {
+            continue;
+        }
+        // A pack is considered even when no argument is left: that is the
+        // zero-arity instance, not a missing argument.
+        const bool pack_head =
+            std::find(parameter->labels.begin(), parameter->labels.end(), "pack") !=
+            parameter->labels.end();
+        if (!pack_head && argument_index >= arguments.size()) {
             continue;
         }
         const auto& labels = parameter->children[0]->labels;
@@ -1755,15 +1762,27 @@ std::string Sema::instantiate_template_call(
             argument_index++;
             continue;
         }
-        const bool is_pack =
-            std::find(parameter->labels.begin(), parameter->labels.end(), "pack") !=
-            parameter->labels.end();
+        const bool is_pack = pack_head;
         if (is_pack) {
             // Every remaining argument belongs to the pack. Its arity becomes part
             // of the instance, and the element type is the arguments' shared one:
             // a pack of mixed types needs a per-position binding this does not
             // have, so it is refused rather than mistyped.
-            if (argument_index >= arguments.size() || !arguments[argument_index]) {
+            // A pack that received no argument is still a pack: its arity is
+            // zero, which the signature expansion removes entirely. Returning
+            // here would leave the call targeting the pattern.
+            if (argument_index >= arguments.size()) {
+                pack_arities.emplace(*template_parameter, std::size_t{0});
+                if (parameter->children.size() > 1 && parameter->children[1]) {
+                    const auto empty_name =
+                        declarator_name(*parameter->children[1]);
+                    if (!empty_name.empty()) {
+                        pack_arities.emplace(empty_name, std::size_t{0});
+                    }
+                }
+                break;
+            }
+            if (!arguments[argument_index]) {
                 return {};
             }
             const auto element = arguments[argument_index];
@@ -1836,7 +1855,7 @@ std::string Sema::instantiate_template_call(
         }
         argument_index++;
     }
-    if (bindings.empty() && value_bindings.empty()) {
+    if (bindings.empty() && value_bindings.empty() && pack_arities.empty()) {
         return {};
     }
     // A value parameter is not deduced from an argument's type, so a call that
