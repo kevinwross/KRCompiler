@@ -6092,10 +6092,23 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
     // An operand that is not a name still resolves a member operator through
     // the record its address names, so *this == other calls the member.
     const auto left_kind = expression.children[0]->kind;
-    const bool left_names_object =
+    bool left_names_object =
         left_kind == frontend::AstKind::MemberExpression ||
         (left_kind == frontend::AstKind::UnaryExpression &&
          expression.children[0]->text == "*");
+    if (!left_names_object && left_kind == frontend::AstKind::Identifier) {
+        // A name bound to a record, or to a reference to one, is an object too:
+        // const type_info& a = ...; a != b must reach the member operator
+        // rather than comparing two records with icmp.
+        const auto* local = lookup_local(expression.children[0]->text);
+        if (local != nullptr && local->frontend_type) {
+            const auto& bound = *local->frontend_type;
+            left_names_object =
+                bound.kind == frontend::TypeKind::Record ||
+                (bound.element != nullptr &&
+                 bound.element->kind == frontend::TypeKind::Record);
+        }
+    }
     if (left_names_object) {
         const auto method_name = "operator" + expression.text;
         auto self = emit_lvalue(*expression.children[0]);

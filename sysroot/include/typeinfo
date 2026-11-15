@@ -25,6 +25,16 @@ public:
     bool operator==(const type_info& other) const { return __name == other.__name; }
     bool operator!=(const type_info& other) const { return __name != other.__name; }
 
+    // An implementation-defined order, so a descriptor can key an ordered
+    // container. The compiler emits one descriptor per class, so the address of
+    // its name is stable for the life of the image and orders descriptors.
+    bool before(const type_info& other) const { return __name < other.__name; }
+
+    // The compiler's spelling of the name. In a hosted implementation this
+    // carries a length prefix; here the name is the source spelling, so it is
+    // the same string name() returns.
+    const char* raw_name() const { return __name; }
+
 private:
     const void* __vptr;
     const char* __name;
