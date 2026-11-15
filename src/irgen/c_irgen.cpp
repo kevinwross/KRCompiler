@@ -4180,7 +4180,15 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 if (argument_nodes.size() == 1 && argument_nodes.front()) {
                     auto value = emit_expression(*argument_nodes.front());
                     if (value.value && value.type == type) {
-                        builder_.create_store(value.value, address);
+                        // A move names its argument, so the value is the source
+                        // record's address and the copy is field-wise. Storing the
+                        // address would put the pointer in the first field. A
+                        // plain copy keeps its own path.
+                        if (is_move_call(*argument_nodes.front())) {
+                            emit_copy(address, value.value, type);
+                        } else {
+                            builder_.create_store(value.value, address);
+                        }
                         continue;
                     }
                 }
@@ -8098,8 +8106,15 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                                     address.value->type->kind == ir::TypeKind::Pointer
                                 ? address.value->type->element
                                 : nullptr;
-            if (element && element->kind != ir::TypeKind::Struct &&
-                element->kind != ir::TypeKind::Array) {
+            if (element && (element->kind == ir::TypeKind::Struct ||
+                            element->kind == ir::TypeKind::Array)) {
+                // A record value is its address, and it must carry the record
+                // type: an initialiser compares the emitted type against its
+                // target's, and a pointer type never matches, which sent a moved
+                // record down the aggregate path.
+                return {address.value, element};
+            }
+            if (element) {
                 return {builder_.create_load(element, address.value, false, 0,
                                              "move.value"),
                         element};
