@@ -763,6 +763,21 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
         }
         analyze_member_declaration(*member, *info);
     }
+    // A class template's own record stands for the unparameterised spelling
+    // (ADR 0032), so a body there is analysed with stub types: inside Holder<T>,
+    // T* is int* and a body written for the real element fails on it. Only an
+    // instance analyses its members' bodies, with the bindings that make them
+    // valid.
+    const bool pattern_only =
+        !is_class_instance(info->tag) &&
+        std::any_of(specifier.labels.begin(), specifier.labels.end(),
+                    [](const std::string& label) {
+                        return label.rfind("template-param:", 0) == 0 ||
+                               label.rfind("template-value-param:", 0) == 0;
+                    });
+    if (pattern_only) {
+        member_bodies.clear();
+    }
     for (const auto* definition : member_bodies) {
         // An in-class body is analysed in the record's scope, like an
         // out-of-line one, once every member it may name exists.

@@ -1887,6 +1887,20 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             function_classes_[function] = record;
             if (sema_.is_class_instance(child->text)) {
                 instance_members_.insert(function);
+            } else {
+                // A class template's own record is the unparameterised spelling,
+                // so its bodies are written for stub types and cannot be built.
+                // Only the instance's copies are (ADR 0032).
+                const bool pattern_member = std::any_of(
+                    child->labels.begin(), child->labels.end(),
+                    [](const std::string& label) {
+                        return label.rfind("template-param:", 0) == 0 ||
+                               label.rfind("template-value-param:", 0) == 0;
+                    });
+                if (pattern_member) {
+                    function->declaration = true;
+                    continue;
+                }
             }
             method_bodies_.push_back({function, member.get()});
         }
