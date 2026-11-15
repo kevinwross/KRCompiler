@@ -1679,6 +1679,24 @@ std::string Sema::instantiate_template_call(
         !pattern->second.definition->children[1]) {
         return {};
     }
+    // A value parameter is not deduced from an argument's type, so a call that
+    // omits it cannot pick an instance. Say so here, before deduction, because
+    // deduction returns early on a parameter whose type is a template-id and the
+    // check later in this function would never be reached.
+    for (std::size_t index = 0; index < pattern->second.parameters.size();
+         ++index) {
+        const auto& name = pattern->second.parameters[index];
+        if (pattern->second.value_parameters.count(name) == 0) {
+            continue;
+        }
+        if (index < explicit_arguments.size()) {
+            continue;
+        }
+        error(callee.location,
+              "cannot deduce the value template parameter '" + name +
+                  "'; write it explicitly");
+        return {};
+    }
     const auto& parameters = pattern->second.definition->children[1]->children;
     std::unordered_map<std::string, TypePtr> bindings;
     std::unordered_map<std::string, long long> value_bindings;

@@ -5245,6 +5245,12 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/thread_local_local_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_cxx_value_parameter_deduced
+        COMMAND $<TARGET_FILE:krc> -fsyntax-only
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/value_parameter_deduced.cpp")
+    # The regex is the assertion: WILL_FAIL would invert its result as well.
+    set_tests_properties(krc_cxx_value_parameter_deduced PROPERTIES
+        PASS_REGULAR_EXPRESSION "cannot deduce the value template parameter")
     add_test(NAME krc_cxx_static_assert_fail
         COMMAND $<TARGET_FILE:krc> -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/static_assert_fail.cpp")
