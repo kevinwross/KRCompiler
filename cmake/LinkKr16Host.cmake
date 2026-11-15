@@ -23,6 +23,13 @@ set(user_object "${OUTPUT}.user.kro")
 set(user_objects "${user_object}")
 set(inputs "${CRT0}|${crt_object}" "${SOURCE}|${user_object}")
 
+# The C library is optional: a fixture that calls printf needs it, and one that
+# does not would only grow the link. LIBCRT names the staged libcrt object.
+set(libraries "${HOST}" "${FILEIO}")
+if(DEFINED LIBCRT AND NOT LIBCRT STREQUAL "")
+    list(APPEND libraries "${LIBCRT}")
+endif()
+
 if(DEFINED SOURCE2 AND NOT SOURCE2 STREQUAL "")
     set(user_object2 "${OUTPUT}.user2.kro")
     list(APPEND inputs "${SOURCE2}|${user_object2}")
@@ -44,7 +51,7 @@ foreach(pair IN LISTS inputs)
     endif()
 endforeach()
 
-execute_process(COMMAND "${KRLD}" "${crt_object}" "${HOST}" "${FILEIO}"
+execute_process(COMMAND "${KRLD}" "${crt_object}" ${libraries}
                         ${user_objects} -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)

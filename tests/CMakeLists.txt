@@ -731,37 +731,65 @@ if(TARGET krc)
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/return_call_once_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
-    # Corpus fixtures extracted from ../kr32/examples, compiled on the target
-    # whose profile admits them. types.c, varargs.c and libc-test.c use types
-    # the KR16 profile rejects, so they are KR32-only and not extracted yet.
-    foreach(corpus_target IN ITEMS kr32 kr16)
-        foreach(corpus_source IN ITEMS
-                corpus/extracted/tier0/hello.c
-                corpus/extracted/tier1/mainentry.c
-                corpus/extracted/tier1/binarytree.c
-                corpus/extracted/tier1/strings.c)
-            string(REPLACE "/" "_" corpus_name "${corpus_source}")
-            string(REPLACE ".c" "" corpus_name "${corpus_name}")
+    # Corpus fixtures extracted from ../kr32/examples. hello, mainentry and
+    # binarytree link and run: they need the C library, so LIBCRT is passed.
+    # strings.c compiles but cannot link -- it calls memmove, which libcrt does
+    # not provide -- so it stays syntax-only, and types.c, varargs.c and
+    # libc-test.c use double or float, which the KR16 profile rejects, so they
+    # are KR32-only and not registered here.
+    foreach(corpus_case IN ITEMS hello:corpus/extracted/tier0/hello.c
+                                 mainentry:corpus/extracted/tier1/mainentry.c
+                                 binarytree:corpus/extracted/tier1/binarytree.c)
+        string(FIND "${corpus_case}" ":" separator)
+        string(SUBSTRING "${corpus_case}" 0 ${separator} corpus_name)
+        math(EXPR after "${separator} + 1")
+        string(SUBSTRING "${corpus_case}" ${after} -1 corpus_source)
+        add_test(NAME krc_corpus_kr16_link_${corpus_name}
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+                    -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+                    -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+                    -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source}
+                    -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/corpus_${corpus_name}.kex
+                    -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+        add_test(NAME krc_corpus_kr16_run_${corpus_name}
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/corpus_${corpus_name}.kex
+                    -DFS_ROOT=${KRC_TEST_OUTPUT_DIR}
+                    -DFS_QUOTA=1G
+                    -DEXPECT_EXIT=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_corpus_kr16_run_${corpus_name} PROPERTIES
+            DEPENDS krc_corpus_kr16_link_${corpus_name})
+    endforeach()
+
+    foreach(corpus_source IN ITEMS
+            corpus/extracted/tier1/strings.c
+            corpus/extracted/tier1/hello.cpp)
+        string(REPLACE "/" "_" corpus_name "${corpus_source}")
+        string(REPLACE ".c" "" corpus_name "${corpus_name}")
+        string(REPLACE ".cpp" "" corpus_name "${corpus_name}")
+        foreach(corpus_target IN ITEMS kr32 kr16)
             if(corpus_target STREQUAL "kr16")
-                add_test(NAME krc_corpus_kr16_${corpus_name}
+                add_test(NAME krc_corpus_${corpus_target}_${corpus_name}
                     COMMAND $<TARGET_FILE:krc> -fsyntax-only --target=kr16
                             -I ${CMAKE_SOURCE_DIR}/sysroot/include
                             --sysroot ${KRC_STAGE_SYSROOT}
                             ${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source})
             else()
-                add_test(NAME krc_corpus_kr32_${corpus_name}
+                add_test(NAME krc_corpus_${corpus_target}_${corpus_name}
                     COMMAND $<TARGET_FILE:krc> -fsyntax-only
                             -I ${CMAKE_SOURCE_DIR}/sysroot/include
                             --sysroot ${KRC_STAGE_SYSROOT}
                             ${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source})
             endif()
         endforeach()
-        add_test(NAME krc_corpus_${corpus_target}_hello_cpp
-            COMMAND $<TARGET_FILE:krc> -fsyntax-only
-                    -I ${CMAKE_SOURCE_DIR}/sysroot/include
-                    --sysroot ${KRC_STAGE_SYSROOT}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier1/hello.cpp)
     endforeach()
+
     add_test(NAME krc_link_kr16_file_layer
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
