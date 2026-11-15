@@ -179,6 +179,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR16_VM}
                     -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_file_layer.kex
                     -DFS_ROOT=${KRC_TEST_OUTPUT_DIR}
+                    -DFS_QUOTA=1G
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
         set_tests_properties(krc_run_kr16_file_layer PROPERTIES

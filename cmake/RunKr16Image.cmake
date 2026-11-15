@@ -5,7 +5,8 @@
 # defect in generated code that the program only shows when executed.
 #
 # Required: VM, IMAGE, EXPECT_EXIT
-# Optional: FS_ROOT -- the directory the VM's file services see as the root.
+# Optional: FS_ROOT -- the directory the VM's file services see as the root;
+#           FS_QUOTA -- the quota for that root.
 #           Without it the VM sandboxes to ./sandbox and every open fails,
 #           which reads exactly like a broken file layer.
 # Optional: MAX_CYCLES (default 20000000), EXPECT_OUTPUT (a regular expression
@@ -27,6 +28,12 @@ endif()
 set(VM_ARGS)
 if(DEFINED FS_ROOT AND NOT FS_ROOT STREQUAL "")
     list(APPEND VM_ARGS --fs-root "${FS_ROOT}")
+endif()
+# The VM's filesystem quota defaults to 5 MiB and counts the whole root
+# recursively, so a root that holds a build tree exhausts it and every write
+# returns SYS_ENOSPC. A test that transfers bytes raises it explicitly.
+if(DEFINED FS_QUOTA AND NOT FS_QUOTA STREQUAL "")
+    list(APPEND VM_ARGS --fs-quota "${FS_QUOTA}")
 endif()
 
 execute_process(
