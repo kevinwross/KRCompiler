@@ -32,3 +32,6 @@ node_modules/
 
 # Keep extracted fixtures and expected-output files under tests/fixtures.
 !tests/fixtures/**
+
+# Handoff mailbox from the sibling VM repository
+/inbox/
