@@ -1,6 +1,7 @@
 #include "krc/frontend/sema.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -1486,6 +1487,19 @@ void rewrite_instance_tag(AstNode& node, const std::string& from,
 }
 void substitute_value_parameters(
     AstNode& node, const std::unordered_map<std::string, long long>& values) {
+    // A template argument is spelled as a label, so `array<T, N>` keeps `N` in a
+    // label rather than in an expression: a value binding can satisfy it there
+    // and a type lookup cannot, which is why the parameter's type stayed a stub.
+    for (auto& label : node.labels) {
+        constexpr std::string_view prefix = "template-arg:";
+        if (label.rfind(prefix, 0) != 0) {
+            continue;
+        }
+        const auto found = values.find(label.substr(prefix.size()));
+        if (found != values.end()) {
+            label = std::string(prefix) + std::to_string(found->second);
+        }
+    }
     for (auto& child : node.children) {
         if (!child) {
             continue;
@@ -1730,6 +1744,17 @@ std::string Sema::instantiate_template_call(
     }
     if (bindings.empty() && value_bindings.empty()) {
         return {};
+    }
+    // A value parameter is not deduced from an argument's type, so a call that
+    // omits it cannot pick an instance. Say so at the call rather than leaving a
+    // symbol nothing defines.
+    for (const auto& name : pattern->second.value_parameters) {
+        if (value_bindings.count(name) == 0) {
+            error(callee.location,
+                  "cannot deduce the value template parameter '" + name +
+                      "'; write it explicitly");
+            return {};
+        }
     }
     // The parser instantiates the all-int case as the definition itself, so a
     // call that deduces only `int` needs no clone.
@@ -2102,7 +2127,18 @@ void Sema::analyze_function_definition(const AstNode& definition) {
         std::find(specifiers->labels.begin(), specifiers->labels.end(), "auto") !=
         specifiers->labels.end();
     auto_return_type_ = nullptr;
-    analyze_function_body(definition, enclosing_record_);
+    // A template pattern whose body depends on a value parameter cannot be
+    // analysed: std::array<T, N> is not a record until N is bound, so the
+    // pattern is a signature only and every instance is analysed with its own
+    // bindings.
+    const bool value_dependent_pattern =
+        std::any_of(definition.labels.begin(), definition.labels.end(),
+                    [](const std::string& label) {
+                        return label.rfind("template-value-param:", 0) == 0;
+                    });
+    if (!value_dependent_pattern) {
+        analyze_function_body(definition, enclosing_record_);
+    }
     if (auto_return_active_ && auto_return_type_ && type->return_type) {
         auto updated = std::make_shared<Type>(*type);
         updated->return_type = auto_return_type_;
