@@ -45,5 +45,13 @@ int main() {
     if (first.raw_name() != first.name()) {
         return 5;
     }
+
+    // Equal descriptors hash equally, and distinct ones do not.
+    if (first.hash_code() != typeid(First).hash_code()) {
+        return 6;
+    }
+    if (first.hash_code() == second.hash_code()) {
+        return 7;
+    }
     return 42;
 }
