@@ -1,6 +1,7 @@
 #include "asm/kr16_assembler.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -654,7 +655,16 @@ bool assemble(std::string_view source, AssemblyResult& result,
     for (const auto& line : lines) {
         if (line.mnemonic == ".short") {
             for (const auto& operand : line.operands) {
-                const auto value = parse_number(operand);
+                // Only a digit or a sign makes a number; parse_number accepts an
+                // identifier as zero, which would silently drop the relocation.
+                const auto trimmed = trim(operand);
+                const bool numeric =
+                    !trimmed.empty() &&
+                    (std::isdigit(static_cast<unsigned char>(trimmed.front())) != 0 ||
+                     trimmed.front() == '-' || trimmed.front() == '+');
+                const auto value = numeric
+                                       ? parse_number(trimmed)
+                                       : std::optional<std::int32_t>{};
                 if (value) {
                     const auto word = static_cast<std::uint16_t>(*value & 0xFFFF);
                     result.text.push_back(static_cast<std::uint8_t>(word & 0xFF));
