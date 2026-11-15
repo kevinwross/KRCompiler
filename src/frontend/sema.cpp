@@ -1799,8 +1799,14 @@ std::string Sema::instantiate_template_call(
                 }
             }
             bindings.emplace(*template_parameter, element);
-            pack_arities.emplace(*template_parameter,
-                                 arguments.size() - argument_index);
+            const auto arity = arguments.size() - argument_index;
+            pack_arities.emplace(*template_parameter, arity);
+            if (parameter->children.size() > 1 && parameter->children[1]) {
+                const auto parameter_name = declarator_name(*parameter->children[1]);
+                if (!parameter_name.empty()) {
+                    pack_arities.emplace(parameter_name, arity);
+                }
+            }
             argument_index = arguments.size();
             break;
         }
@@ -1849,7 +1855,8 @@ std::string Sema::instantiate_template_call(
     // The all-int shortcut assumes the pattern itself is the int instance. A
     // value parameter makes the pattern uncallable, so there is nothing to
     // reuse and the instance must be built.
-    if (value_bindings.empty() && bindings.size() == 1 &&
+    if (value_bindings.empty() && pack_arities.empty() &&
+        bindings.size() == 1 &&
         bindings.begin()->second->kind == TypeKind::Int &&
         !bindings.begin()->second->is_unsigned) {
         return {};
@@ -1910,10 +1917,36 @@ std::string Sema::instantiate_template_call(
                                   "pack"),
                     parameter->labels.end());
                 const auto arity = pack_arities.begin()->second;
+                // A pack that received no arguments contributes no parameter at
+                // all, so it is removed rather than kept.
+                if (arity == 0) {
+                    function->children.erase(function->children.begin() +
+                                             static_cast<std::ptrdiff_t>(index));
+                    break;
+                }
+                const auto pack_name = parameter->children.size() > 1 &&
+                                               parameter->children[1]
+                                           ? declarator_name(*parameter->children[1])
+                                           : std::string{};
                 for (std::size_t copy = 1; copy < arity; ++copy) {
+                    auto duplicated = clone_ast(*parameter);
+                    if (!pack_name.empty() && duplicated->children.size() > 1 &&
+                        duplicated->children[1]) {
+                        auto* declarator =
+                            const_cast<AstNode*>(duplicated->children[1].get());
+                        while (declarator != nullptr &&
+                               declarator->kind != AstKind::Declarator) {
+                            declarator = declarator->children.empty()
+                                             ? nullptr
+                                             : declarator->children.front().get();
+                        }
+                        if (declarator != nullptr) {
+                            declarator->text = pack_name + std::to_string(copy);
+                        }
+                    }
                     function->children.insert(function->children.begin() +
                                                   static_cast<std::ptrdiff_t>(index + 1),
-                                              clone_ast(*parameter));
+                                              std::move(duplicated));
                 }
                 break;
             }

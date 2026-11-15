@@ -260,11 +260,25 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
             // called without one, so it is a declaration: the instantiation is
             // the only definition. ADR 0031's int-substituted copy only works
             // for type parameters.
-            const bool value_dependent =
+            bool value_dependent =
                 std::any_of(definition->labels.begin(), definition->labels.end(),
                             [](const std::string& label) {
                                 return label.rfind("template-value-param:", 0) == 0;
                             });
+            // A pattern with a parameter pack has no arity, so its body cannot
+            // be built either: sizeof...(pack) has nothing to fold to.
+            for (const auto& child : definition->children) {
+                if (!child) {
+                    continue;
+                }
+                for (const auto& nested : child->children) {
+                    if (nested &&
+                        std::find(nested->labels.begin(), nested->labels.end(),
+                                  "pack") != nested->labels.end()) {
+                        value_dependent = true;
+                    }
+                }
+            }
             if (value_dependent) {
                 const auto name = declarator_name(*definition->children[1]);
                 const auto found = functions_.find(name);
@@ -10413,6 +10427,18 @@ CIRGen::Expression CIRGen::emit_cast(const frontend::AstNode& expression) {    i
 }
 
 CIRGen::Expression CIRGen::emit_sizeof(const frontend::AstNode& expression) {
+    // sizeof...(pack) is the arity the instance folded to, not a type's size.
+    if (expression.text == "sizeof...") {
+        long long folded = 0;
+        if (!sema_.folded_constant(expression, folded)) {
+            error(expression.location,
+                  "the arity of this parameter pack is not known here");
+            return {};
+        }
+        const auto type = size_type();
+        return {module_->constant_int(type, folded), type};
+    }
+
     if (expression.children.empty() || !expression.children.front()) {
         return {};
     }
