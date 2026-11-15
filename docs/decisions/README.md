@@ -81,6 +81,7 @@ What was rejected and why.
 - [0036-reference-representation.md](0036-reference-representation.md) — proposed; a record value is its address, a reference slot holds an address, and a reference-returning call answers with one, so binding names the object.
 - [0037-address-array-pointer-width.md](0037-address-array-pointer-width.md) — accepted; a verifier rule about address-shaped constants asks the module's target for the pointer width rather than naming 32 bits.
 - [0038-kr32-has-exceptions.md](0038-kr32-has-exceptions.md) — accepted; KR32 has exception handling, so its profile reports it and cleanup pads are created for it again.
+- [0039-lazy-member-bodies.md](0039-lazy-member-bodies.md) — proposed; a class template instance's member bodies are analysed and generated when used, so an unused body cannot reject a valid program.
 ame__tag.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
