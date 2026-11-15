@@ -2049,6 +2049,46 @@ std::string Sema::instantiate_template_call(
                     fold_over_pack(node, name, arity, node.text);
                     return;
                 }
+                // `f(pack...)` forwards the pack as that many arguments. The
+                // signature expansion named the parameters `name`, `name1`, ...,
+                // so the marked argument becomes those identifiers.
+                if (node.kind == AstKind::CallExpression &&
+                    node.children.size() > 1 && node.children[1]) {
+                    auto& arguments = node.children[1]->children;
+                    for (std::size_t index = 0; index < arguments.size();
+                         ++index) {
+                        auto& argument = arguments[index];
+                        if (!argument ||
+                            std::find(argument->labels.begin(),
+                                      argument->labels.end(),
+                                      "pack-expansion") ==
+                                argument->labels.end() ||
+                            argument->kind != AstKind::Identifier ||
+                            argument->text != name) {
+                            continue;
+                        }
+                        std::vector<std::unique_ptr<AstNode>> expanded;
+                        for (std::size_t position = 0; position < arity;
+                             ++position) {
+                            auto element = std::make_unique<AstNode>();
+                            element->kind = AstKind::Identifier;
+                            element->location = argument->location;
+                            element->text =
+                                position == 0
+                                    ? name
+                                    : name + std::to_string(position);
+                            expanded.push_back(std::move(element));
+                        }
+                        arguments.erase(arguments.begin() +
+                                        static_cast<std::ptrdiff_t>(index));
+                        arguments.insert(
+                            arguments.begin() +
+                                static_cast<std::ptrdiff_t>(index),
+                            std::make_move_iterator(expanded.begin()),
+                            std::make_move_iterator(expanded.end()));
+                        break;
+                    }
+                }
                 for (auto& child : node.children) {
                     if (child) {
                         self(*child, name, arity, self);

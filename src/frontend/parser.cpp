@@ -2466,6 +2466,12 @@ std::unique_ptr<AstNode> Parser::parse_argument_list() {
     for (;;) {
         auto argument = parse_assignment_expression();
         if (argument) {
+            // `f(pack...)` expands one argument into the pack's arity. The
+            // ellipsis is recorded on the argument, and instantiation replaces
+            // it with the expanded parameters, which exist only per instance.
+            if (cxx_mode_ && match("...")) {
+                argument->labels.emplace_back("pack-expansion");
+            }
             node->children.push_back(std::move(argument));
         }
         if (!match(",")) {
