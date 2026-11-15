@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T02:44:37-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 628/628
+windows-msvc-release  PASS 628/628
+linux-gcc-debug       PASS 556/556
+linux-gcc-release     PASS 556/556
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-14T23:31:03-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 626/626
@@ -3517,3 +3525,4 @@ not verified: native Linux x64, Linux ARM64
   On KR32 a pointer is four bytes, so the literal was right there and wrong on KR16, where the vptr landed **two words into the vtable**. Every dynamic read was then one slot off, and my `typeid` slot offset had been compensating for it in the opposite direction — which is why five rounds of investigating the slot went nowhere: the slot offset was never the primary fault.
 - **2026-11-15T00:07:36-08:00** — The fix is the pointer size from the target (ADR 0037's rule, the third place in this code base where a literal 4 stood in for it). With it, `vptr=27640` points at the first virtual entry, `[vptr-2]` is 27728 — `_ZTIFirst`'s address — and `typeinfo_members.cpp` returns **42 on KR16**. The limitation note added to `<typeinfo>` last round was false the moment this landed and has been removed: documentation that says a thing does not work is as damaging as one that says it does.
 - **2026-11-15T00:07:36-08:00** — `typeinfo_members` is now registered for **KR16 as well as KR32** (four tests rather than two), and the suite is **628/628**. `unique_ptr`, `std::move`, `<utility>`, non-type template parameters, a class template type in a signature, template member bodies, const overload dispatch and descriptor comparison through references are all in and verified on both targets.
+- **2026-11-15T03:02:20-08:00** — Host gate, closing the last two commits: `windows-msvc-debug` **628/628**, `windows-msvc-release` **628/628**, `linux-gcc-debug` **556/556**, `linux-gcc-release` **556/556**, each from an empty build directory, no warnings in the Linux logs. The Linux rows run 556 because the 72 executed tests are registered only on a Windows host.
