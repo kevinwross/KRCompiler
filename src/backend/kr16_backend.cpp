@@ -114,6 +114,60 @@ bool gep_offset(const ir::Instruction& instruction, std::uint32_t& offset,
     return true;
 }
 
+// The scale for a GEP whose last index is a runtime value. The indices before it
+// must be constants: they walk to the aggregate the runtime index selects from,
+// contributing their own byte offset, and the scale is the size of one element of
+// that aggregate. `getelementptr %T, ptr %base, 0, %i` is the shape a loop over
+// an array field produces.
+bool dynamic_gep_scale(const ir::Instruction& instruction, std::uint32_t& offset,
+                       std::uint32_t& scale, std::string& error) {
+    offset = 0;
+    scale = 0;
+    ir::TypePtr current = instruction.source_type;
+    const std::size_t last = instruction.operands.size() - 1;
+    for (std::size_t index = 1; index < last; ++index) {
+        const auto* constant =
+            dynamic_cast<const ir::ConstantInt*>(instruction.operands[index]);
+        if (!constant) {
+            error = "KR16 dynamic GEP has more than one runtime index";
+            return false;
+        }
+        const auto element = constant->value;
+        if (current && current->kind == ir::TypeKind::Array) {
+            offset += static_cast<std::uint32_t>(
+                element * static_cast<std::int64_t>(type_size(current->element)));
+            current = current->element;
+            continue;
+        }
+        if (current && current->kind == ir::TypeKind::Struct) {
+            if (element < 0 ||
+                static_cast<std::size_t>(element) >= current->fields.size()) {
+                error = "KR16 GEP struct index is out of range";
+                return false;
+            }
+            for (std::int64_t field = 0; field < element; ++field) {
+                offset += type_size(current->fields[static_cast<std::size_t>(field)]);
+            }
+            current = current->fields[static_cast<std::size_t>(element)];
+            continue;
+        }
+        // The first index steps over whole source values, which is how a pointer
+        // to one element becomes a pointer to the next.
+        offset += static_cast<std::uint32_t>(
+            element * static_cast<std::int64_t>(type_size(current)));
+    }
+    if (current && current->kind == ir::TypeKind::Array) {
+        scale = static_cast<std::uint32_t>(type_size(current->element));
+        return true;
+    }
+    if (current && current->kind == ir::TypeKind::Pointer) {
+        scale = static_cast<std::uint32_t>(type_size(current->element));
+        return true;
+    }
+    scale = static_cast<std::uint32_t>(type_size(current));
+    return true;
+}
+
 }  // namespace
 
 Kr16Backend::Kr16Backend(const ir::Module& module,
@@ -460,10 +514,19 @@ void Kr16Backend::emit_function(std::string& out,
                 break;
             }
             case ir::Opcode::GetElementPtr: {
-                const bool dynamic_index =
-                    instruction->operands.size() == 2 &&
+                // Two forms reach here: [%i] selects from the source type and
+                // keeps its own lowering, and [0, %i] selects an element of an
+                // aggregate field, which is the shape a loop over an array
+                // member produces. Only the second is new here.
+                const bool aggregate_index =
+                    instruction->operands.size() >= 3 &&
                     dynamic_cast<const ir::ConstantInt*>(
-                        instruction->operands[1]) == nullptr;
+                        instruction->operands.back()) == nullptr;
+                const bool dynamic_index =
+                    aggregate_index ||
+                    (instruction->operands.size() == 2 &&
+                     dynamic_cast<const ir::ConstantInt*>(
+                         instruction->operands[1]) == nullptr);
                 std::uint32_t offset = 0;
                 if (!dynamic_index &&
                     !gep_offset(*instruction, offset, error)) {
@@ -478,7 +541,25 @@ void Kr16Backend::emit_function(std::string& out,
                 } else {
                     load(instruction->operands[0], "R0");
                 }
-                if (dynamic_index) {
+                if (aggregate_index) {
+                    std::uint32_t scale = 0;
+                    if (!dynamic_gep_scale(*instruction, offset, scale, error)) {
+                        return;
+                    }
+                    load(instruction->operands.back(), "R1");
+                    if (scale == 2) {
+                        out += "    ADD R1, R1\n";
+                    } else if (scale == 4) {
+                        out += "    SHL R1, #2\n";
+                    } else if (scale == 8) {
+                        out += "    SHL R1, #3\n";
+                    } else if (scale != 1) {
+                        error = "KR16 dynamic GEP element size is unsupported";
+                        return;
+                    }
+                    out += "    ADD R0, R1\n";
+                }
+                if (!aggregate_index && dynamic_index) {
                     const auto size = type_size(instruction->source_type);
                     load(instruction->operands[1], "R1");
                     if (size == 2) {
@@ -492,7 +573,8 @@ void Kr16Backend::emit_function(std::string& out,
                         return;
                     }
                     out += "    ADD R0, R1\n";
-                } else if (offset != 0) {
+                }
+                if (!aggregate_index && offset != 0) {
                     out += "    MOV R1, #" + std::to_string(offset) + "\n";
                     out += "    ADD R0, R1\n";
                 }
