@@ -2194,6 +2194,21 @@ std::unique_ptr<AstNode> Parser::parse_unary_expression() {
     if (check("sizeof") || check("_Alignof") || check("alignof")) {
         const bool is_sizeof = check("sizeof");
         ++position_;
+        // sizeof...(pack) is its own form: the ellipsis follows the keyword and
+        // the operand is a name, so it is recorded as a call-shaped node that
+        // instantiation folds to a number.
+        if (is_sizeof && check("...") && peek(1).is("(")) {
+            ++position_;
+            auto node = make_ast(AstKind::SizeofExpression, location, "sizeof...");
+            if (match("(")) {
+                auto operand = parse_expression();
+                expect(")", "after the operand of sizeof...");
+                if (operand) {
+                    node->children.push_back(std::move(operand));
+                }
+            }
+            return node;
+        }
         auto node = make_ast(is_sizeof ? AstKind::SizeofExpression : AstKind::AlignofExpression,
                              location);
         if (check("(") && peek(1).kind != TokenKind::Eof &&
