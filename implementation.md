@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T12:07:11-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 645/645
+windows-msvc-release  PASS 645/645
+linux-gcc-debug       PASS 565/565
+linux-gcc-release     PASS 565/565
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T11:43:18-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 645/645
@@ -3692,3 +3700,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T12:06:05-08:00** — `docs/release-notes.md` was **materially false** and is now correct: it listed variadic templates and fold expressions under "what is not in this release", and denied a complete `<functional>` alongside `<array>` and `<memory>`, all four of which work now. The two bullets now name what is absent instead — partial specialisation, member templates, explicit arguments on a class template, pack expansion in an expression, multiple packs, other fold forms, `<tuple>`, and a callable passed as a template parameter — and say what does work. Release notes are the one document whose staleness is a claim about the product, so this was the highest-value item 6 work available.
 - **2026-11-15T12:06:46-08:00** — The Tier 0–2 corpus measured, and the gap is extraction rather than coverage: **380 fixtures** exist in `tests/fixtures/c/`, 44 of them registered as KR16 link-and-run pairs and 34 as KR32 run tests, so the behaviour being checked is execution and not compilation. `plan.md` §5.2 defines the tiers — 0 smoke, 1 C core, 2 C++ core, 3 runtime, 4 stress — and `tests/corpus/README.md` now maps the existing fixtures onto them, which makes M8's "Tier 0–2 green" checkable for the first time.
 - **2026-11-15T12:06:46-08:00** — What that file is **not**, stated in it: the plan's extraction path is `tests/corpus/extracted/<feature>/<name>`, taken from the doctest strings and `../kr32/examples/`, and this is an inventory of fixtures that already exist rather than that extraction. Nothing enforces the mapping, so a fixture added without an entry is not detected. The extraction remains M8's work and is larger than a round.
+- **2026-11-15T12:29:02-08:00** — Host gate `2026-11-15T12:07:11-08:00`: `windows-msvc-debug` **645/645**, `windows-msvc-release` **645/645**, `linux-gcc-debug` **565/565**, `linux-gcc-release` **565/565**, from empty build directories and no warnings. It publishes the CI rewrite and the two release-notes corrections, both documentation and configuration, and the corpus map.
+- **2026-11-15T12:29:02-08:00** — The goal is **paused by the operator's request** at this point rather than completed. Three of six items are done — the table publish, variadic templates with folds, and the KR16 file layer. The rest is blocked or unverifiable: section GC needs the object-format change ADR 0041 defines, relaxation needs an ISA extension in a repository this one does not write, `tuple` needs variadic class templates, corpus extraction needs the doctest strings split out, and whether CI passes on GitHub cannot be observed from this host. No item was closed by narrowing the objective.
