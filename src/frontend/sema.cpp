@@ -1544,6 +1544,9 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     }
     std::unordered_map<std::string, TypePtr> bindings;
     std::unordered_map<std::string, long long> value_bindings;
+    // A pack's arity, keyed by the pack's name, so the instance's signature can
+    // take that many arguments and sizeof... can fold to it.
+    std::unordered_map<std::string, std::size_t> pack_arities;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const auto parameter = pattern->second.parameters[index];
         if (pattern->second.value_parameters.count(parameter) != 0) {
@@ -1700,6 +1703,9 @@ std::string Sema::instantiate_template_call(
     const auto& parameters = pattern->second.definition->children[1]->children;
     std::unordered_map<std::string, TypePtr> bindings;
     std::unordered_map<std::string, long long> value_bindings;
+    // A pack's arity, keyed by the pack's name, so the instance's signature can
+    // take that many arguments and sizeof... can fold to it.
+    std::unordered_map<std::string, std::size_t> pack_arities;
     // An explicit argument list overrides deduction: parameter i is bound to
     // the spelled type, and only the rest are deduced from the call.
     std::unordered_set<std::string> explicit_bound;
@@ -1748,6 +1754,55 @@ std::string Sema::instantiate_template_call(
         if (explicit_bound.count(*template_parameter) != 0) {
             argument_index++;
             continue;
+        }
+        const bool is_pack =
+            std::find(parameter->labels.begin(), parameter->labels.end(), "pack") !=
+            parameter->labels.end();
+        if (is_pack) {
+            // Every remaining argument belongs to the pack. Its arity becomes part
+            // of the instance, and the element type is the arguments' shared one:
+            // a pack of mixed types needs a per-position binding this does not
+            // have, so it is refused rather than mistyped.
+            if (argument_index >= arguments.size() || !arguments[argument_index]) {
+                return {};
+            }
+            const auto element = arguments[argument_index];
+            // Type pointers are not shared between two occurrences of int, so
+            // the comparison is structural: kind, signedness, and the element for
+            // the kinds that carry one.
+            const auto same_shape = [](const TypePtr& left, const TypePtr& right,
+                                     const auto& self) -> bool {
+                if (!left || !right) {
+                    return left == right;
+                }
+                if (left->kind != right->kind ||
+                    left->is_unsigned != right->is_unsigned) {
+                    return false;
+                }
+                if (left->kind == TypeKind::Pointer ||
+                    left->kind == TypeKind::Array) {
+                    return self(left->element, right->element, self);
+                }
+                if (left->kind == TypeKind::Record) {
+                    return left->record && right->record &&
+                           left->record->tag == right->record->tag;
+                }
+                return true;
+            };
+            for (std::size_t position = argument_index;
+                 position < arguments.size(); ++position) {
+                if (!same_shape(arguments[position], element, same_shape)) {
+                    error(callee.location,
+                          "a parameter pack with mixed argument types is not "
+                          "implemented yet");
+                    return {};
+                }
+            }
+            bindings.emplace(*template_parameter, element);
+            pack_arities.emplace(*template_parameter,
+                                 arguments.size() - argument_index);
+            argument_index = arguments.size();
+            break;
         }
         TypePtr bound = arguments[argument_index];
         if (!bound) {
@@ -1810,6 +1865,12 @@ std::string Sema::instantiate_template_call(
         const auto binding = bindings.find(name);
         mangled += binding == bindings.end() ? "unknown"
                                              : template_type_tag(binding->second);
+        // A pack is distinguished by its arity: the same pattern instantiated
+        // for three arguments and for two is two functions.
+        const auto arity = pack_arities.find(name);
+        if (arity != pack_arities.end()) {
+            mangled += "__" + std::to_string(arity->second);
+        }
     }
     if (instantiated_names_.count(mangled) != 0) {
         return mangled;
@@ -1828,6 +1889,37 @@ std::string Sema::instantiate_template_call(
     }
     clone->text = mangled;
 
+    // A pack parameter becomes one parameter per argument, so the instance takes
+    // exactly the arguments the call passes. Each copy keeps the pack's name,
+    // which is what sizeof...(name) folded against above.
+    if (!pack_arities.empty()) {
+        auto* function =
+            const_cast<AstNode*>(find_function_declarator(*clone->children[1]));
+        if (function != nullptr) {
+            for (std::size_t index = 0; index < function->children.size();
+                 ++index) {
+                auto* parameter = function->children[index].get();
+                if (parameter == nullptr ||
+                    parameter->kind != AstKind::ParameterDeclaration ||
+                    std::find(parameter->labels.begin(), parameter->labels.end(),
+                              "pack") == parameter->labels.end()) {
+                    continue;
+                }
+                parameter->labels.erase(
+                    std::remove(parameter->labels.begin(), parameter->labels.end(),
+                                  "pack"),
+                    parameter->labels.end());
+                const auto arity = pack_arities.begin()->second;
+                for (std::size_t copy = 1; copy < arity; ++copy) {
+                    function->children.insert(function->children.begin() +
+                                                  static_cast<std::ptrdiff_t>(index + 1),
+                                              clone_ast(*parameter));
+                }
+                break;
+            }
+        }
+    }
+
     // Analyze the clone at file scope: a template body sees its own scope and
     // the file's, never the caller's.
     auto saved_scopes = std::move(scopes_);
@@ -1835,6 +1927,7 @@ std::string Sema::instantiate_template_call(
     scopes_.push_back(std::move(saved_scopes.front()));
     template_bindings_ = bindings;
     template_value_bindings_ = value_bindings;
+    template_pack_arities_ = pack_arities;
     if (!value_bindings.empty()) {
         substitute_value_parameters(*clone, value_bindings);
     }
@@ -1842,6 +1935,7 @@ std::string Sema::instantiate_template_call(
     analyze_function_definition(*clone);
     template_bindings_.clear();
     template_value_bindings_.clear();
+    template_pack_arities_.clear();
     saved_scopes.front() = std::move(scopes_.front());
     scopes_ = std::move(saved_scopes);
     instantiations_.push_back(clone.get());
@@ -2073,22 +2167,7 @@ void Sema::analyze_declaration(const AstNode& declaration) {
 }
 
 void Sema::analyze_function_definition(const AstNode& definition) {
-    // A parameter pack parses but has no analysis yet; say so once rather than
-    // let the body fail over a name that has no type.
-    for (const auto& child : definition.children) {
-        if (!child) {
-            continue;
-        }
-        for (const auto& nested : child->children) {
-            if (nested &&
-                std::find(nested->labels.begin(), nested->labels.end(), "pack") !=
-                    nested->labels.end()) {
-                error(nested->location,
-                      "a parameter pack is not implemented yet");
-                return;
-            }
-        }
-    }
+
     // Record the template pattern the parser tagged, then analyze the
     // int-substituted definition exactly as before. (ADR 0031)
     std::vector<std::string> template_parameters;
@@ -2180,12 +2259,27 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     // analysed: std::array<T, N> is not a record until N is bound, so the
     // pattern is a signature only and every instance is analysed with its own
     // bindings.
+    // A pattern whose body depends on a value parameter or on a parameter pack
+    // cannot be analysed: neither has a value until a call supplies one, and
+    // sizeof...(pack) is the instance's arity. Only the instances are analysed.
     const bool value_dependent_pattern =
         std::any_of(definition.labels.begin(), definition.labels.end(),
                     [](const std::string& label) {
                         return label.rfind("template-value-param:", 0) == 0;
                     });
-    if (!value_dependent_pattern) {
+    bool pack_pattern = false;
+    for (const auto& child : definition.children) {
+        if (!child) {
+            continue;
+        }
+        for (const auto& nested : child->children) {
+            if (nested && std::find(nested->labels.begin(), nested->labels.end(),
+                                  "pack") != nested->labels.end()) {
+                pack_pattern = true;
+            }
+        }
+    }
+    if (!value_dependent_pattern && !pack_pattern) {
         analyze_function_body(definition, enclosing_record_);
     }
     if (auto_return_active_ && auto_return_type_ && type->return_type) {
@@ -3420,6 +3514,20 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
     case AstKind::SizeofExpression:
     case AstKind::AlignofExpression:
     case AstKind::OffsetofExpression: {
+        // sizeof...(pack) is the instance's arity, not a type's size.
+        if (expression.text == "sizeof..." && !expression.children.empty() &&
+            expression.children.front()) {
+            const auto* operand = expression.children.front().get();
+            const auto arity = template_pack_arities_.find(operand->text);
+            if (arity != template_pack_arities_.end()) {
+                constant_folds_[&expression] =
+                    static_cast<long long>(arity->second);
+                return size_type_;
+            }
+            error(expression.location,
+                  "sizeof... names something that is not a parameter pack");
+            return size_type_;
+        }
         if (!expression.children.empty() && expression.children.front()) {
             const auto* operand = expression.children.front().get();
             if (operand->kind == AstKind::TypeName) {

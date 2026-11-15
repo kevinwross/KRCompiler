@@ -35,6 +35,16 @@ public:
     [[nodiscard]] bool is_class_instance(std::string_view tag) const {
         return class_instances_.count(std::string(tag)) != 0;
     }
+    // The value a sizeof...(pack) folded to, for code generation.
+    [[nodiscard]] bool folded_constant(const AstNode& expression,
+                                      long long& value) const {
+        const auto found = constant_folds_.find(&expression);
+        if (found == constant_folds_.end()) {
+            return false;
+        }
+        value = found->second;
+        return true;
+    }
     // The name a call resolved to when its callee was a template, or empty.
     [[nodiscard]] std::string call_target(const AstNode& call) const {
         const auto found = call_targets_.find(&call);
@@ -242,6 +252,9 @@ private:
     // A constant an expression folded to, keyed by its node: code generation
     // runs after the bindings are gone and reads the value here (ADR 0033).
     std::unordered_map<const AstNode*, long long> constant_folds_;
+    // A pack's arity while its instance is analysed, so sizeof...(pack) folds
+    // to the count the call supplied.
+    std::unordered_map<std::string, std::size_t> template_pack_arities_;
     // Definitions created by instantiation, in the order they were created.
     std::vector<const AstNode*> instantiations_;
     // The function a call resolves to when the callee is a template name.
