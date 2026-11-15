@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T12:49:20-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 645/645
+windows-msvc-release  PASS 645/645
+linux-gcc-debug       PASS 565/565
+linux-gcc-release     PASS 565/565
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T12:07:11-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 645/645
@@ -3708,3 +3716,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T12:42:10-08:00** — The function-section proposal was also put to kr16, in a **different form**, after checking what applies: kr16 carries its own container (`"KR16"` magic, not KRO) and its own linker, so the *naming convention* is not a shared decision and the ADR 0040 weak binding is irrelevant to them. What does apply is the **design question** — their linker has `--map`, `--strip` and `--strip-debug`, real sections and **no collection flag**, so with one `.text` per unit they face the same wall. The note to `../kr16/inbox/` asks three things: whether a KR16 function already lands in its own section (their assembler indexes sections per symbol, so the machinery exists), what section-header cost they consider acceptable, and whether object-level collection is enough for their purposes. It says explicitly that "object-level is enough" would be a useful answer which I would record as the shared decision.
 - **2026-11-15T12:47:46-08:00** — **kr16 corrected ADR 0041 and the correction is measured, not accepted on trust.** Their reply said function sections are not an object-format change because their container already has a section table and a section index per symbol. Ours does too: `KroObject` holds a vector of `KroSection`, `kro_writer.cpp` already emits text, data and exception sections and already writes each symbol's own index, and the KR16 assembler gives every `AssembledSymbol` a section. The only place the index is lost is one hardcoded zero in `kr16_object.cpp`. ADR 0041 now says so, with a "What this decision is not" section recording that the first version overstated the cost.
 - **2026-11-15T12:47:46-08:00** — Their recommendation — object-level collection plus compiler-side removal of unused `static` functions, function sections deferred — is accepted **for their C toolchain** and not for my C++ output, where template instances and inline definitions are per-unit and mostly unused: exactly the "many inline/static functions per unit" case their reply names as the trigger. A divergence with a stated reason rather than a disagreement, recorded in the ADR along with their determinism rules (source order, stable names, no symbol-table iteration) and their measured constants (32-byte section header, 20-byte symbol entry, 1,280 bytes for forty sections).
+- **2026-11-15T13:11:19-08:00** — Host gate `2026-11-15T12:49:20-08:00`: `windows-msvc-debug` **645/645**, `windows-msvc-release` **645/645**, `linux-gcc-debug` **565/565**, `linux-gcc-release` **565/565**, from empty build directories and no warnings.
+- **2026-11-15T13:11:19-08:00** — kr32 replied on the section question and **the one defect they said blocks the convention does not exist here**. They rank sections by exact name, so `.text.<symbol>` lands after `.bss`; `krld` ranks by **`KroSectionType`** — Text 1, Rodata 2, Data 3, Bss 4, default 5 — so a `.text.<symbol>` section ranks first with no special case. What they called the one real defect to fix before either side emits the convention is, on my side, already the shape that works. Also confirmed against their naming correction: the KR32 backend already emits `FLOAD.D`/`FSTORE`, so no spelling change was needed either way.
+- **2026-11-15T13:11:19-08:00** — They froze `0x032` in practice (no open item reallocates it, and a move would be announced in the inbox) and corrected two things I had wrong: the `float32` `FMV` pair is exact rather than truncating, which is this ABI's canonical layout. **All three sessions now agree independently** on object-level reachability first, plus removing unreferenced `static` functions in the compiler before any link-time GC — recorded as the shared position, and the static removal is added to this project's plan because it needs no linker support.
