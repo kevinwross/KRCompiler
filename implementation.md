@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T10:43:17-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 643/643
+windows-msvc-release  PASS 643/643
+linux-gcc-debug       PASS 564/564
+linux-gcc-release     PASS 564/564
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T09:53:05-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 637/637
@@ -3652,3 +3660,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T10:42:58-08:00** — `<functional>` exists and works, which closes item 4's `functional` half. Fourteen function objects — `plus`, `minus`, `multiplies`, `divides`, `negate`, `equal_to`, `not_equal_to`, `less`, `greater`, `less_equal`, `greater_equal`, `logical_and`, `logical_or`, `logical_not` — each a struct with a `const` call operator taking its operands by `const T&`, which is exactly the form the round-17 fix made work. `functional.cpp` checks all fourteen and an lvalue operand: 42 on KR16, compiles for KR32. Suite **643/643**.
 - **2026-11-15T10:42:58-08:00** — The first attempt at this header, three rounds ago, was reverted because it returned wrong values; the difference between then and now is entirely the `operator()` reference fix, not the header. What remains open in `<functional>` is anything needing a callable as a **template parameter** — `template <typename Compare> ... compare(a, b)` still reports *called object is not a function*, so no generic algorithm can take these objects yet.
 - **2026-11-15T10:42:58-08:00** — Item 4 is therefore half done: `functional` is in, `tuple` is not, and `tuple` is blocked on variadic class templates rather than on anything recordable here. Seven commits are local and waiting for a gate.
+- **2026-11-15T11:07:49-08:00** — Host gate `2026-11-15T10:43:17-08:00` on the first attempt: `windows-msvc-debug` **643/643**, `windows-msvc-release` **643/643**, `linux-gcc-debug` **564/564**, `linux-gcc-release` **564/564**, each from an empty build directory and no warnings in the Linux logs. Eight commits are published by it, including the `operator()` reference-argument fix, which is the first IR-generation change in this run to cross the matrix without a finding — the previous gate's `-Wswitch` failure has not recurred.
