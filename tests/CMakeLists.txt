@@ -63,8 +63,10 @@ if(TARGET krc)
     add_test(NAME krc_kr16_assembly
         COMMAND $<TARGET_FILE:krc> -S --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c")
+    # A call target is an address, not a sixteen-bit immediate: the assembler
+    # cannot resolve a symbol to one, so the call materialises it with LEA.
     set_tests_properties(krc_kr16_assembly PROPERTIES
-        PASS_REGULAR_EXPRESSION "MOV R0, #sum_to")
+        PASS_REGULAR_EXPRESSION "LEA R0, .sum_to.")
 
     add_test(NAME krc_kr16_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16

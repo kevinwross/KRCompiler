@@ -9777,8 +9777,13 @@ CIRGen::Expression CIRGen::emit_typeid_reference(const frontend::AstNode& expres
                 module_->types().pointer_type(byte_type));
             auto* table = builder_.create_load(module_->types().pointer_type(byte_type),
                                                vptr_slot, false, 0, "typeid.vtable");
+            // The descriptor sits one pointer below the first virtual entry,
+            // and a pointer is not always four bytes (ADR 0037).
+            const auto pointer_bytes = static_cast<std::int64_t>(
+                target::get_target(module_->target()).pointer_bits / 8);
             auto* info_slot = builder_.create_gep(
-                byte_type, table, {module_->constant_int(int_type(), -4)}, false,
+                byte_type, table,
+                {module_->constant_int(int_type(), -pointer_bytes)}, false,
                 "typeid.slot");
             info_slot->type = module_->types().pointer_type(
                 module_->types().pointer_type(byte_type));

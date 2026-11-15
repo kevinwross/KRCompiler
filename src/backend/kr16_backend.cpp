@@ -408,8 +408,9 @@ void Kr16Backend::emit_function(std::string& out,
                 if (!instruction->operands.empty() &&
                     instruction->operands[0] &&
                     instruction->operands[0]->kind == ir::ValueKind::Function) {
-                    out += "    MOV R0, #" + instruction->operands[0]->name +
-                           "\n";
+                    // A function's address is an address for the same reason.
+                    out += "    LEA R0, [" + instruction->operands[0]->name +
+                           "]\n";
                     store(*instruction, "R0");
                     break;
                 }
@@ -496,7 +497,9 @@ void Kr16Backend::emit_function(std::string& out,
                         : std::size_t{0};
                 const auto* callee = instruction->operands[0];
                 if (callee->kind == ir::ValueKind::Function) {
-                    out += "    MOV R0, #" + callee->name + "\n";
+                    // A symbol is an address, not a sixteen-bit immediate: the
+                    // assembler cannot resolve one at assembly time and rejects it.
+                    out += "    LEA R0, [" + callee->name + "]\n";
                 } else {
                     // The callee value is read after the pushes, so its slot
                     // offset carries the same adjustment as the arguments.
@@ -581,7 +584,12 @@ void Kr16Backend::emit_function(std::string& out,
                     out += "    ADD R0, R1\n";
                 }
                 if (!aggregate_index && offset != 0) {
-                    out += "    MOV R1, #" + std::to_string(offset) + "\n";
+                    // A negative displacement is stored as a 32-bit two's
+                    // complement, and printing that unsigned puts 4294967292 in
+                    // a sixteen-bit immediate: the assembler cannot accept it.
+                    out += "    MOV R1, #" +
+                           std::to_string(static_cast<std::int32_t>(offset)) +
+                           "\n";
                     out += "    ADD R0, R1\n";
                 }
                 store(*instruction, "R0");
