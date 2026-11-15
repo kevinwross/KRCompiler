@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T07:07:10-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 635/635
+windows-msvc-release  PASS 635/635
+linux-gcc-debug       PASS 560/560
+linux-gcc-release     PASS 560/560
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T04:09:22-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 633/633
@@ -3561,3 +3569,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T07:06:52-08:00** — **Both recorded defects are fixed.** (1) A plain copy of a record now copies every field: the initialiser emitted `load %Item` / `store %Item`, a whole-record load and store, which the backends move as one word — so a two-field copy kept its first field and **zeroed** the rest (`copy: value=7 other=0`). It now takes the source's address and calls `emit_copy`, field by field. (2) `&reference` where the operand is a `Base&` was typed `ptr<Base&>`, whose element is a reference rather than a record, so `dynamic_cast` rejected it; the address of a reference variable is now typed as a pointer to its **referent**. `record_copy.cpp` (two fields, three fields, independence, assignment) and the restored reference case in `dynamic_cast_void.cpp` both pass: 42 on KR16, compiling for KR32. Suite **635/635**.
 - **2026-11-15T07:06:52-08:00** — One regression caught on the way: taking the address of any single argument put `emit_lvalue` on a **literal**, and `emit_lvalue` *reports* an error rather than returning null, so four constructor tests failed with *expression is not an lvalue*. The record path is now restricted to lvalue-shaped arguments — identifier, member access, call, or dereference — and a literal keeps the value path.
 - **2026-11-15T07:06:52-08:00** — The two measurement prints that found these were the same shape as the ones that closed the previous goal: the copied object's field values (`value=7 other=0`), and the IR of the copy (`load %Item` / `store %Item`). Neither defect was where the previous round's note guessed.
+- **2026-11-15T07:32:29-08:00** — Host gate closing the two-defect fix: `windows-msvc-debug` **635/635**, `windows-msvc-release` **635/635**, `linux-gcc-debug` **560/560**, `linux-gcc-release` **560/560**, each from an empty build directory, no warnings in the Linux logs.
