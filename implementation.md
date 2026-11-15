@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T09:53:05-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 637/637
+windows-msvc-release  PASS 637/637
+linux-gcc-debug       PASS 561/561
+linux-gcc-release     PASS 561/561
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T07:54:00-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 635/635
@@ -3607,3 +3615,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T09:29:29-08:00** — Item 3's first half is measured and closed: **weak symbols now survive to the linker**, and two translation units that define the same template link and run to 42 where they reported `duplicate symbol 'twice'`. The linker already implemented the weak rule — a duplicate is accepted when either definition is weak, and a strong one overrides — so the defect was upstream, in three layers that dropped the binding: IR generation chose linkage from `inline` and `constexpr` only, so a template's definition (including the all-int pattern, which is reused as the `int` instance) was **external**; the KR16 printer had no `.weak` form; and `AssembledSymbol` had `global` and `external` but no `weak`, so the object writer could only choose Global or Local. ADR 0040 records the decision; suite **637/637**.
 - **2026-11-15T09:29:29-08:00** — The multi-translation-unit case has **no automated test**, and ADR 0040 says so: `cmake/LinkKr16Host.cmake` takes one source, and the reproduction is `build/corpus/tu_a.cpp` and `tu_b.cpp` linked by hand. Adding a second-source parameter to that script is the next step rather than an optional one, because this is exactly the kind of result that silently rots.
 - **2026-11-15T09:29:29-08:00** — Section GC and relocation relaxation, the other two parts of item 3, are untouched. Also corrected forward in this commit: `docs/decisions/README.md` carried a stray fragment, `ame__tag.`, appended by a damaged string replacement during the P1 round and pushed with it. It was removed rather than rewritten out of history, since the commit is on the remote.
+- **2026-11-15T10:17:15-08:00** — Host gate `2026-11-15T09:53:05-08:00`: `windows-msvc-debug` **637/637**, `windows-msvc-release` **637/637**, `linux-gcc-debug` **561/561**, `linux-gcc-release` **561/561**. It took two attempts, and the first attempt is the more useful record: Linux debug failed **560 of 561** because `FoldExpression` was missing from the switch in `ast_kind_name`, which GCC's `-Wswitch` rejects and MSVC's `/W4` does not — the "warnings-as-errors cuts both ways" trap in `AGENTS.local.md`, hit exactly as described. The Windows rows had already passed on that tree. The fix landed mid-gate, so the whole gate was restarted rather than mixing rows from two trees; all four then passed from empty build directories.
+- **2026-11-15T10:17:15-08:00** — Nine commits are published by this gate: the rebased table, the variadic parser work, pack binding and instantiation, zero-arity and pack-after-parameter cases, fold expressions, and weak template definitions with ADR 0040.
