@@ -1595,7 +1595,8 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     clone->labels.erase(
         std::remove_if(clone->labels.begin(), clone->labels.end(),
                        [](const std::string& label) {
-                           return label.rfind("template-param:", 0) == 0;
+                           return label.rfind("template-param:", 0) == 0 ||
+                                  label.rfind("template-value-param:", 0) == 0;
                        }),
         clone->labels.end());
 
@@ -1651,6 +1652,7 @@ std::string Sema::instantiate_template_call(
     }
     const auto& parameters = pattern->second.definition->children[1]->children;
     std::unordered_map<std::string, TypePtr> bindings;
+    std::unordered_map<std::string, long long> value_bindings;
     // An explicit argument list overrides deduction: parameter i is bound to
     // the spelled type, and only the rest are deduced from the call.
     std::unordered_set<std::string> explicit_bound;
@@ -1658,12 +1660,24 @@ std::string Sema::instantiate_template_call(
          index < explicit_arguments.size() &&
          index < pattern->second.parameters.size();
          ++index) {
+        const auto& parameter_name = pattern->second.parameters[index];
+        if (pattern->second.value_parameters.count(parameter_name) != 0) {
+            // A number, not a type: constant<3> binds N to 3 and the body is
+            // emitted with the literal in place (ADR 0033).
+            const auto& spelled = explicit_arguments[index];
+            if (spelled.empty() ||
+                spelled.find_first_not_of("0123456789") != std::string::npos) {
+                return {};
+            }
+            value_bindings.emplace(parameter_name, std::stoll(spelled));
+            continue;
+        }
         const auto bound = template_argument_type(explicit_arguments[index]);
         if (!bound) {
             return {};
         }
-        bindings.emplace(pattern->second.parameters[index], bound);
-        explicit_bound.insert(pattern->second.parameters[index]);
+        bindings.emplace(parameter_name, bound);
+        explicit_bound.insert(parameter_name);
     }
     std::size_t argument_index = 0;
     for (std::size_t index = 1; index < parameters.size(); ++index) {
@@ -1714,19 +1728,28 @@ std::string Sema::instantiate_template_call(
         }
         argument_index++;
     }
-    if (bindings.empty()) {
+    if (bindings.empty() && value_bindings.empty()) {
         return {};
     }
     // The parser instantiates the all-int case as the definition itself, so a
     // call that deduces only `int` needs no clone.
-    if (bindings.size() == 1 && bindings.begin()->second->kind == TypeKind::Int &&
+    // The all-int shortcut assumes the pattern itself is the int instance. A
+    // value parameter makes the pattern uncallable, so there is nothing to
+    // reuse and the instance must be built.
+    if (value_bindings.empty() && bindings.size() == 1 &&
+        bindings.begin()->second->kind == TypeKind::Int &&
         !bindings.begin()->second->is_unsigned) {
         return {};
     }
     std::string mangled = pattern->second.name;
     for (const auto& name : pattern->second.parameters) {
-        const auto binding = bindings.find(name);
         mangled += "__";
+        const auto value_binding = value_bindings.find(name);
+        if (value_binding != value_bindings.end()) {
+            mangled += std::to_string(value_binding->second);
+            continue;
+        }
+        const auto binding = bindings.find(name);
         mangled += binding == bindings.end() ? "unknown"
                                              : template_type_tag(binding->second);
     }
@@ -1738,7 +1761,8 @@ std::string Sema::instantiate_template_call(
     clone->labels.erase(
         std::remove_if(clone->labels.begin(), clone->labels.end(),
                        [](const std::string& label) {
-                           return label.rfind("template-param:", 0) == 0;
+                           return label.rfind("template-param:", 0) == 0 ||
+                                  label.rfind("template-value-param:", 0) == 0;
                        }),
         clone->labels.end());
     if (auto* named = const_cast<AstNode*>(function_name_declarator(*clone->children[1]))) {
@@ -1752,9 +1776,14 @@ std::string Sema::instantiate_template_call(
     scopes_.clear();
     scopes_.push_back(std::move(saved_scopes.front()));
     template_bindings_ = bindings;
+    template_value_bindings_ = value_bindings;
+    if (!value_bindings.empty()) {
+        substitute_value_parameters(*clone, value_bindings);
+    }
     instantiated_names_.insert(mangled);
     analyze_function_definition(*clone);
     template_bindings_.clear();
+    template_value_bindings_.clear();
     saved_scopes.front() = std::move(scopes_.front());
     scopes_ = std::move(saved_scopes);
     instantiations_.push_back(clone.get());
@@ -2005,6 +2034,7 @@ void Sema::analyze_function_definition(const AstNode& definition) {
         templates_.find(definition.text) == templates_.end()) {
         TemplateInfo info;
         info.parameters = template_parameters;
+        info.value_parameters = template_value_parameters;
         info.definition = &definition;
         info.name = definition.text;
         templates_.emplace(definition.text, std::move(info));

@@ -217,6 +217,23 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
     }
     for (const auto* definition : definitions_) {
         if (definition) {
+            // A pattern whose body depends on a value parameter cannot be
+            // called without one, so it is a declaration: the instantiation is
+            // the only definition. ADR 0031's int-substituted copy only works
+            // for type parameters.
+            const bool value_dependent =
+                std::any_of(definition->labels.begin(), definition->labels.end(),
+                            [](const std::string& label) {
+                                return label.rfind("template-value-param:", 0) == 0;
+                            });
+            if (value_dependent) {
+                const auto name = declarator_name(*definition->children[1]);
+                const auto found = functions_.find(name);
+                if (found != functions_.end() && found->second) {
+                    found->second->declaration = true;
+                }
+                continue;
+            }
             generate_function(*definition);
         }
     }
