@@ -3631,3 +3631,18 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T10:27:19-08:00** — The namespace hypothesis was **partly wrong too**. The symbol table shows the instance defined as `Plus__int_op_call` and the call in `main` targeting it correctly — `LEA R0, [Plus__int_op_call]`, with the object's address in `R1` and the two arguments in `R2`/`R3`, which is the right convention. What is *also* emitted is a stray `.extern Plus_op_call`, the unparameterised spelling, with no definition anywhere; it is not called, so it is not the cause of the zero.
 - **2026-11-15T10:27:19-08:00** — The callee's body looks correct as well: it spills `R1`, `R2`, `R3` to its own frame, reloads them, and takes the address of each copy for the `const T&` parameters. So the bug is **not visible in the assembly I have read**, which means reading further is the wrong instrument — the next step is a value trace of what the body returns and what `main` stores, not another pass over the text.
 - **2026-11-15T10:27:19-08:00** — Two concrete leads are recorded rather than one guess: the stray `.extern Plus_op_call` is a real defect in its own right even if it is not this one (an unqualified name for a pattern member reaching the object), and the callee takes the address of a *copy* of each argument rather than of the caller's object, which is harmless for a read-only `const T&` and wrong if anything writes through it.
+- **2026-11-15T10:28:11-08:00** — The value trace **forces a retraction**: the namespace was never the trigger, and neither is the reference parameter on its own. Eight probes now contradict each other, and the table is the finding:
+
+| probe | program | result |
+|---|---|---|
+| op1 | plain structs, by-value parameters | 42 |
+| op2 | template struct, by-value `T` parameters | 42 |
+| op3 | `namespace std`, `const T&` parameters | **0** |
+| op4 | plain struct, `const int&` parameters | 42 |
+| op5 | template free function *and* template member, `const T&` | 42 |
+| op6 | namespace template, `const T&` | **0** |
+| op7 | global *and* namespaced template, `const T&` | **0, 0** |
+| op8 | global template only, `const T&` | **0, 0** |
+
+- **2026-11-15T10:28:11-08:00** — `op5` and `op8` are **structurally identical** for the member call — a template struct, a `const` member, `const T&` parameters, a named local, a direct call — and one answers 42 while the other answers 0 twice. A difference that survives that is not a property of the member: it is a property of **what else the program instantiates**, which is order-dependent behaviour in instantiation or in symbol resolution. That is a different kind of defect from any of the three I proposed, and it explains why each hypothesis passed some probes and failed others.
+- **2026-11-15T10:28:11-08:00** — The next probe is a genuine bisection rather than another guess: `op5` reduced toward `op8` one deletion at a time — drop the free function first, then the second template — and the first program where the answer flips from 42 to 0 names the factor. Every probe so far has been a guess dressed as a measurement, which is why four rounds have produced a table and no fix.
