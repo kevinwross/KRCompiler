@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T11:43:18-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 645/645
+windows-msvc-release  PASS 645/645
+linux-gcc-debug       PASS 565/565
+linux-gcc-release     PASS 565/565
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T10:43:17-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 643/643
@@ -3679,3 +3687,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T11:36:59-08:00** — **The "VM write defect" is retracted; kr16 was right and I was wrong.** Their reply explained it: the VM's filesystem quota defaults to **5 MiB** and is counted **recursively over the whole `--fs-root` tree**, so pointing `--fs-root` at this working tree — about 810 MiB with build outputs — leaves `allowed == 0` and every write returns `ENOSPC`. Console descriptors take a branch that bypasses the quota, which is exactly why fd 1 worked and fd 4 did not. Confirmed both ways: `--fs-root` on an empty directory returns **5** and writes `hello`; `--fs-root .` with `--fs-quota 1G` succeeds on the same image.
 - **2026-11-15T11:36:59-08:00** — This is the fifth claim withdrawn this session, and the first one where asking upstream rather than filing a bug was what prevented a false report: the evidence looked strong — flags matched against their header, four open variants, two buffer locations, a working console path — and every item in it was consistent with the truth while none of it could see the truth, because the cause was a property of the root rather than of any call. `kr16`'s accounting was the missing fact.
 - **2026-11-15T11:36:59-08:00** — **Item 5 is now complete and its test is real**: `file_layer.cpp` writes, reads back, compares, then truncates and re-reads, and passes with `FS_ROOT` on a dedicated directory and `FS_QUOTA=1G`. `RunKr16Image.cmake` gained `FS_QUOTA` alongside `FS_ROOT`, with a comment stating why a root holding build outputs exhausts the default. Suite **645/645**. A reply acknowledging the diagnosis and withdrawing the report went to `../kr16/inbox/`.
+- **2026-11-15T12:05:13-08:00** — Host gate `2026-11-15T11:43:18-08:00`: `windows-msvc-debug` **645/645**, `windows-msvc-release` **645/645**, `linux-gcc-debug` **565/565**, `linux-gcc-release` **565/565**, from empty build directories, no warnings in the Linux logs. It is the first gate run against the new `kr16 1.0.0` VM, and the first with the file layer's write-read-truncate cycle in it.
