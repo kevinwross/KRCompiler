@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T04:09:22-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 633/633
+windows-msvc-release  PASS 633/633
+linux-gcc-debug       PASS 559/559
+linux-gcc-release     PASS 559/559
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T02:44:37-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 628/628
@@ -3549,3 +3557,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T04:09:04-08:00** — **Gap 4 closed, and with it all five items of this goal.** `dynamic_cast<void*>` is accepted: a `void*` target names the complete object, which under single inheritance is the address the operand already holds, so the cast is the identity after the usual null rule — `dynamic_cast<void*>(nullptr)` is null. The refusal was a Sema condition requiring a **class** element; it now admits `void` for a pointer target only, and IR generation short-circuits before the descriptor walk, which a scalar target has no way to perform. `dynamic_cast_void.cpp` covers the identity and the null case; 42 on KR16, compiles for KR32. Suite **633/633**.
 - **2026-11-15T04:09:04-08:00** — A separate gap surfaced while writing that fixture and is **not** fixed: `dynamic_cast<void*>(&reference)` reports *operand must be a pointer or an lvalue of a class* when `reference` is a `Base&`. Taking the address of a reference variable produces a type Sema does not classify as a pointer, which is independent of this item — the fixture uses the pointer directly and says nothing about references. Recorded with its reproduction in the log rather than quietly dropped from the test.
 - **2026-11-15T04:09:04-08:00** — The five goal items and the sixth gap found in passing stand as: moved-record construction ✓, `hash_code` ✓, `typeid` of a non-class ✓, `dynamic_cast<void*>` ✓, the deduced value-parameter diagnostic ✓, and the **plain copy of a two-field record** ✗ — recorded, unclaimed, with its reproduction.
+- **2026-11-15T04:35:08-08:00** — Host gate closing the gap work: `windows-msvc-debug` **633/633**, `windows-msvc-release` **633/633**, `linux-gcc-debug` **559/559**, `linux-gcc-release` **559/559**, each from an empty build directory, no warnings in the Linux logs.
