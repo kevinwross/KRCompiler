@@ -1,0 +1,79 @@
+#pragma once
+
+// The function objects, for the supported subset. Each is a struct with a
+// const call operator taking its operands by const reference, so a call on a
+// named object passes the operands' addresses.
+
+namespace std {
+
+template <typename T>
+struct less {
+    bool operator()(const T& left, const T& right) const { return left < right; }
+};
+
+template <typename T>
+struct greater {
+    bool operator()(const T& left, const T& right) const { return left > right; }
+};
+
+template <typename T>
+struct less_equal {
+    bool operator()(const T& left, const T& right) const { return left <= right; }
+};
+
+template <typename T>
+struct greater_equal {
+    bool operator()(const T& left, const T& right) const { return left >= right; }
+};
+
+template <typename T>
+struct equal_to {
+    bool operator()(const T& left, const T& right) const { return left == right; }
+};
+
+template <typename T>
+struct not_equal_to {
+    bool operator()(const T& left, const T& right) const { return left != right; }
+};
+
+template <typename T>
+struct plus {
+    T operator()(const T& left, const T& right) const { return left + right; }
+};
+
+template <typename T>
+struct minus {
+    T operator()(const T& left, const T& right) const { return left - right; }
+};
+
+template <typename T>
+struct multiplies {
+    T operator()(const T& left, const T& right) const { return left * right; }
+};
+
+template <typename T>
+struct divides {
+    T operator()(const T& left, const T& right) const { return left / right; }
+};
+
+template <typename T>
+struct logical_and {
+    bool operator()(const T& left, const T& right) const { return left && right; }
+};
+
+template <typename T>
+struct logical_or {
+    bool operator()(const T& left, const T& right) const { return left || right; }
+};
+
+template <typename T>
+struct logical_not {
+    bool operator()(const T& value) const { return !value; }
+};
+
+template <typename T>
+struct negate {
+    T operator()(const T& value) const { return -value; }
+};
+
+}  // namespace std
