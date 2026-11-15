@@ -9271,8 +9271,15 @@ void CIRGen::emit_vtable_init(ir::Value* object, ir::TypePtr type) {
     auto* table_pointer = builder_.create(
         ir::Opcode::BitCast, module_->types().pointer_type(byte_type), {table},
         "vtable");
+    // The vptr points at the first virtual entry, which is one pointer past
+    // the descriptor slot -- and a pointer is not always four bytes. A literal 4
+    // here put the vptr two words into a KR16 vtable, so every dynamic read
+    // landed one slot off (ADR 0037).
+    const auto descriptor_bytes = static_cast<std::int64_t>(
+        target::get_target(module_->target()).pointer_bits / 8);
     auto* functions = builder_.create_gep(
-        byte_type, table_pointer, {module_->constant_int(int_type(), 4)}, false,
+        byte_type, table_pointer,
+        {module_->constant_int(int_type(), descriptor_bytes)}, false,
         "vtable.functions");
     auto* zero = module_->constant_int(int_type(), 0);
     auto* vptr_slot = builder_.create_gep(type, object, {zero, zero}, false,
