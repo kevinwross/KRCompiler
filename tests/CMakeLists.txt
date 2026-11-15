@@ -756,6 +756,7 @@ if(TARGET krc)
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source}
                     -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/corpus_${corpus_name}.kex
                     -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+        if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
         add_test(NAME krc_corpus_kr16_run_${corpus_name}
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR16_VM}
@@ -766,6 +767,7 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
         set_tests_properties(krc_corpus_kr16_run_${corpus_name} PROPERTIES
             DEPENDS krc_corpus_kr16_link_${corpus_name})
+        endif()
     endforeach()
 
     foreach(corpus_source IN ITEMS
