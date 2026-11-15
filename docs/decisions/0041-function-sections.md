@@ -4,7 +4,9 @@
 - Date: 2026-11-15
 - Decision: each KR16 function is emitted into its own section, named for the
   function, so a linker can drop the ones nothing references
-- Scope: object format
+- Scope: the KR16 emitter, assembler and object writer — not the object format,
+  which already carries a section table (corrected after kr16 pointed out that
+  theirs does, and measuring showed ours does too)
 
 ## Context
 
@@ -42,10 +44,31 @@ and inline definitions are emitted per unit and most are unused.
 - A KR16 function is emitted into its own section, named `.text.<symbol>`.
 - The assembler accepts `.section <name>` and switches the current section,
   with `.text` and `.data` as fixed names for the common cases.
-- The object writer records the section index rather than assuming 0, and the
-  symbol table's section field is the symbol's own section.
+- `kr16_object.cpp` records the symbol's own section index instead of hardcoding
+  zero. The shared KRO writer already writes `symbol.section` and `KroObject`
+  already holds a vector of sections, so this is the only place the index is
+  lost.
 - `krld` gains `--gc-sections`, which keeps the sections reachable from the
   entry point and drops the rest, before relocation is applied.
+
+## What this decision is not
+
+It is **not** an object-format change. `KroObject` carries a `sections` vector
+and `KroSection` has a type, `kro_writer.cpp` already emits text, data and
+exception sections and writes each symbol's own index, and the KR16 assembler
+already gives every `AssembledSymbol` a section. What is missing is the emitter's
+per-function split, the `.section` directive, and the one hardcoded zero. The
+first version of this record called it an object-format change, which overstated
+the cost; kr16's reply prompted the measurement that corrected it.
+
+## Determinism
+
+kr16 measured the constants — 32 bytes per section header, 20 per symbol entry,
+1,280 bytes for forty sections — and identified the cost as determinism rather
+than bytes. This decision adopts their guidance: emit functions in source order
+and never in unordered-map order, use a stable section-name convention, sort only
+where the map and listing already sort, and never let section order depend on
+iteration over a symbol table.
 
 ## Consequences
 
