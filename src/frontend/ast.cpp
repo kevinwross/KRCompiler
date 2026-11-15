@@ -133,6 +133,8 @@ std::string_view ast_kind_name(AstKind kind) noexcept {
         return "TypeIdExpression";
     case AstKind::SizeofExpression:
         return "SizeofExpression";
+    case AstKind::FoldExpression:
+        return "FoldExpression";
     case AstKind::AlignofExpression:
         return "AlignofExpression";
     case AstKind::OffsetofExpression:
