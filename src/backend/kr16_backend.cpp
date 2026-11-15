@@ -554,8 +554,11 @@ void Kr16Backend::emit_function(std::string& out,
                     } else if (scale == 8) {
                         out += "    SHL R1, #3\n";
                     } else if (scale != 1) {
-                        error = "KR16 dynamic GEP element size is unsupported";
-                        return;
+                        // Any other element size multiplies: a record of three
+                        // ints is six bytes, and a loop over an array of them is
+                        // as ordinary as one over a pair.
+                        out += "    MOV R2, #" + std::to_string(scale) + "\n";
+                        out += "    MUL R1, R2\n";
                     }
                     out += "    ADD R0, R1\n";
                 }
@@ -569,8 +572,11 @@ void Kr16Backend::emit_function(std::string& out,
                     } else if (size == 8) {
                         out += "    SHL R1, #3\n";
                     } else if (size != 1) {
-                        error = "KR16 dynamic GEP element size is unsupported";
-                        return;
+                        // The same fallback as the aggregate form: an element
+                        // that is neither one, two, four, nor eight bytes
+                        // multiplies.
+                        out += "    MOV R2, #" + std::to_string(size) + "\n";
+                        out += "    MUL R1, R2\n";
                     }
                     out += "    ADD R0, R1\n";
                 }
