@@ -117,6 +117,42 @@ std::string type_symbol(const frontend::RecordInfo& record, std::string_view pre
     return name;
 }
 
+std::string mangle_method(std::string_view tag, std::string_view name);
+
+// A method is keyed by its name, and by its constness only when the class
+// declares that name twice: a real overload pair needs two entries, while a lone
+// const method keeps the plain key so every existing lookup still finds it.
+std::string method_key_of(std::string_view name, bool is_const) {
+    return is_const ? std::string(name) + "#const" : std::string(name);
+}
+
+// Whether a function declarator carries `const`. The qualifier is on the
+// FunctionDeclarator itself, so the walk stops there: a `const` inside a
+// parameter's type belongs to that parameter, not to the method.
+bool declarator_is_const(const frontend::AstNode& declarator) {
+    if (declarator.kind == frontend::AstKind::FunctionDeclarator) {
+        return std::find(declarator.labels.begin(), declarator.labels.end(),
+                         "const") != declarator.labels.end();
+    }
+    for (const auto& child : declarator.children) {
+        if (child && declarator_is_const(*child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The symbol a method is emitted under. The constness suffix is appended to the
+// mangled name rather than passed into it: the mangler rewrites every character
+// of an operator name, so "operator==__const" would spell `op_eqeqconst`.
+std::string method_symbol(std::string_view tag, std::string_view name,
+                          bool is_const) {
+    auto symbol = mangle_method(tag, name);
+    if (is_const) {
+        symbol += "__const";
+    }
+    return symbol;
+}
 std::string mangle_method(std::string_view tag, std::string_view name) {
     if (name.starts_with("operator")) {
         std::string suffix;
@@ -1553,6 +1589,19 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
         const auto* record = record_type->record.get();
         auto* class_type = map_record(*record);
         auto& methods = class_methods_[child->text];
+        // A name declared twice is a real overload pair, and only those pay for
+        // the constness suffix. A single-method class keeps its plain key, so a
+        // const conversion operator or a lone size() is untouched.
+        std::unordered_map<std::string, int> name_counts;
+        for (const auto& recorded : record->methods) {
+            ++name_counts[recorded.name];
+        }
+        std::unordered_set<std::string> overloaded_names;
+        for (const auto& entry : name_counts) {
+            if (entry.second > 1) {
+                overloaded_names.insert(entry.first);
+            }
+        }
         for (const auto& member : child->children) {
             if (member && member->kind == frontend::AstKind::MemberDeclaration &&
                 member->children.size() >= 2 && member->children[0] &&
@@ -1580,9 +1629,14 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             const bool is_assignment = method_name == "operator=";
             const bool is_incdec = method_name == "operator++" ||
                                    method_name == "operator--";
+            // Only a genuine overload pair is split by constness; every other
+            // method keeps the plain key it has always had.
+            const bool pair_split = overloaded_names.contains(method_name);
+            const bool method_is_const =
+                pair_split && declarator_is_const(*member->children[1]);
             if (method_name.empty() ||
                 (!is_constructor && !is_assignment && !is_incdec &&
-                 methods.contains(method_name))) {
+                 methods.contains(method_key_of(method_name, method_is_const)))) {
                 continue;
             }
             // The record's method type was resolved when the class was
@@ -1706,7 +1760,8 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                           : is_incdec
                                 ? record->tag + "_op_inc_" +
                                       std::to_string(parameter_count)
-                                : mangle_method(child->text, method_name);
+                                : method_symbol(child->text, method_name,
+                                                 method_is_const);
             auto* function =
                 module_->add_function(mangled, ir_type, ir::Linkage::Weak, false);
             function->debug_name =
@@ -1743,7 +1798,7 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                           : is_incdec
                                 ? method_name + "#" +
                                       std::to_string(parameter_count)
-                                : method_name;
+                                : method_key_of(method_name, method_is_const);
             methods.emplace(method_key, function);
             if (is_constructor) {
                 class_constructors_[record->tag].push_back(function);
@@ -8301,14 +8356,22 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 record_type ? ir_records_.find(record_type) : ir_records_.end();
             ir::Function* method_function = nullptr;
             if (source_record != ir_records_.end()) {
-                const auto class_methods =
-                    class_methods_.find(source_record->second->tag);
-                if (class_methods != class_methods_.end()) {
-                    const auto method = class_methods->second.find(member.text);
-                    if (method != class_methods->second.end()) {
-                        method_function = method->second;
+                // A const object calls the const overload of an overload pair,
+                // which is the choice Sema made for the same call.
+                bool base_is_const = false;
+                if (member.children.front()->kind ==
+                    frontend::AstKind::Identifier) {
+                    const auto* local =
+                        lookup_local(member.children.front()->text);
+                    if (local != nullptr && local->frontend_type) {
+                        base_is_const =
+                            local->frontend_type->is_const ||
+                            (local->frontend_type->element != nullptr &&
+                             local->frontend_type->element->is_const);
                     }
                 }
+                method_function = find_method(source_record->second->tag,
+                                             member.text, base_is_const);
                 if (!method_function) {
                     const auto direct =
                         functions_.find(source_record->second->tag + "_" + member.text);
@@ -9138,6 +9201,29 @@ CIRGen::Expression CIRGen::emit_implicit_member(std::string_view name) {
     return {builder_.create_load(address.type, address.value, false, 0,
                                  std::string(name) + ".load"),
             address.type};
+}
+
+ir::Function* CIRGen::find_method(const std::string& tag,
+                                       const std::string& name,
+                                       bool want_const) const {
+    const auto methods = class_methods_.find(tag);
+    if (methods == class_methods_.end()) {
+        return nullptr;
+    }
+    const auto& table = methods->second;
+    const auto const_key = name + "#const";
+    if (want_const) {
+        const auto found = table.find(const_key);
+        if (found != table.end() && found->second) {
+            return found->second;
+        }
+    }
+    const auto plain = table.find(name);
+    if (plain != table.end() && plain->second) {
+        return plain->second;
+    }
+    const auto only = table.find(const_key);
+    return only != table.end() ? only->second : nullptr;
 }
 
 CIRGen::Expression CIRGen::emit_member(const frontend::AstNode& expression) {    auto address = emit_member_lvalue(expression);

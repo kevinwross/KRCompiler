@@ -199,6 +199,11 @@ private:
                                                  Expression self,
                                                  const frontend::AstNode& index_node,
                                                  bool as_address = false);
+    // A method by name, preferring the const overload when asked. A class that
+    // declares the name once resolves either way.
+    [[nodiscard]] ir::Function* find_method(const std::string& tag,
+                                           const std::string& name,
+                                           bool want_const) const;
     [[nodiscard]] Expression emit_member(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_member_lvalue(const frontend::AstNode& expression);
     [[nodiscard]] Expression emit_implicit_member(std::string_view name);

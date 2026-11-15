@@ -3213,8 +3213,23 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                     return member.type;
                 }
             }
+            // Two overloads may differ only in constness, so a const object
+            // prefers the const one instead of taking whichever came first.
             for (const auto& method : record->methods) {
                 if (method.name == expression.text) {
+                    if (base->is_const && !method.is_const) {
+                        bool has_const_overload = false;
+                        for (const auto& candidate : record->methods) {
+                            if (candidate.name == expression.text &&
+                                candidate.is_const) {
+                                has_const_overload = true;
+                                break;
+                            }
+                        }
+                        if (has_const_overload) {
+                            continue;
+                        }
+                    }
                     if (method.is_deleted) {
                         error(expression.location, "use of deleted function '" +
                                                        record->tag + "::" + method.name + "'");
