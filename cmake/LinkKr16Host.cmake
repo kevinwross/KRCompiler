@@ -1,11 +1,15 @@
 # Links a KR16 image from the startup object, the host-service wrappers, the
-# file layer, and one C source.
+# file layer, and one or two C sources.
 #
 # The wrappers are assembled and the file layer is compiled separately from the C
 # runtime library, so a test states that it needs both. The staged objects come
 # from the build's sysroot, which the runtime target produces.
 #
+# A second source states that two translation units link together: a template
+# instantiated in both is emitted weak in each, and the linker keeps one.
+#
 # Required: KRC, KRLD, CRT0, HOST, FILEIO, SOURCE, OUTPUT
+# Optional: SOURCE2
 
 if(NOT DEFINED KRC OR NOT DEFINED KRLD OR NOT DEFINED CRT0 OR
    NOT DEFINED HOST OR NOT DEFINED FILEIO OR NOT DEFINED SOURCE OR
@@ -16,9 +20,18 @@ endif()
 
 set(crt_object "${OUTPUT}.crt0.kro")
 set(user_object "${OUTPUT}.user.kro")
-file(REMOVE "${crt_object}" "${user_object}" "${OUTPUT}")
+set(user_objects "${user_object}")
+set(inputs "${CRT0}|${crt_object}" "${SOURCE}|${user_object}")
 
-foreach(pair IN ITEMS "${CRT0}|${crt_object}" "${SOURCE}|${user_object}")
+if(DEFINED SOURCE2 AND NOT SOURCE2 STREQUAL "")
+    set(user_object2 "${OUTPUT}.user2.kro")
+    list(APPEND inputs "${SOURCE2}|${user_object2}")
+    list(APPEND user_objects "${user_object2}")
+endif()
+
+file(REMOVE "${crt_object}" ${user_objects} "${OUTPUT}")
+
+foreach(pair IN LISTS inputs)
     string(FIND "${pair}" "|" separator)
     string(SUBSTRING "${pair}" 0 ${separator} input)
     math(EXPR after "${separator} + 1")
@@ -32,7 +45,7 @@ foreach(pair IN ITEMS "${CRT0}|${crt_object}" "${SOURCE}|${user_object}")
 endforeach()
 
 execute_process(COMMAND "${KRLD}" "${crt_object}" "${HOST}" "${FILEIO}"
-                        "${user_object}" -o "${OUTPUT}"
+                        ${user_objects} -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)
     message(FATAL_ERROR "krld failed to link the KR16 host-service image")
