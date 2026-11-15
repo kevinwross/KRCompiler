@@ -8,6 +8,7 @@
 // `std::out_of_range`, which the runtime's exception machinery carries.
 
 #include <stddef.h>
+#include <stdlib.h>
 #include <stdexcept>
 
 namespace std {
@@ -19,15 +20,25 @@ public:
     T& operator[](size_t index) { return __elements[index]; }
     const T& operator[](size_t index) const { return __elements[index]; }
 
+    // A profile without exceptions cannot throw: the index check then stops the
+    // program instead, which is the same contract without unwinding.
     T& at(size_t index) {
         if (index >= N) {
+#ifdef __kr16__
+            abort();
+#else
             throw out_of_range("std::array::at");
+#endif
         }
         return __elements[index];
     }
     const T& at(size_t index) const {
         if (index >= N) {
+#ifdef __kr16__
+            abort();
+#else
             throw out_of_range("std::array::at");
+#endif
         }
         return __elements[index];
     }

@@ -1459,8 +1459,14 @@ bool Verifier::verify(const Module& module, std::string& error) const {
         if (constant->kind == ValueKind::ConstantAddressArray) {
             const auto& addresses =
                 *static_cast<const ConstantAddressArray*>(constant.get());
+            // The elements are addresses, so the element type has to hold one:
+            // its width is the module's pointer width, not a fixed 32 bits (rule
+            // 12 has to hold on every target the module names).
+            const auto pointer_bits =
+                target::get_target(module.target()).pointer_bits;
             if (!constant->type || constant->type->kind != TypeKind::Array ||
-                !is_integer(constant->type->element) || constant->type->element->bits != 32 ||
+                !is_integer(constant->type->element) ||
+                constant->type->element->bits != pointer_bits ||
                 addresses.elements.size() != constant->type->count) {
                 return fail("address-array constant has an invalid type or length");
             }

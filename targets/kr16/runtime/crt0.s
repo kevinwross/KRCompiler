@@ -6,6 +6,10 @@ _start:
     CALL R0
     HLT
 
+.global abort
+abort:
+    HLT
+
 .global puts
 puts:
     MOV R2, #0xF000
