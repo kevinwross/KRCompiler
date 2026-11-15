@@ -584,6 +584,13 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/side_effects_once_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    add_test(NAME krc_cxx_record_comparison
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/record_comparison.cpp
+                -DEXPECT=no matching 'operator==' for operands of record type 'Item'
+                -DOBJECT=${KRC_TEST_OUTPUT_DIR}/record_comparison.kro
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
     add_test(NAME krc_cxx_return_record_no_conversion
         COMMAND ${CMAKE_COMMAND}
                 -DEXE=$<TARGET_FILE:krc>

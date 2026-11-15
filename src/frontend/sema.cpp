@@ -2807,6 +2807,28 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                 return function->type->return_type;
             }
         }
+        const bool comparison = operation == "==" || operation == "!=" ||
+                                operation == "<" || operation == ">" ||
+                                operation == "<=" || operation == ">=";
+        // Only when neither side is something a record could convert to: a
+        // record beside a scalar compares through its conversion operator.
+        if (comparison &&
+            (left && left->kind == TypeKind::Record) &&
+            (right && right->kind == TypeKind::Record)) {
+            // The operator lookup above found nothing on the record, and a record
+            // has no scalar form to compare. Reporting it here beats emitting a
+            // comparison of aggregate values, which the IR verifier then rejects
+            // as a compiler bug.
+            const auto& record =
+                left && left->kind == TypeKind::Record && left->record
+                    ? left->record->tag
+                    : (right && right->record ? right->record->tag
+                                              : std::string{});
+            error(expression.location,
+                  "no matching 'operator" + operation +
+                      "' for operands of record type '" + record + "'");
+            return int_type_;
+        }
         if (operation == ",") {
             return right;
         }
