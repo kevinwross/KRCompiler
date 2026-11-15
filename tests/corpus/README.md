@@ -38,3 +38,22 @@ consequences:
 The extraction itself is M8's remaining work, and it is larger than this file:
 it needs the doctest strings split out and the corpus examples imported, with
 expected output and exit codes recorded per tier.
+
+## What has been extracted
+
+`tests/corpus/extracted/` now holds fixtures copied verbatim from
+`../kr32/examples` at commit `ba69940`, with a provenance header added:
+
+| Tier | Files | Registered as |
+|---|---|---|
+| 0 | `hello.c` | `krc_corpus_kr32_*`, `krc_corpus_kr16_*` (syntax-only) |
+| 1 | `mainentry.c`, `binarytree.c`, `strings.c`, `hello.cpp` | the same, per target |
+
+Ten tests, all passing: four C sources on both targets and `hello.cpp` on both.
+They are **compile-only** — the link script does not provide the C library, so a
+program that calls `printf` cannot be linked yet, which is why these are
+syntax-only rather than link-and-run.
+
+Not extracted, because the KR16 profile rejects what they use: `types.c` and
+`libc-test.c` (`double`, `float`) and `varargs.c` (`double`). They compile for
+KR32 and belong to a KR32-only tier-1 set when that exists.

@@ -731,6 +731,37 @@ if(TARGET krc)
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/return_call_once_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    # Corpus fixtures extracted from ../kr32/examples, compiled on the target
+    # whose profile admits them. types.c, varargs.c and libc-test.c use types
+    # the KR16 profile rejects, so they are KR32-only and not extracted yet.
+    foreach(corpus_target IN ITEMS kr32 kr16)
+        foreach(corpus_source IN ITEMS
+                corpus/extracted/tier0/hello.c
+                corpus/extracted/tier1/mainentry.c
+                corpus/extracted/tier1/binarytree.c
+                corpus/extracted/tier1/strings.c)
+            string(REPLACE "/" "_" corpus_name "${corpus_source}")
+            string(REPLACE ".c" "" corpus_name "${corpus_name}")
+            if(corpus_target STREQUAL "kr16")
+                add_test(NAME krc_corpus_kr16_${corpus_name}
+                    COMMAND $<TARGET_FILE:krc> -fsyntax-only --target=kr16
+                            -I ${CMAKE_SOURCE_DIR}/sysroot/include
+                            --sysroot ${KRC_STAGE_SYSROOT}
+                            ${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source})
+            else()
+                add_test(NAME krc_corpus_kr32_${corpus_name}
+                    COMMAND $<TARGET_FILE:krc> -fsyntax-only
+                            -I ${CMAKE_SOURCE_DIR}/sysroot/include
+                            --sysroot ${KRC_STAGE_SYSROOT}
+                            ${CMAKE_CURRENT_SOURCE_DIR}/${corpus_source})
+            endif()
+        endforeach()
+        add_test(NAME krc_corpus_${corpus_target}_hello_cpp
+            COMMAND $<TARGET_FILE:krc> -fsyntax-only
+                    -I ${CMAKE_SOURCE_DIR}/sysroot/include
+                    --sysroot ${KRC_STAGE_SYSROOT}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier1/hello.cpp)
+    endforeach()
     add_test(NAME krc_link_kr16_file_layer
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
