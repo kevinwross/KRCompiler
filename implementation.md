@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T15:20:24-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 663/663
+windows-msvc-release  PASS 663/663
+linux-gcc-debug       PASS 579/579
+linux-gcc-release     PASS 579/579
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T14:18:13-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 655/655
@@ -3759,3 +3767,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T15:20:02-08:00** — The pattern-skip **worked and was still not enough**, and the round ends with two new facts rather than a fix. Skipping a pattern whose body calls a parameter of template-parameter type — detected by walking the body for a call through such a parameter, with the flag shared to IR generation — moves the error out of the pattern: all four callable forms now pass `-fsyntax-only`, where before none did. It then fails in the **instance**, at `compare(left, right)`, so a third cause exists that neither the pattern nor the binding explains.
 - **2026-11-15T15:20:02-08:00** — The second fact: with the pattern skipped, the by-reference form compiles to an object but the link reports `undefined symbol 'larger_of'`, so the call site is still targeting the **pattern** — `instantiate_template_call` is returning empty for a parameter declared `const Compare&`, and nothing replaces the reference. That is a deduction or instantiation gap, separate from the analysis error.
 - **2026-11-15T15:20:02-08:00** — Reverted whole again, with the suite back to **663/663**. Six rounds on this gap have now produced five measurements and no landed code; the measurements are real and each is recorded, but the item's remaining work is three distinct defects stacked on each other — pattern analysis, instance analysis, and instantiation through a deduced reference parameter — and they cannot be fixed as one change. ADR 0031 should record that the int substitution is unsound for a body that calls a template-parameter-typed parameter, and the instantiation gap should be measured on its own before any of the three is attempted again.
+- **2026-11-15T15:41:04-08:00** — Host gate `2026-11-15T15:20:24-08:00`: `windows-msvc-debug` **663/663**, `windows-msvc-release` **663/663**, `linux-gcc-debug` **579/579**, `linux-gcc-release` **579/579**, from empty build directories and no warnings. The Linux rows moved from 571 to **579** with the tier-2 corpus, and the Windows rows from 655 to **663** — the same eight tests, all syntax-only and therefore registered on both hosts.
