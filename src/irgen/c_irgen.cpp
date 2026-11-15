@@ -196,6 +196,33 @@ CIRGen::CIRGen(frontend::Sema& sema, const frontend::AstNode& translation_unit,
     : sema_(sema), unit_(translation_unit), profile_(profile), diagnostics_(diagnostics),
       module_(std::make_unique<ir::Module>(profile.id)), builder_(module_->types()) {}
 
+bool CIRGen::is_referenced(ir::Function* target) const {
+    if (target == nullptr) {
+        return false;
+    }
+    for (const auto& function : module_->functions()) {
+        if (!function || function.get() == target) {
+            continue;
+        }
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            for (const auto& instruction : block->instructions) {
+                if (!instruction) {
+                    continue;
+                }
+                for (const auto* operand : instruction->operands) {
+                    if (operand == target) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 std::unique_ptr<ir::Module> CIRGen::generate() {
     collect_declarations();
     clone_inherited_methods();
@@ -212,6 +239,18 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
                 function->declaration = true;
                 continue;
             }
+        }
+        // Constructors and destructors stay eager: an object's lifetime is
+        // reached through cleanup and member-destructor helpers that are
+        // themselves created while other bodies are being built, so a later
+        // reference scan cannot see them. Everything else waits for a caller.
+        const bool lifecycle = function->name.find("_ctor_") != std::string::npos ||
+                               function->name.find("_dtor") != std::string::npos;
+        if (instance_members_.count(function) != 0 && !lifecycle) {
+            // Left as a declaration until something refers to it.
+            function->declaration = true;
+            pending_bodies_.emplace(function, definition);
+            continue;
         }
         generate_function(*definition, function);
     }
@@ -240,6 +279,24 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
     for (const auto& [type, record] : ir_records_) {
         static_cast<void>(type);
         static_cast<void>(record);
+    }
+    // A pending body is built once something refers to it, and its own calls may
+    // pull in more, so the loop runs to a fixed point. A body nothing reaches
+    // stays a declaration (ADR 0039).
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const auto& entry : pending_bodies_) {
+            if (!entry.second || !entry.first ||
+                generated_pending_.count(entry.first) != 0 ||
+                !is_referenced(entry.first)) {
+                continue;
+            }
+            generated_pending_.insert(entry.first);
+            entry.first->declaration = false;
+            generate_function(*entry.second, entry.first);
+            changed = true;
+        }
     }
     generate_global_constructors();
     finalize_vtables();
@@ -1828,6 +1885,9 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
             function_ast_types_[function] = frontend_type;
             function_source_names_[function] = method_name;
             function_classes_[function] = record;
+            if (sema_.is_class_instance(child->text)) {
+                instance_members_.insert(function);
+            }
             method_bodies_.push_back({function, member.get()});
         }
         for (const auto& method : record->methods) {

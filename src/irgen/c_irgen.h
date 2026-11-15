@@ -199,6 +199,12 @@ private:
                                                  Expression self,
                                                  const frontend::AstNode& index_node,
                                                  bool as_address = false);
+    // A member of a class template instance is emitted when something calls it:
+    // a body nothing uses must not be able to reject the program (ADR 0039).
+    std::unordered_set<ir::Function*> instance_members_;
+    std::unordered_map<ir::Function*, const frontend::AstNode*> pending_bodies_;
+    std::unordered_set<ir::Function*> generated_pending_;
+    [[nodiscard]] bool is_referenced(ir::Function* target) const;
     // A method by name, preferring the const overload when asked. A class that
     // declares the name once resolves either way.
     [[nodiscard]] ir::Function* find_method(const std::string& tag,
