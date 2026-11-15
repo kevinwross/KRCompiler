@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T07:54:00-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 635/635
+windows-msvc-release  PASS 635/635
+linux-gcc-debug       PASS 560/560
+linux-gcc-release     PASS 560/560
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T07:07:10-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 635/635
@@ -3572,3 +3580,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T07:32:29-08:00** — Host gate closing the two-defect fix: `windows-msvc-debug` **635/635**, `windows-msvc-release` **635/635**, `linux-gcc-debug` **560/560**, `linux-gcc-release` **560/560**, each from an empty build directory, no warnings in the Linux logs.
 - **2026-11-15T07:47:17-08:00** — Rebasing the milestone table against the per-milestone checklists and this session's work. Four rows were wrong: **M5** claimed "general vtables, move semantics, and dynamic dispatch remain" when vptr-based dispatch, virtual destructors, and move construction and assignment all work; **M6** claimed templates, lambdas, move semantics, and structured bindings remain when lambdas, structured bindings, `if constexpr`, and real class and function templates are in; **M7** claimed "complete locally" while its checklist still lists descriptor relaxation, the calling-convention suite, and the wider runtime; and **M10** was "pending" with no evidence, when `array`, `memory`, `utility`, and the whole `typeinfo`/RTTI surface are in place. Every remaining-work list now comes from the checklists rather than from prose written months ago.
 - **2026-11-15T07:47:17-08:00** — Two checklist lines contradicted the rebased table and were corrected with it: M5's "multiple inheritance and RTTI remain" no longer claims RTTI is open, and M10's `memory`/`tuple`/`functional` item now records what `memory` and `utility` provide. The rest of the checklists are untouched, so the outstanding work they list is the authority the table now summarises.
+- **2026-11-15T08:12:12-08:00** — Host gate publishing the rebased milestone table: `windows-msvc-debug` **635/635**, `windows-msvc-release` **635/635**, `linux-gcc-debug` **560/560**, `linux-gcc-release` **560/560**, each from an empty build directory, no warnings in the Linux logs. It is a documentation-only change, so the gate is the standing evidence that the tree it describes still builds and passes everywhere this host can reach.
