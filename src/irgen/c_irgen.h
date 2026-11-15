@@ -294,6 +294,10 @@ private:
     // type_info, and _ZTV<tag> the vtable with the typeinfo address at word 0
     // so a vptr points at word 1 (RTTI at vptr - 4, virtual slot k at
     // vptr + 4*k).
+    // One descriptor per scalar spelling, so 	ypeid(int) has an object to
+    // refer to and compares equal to itself.
+    [[nodiscard]] ir::GlobalVariable* ensure_scalar_typeinfo(std::string_view name);
+    std::unordered_map<std::string, ir::GlobalVariable*> scalar_typeinfos_;
     [[nodiscard]] ir::GlobalVariable* ensure_typeinfo(
         const frontend::RecordInfo& record);
     [[nodiscard]] ir::GlobalVariable* ensure_vtable(

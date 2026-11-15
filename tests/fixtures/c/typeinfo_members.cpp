@@ -46,6 +46,23 @@ int main() {
         return 5;
     }
 
+    // A scalar has a descriptor of its own, distinct from every class and from
+    // other scalars, and equal to itself.
+    const std::type_info& integer = typeid(int);
+    const std::type_info& character = typeid(char);
+    if (integer.hash_code() != typeid(int).hash_code()) {
+        return 8;
+    }
+    if (integer.hash_code() == character.hash_code()) {
+        return 9;
+    }
+    if (integer.hash_code() == first.hash_code()) {
+        return 10;
+    }
+    if (integer.name() == nullptr || character.name() == nullptr) {
+        return 11;
+    }
+
     // Equal descriptors hash equally, and distinct ones do not.
     if (first.hash_code() != typeid(First).hash_code()) {
         return 6;

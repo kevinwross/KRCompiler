@@ -9159,6 +9159,71 @@ int CIRGen::virtual_slot(const frontend::RecordInfo& record,
     return -1;
 }
 
+// The spelling a scalar's descriptor is keyed and named by. Only the kinds the
+// language has without a class are covered, which is what `typeid(int)` needs.
+std::string scalar_type_name(const frontend::Type& type) {
+    auto name = std::string{};
+    switch (type.kind) {
+        case frontend::TypeKind::Void:
+            name = "void";
+            break;
+        case frontend::TypeKind::Bool:
+            name = "bool";
+            break;
+        case frontend::TypeKind::Char:
+            name = "char";
+            break;
+        case frontend::TypeKind::Int:
+            // The language has one integer kind here, so the spelling is the
+            // common one; a distinct long descriptor is not distinguished.
+            name = "int";
+            break;
+        case frontend::TypeKind::Float:
+            name = "float";
+            break;
+        case frontend::TypeKind::Double:
+            name = "double";
+            break;
+        case frontend::TypeKind::Pointer:
+            name = "pointer";
+            break;
+        default:
+            name = "unknown";
+            break;
+    }
+    // The spelling is also the symbol suffix, so it carries no space: the KR16
+    // assembler rejects a symbol it cannot lex.
+    if (type.is_unsigned && name != "pointer" && name != "unknown") {
+        name = "unsigned_" + name;
+    }
+    return name;
+}
+ir::GlobalVariable* CIRGen::ensure_scalar_typeinfo(std::string_view name) {
+    const auto key = std::string(name);
+    const auto cached = scalar_typeinfos_.find(key);
+    if (cached != scalar_typeinfos_.end() && cached->second) {
+        return cached->second;
+    }
+    const auto i32 = int_type();
+    std::vector<std::uint8_t> name_bytes(key.begin(), key.end());
+    name_bytes.push_back(0);
+    const auto name_type = module_->types().array_type(
+        module_->types().int_type(8), name_bytes.size());
+    auto* type_name = module_->add_global("_ZTS" + key, name_type, true, 1);
+    type_name->weak = true;
+    type_name->initializer = module_->constant_data_array(name_type, std::move(name_bytes));
+
+    // The same layout a class descriptor has: vtable pointer, name pointer,
+    // flags, and a base word that stays zero because a scalar has no base.
+    const auto words = module_->types().array_type(i32, 4);
+    auto* typeinfo = module_->add_global("_ZTI" + key, words, true, 4);
+    typeinfo->weak = true;
+    scalar_typeinfos_[key] = typeinfo;
+    auto* zero = module_->constant_int(i32, 0);
+    typeinfo->initializer =
+        module_->constant_address_array(words, {zero, type_name, zero, zero});
+    return typeinfo;
+}
 ir::GlobalVariable* CIRGen::ensure_typeinfo(const frontend::RecordInfo& record) {
     const auto cached = typeinfo_globals_.find(&record);
     if (cached != typeinfo_globals_.end() && cached->second) {
@@ -9777,11 +9842,16 @@ CIRGen::Expression CIRGen::emit_typeid_reference(const frontend::AstNode& expres
     const auto& operand = *expression.children.front();
     const auto byte_type = module_->types().int_type(8);
     const auto static_reference = [&](frontend::TypePtr type) -> ir::Value* {
-        if (!type || type->kind != frontend::TypeKind::Record || !type->record) {
-            error(expression.location, "typeid of a non-class type is not implemented");
+        if (!type) {
+            error(expression.location, "typeid needs a type");
             return nullptr;
         }
-        auto* global = ensure_typeinfo(*type->record);
+        // A scalar has a descriptor too: one weak object per spelling, with an
+        // empty base word, so 	ypeid(int) == typeid(int) holds and a class
+        // descriptor never equals it.
+        auto* global = type->kind == frontend::TypeKind::Record && type->record
+                           ? ensure_typeinfo(*type->record)
+                           : ensure_scalar_typeinfo(scalar_type_name(*type));
         return builder_.create(ir::Opcode::BitCast,
                                module_->types().pointer_type(info_type), {global},
                                "typeid.static");
