@@ -2006,6 +2006,14 @@ std::unique_ptr<AstNode> Parser::parse_binary_expression(int minimum_precedence)
         const auto location = peek().location;
         const auto operation = peek().text;
         ++position_;
+        // (expr op ...) folds the pack named in xpr over op: the ellipsis
+        // sits where the right operand would begin, so it is recognised here.
+        if (cxx_mode_ && check("...")) {
+            ++position_;
+            auto node = make_ast(AstKind::FoldExpression, location, operation);
+            node->children.push_back(std::move(left));
+            return node;
+        }
         auto right = parse_binary_expression(operation_precedence + 1);
         auto node = make_ast(AstKind::BinaryExpression, location, operation);
         node->children.push_back(std::move(left));

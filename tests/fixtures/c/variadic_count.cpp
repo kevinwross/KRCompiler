@@ -8,6 +8,16 @@ int count(Ts... values) {
 }
 
 template <typename... Ts>
+int sum(Ts... values) {
+    return (values + ...);
+}
+
+template <typename... Ts>
+int product(Ts... values) {
+    return (values * ...);
+}
+
+template <typename... Ts>
 int with_fallback(int fallback, Ts... values) {
     return sizeof...(values) == 0 ? fallback : sizeof...(values);
 }
@@ -37,5 +47,18 @@ int main() {
         return 6;
     }
     return 42;
+    // A fold reduces the pack over its operator, at every arity.
+    if (sum(1, 2, 3) != 6) {
+        return 7;
+    }
+    if (sum(4, 5) != 9) {
+        return 8;
+    }
+    if (sum(6) != 6) {
+        return 9;
+    }
+    if (product(2, 3, 4) != 24) {
+        return 10;
+    }
     return 42;
 }

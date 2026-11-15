@@ -74,6 +74,8 @@ enum class AstKind {
     CastExpression,
     TypeIdExpression,
     SizeofExpression,
+    // (expr op ...): a fold over the parameter pack that xpr names.
+    FoldExpression,
     AlignofExpression,
     OffsetofExpression,
     CompoundLiteral,

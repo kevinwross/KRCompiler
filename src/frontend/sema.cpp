@@ -1673,6 +1673,59 @@ TypePtr Sema::template_argument_type(const std::string& spelling) const {
     return const_cast<Sema*>(this)->type_from_specifiers(*specifiers);
 }
 
+namespace {
+
+// Rewrites a fold node in place into a left-associative chain over the pack's
+// expanded parameters: `(v + ...)` with three elements becomes (v + v1) + v2.
+// The parameters are named `v`, `v1`, ... by the signature expansion, which is
+// why the arity is needed here rather than only in Sema's fold for sizeof....
+void fold_over_pack(AstNode& node, const std::string& name, std::size_t arity,
+                    const std::string& operation) {
+    const auto element = [&](std::size_t index) {
+        auto identifier = std::make_unique<AstNode>();
+        identifier->kind = AstKind::Identifier;
+        identifier->location = node.location;
+        identifier->text =
+            index == 0 ? name : name + std::to_string(index);
+        return identifier;
+    };
+    if (arity == 0) {
+        node.kind = AstKind::IntegerLiteral;
+        node.text = "0";
+        node.children.clear();
+        return;
+    }
+    if (arity == 1) {
+        node.kind = AstKind::Identifier;
+        node.text = name;
+        node.children.clear();
+        return;
+    }
+    auto left = std::make_unique<AstNode>();
+    left->kind = AstKind::BinaryExpression;
+    left->location = node.location;
+    left->text = operation;
+    left->children.push_back(element(0));
+    left->children.push_back(element(1));
+    for (std::size_t index = 2; index < arity; ++index) {
+        auto combined = std::make_unique<AstNode>();
+        combined->kind = AstKind::BinaryExpression;
+        combined->location = node.location;
+        combined->text = operation;
+        combined->children.push_back(std::move(left));
+        combined->children.push_back(element(index));
+        left = std::move(combined);
+    }
+    auto first = std::move(left->children[0]);
+    auto second = std::move(left->children[1]);
+    node.children.clear();
+    node.kind = AstKind::BinaryExpression;
+    node.text = operation;
+    node.children.push_back(std::move(first));
+    node.children.push_back(std::move(second));
+}
+
+}  // namespace
 std::string Sema::instantiate_template_call(
     const AstNode& callee, const std::vector<std::string>& explicit_arguments,
     const std::vector<TypePtr>& arguments) {
@@ -1969,6 +2022,40 @@ std::string Sema::instantiate_template_call(
                 }
                 break;
             }
+        }
+    }
+
+    // A fold over the pack becomes a chain over the expanded parameters, which
+    // exist only after the signature expansion above. The pack is named by the
+    // function parameter, so the entry keyed by a template parameter is skipped.
+    if (!pack_arities.empty()) {
+        auto pack_name = std::string{};
+        auto pack_arity = std::size_t{0};
+        for (const auto& entry : pack_arities) {
+            if (std::find(pattern->second.parameters.begin(),
+                          pattern->second.parameters.end(),
+                          entry.first) == pattern->second.parameters.end()) {
+                pack_name = entry.first;
+                pack_arity = entry.second;
+            }
+        }
+        if (!pack_name.empty()) {
+            const auto rewrite = [](AstNode& node, const std::string& name,
+                                    std::size_t arity,
+                                    const auto& self) -> void {
+                if (node.kind == AstKind::FoldExpression &&
+                    !node.children.empty() && node.children.front() &&
+                    node.children.front()->text == name) {
+                    fold_over_pack(node, name, arity, node.text);
+                    return;
+                }
+                for (auto& child : node.children) {
+                    if (child) {
+                        self(*child, name, arity, self);
+                    }
+                }
+            };
+            rewrite(*clone, pack_name, pack_arity, rewrite);
         }
     }
 
