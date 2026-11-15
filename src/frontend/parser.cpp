@@ -182,6 +182,9 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
                 if (peek().kind == TokenKind::Identifier &&
                     (peek().text == "typename" || peek().text == "class")) {
                     ++position_;
+                    // 	ypename... Ts names a pack. The ellipsis is accepted so
+                    // the name is read as a parameter rather than swallowed.
+                    static_cast<void>(match("..."));
                 }
                 if (peek().kind == TokenKind::Identifier) {
                     parameters.push_back(peek().text);
@@ -925,6 +928,13 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
                             break;
                         }
                         parameter->children.push_back(std::move(parameter_specifiers));
+                        // Ts... values declares a parameter pack. The syntax is
+                        // accepted here so the diagnostic comes from analysis
+                        // rather than from the declarator parser, which cannot
+                        // describe a pack at all.
+                        if (match("...")) {
+                            parameter->labels.emplace_back("pack");
+                        }
                         if (!check(",") && !check(")")) {
                             auto parameter_declarator = parse_declarator(true);
                             if (parameter_declarator) {

@@ -2073,6 +2073,22 @@ void Sema::analyze_declaration(const AstNode& declaration) {
 }
 
 void Sema::analyze_function_definition(const AstNode& definition) {
+    // A parameter pack parses but has no analysis yet; say so once rather than
+    // let the body fail over a name that has no type.
+    for (const auto& child : definition.children) {
+        if (!child) {
+            continue;
+        }
+        for (const auto& nested : child->children) {
+            if (nested &&
+                std::find(nested->labels.begin(), nested->labels.end(), "pack") !=
+                    nested->labels.end()) {
+                error(nested->location,
+                      "a parameter pack is not implemented yet");
+                return;
+            }
+        }
+    }
     // Record the template pattern the parser tagged, then analyze the
     // int-substituted definition exactly as before. (ADR 0031)
     std::vector<std::string> template_parameters;
