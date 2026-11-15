@@ -5,9 +5,13 @@
 // accessors. Copying is deleted, so the compiler selects the move constructor
 // for a returned or explicitly moved value.
 //
-// make_unique is not provided: an overload set of function templates under one
-// name is not supported, so the arities would collide. Construct an owner
-// directly instead: unique_ptr<T> owner(new T(...));
+// make_unique is not provided, and the reason changed: variadic function
+// templates now exist, so one template would cover every arity. What it needs
+// is pack expansion in an expression -- `new T(args...)` -- which is still
+// rejected. Construct an owner directly instead: unique_ptr<T> owner(new T(...));
+//
+// A one-argument form would compile today and is deliberately not provided: an
+// API that silently accepts one argument and rejects two is a trap.
 
 namespace std {
 
