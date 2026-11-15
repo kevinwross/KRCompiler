@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T14:18:13-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 655/655
+windows-msvc-release  PASS 655/655
+linux-gcc-debug       PASS 571/571
+linux-gcc-release     PASS 571/571
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T12:49:20-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 645/645
@@ -3734,3 +3742,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T13:50:57-08:00** — The `memmove` gap is closed and **`strings.c` now links and runs**: 14 lines of output, exit 0, exercising `strcpy`, `strcat`, `strncpy`, `strncat`, `strcmp`, `strncmp`, `strchr`, `strrchr`, `strstr`, `memmove`, `memcmp`, `memchr`, `strdup`, `free` and `strtok` against the KR16 runtime. `memchr` and `memmove` were the only two genuinely missing — the rest of the string routines were already there and my first inventory missed them because the grep only matched a narrow declaration shape. Suite **655/655**, all ten corpus tests passing.
 - **2026-11-15T13:50:57-08:00** — Two mistakes in this round, both the same kind: I ported ten functions from the KR32 runtime and the build answered with `redefinition of function 'strcpy'`, because my inventory of what the KR16 runtime already had was wrong. The append was removed and only `memchr` added. The lesson is the one this run keeps charging for — a "which functions exist" question answered by one narrow grep is a guess wearing an inventory's clothes. The right check was to compile the fixture and read the linker's list of undefined symbols, which is exhaustive by construction.
 - **2026-11-15T13:50:57-08:00** — The runtime change is two functions in `targets/kr16/runtime/libc.c`, ported from the KR32 runtime with the profile's `unsigned int` signature. No ADR: it adds functions the KR32 runtime has had since its libc was written, and no ABI, object or symbol form changes.
+- **2026-11-15T14:47:19-08:00** — Host gate `2026-11-15T14:18:13-08:00`: `windows-msvc-debug` **655/655**, `windows-msvc-release` **655/655**, `linux-gcc-debug` **571/571**, `linux-gcc-release` **571/571**, from empty build directories and no warnings. It took a restart: the first Linux debug row failed **4 of 575** because the corpus run tests were registered unconditionally, so a Linux host with no sibling VM ran four tests that could never pass. The existing run tests already guard on `KRC_KR16_VM`; that block now does too. The fix changed `tests/CMakeLists.txt` after the Windows rows had been built, so all four rows were rebuilt from one tree rather than mixing a pre-fix row with post-fix ones.
+- **2026-11-15T14:47:19-08:00** — The Linux rows count **571** where Windows counts **655**: the difference is the 84 KR16 executed tests, which are not registered without a VM. That gap is worth stating in every gate record rather than leaving a reader to wonder why the numbers differ.
