@@ -5,6 +5,9 @@
 # defect in generated code that the program only shows when executed.
 #
 # Required: VM, IMAGE, EXPECT_EXIT
+# Optional: FS_ROOT -- the directory the VM's file services see as the root.
+#           Without it the VM sandboxes to ./sandbox and every open fails,
+#           which reads exactly like a broken file layer.
 # Optional: MAX_CYCLES (default 20000000), EXPECT_OUTPUT (a regular expression
 #           matched against stdout; newlines become '|' before matching)
 
@@ -21,8 +24,13 @@ if(NOT EXISTS "${IMAGE}")
     message(FATAL_ERROR "image not found: ${IMAGE}")
 endif()
 
+set(VM_ARGS)
+if(DEFINED FS_ROOT AND NOT FS_ROOT STREQUAL "")
+    list(APPEND VM_ARGS --fs-root "${FS_ROOT}")
+endif()
+
 execute_process(
-    COMMAND "${VM}" vm "${IMAGE}" --max-cycles ${MAX_CYCLES}
+    COMMAND "${VM}" vm "${IMAGE}" --max-cycles ${MAX_CYCLES} ${VM_ARGS}
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
     RESULT_VARIABLE result)
