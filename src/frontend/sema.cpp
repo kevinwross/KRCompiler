@@ -2583,7 +2583,14 @@ void Sema::check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr
     const bool reference_target = target->is_reference;
     const TypePtr target_element =
         target->kind == TypeKind::Pointer ? target->element : nullptr;
-    if (!target_element || target_element->kind != TypeKind::Record) {
+    // oid* is a valid target for a pointer cast: it names the complete
+    // object. With single inheritance that is the address the operand already
+    // holds, so the cast is the identity. A reference to void is not valid.
+    const bool void_target =
+        !reference_target && target_element &&
+        target_element->kind == TypeKind::Void;
+    if (!target_element ||
+        (target_element->kind != TypeKind::Record && !void_target)) {
         error(expression.location,
               reference_target
                   ? "dynamic_cast target must be a reference to a class"

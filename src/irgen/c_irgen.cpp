@@ -9982,6 +9982,17 @@ CIRGen::Expression CIRGen::emit_dynamic_cast(const frontend::AstNode& expression
             : (source_frontend->element && source_frontend->element->record
                    ? source_frontend->element->record.get()
                    : nullptr);
+    // A oid* target names the complete object, which under single
+    // inheritance is the operand's own address: no descriptor walk is needed.
+    if (target_frontend->element &&
+        target_frontend->element->kind == frontend::TypeKind::Void) {
+        if (operand.type == target) {
+            return {operand.value, target};
+        }
+        return {builder_.create(ir::Opcode::BitCast, target, {operand.value},
+                                "cast.void"),
+                target};
+    }
     const auto* target_record = target_frontend->element &&
                                         target_frontend->element->record
                                     ? target_frontend->element->record.get()
