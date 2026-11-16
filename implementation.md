@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T19:16:38-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 673/673
+windows-msvc-release  PASS 673/673
+linux-gcc-debug       PASS 584/584
+linux-gcc-release     PASS 584/584
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T18:40:31-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 673/673
@@ -3886,3 +3894,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T19:16:06-08:00** — The fix the last round specified is **already there**, which moves the boundary one layer down: `instantiate_class_template` does set `template_bindings_ = bindings` before analysing the instance, exactly as the function-template path does. So the empty map measured in round 69 is not a missing assignment in this function — the body that goes wrong is analysed or emitted **outside** that scope.
 - **2026-11-15T19:16:06-08:00** — That leaves two candidates downstream and they are distinguishable: the instance's members are cloned and their field types come from `record_type(*specifier, false)` while the bindings are active, so a clone should carry `Box__int`; if it does, then the `%Box` in the emitted body comes from **IRGen's record cache** keyed by the frontend record, and the fix belongs there rather than in Sema.
 - **2026-11-15T19:16:06-08:00** — Recorded rather than chased: the round budget went into reading the two binding scopes and finding that the obvious fix is already present. No code changed; tree clean; suite **673/673**.
+- **2026-11-15T19:41:16-08:00** — Host gate `2026-11-15T19:16:38-08:00`: `windows-msvc-debug` **673/673**, `windows-msvc-release` **673/673**, `linux-gcc-debug` **584/584**, `linux-gcc-release` **584/584**, from empty build directories and no warnings, first attempt. It publishes the four rounds that traced the record-returning template defect to its mechanism: the class-template path already enters `template_bindings_`, the parameter resolves to `int` through the parser's typedef stub, and the map is empty where the body is actually analysed — so the substitution the body sees is not the instantiation's.
+- **2026-11-15T19:41:16-08:00** — The three reproducers those rounds produced are the durable part: `box2.cpp` (five lines, a template whose return type is a template-id), `namespace_template.cpp`, and `new_pack_expansion.cpp`. Item 4's remaining work is now a single subsystem — class-template instantiation — with entry points that take one dump each, rather than three unrelated gaps.
