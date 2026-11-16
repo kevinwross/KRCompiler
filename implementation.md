@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T07:57:08-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T07:17:01-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4177,3 +4185,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T07:56:43-08:00** — Two failures this round, both mine and both worth recording precisely. First, the three `cdb` breakpoints from last round were set against symbols I had **not verified**; a check with `x krc!*align_of*` shows the real name is `Sema::align_of_type`, so "no breakpoint hit" was never evidence about the code.
 - **2026-11-16T07:56:43-08:00** — Second, a depth counter added to `align_of` to bound the overflow **never decremented**, so it counted total calls rather than nesting and aborted during an ordinary build of the KR32 and KR16 runtime — `MSB8066 ... exited with code -2147483645`. A depth counter needs a scope guard, which is exactly the bug I had already written and reverted two rounds ago in a different function.
 - **2026-11-16T07:56:43-08:00** — Reverted, suite **677/677**, tree clean. The next attempt on this defect should verify a symbol with `x` before breaking on it, and use an RAII guard for any depth counter. Neither is a new insight; both are things this session had already learned and then failed to apply.
+- **2026-11-16T08:17:39-08:00** — Host gate `2026-11-16T07:57:08-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the reinstated finding about the member specifier and the record of two diagnostic failures — unverified breakpoints and a depth counter that never decremented.
+- **2026-11-16T08:17:39-08:00** — Session close at round 137. Five of six objectives complete and published behind **twenty-eight gates**; the sixth is `tuple`, open with a measured causal chain, seven refutations, a failing test, and a diagnostic method that stopped working after nineteen hours in one context.
