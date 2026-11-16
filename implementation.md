@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T06:20:41-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T02:02:01-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4124,3 +4132,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T06:13:29-08:00** — The cycle is **`align_of`'s member loop**, and nothing else: the stack is `align_of+0x24e` repeated, which is the `align_of(*member.type)` line, with a single `size_of` at the bottom. So the layout of `Tup<int, int>` walks member `tail`, whose type is `Tup<int>`, whose member `tail` is `Tup<>` — and `Tup<>` is where it should stop.
 - **2026-11-16T06:13:29-08:00** — It does not stop because **`Tup<>`'s record carries the specialization's members**. A print of `record_type` shows exactly one call for the instance (`RT tag=Tup__int__int__1`), so the record is not duplicated — the empty instance simply resolves to a record built from `Tup<T, R...>`, whose `tail` is `Tup<>` again. That is why a guard keyed by record identity could not fire: there is genuinely only one record, and it refers to itself.
 - **2026-11-16T06:13:29-08:00** — So the defect is the **specialization selection rule** for the empty arity, one layer below where rounds 105 and 113 examined it: `Tup<>` must resolve to the **primary** (no members) and is instead resolving to the specialization. `Tup<int>` compiling and `Tup<int, int>` not is exactly what that would look like, because only the deeper instance reaches an empty tail.
+- **2026-11-16T06:42:13-08:00** — Host gate `2026-11-16T06:20:41-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the debugger work: the two stack traces that named `Sema::align_of` and the self-referential record, and the three fixes that were tried and reverted.
+- **2026-11-16T06:42:13-08:00** — Debugging Tools for Windows was installed mid-session, and `cdb.exe` located in three runs what fifteen rounds of prints could not: the recursion is in layout arithmetic, not instantiation, and it terminates on a record that carries the specialization's own members.
