@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T17:35:09-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 667/667
+windows-msvc-release  PASS 667/667
+linux-gcc-debug       PASS 581/581
+linux-gcc-release     PASS 581/581
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T16:29:10-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 665/665
@@ -3833,3 +3841,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T17:34:47-08:00** — The promotion's missed case is **measured and located**. With the backend emitting `BRA`, `relax1.cpp`, `binarytree.c` and `strings.c` all assemble — so the promotion works on ordinary code — and `targets/kr16/runtime/libc.c` does not. Its assembly contains **48 `BRA`s whose targets are more than 120 lines away**, the worst from line 7697 to line 9983, and the assembler still reports *does not fit in 8 signed bits*. So the fixpoint is not promoting them at all, rather than promoting them to a `JMP` that is itself too far.
 - **2026-11-15T17:34:47-08:00** — That is a sharper question than round 57's: not "a case is missed" but "the fixpoint does not fire on this file". The candidates are narrow and testable — the fixpoint's address computation ignoring section changes (`libc.c` has `.text` and `.data`), or `label_positions` recording the wrong index for labels that appear after a directive — and both are checked by one print of how many promotions the fixpoint performs on that file.
 - **2026-11-15T17:34:47-08:00** — Reverted the backend flip again; suite **667/667**. Nothing new was committed this round: the assembler promotion from round 57 stands on its own and remains green, and the next step is the print, not another attempt.
+- **2026-11-15T17:55:45-08:00** — Host gate `2026-11-15T17:35:09-08:00`: `windows-msvc-debug` **667/667**, `windows-msvc-release` **667/667**, `linux-gcc-debug` **581/581**, `linux-gcc-release` **581/581**, from empty build directories and no warnings, first attempt. It publishes **object-level section GC** — the first item-3 feature to land — together with ADR 0043, the assembler's branch promotion, and the records locating the promotion's miss.
+- **2026-11-15T17:55:45-08:00** — Item 3 is now **two of three complete**: weak symbols (a correctness fix, two translation units can link) and section GC (38,203 → 199 bytes on the probe, deterministic, tested). The third — relaxation — has its assembler half landed and its remaining case located: the promotion fixpoint fires on ordinary code and not on `libc.c`, which has 48 far branches and both `.text` and `.data`.
