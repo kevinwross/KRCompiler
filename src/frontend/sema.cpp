@@ -1432,7 +1432,8 @@ namespace {
 std::string class_instance_tag(const std::string& tag,
                                const std::vector<std::string>& parameters,
                                const std::unordered_map<std::string, TypePtr>& bindings,
-                               const std::unordered_map<std::string, long long>& values) {
+                               const std::unordered_map<std::string, long long>& values,
+                               const std::unordered_map<std::string, std::size_t>& arities) {
     std::string name = tag;
     for (const auto& parameter : parameters) {
         name += "__";
@@ -1442,6 +1443,13 @@ std::string class_instance_tag(const std::string& tag,
         }
         const auto bound = bindings.find(parameter);
         name += bound == bindings.end() ? "unknown" : template_type_tag(bound->second);
+        // A pack is identified by its arity: the same pattern at three arguments
+        // and at two is two instances, and without the arity every instance of a
+        // pack template collapses onto the first element's tag.
+        const auto arity = arities.find(parameter);
+        if (arity != arities.end()) {
+            name += "__" + std::to_string(arity->second);
+        }
     }
     return name;
 }
@@ -1551,8 +1559,10 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     std::size_t pack_index = pattern->second.parameters.size();
     if (!pattern->second.definition->children.empty() &&
         pattern->second.definition->children.front()) {
-        const auto& pattern_labels =
-            pattern->second.definition->children.front()->labels;
+        std::vector<std::string> pattern_labels = pattern->second.definition->labels;
+        for (const auto& label : pattern->second.definition->children.front()->labels) {
+            pattern_labels.push_back(label);
+        }
         for (std::size_t index = 0; index < pattern->second.parameters.size();
              ++index) {
             const auto label = std::string("template-pack-param:") +
@@ -1616,7 +1626,8 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // reference through a template parameter (Box<T>) and one through the
     // type (Box<int>) name the same instance.
     const auto instance_tag =
-        class_instance_tag(tag, pattern->second.parameters, bindings, value_bindings);
+        class_instance_tag(tag, pattern->second.parameters, bindings, value_bindings,
+                          pack_arities);
     if (const auto cached = class_instances_.find(instance_tag);
         cached != class_instances_.end()) {
         if (cached->second) {
