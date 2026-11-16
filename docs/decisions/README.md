@@ -85,5 +85,6 @@ What was rejected and why.
 - [0040-weak-template-definitions.md](0040-weak-template-definitions.md) — accepted; a template's definition is emitted weak, the KR16 assembler accepts .weak, and the object writer records the binding, so two translation units can define the same template.
 - [0041-function-sections.md](0041-function-sections.md) — proposed; each KR16 function gets its own section, so section GC can drop the ones nothing references.
 - [0042-int-substitution-is-a-fallback.md](0042-int-substitution-is-a-fallback.md) — proposed; a template pattern whose body calls a parameter of template-parameter type stays a declaration, because the int substitution cannot describe that call.
+- [0043-branch-promotion.md](0043-branch-promotion.md) — proposed; the assembler promotes an out-of-range `BRA` to `JMP`, which needs label positions recorded first.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
