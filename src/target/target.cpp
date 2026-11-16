@@ -38,6 +38,7 @@ constexpr TargetProfile kKr32{
     true,
     true,
     true,
+    AggregateRules::RegistersOrMemory,
 };
 
 constexpr TargetProfile kKr16{
@@ -70,6 +71,7 @@ constexpr TargetProfile kKr16{
     false,
     false,
     true,
+    AggregateRules::MemoryOnly,
 };
 
 constexpr TargetProfile kKr64{
@@ -102,6 +104,7 @@ constexpr TargetProfile kKr64{
     false,
     false,
     false,
+    AggregateRules::RegistersOrMemory,
 };
 
 constexpr std::array<TargetProfile, 3> kProfiles{kKr32, kKr16, kKr64};

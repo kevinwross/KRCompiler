@@ -1395,6 +1395,13 @@ bool CIRGen::is_memory_class_argument(ir::TypePtr type) const {
     if (!type || (type->kind != ir::TypeKind::Struct && type->kind != ir::TypeKind::Union)) {
         return false;
     }
+    // A target without a register path for aggregates passes every one of them as
+    // a hidden pointer (schema's `aggregate_rules`). Deciding this from a size
+    // threshold would make a by-value aggregate stop compiling on such a target
+    // the moment its layout got smaller.
+    if (profile_.aggregate_rules == target::AggregateRules::MemoryOnly) {
+        return true;
+    }
     const auto size = ir_size_of(type);
     if (size > 16) {
         return true;
@@ -10181,6 +10188,12 @@ ir::Instruction* CIRGen::create_call_instruction(ir::Value* callee,
                 continue;
             }
             auto* copy = builder_.create_alloca(argument->type, 0, "argument.copy");
+            // One whole-record load and store, which the back end moves as **one
+            // word** -- four bytes on KR32 and two on KR16. A record larger than a
+            // word therefore loses its tail here, and a three-byte record passed by
+            // value is wrong on KR16 for exactly that reason; the copy wants the
+            // argument's address and this path does not have it. Recorded in
+            // implementation.md rather than changed underneath the layout work.
             builder_.create_store(argument, copy);
             arguments[index] =
                 copy->type == parameter
@@ -10549,15 +10562,15 @@ std::uint64_t CIRGen::ir_size_of(ir::TypePtr type) const {
     case ir::TypeKind::Array:
         return ir_size_of(type->element) * type->count;
     case ir::TypeKind::Struct: {
+        // A field is aligned by its own alignment, not by a fixed four bytes. The
+        // fixed value is a KR32-shaped guess: it made `struct { char a, b, c; }`
+        // twelve bytes when Sema lays it out as three, so `sizeof(<expression>)`
+        // disagreed with `sizeof(<type>)` and `is_memory_class_argument` classified
+        // a small aggregate as memory class (ADR 0046).
         std::uint64_t size = 0;
         std::uint64_t alignment = 1;
         for (const auto& field : type->fields) {
-            const auto field_alignment = [&]() -> std::uint64_t {
-                if (field->kind == ir::TypeKind::Array && field->element) {
-                    return field->element->kind == ir::TypeKind::Float ? 8 : 4;
-                }
-                return field->kind == ir::TypeKind::Float ? 8 : 4;
-            }();
+            const auto field_alignment = ir_align_of(field);
             alignment = std::max(alignment, field_alignment);
             size = (size + field_alignment - 1) / field_alignment * field_alignment;
             size += ir_size_of(field);
@@ -10575,6 +10588,33 @@ std::uint64_t CIRGen::ir_size_of(ir::TypePtr type) const {
         return 0;
     }
     return 0;
+}
+
+std::uint64_t CIRGen::ir_align_of(ir::TypePtr type) const {
+    if (!type) {
+        return 1;
+    }
+    switch (type->kind) {
+    case ir::TypeKind::Integer:
+    case ir::TypeKind::Float:
+        return std::max<std::uint64_t>(1, (type->bits + 7) / 8);
+    case ir::TypeKind::Pointer:
+        return profile_.pointer_bits / 8;
+    case ir::TypeKind::Array:
+        return ir_align_of(type->element);
+    case ir::TypeKind::Struct:
+    case ir::TypeKind::Union: {
+        std::uint64_t alignment = 1;
+        for (const auto& field : type->fields) {
+            alignment = std::max(alignment, ir_align_of(field));
+        }
+        return alignment;
+    }
+    case ir::TypeKind::Void:
+    case ir::TypeKind::Function:
+        return 1;
+    }
+    return 1;
 }
 
 ir::Value* CIRGen::promote(ir::Value* value, ir::TypePtr from, ir::TypePtr to) {

@@ -245,6 +245,10 @@ private:
     [[nodiscard]] ir::TypePtr size_type() const;
     [[nodiscard]] ir::TypePtr int_type() const;
     [[nodiscard]] std::uint64_t ir_size_of(ir::TypePtr type) const;
+    // The alignment a field of this IR type is laid out with, which is what
+    // ir_size_of pads and rounds by. Pointers ask the target's width (ADR 0037),
+    // never a literal.
+    [[nodiscard]] std::uint64_t ir_align_of(ir::TypePtr type) const;
     [[nodiscard]] std::uint32_t alignment_of(frontend::TypePtr type) const;
     [[nodiscard]] std::uint32_t alignment_of(const frontend::AstNode& specifiers,
                                             frontend::TypePtr type) const;

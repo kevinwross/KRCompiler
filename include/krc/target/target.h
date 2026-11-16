@@ -30,6 +30,18 @@ enum class DataModel : std::uint8_t {
     Lp64,
 };
 
+// docs/targets/schema.md's ABI `aggregate_rules`: how a by-value aggregate is
+// passed. `RegistersOrMemory` classifies by size (docs/abi.md: an aggregate of
+// eight bytes or less stays in integer registers, an FP-only one of nine to
+// sixteen in two FPRs, everything else in memory). `MemoryOnly` passes every
+// aggregate as a hidden pointer, which is what a target without a register path
+// needs -- and it is a property of the target, not something code generation may
+// infer from a size threshold that only happens to correlate with it.
+enum class AggregateRules : std::uint8_t {
+    MemoryOnly,
+    RegistersOrMemory,
+};
+
 struct TargetProfile {
     TargetId id;
     std::string_view name;
@@ -60,6 +72,7 @@ struct TargetProfile {
     bool has_tls;
     bool has_cpp;
     bool backend_available;
+    AggregateRules aggregate_rules;
 };
 
 [[nodiscard]] std::string_view to_string(TargetId id) noexcept;

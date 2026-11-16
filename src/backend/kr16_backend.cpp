@@ -42,6 +42,40 @@ std::string inverse_condition_for(ir::ICmpPredicate predicate) {
     return "BNE";
 }
 
+// The alignment a field is laid out with. A field narrower than a word is aligned
+// by its own width, so a three-`char` record is three bytes and `sizeof` agrees
+// with the object the back end actually lays out. Rounding every field up to the
+// two-byte word made that record six bytes while the front end reported three, and
+// `new T[n]` sized the allocation from `sizeof`.
+std::uint32_t type_alignment(const ir::TypePtr& type) {
+    if (!type) {
+        return 1;
+    }
+    switch (type->kind) {
+    case ir::TypeKind::Integer:
+        return static_cast<std::uint32_t>(
+            std::max<std::uint64_t>(1, (type->bits + 7) / 8));
+    case ir::TypeKind::Pointer:
+        return 2;
+    case ir::TypeKind::Array:
+        return type_alignment(type->element);
+    case ir::TypeKind::Struct:
+    case ir::TypeKind::Union: {
+        std::uint32_t alignment = 1;
+        for (const auto& field : type->fields) {
+            alignment = std::max(alignment, type_alignment(field));
+        }
+        return alignment;
+    }
+    default:
+        return 2;
+    }
+}
+
+std::uint32_t round_up(std::uint32_t value, std::uint32_t alignment) {
+    return alignment == 0 ? value : (value + alignment - 1) / alignment * alignment;
+}
+
 std::uint32_t type_size(const ir::TypePtr& type) {
     if (!type) {
         return 0;
@@ -59,11 +93,21 @@ std::uint32_t type_size(const ir::TypePtr& type) {
                static_cast<std::uint32_t>(type->count);
     case ir::TypeKind::Struct: {
         std::uint32_t size = 0;
+        std::uint32_t alignment = 1;
         for (const auto& field : type->fields) {
-            size = (size + 1) & ~1u;
+            const auto field_alignment = type_alignment(field);
+            alignment = std::max(alignment, field_alignment);
+            size = round_up(size, field_alignment);
             size += type_size(field);
         }
-        return (size + 1) & ~1u;
+        return round_up(size, alignment);
+    }
+    case ir::TypeKind::Union: {
+        std::uint32_t size = 0;
+        for (const auto& field : type->fields) {
+            size = std::max(size, type_size(field));
+        }
+        return size;
     }
     default:
         return 2;
