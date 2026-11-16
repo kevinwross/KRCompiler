@@ -497,6 +497,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T15:17:00-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 696/696
+windows-msvc-release  PASS 696/696
+linux-gcc-debug       PASS 596/596
+linux-gcc-release     PASS 596/596
+not verified: native Linux x64, Linux ARM64
+
+All four from empty build directories, each row built and tested on its own, no
+warnings in either Linux log. Row 1's first launch stopped before configuring — a
+shell redirect to a path that does not exist on Windows — and was restarted
+immediately on the same tree; the timestamp is when the gate's directories were
+deleted and the first row was launched. It publishes six commits: the pack-template
+call and its pattern, the record-layout convergence with `aggregate_rules`
+(ADR 0046), the `<tuple>` header, and the priority list they came from.
+
 ### 2026-11-16T09:56:54-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
