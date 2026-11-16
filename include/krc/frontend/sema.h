@@ -35,6 +35,14 @@ public:
     [[nodiscard]] bool is_class_instance(std::string_view tag) const {
         return class_instances_.count(std::string(tag)) != 0;
     }
+    // True when a function definition is a template pattern with no analysable
+    // body: its body depends on a value parameter, on a parameter pack, or on a
+    // pack in the signature (`arity_of(Tup<T, Rest...>&)`), none of which has a
+    // value until a call supplies one. Such a pattern is a signature only, so it
+    // has no body to analyse and none to emit -- the instances are the definitions.
+    // Sema and code generation must ask this one question, or one of them skips a
+    // pattern the other still builds.
+    [[nodiscard]] bool is_pattern_signature(const AstNode& definition) const;
     // The value a sizeof...(pack) folded to, for code generation.
     [[nodiscard]] bool folded_constant(const AstNode& expression,
                                       long long& value) const {
@@ -279,6 +287,11 @@ private:
     std::vector<const AstNode*> class_instantiations_;
     std::vector<std::unique_ptr<AstNode>> class_instantiation_storage_;
     std::unordered_map<std::string, TypePtr> class_instances_;
+    // The argument list each class instance was built from, keyed by its tag. A
+    // function template can name a class template in its signature
+    // (`arity_of(Tup<T, Rest...>&)`), and the only place the argument types exist
+    // is here: the instance's own tag is a serialized name, not a list.
+    std::unordered_map<std::string, std::vector<TypePtr>> class_instance_arguments_;
     // Builds (or finds) the record for 	ag<arguments> from the class template
     // pattern, or returns null when the pattern or an argument is unusable.
     [[nodiscard]] TypePtr instantiate_class_template(
@@ -289,6 +302,18 @@ private:
     [[nodiscard]] std::string instantiate_template_call(
         const AstNode& callee, const std::vector<std::string>& explicit_arguments,
         const std::vector<TypePtr>& arguments);
+    // Binds a function template's parameters from an argument whose type is an
+    // instance of the class template its parameter's specifier names, which is
+    // what `arity_of(Tup<T, Rest...>&)` needs. The match is positional against the
+    // instance's recorded argument list: the specifier's i-th `template-arg:`
+    // spelling names the parameter the instance's i-th argument supplies, and a
+    // trailing `Name...` takes the remainder as a pack. Returns false when the
+    // shape does not apply, leaving ordinary deduction in charge.
+    [[nodiscard]] bool deduce_class_template_arguments(
+        const AstNode& specifier, const TypePtr& argument,
+        const std::vector<std::string>& parameters,
+        std::unordered_map<std::string, TypePtr>& bindings,
+        std::unordered_map<std::string, std::size_t>& pack_arities) const;
     // Resolves the spelling of an explicit template argument (double) to a
     // type, or null when it is not a type this front end knows.
     [[nodiscard]] TypePtr template_argument_type(const std::string& spelling) const;

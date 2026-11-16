@@ -256,30 +256,13 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
     }
     for (const auto* definition : definitions_) {
         if (definition) {
-            // A pattern whose body depends on a value parameter cannot be
-            // called without one, so it is a declaration: the instantiation is
-            // the only definition. ADR 0031's int-substituted copy only works
-            // for type parameters.
-            bool value_dependent =
-                std::any_of(definition->labels.begin(), definition->labels.end(),
-                            [](const std::string& label) {
-                                return label.rfind("template-value-param:", 0) == 0;
-                            });
-            // A pattern with a parameter pack has no arity, so its body cannot
-            // be built either: sizeof...(pack) has nothing to fold to.
-            for (const auto& child : definition->children) {
-                if (!child) {
-                    continue;
-                }
-                for (const auto& nested : child->children) {
-                    if (nested &&
-                        std::find(nested->labels.begin(), nested->labels.end(),
-                                  "pack") != nested->labels.end()) {
-                        value_dependent = true;
-                    }
-                }
-            }
-            if (value_dependent) {
+            // A pattern whose body depends on a value parameter or on a pack is a
+            // signature: it has no body Sema could analyse, so the instantiation is
+            // the only definition (ADR 0031, ADR 0045). Sema decides this question,
+            // and code generation asks it of the same definition -- the two used to
+            // hold separate copies of the test, and a pack declared in the template
+            // parameter list fell between them.
+            if (sema_.is_pattern_signature(*definition)) {
                 const auto name = declarator_name(*definition->children[1]);
                 const auto found = functions_.find(name);
                 if (found != functions_.end() && found->second) {
@@ -4959,7 +4942,12 @@ void CIRGen::emit_return(const frontend::AstNode& statement) {
         if (address.value && current_function_->type &&
             current_function_->type->return_type) {
             auto* value = address.value;
-            if (value->type != current_function_->type->return_type) {
+            // Structural, not pointer identity: an instance's return type is a
+            // fresh Type object, so identity reported a difference where there was
+            // none and emitted a cast from a type to itself, which the backend
+            // cannot encode (ADR 0036).
+            if (!value->type ||
+                !ir::same_type(value->type, current_function_->type->return_type)) {
                 value = builder_.create(ir::Opcode::BitCast,
                                         current_function_->type->return_type,
                                         {value}, "reference.return");

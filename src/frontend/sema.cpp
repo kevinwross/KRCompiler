@@ -1655,6 +1655,12 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
         pack_arities[pattern_info.parameters[pack_index]] =
             arguments.size() - pack_index;
     }
+    // The instance's arguments in the order they were written, so a function
+    // template whose signature names this class template can deduce its own
+    // parameters from them. A value argument has no type and would misalign the
+    // positions, so an instance built with one records nothing.
+    std::vector<TypePtr> argument_types;
+    bool has_value_argument = false;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         if (pack_index != pattern_info.parameters.size() && index >= pack_index) {
             // Every remaining argument belongs to the pack. Each element is bound
@@ -1665,6 +1671,7 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
             if (!element) {
                 return nullptr;
             }
+            argument_types.push_back(element);
             bindings.emplace(pack_parameter + std::to_string(index - pack_index),
                              element);
             if (index == pack_index) {
@@ -1679,12 +1686,14 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
                 return nullptr;
             }
             value_bindings.emplace(parameter, value);
+            has_value_argument = true;
             continue;
         }
         const auto bound = template_argument_type(arguments[index]);
         if (!bound) {
             return nullptr;
         }
+        argument_types.push_back(bound);
         if (const auto existing = bindings.find(parameter); existing != bindings.end()) {
             if (existing->second != bound) {
                 return nullptr;
@@ -1700,6 +1709,9 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     const auto instance_tag =
         class_instance_tag(tag, pattern_info.parameters, bindings, value_bindings,
                           pack_arities);
+    if (!has_value_argument) {
+        class_instance_arguments_.emplace(instance_tag, argument_types);
+    }
     if (const auto cached = class_instances_.find(instance_tag);
         cached != class_instances_.end()) {
         if (cached->second) {
@@ -1753,7 +1765,8 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
         std::remove_if(clone->labels.begin(), clone->labels.end(),
                        [](const std::string& label) {
                            return label.rfind("template-param:", 0) == 0 ||
-                                  label.rfind("template-value-param:", 0) == 0;
+                                  label.rfind("template-value-param:", 0) == 0 ||
+                                  label.rfind("template-pack-param:", 0) == 0;
                        }),
         clone->labels.end());
 
@@ -1807,6 +1820,85 @@ std::vector<std::string> Sema::expand_template_arguments(
         }
     }
     return expanded;
+}
+
+bool Sema::deduce_class_template_arguments(
+    const AstNode& specifier, const TypePtr& argument,
+    const std::vector<std::string>& parameters,
+    std::unordered_map<std::string, TypePtr>& bindings,
+    std::unordered_map<std::string, std::size_t>& pack_arities) const {
+    // The specifier's arguments, in the order they were written: `Tup<T, Rest...>`
+    // spells two.
+    std::vector<std::string> spelled;
+    for (const auto& label : specifier.labels) {
+        constexpr std::string_view prefix = "template-arg:";
+        if (label.rfind(prefix, 0) == 0) {
+            spelled.push_back(label.substr(prefix.size()));
+        }
+    }
+    if (spelled.empty()) {
+        return false;
+    }
+    // Every spelling must name a parameter of the function template. A concrete
+    // type in the list (`Tup<int, Rest...>`) would have to be matched against the
+    // instance's argument structurally, which this slice does not do; falling back
+    // leaves the call behaving exactly as it did before this path existed.
+    const auto names_parameter = [&](const std::string& name) {
+        return std::find(parameters.begin(), parameters.end(), name) !=
+               parameters.end();
+    };
+    for (const auto& spelling : spelled) {
+        const auto pack = spelling.size() > 3 &&
+                          spelling.compare(spelling.size() - 3, 3, "...") == 0;
+        const auto name =
+            pack ? spelling.substr(0, spelling.size() - 3) : spelling;
+        if (!names_parameter(name)) {
+            return false;
+        }
+    }
+    // The record the argument names, unwrapped from a pointer, an array or a
+    // reference. A reference parameter's argument arrives as the record itself,
+    // which is why the pointer forms are only the first case here.
+    auto type = argument;
+    while (type && (type->kind == TypeKind::Pointer || type->kind == TypeKind::Array) &&
+           type->element) {
+        type = type->element;
+    }
+    if (!type || type->kind != TypeKind::Record || !type->record) {
+        return false;
+    }
+    const auto supplied = class_instance_arguments_.find(type->record->tag);
+    if (supplied == class_instance_arguments_.end()) {
+        return false;
+    }
+    const auto& arguments = supplied->second;
+    std::size_t position = 0;
+    for (const auto& spelling : spelled) {
+        const auto pack = spelling.size() > 3 &&
+                          spelling.compare(spelling.size() - 3, 3, "...") == 0;
+        if (pack) {
+            // The pack takes every argument the fixed spellings before it did not,
+            // including none at all. Each element is bound under the name a class
+            // instance uses for it, which is the name a template-id in the body
+            // expands to (Rest0, Rest1, ...).
+            const auto name = spelling.substr(0, spelling.size() - 3);
+            for (std::size_t index = position; index < arguments.size(); ++index) {
+                bindings[name + std::to_string(index - position)] = arguments[index];
+            }
+            if (position < arguments.size()) {
+                bindings[name] = arguments[position];
+            }
+            pack_arities[name] = arguments.size() - position;
+            position = arguments.size();
+            continue;
+        }
+        if (position >= arguments.size()) {
+            return false;
+        }
+        bindings[spelling] = arguments[position];
+        ++position;
+    }
+    return true;
 }
 
 TypePtr Sema::template_argument_type(const std::string& spelling) const {
@@ -2019,6 +2111,25 @@ std::string Sema::instantiate_template_call(
                                  label) != pattern->second.parameters.end();
             });
         if (template_parameter == labels.end()) {
+            // A parameter whose type is a class template-id spells its arguments as
+            // labels rather than naming a template parameter directly, so the search
+            // above finds nothing: `arity_of(Tup<T, Rest...>&)`. Deduce from the
+            // instance's recorded argument list. An explicitly spelled argument is
+            // left alone: binding it here as well would silently overrule the caller.
+            const bool explicitly_spelled =
+                std::any_of(labels.begin(), labels.end(), [&](const std::string& label) {
+                    constexpr std::string_view prefix = "template-arg:";
+                    return label.rfind(prefix, 0) == 0 &&
+                           explicit_bound.count(label.substr(prefix.size())) != 0;
+                });
+            if (!explicitly_spelled &&
+                deduce_class_template_arguments(*parameter->children[0],
+                                                arguments[argument_index],
+                                                pattern->second.parameters, bindings,
+                                                pack_arities)) {
+                argument_index++;
+                continue;
+            }
             argument_index++;
             continue;
         }
@@ -2171,7 +2282,8 @@ std::string Sema::instantiate_template_call(
         std::remove_if(clone->labels.begin(), clone->labels.end(),
                        [](const std::string& label) {
                            return label.rfind("template-param:", 0) == 0 ||
-                                  label.rfind("template-value-param:", 0) == 0;
+                                  label.rfind("template-value-param:", 0) == 0 ||
+                                  label.rfind("template-pack-param:", 0) == 0;
                        }),
         clone->labels.end());
     if (auto* named = const_cast<AstNode*>(function_name_declarator(*clone->children[1]))) {
@@ -2649,27 +2761,12 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     // analysed: std::array<T, N> is not a record until N is bound, so the
     // pattern is a signature only and every instance is analysed with its own
     // bindings.
-    // A pattern whose body depends on a value parameter or on a parameter pack
-    // cannot be analysed: neither has a value until a call supplies one, and
-    // sizeof...(pack) is the instance's arity. Only the instances are analysed.
-    const bool value_dependent_pattern =
-        std::any_of(definition.labels.begin(), definition.labels.end(),
-                    [](const std::string& label) {
-                        return label.rfind("template-value-param:", 0) == 0;
-                    });
-    bool pack_pattern = false;
-    for (const auto& child : definition.children) {
-        if (!child) {
-            continue;
-        }
-        for (const auto& nested : child->children) {
-            if (nested && std::find(nested->labels.begin(), nested->labels.end(),
-                                  "pack") != nested->labels.end()) {
-                pack_pattern = true;
-            }
-        }
-    }
-    if (!value_dependent_pattern && !pack_pattern) {
+    // A pattern whose body depends on a value parameter or on a pack cannot be
+    // analysed: neither has a value until a call supplies one. Only the instances
+    // are analysed, and code generation asks the same question of the same
+    // definition so it does not emit a body that was never built.
+    const bool pattern_signature = is_pattern_signature(definition);
+    if (!pattern_signature) {
         analyze_function_body(definition, enclosing_record_);
     }
     if (auto_return_active_ && auto_return_type_ && type->return_type) {
@@ -2684,6 +2781,37 @@ void Sema::analyze_function_definition(const AstNode& definition) {
     auto_return_type_ = nullptr;
     current_function_name_ = saved_function_name;
     enclosing_record_ = saved_enclosing_record;
+}
+
+bool Sema::is_pattern_signature(const AstNode& definition) const {
+    // A value parameter or a pack has no value until a call supplies one, and
+    // sizeof...(pack) is the instance's arity, so a body that depends on either
+    // cannot be analysed as a program. The parser records the declarations as
+    // labels on the definition -- including `template-pack-param:` for a pack that
+    // never appears as a parameter pack, which is the shape a signature naming a
+    // class template has (`arity_of(Tup<T, Rest...>&)`).
+    const bool declared_dependent =
+        std::any_of(definition.labels.begin(), definition.labels.end(),
+                    [](const std::string& label) {
+                        return label.rfind("template-value-param:", 0) == 0 ||
+                               label.rfind("template-pack-param:", 0) == 0;
+                    });
+    if (declared_dependent) {
+        return true;
+    }
+    // A parameter pack in the parameter list is the other spelling.
+    for (const auto& child : definition.children) {
+        if (!child) {
+            continue;
+        }
+        for (const auto& nested : child->children) {
+            if (nested && std::find(nested->labels.begin(), nested->labels.end(),
+                                    "pack") != nested->labels.end()) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void Sema::analyze_function_body(const AstNode& definition, RecordInfo* record) {
