@@ -709,6 +709,35 @@ bool assemble(std::string_view source, AssemblyResult& result,
             break;
         }
     }
+    // The encoder resolves branch targets through `labels`, whose offsets were
+    // recorded by the parse pass. Any promotion moved them, so they are rewritten
+    // from the final layout here -- otherwise a promoted instruction encodes a
+    // displacement to where the label used to be.
+    {
+        std::vector<std::uint64_t> line_address(lines.size(), 0);
+        std::uint64_t address = 0;
+        for (std::size_t index = 0; index < lines.size(); ++index) {
+            line_address[index] = address;
+            if (lines[index].mnemonic == ".short") {
+                address += lines[index].operands.size() * 2;
+            } else if (lines[index].mnemonic == ".byte") {
+                address += lines[index].operands.size();
+            } else {
+                std::string size_error;
+                const auto size = instruction_size(lines[index], size_error);
+                address += size ? static_cast<std::uint64_t>(*size) * 2 : 2;
+            }
+        }
+        for (const auto& entry : label_positions) {
+            const auto found = labels.find(entry.first);
+            if (found == labels.end()) {
+                continue;
+            }
+            found->second.offset = entry.second < line_address.size()
+                                       ? line_address[entry.second]
+                                       : address;
+        }
+    }
 
     section = 0;
     offset = 0;

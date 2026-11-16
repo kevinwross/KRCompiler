@@ -398,10 +398,10 @@ void Kr16Backend::emit_function(std::string& out,
                 out += "    " +
                        inverse_condition_for(instruction->icmp_predicate) + " " +
                        false_label + "\n";
-                out += "    JMP " + true_label + "\n";
+                out += "    BRA " + true_label + "\n";
                 out += false_label + ":\n";
                 out += "    MOV R0, #0\n";
-                out += "    JMP " + end_label + "\n";
+                out += "    BRA " + end_label + "\n";
                 out += true_label + ":\n";
                 out += "    MOV R0, #1\n";
                 out += end_label + ":\n";
@@ -434,7 +434,7 @@ void Kr16Backend::emit_function(std::string& out,
                     error = "KR16 branch has no destination";
                     return;
                 }
-                out += "    JMP " + label_for(*instruction->successors[0]) +
+                out += "    BRA " + label_for(*instruction->successors[0]) +
                        "\n";
                 break;
             case ir::Opcode::CondBr: {
@@ -449,10 +449,10 @@ void Kr16Backend::emit_function(std::string& out,
                     std::to_string(synthetic_label);
                 ++synthetic_label;
                 out += "    BEQ " + false_label + "\n";
-                out += "    JMP " + label_for(*instruction->successors[0]) +
+                out += "    BRA " + label_for(*instruction->successors[0]) +
                        "\n";
                 out += false_label + ":\n";
-                out += "    JMP " + label_for(*instruction->successors[1]) +
+                out += "    BRA " + label_for(*instruction->successors[1]) +
                        "\n";
                 break;
             }
@@ -614,14 +614,14 @@ void Kr16Backend::emit_function(std::string& out,
                     }
                     load(instruction->operands[0], "R0");
                 }
-                out += "    JMP .L" + function.name + ".ret\n";
+                out += "    BRA .L" + function.name + ".ret\n";
                 break;
             case ir::Opcode::Unreachable:
                 // Nothing branches here. Jumping to the function's return keeps
                 // the instruction stream well formed, and a path that reaches it
                 // is a program that had no defined behaviour anyway. A 	hrow`r
                 // in a header such as <stdexcept> ends its function this way.
-                out += "    JMP .L" + function.name + ".ret\n";
+                out += "    BRA .L" + function.name + ".ret\n";
                 break;
             default:
                 error = "KR16 backend does not support opcode " +
