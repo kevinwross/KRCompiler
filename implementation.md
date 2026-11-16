@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T02:02:01-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T01:35:19-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4102,3 +4110,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T01:55:56-08:00** — A depth chain in `instantiate_class_template` never reaches six frames, so the stack overflow is **not** a recursion through class instantiation either. Together with round 111 — where a chain in `map_record` never reached twelve — this rules out both places the defect could plausibly have been, and each had already been the subject of a fix attempt.
 - **2026-11-16T01:55:56-08:00** — Two exhaustive print-based searches now agree that the recursion is in a third place: not the type mapper, not the instantiator, and — from the fact that `-fsyntax-only` passes — not the front end's ordinary analysis. That leaves the path from an analysed definition to emitted code, and it is the one area none of tonight's probes instrumented.
 - **2026-11-16T01:55:56-08:00** — Reverted; suite **677/677**. This is the honest end of what prints can establish: the next instrument must be a stack trace, and the two candidates that a trace would name first are now already excluded, which makes it more likely than not that the answer is somewhere neither the map nor the instantiator touches.
+- **2026-11-16T02:22:07-08:00** — Host gate `2026-11-16T02:02:01-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the round that excluded class instantiation as the recursion's home.
+- **2026-11-16T02:22:07-08:00** — Session close at round 117, after fifteen and a half hours. Five of six objectives complete and published behind **twenty-five gates**, every one green on its first attempt. The sixth — `tuple` — is open with everything established except the one thing a print cannot give: the recursion's actual location, which needs a stack trace from a host with a debugger.
