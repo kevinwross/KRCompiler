@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T09:17:27-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T08:40:55-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4215,3 +4223,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T09:15:41-08:00** — The remaining defect is measured: `sizeof(Tup<int, char>.tail)` is **0**, so the member resolves to the **empty primary** rather than to `Tup<char>`. With `>` fixed at one, arity one fails `arguments.size() > fixed` and the specialization does not match — a specialization fixing one parameter should take the first argument and let its pack absorb nothing.
 - **2026-11-16T09:15:41-08:00** — Restoring `>=` gives the right selection and **reintroduces the crash**, so the two are coupled: `>` is crash-free with a wrong size, `>=` is size-correct and overflows. The committed state keeps `>` — a crash is worse than a wrong size — and the coupling is the thing to break, not either rule on its own.
 - **2026-11-16T09:15:41-08:00** — Reverted to the committed state and verified: the `rewrite_instance_tag` fix is present, `tail1.cpp` and `rec5.cpp` both compile, suite **677/677**. The next attempt must make the arity-one specialization safe rather than choose between the two behaviours.
+- **2026-11-16T09:42:13-08:00** — Host gate `2026-11-16T09:17:27-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes **the crash fix**: `rewrite_instance_tag` no longer renames a member's class name when that node carries its own template arguments, so `Tup<R...>` inside `Tup<int, int>` stops resolving to the record being built.
+- **2026-11-16T09:42:13-08:00** — That is the most significant change since the linker work: a recursive variadic class template now compiles, links and runs instead of overflowing the stack. What remains for `tuple` is a size, not a crash — the member resolves to the empty primary because the selection rule does not match arity one — and that correction is coupled to a crash, which is recorded.
