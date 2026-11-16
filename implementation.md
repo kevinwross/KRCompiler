@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T22:08:30-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 673/673
+windows-msvc-release  PASS 673/673
+linux-gcc-debug       PASS 584/584
+linux-gcc-release     PASS 584/584
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T21:06:32-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 673/673
@@ -3982,3 +3990,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T22:01:26-08:00** — The labels are **present**: `SPECS P | template-id | template-arg:int` for `P<int> one;`. So the dispatch is not the problem — the branch that instantiates a class template can fire, and every round that suspected the specifier path, the parser, or a guard was suspecting the wrong function. The failure is **inside** `instantiate_class_template`, or after it returns.
 - **2026-11-15T22:01:26-08:00** — That narrows twelve rounds of work to a single function, and it also explains why removing the branch guard changed nothing: the guard was irrelevant to `P<int>`, which reaches the branch either way. The two refutations in round 90 are consistent with this — no cache hit because instantiation never *succeeds*, and no change from the guard because the guard was never the gate.
 - **2026-11-15T22:01:26-08:00** — The next print belongs in `instantiate_class_template` after the pack branch: whether it returns early on `template_argument_type("int")`, on the arity comparison, or succeeds and is then discarded by `record_type`. Trace reverted; tree clean; suite **673/673**.
+- **2026-11-15T22:31:01-08:00** — Host gate `2026-11-15T22:08:30-08:00`: `windows-msvc-debug` **673/673**, `windows-msvc-release` **673/673**, `linux-gcc-debug` **584/584**, `linux-gcc-release` **584/584**, from empty build directories and no warnings, first attempt. It publishes the two landed steps of the `tuple` prerequisite: the parser records a class template's pack parameter, and instantiation absorbs the tail into it, so a variadic class template works from arity 2 upward with `sizeof...(Ts)` folding correctly.
+- **2026-11-15T22:31:01-08:00** — It also publishes the twelve rounds of narrowing that did **not** land, which is the more useful record: ADR 0045 (a pattern body is a template, not a program), the refutation of the cache and the branch guard, and the measurement showing a one-argument reference carries `template-id` and `template-arg:int` and therefore reaches the instantiation branch. The remaining defect is inside `instantiate_class_template` for a pack of arity 1, with the print location named.
