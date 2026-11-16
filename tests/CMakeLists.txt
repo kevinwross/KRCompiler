@@ -174,6 +174,14 @@ if(TARGET krc)
     # The executed KR16 tests report the program's exit status from the sibling
     # VM; a host without a runnable VM registers none of them, as for KR32.
     if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+        add_test(NAME krc_run_kr16_namespace_template
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_namespace_template.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_namespace_template PROPERTIES
+            DEPENDS krc_link_kr16_namespace_template)
         add_test(NAME krc_run_kr16_new_pack_expansion
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR16_VM}
@@ -859,6 +867,17 @@ if(TARGET krc)
         endforeach()
     endforeach()
 
+    add_test(NAME krc_link_kr16_namespace_template
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+                -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+                -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+                -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/namespace_template.cpp
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_namespace_template.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
     add_test(NAME krc_link_kr16_new_pack_expansion
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

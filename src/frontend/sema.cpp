@@ -1729,7 +1729,17 @@ void fold_over_pack(AstNode& node, const std::string& name, std::size_t arity,
 std::string Sema::instantiate_template_call(
     const AstNode& callee, const std::vector<std::string>& explicit_arguments,
     const std::vector<TypePtr>& arguments) {
-    const auto pattern = templates_.find(callee.text);
+    // Templates are registered under the name their declaration spells, so a
+    // call through a namespace — `std::make_unique(...)` — has to fall back to the
+    // unqualified tail. Without that, a template in a namespace is never found and
+    // the call targets a symbol nothing defines.
+    auto pattern = templates_.find(callee.text);
+    if (pattern == templates_.end()) {
+        const auto separator = callee.text.rfind("::");
+        if (separator != std::string::npos) {
+            pattern = templates_.find(callee.text.substr(separator + 2));
+        }
+    }
     if (pattern == templates_.end() || !pattern->second.definition ||
         pattern->second.definition->children.size() < 2 ||
         !pattern->second.definition->children[1]) {
