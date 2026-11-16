@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T20:31:17-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 673/673
+windows-msvc-release  PASS 673/673
+linux-gcc-debug       PASS 584/584
+linux-gcc-release     PASS 584/584
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T19:52:44-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 673/673
@@ -3933,3 +3941,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T20:30:54-08:00** — Change (2) was attempted and **reverted**: the pack-absorbing instantiation and the arity plumbing compiled, and `sizeof...(Ts)` in the constructor body still reported "not a parameter pack". The reason is now clear and is the same shape as tonight's other defects — `instantiate_class_template` sets `template_bindings_` and would set `template_pack_arities_` for the duration of `record_type(*specifier, false)`, but a **member function body is analysed lazily** (ADR 0039), after that scope has been closed. The arity is visible exactly while the record's fields are built and gone by the time the constructor's body is.
 - **2026-11-15T20:30:54-08:00** — So change (2) is not the two-line change the specification assumed: it needs the pack arity to travel **with the instance** rather than with a transient scope — either recorded on the class instance's TemplateInfo, or re-entered from the instance when a lazy member body is analysed. That is a design decision, not a plumbing fix, and it is the correct place to stop and write it down rather than to keep moving the assignment.
 - **2026-11-15T20:30:54-08:00** — Reverted, tree clean, suite **673/673**. The round-79 parser change stands: the label is recorded and additive, and it is what makes the remaining work expressible.
+- **2026-11-15T20:56:53-08:00** — Host gate `2026-11-15T20:31:17-08:00`: `windows-msvc-debug` **673/673**, `windows-msvc-release` **673/673**, `linux-gcc-debug` **584/584**, `linux-gcc-release` **584/584**, from empty build directories and no warnings, first attempt. It publishes the `tuple` prerequisite work: the parser now records a class template's pack parameter as `template-pack-param:Ts` instead of discarding the ellipsis, and the record explains why the instantiation half needs the arity to travel with the instance rather than with a transient scope.
+- **2026-11-15T20:56:53-08:00** — Item 4's remainder is one design decision and three follow-ons: where an instance's pack arities live (on its TemplateInfo, or re-entered when a lazy member body is analysed), the pack-absorbing instantiation that depends on it, `sizeof...(Ts)` folding in a class body, and then `tuple` itself as a class template with a specialization on the pack.
