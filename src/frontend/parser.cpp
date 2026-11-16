@@ -1039,6 +1039,28 @@ std::unique_ptr<AstNode> Parser::parse_struct_specifier(bool is_union) {
             class_names_.insert(node->text);
         }
         ++position_;
+        // A class head written as a template-id is a partial specialization:
+        // `struct Tuple<T, Rest...>` names a pattern rather than a definition. The
+        // argument spellings are recorded so Sema can register the pattern apart
+        // from the primary template.
+        if (cxx_mode_ && check("<")) {
+            ++position_;
+            while (!check(">") && !at_end()) {
+                std::string argument;
+                while (!check(",") && !check(">") && !at_end()) {
+                    argument += peek().text;
+                    ++position_;
+                }
+                if (!argument.empty()) {
+                    node->labels.push_back("template-arg:" + argument);
+                }
+                if (!match(",")) {
+                    break;
+                }
+            }
+            expect(">", "after a specialization's argument list");
+            node->labels.push_back("specialization");
+        }
     }
     skip_attributes();
     if (cxx_mode_ && check("final")) {
