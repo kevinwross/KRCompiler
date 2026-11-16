@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
     std::string layout_path;
     std::string source_root;
     bool print_size = false;
+    bool gc_sections = false;
     std::vector<std::string> inputs;
 
     for (int index = 1; index < argc; ++index) {
@@ -120,6 +121,10 @@ int main(int argc, char** argv) {
         }
         if (argument == "--print-size") {
             print_size = true;
+            continue;
+        }
+        if (argument == "--gc-sections") {
+            gc_sections = true;
             continue;
         }
         if (argument.starts_with("--base=")) {
@@ -199,6 +204,7 @@ int main(int argc, char** argv) {
     }
     krc::linker::LinkOptions options;
     options.base = base;
+    options.gc_sections = gc_sections;
     options.entry_symbol = entry;
     if (!layout_path.empty()) {
         std::ifstream layout(layout_path);

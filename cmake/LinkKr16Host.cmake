@@ -51,7 +51,13 @@ foreach(pair IN LISTS inputs)
     endif()
 endforeach()
 
-execute_process(COMMAND "${KRLD}" "${crt_object}" ${libraries}
+set(gc_flags)
+if(DEFINED GC_SECTIONS AND NOT GC_SECTIONS STREQUAL "")
+    # Object-level collection: drop objects the entry point cannot reach.
+    list(APPEND gc_flags --gc-sections)
+endif()
+
+execute_process(COMMAND "${KRLD}" "${crt_object}" ${libraries} ${gc_flags}
                         ${user_objects} -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)

@@ -212,9 +212,64 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     std::vector<OutputSection> sections;
     std::unordered_map<std::string, std::size_t> section_index;
     std::vector<std::vector<std::uint32_t>> offsets(objects.size());
+
+    // Object-level garbage collection. Reachability is over objects: a symbol a
+    // reachable object refers to makes its defining object reachable. The entry
+    // symbol starts the walk and relocation targets carry it onward.
+    //
+    // Only *definitions* establish ownership. The startup object carries
+    // `.extern main`, and an undefined entry has section MAX, so registering it
+    // would bind `main` to crt0 and the walk would stop before reaching the
+    // object that actually defines it — which is exactly how the first attempt
+    // failed with `undefined symbol 'main'`.
+    std::vector<bool> reachable(objects.size(), !options.gc_sections);
+    if (options.gc_sections) {
+        std::unordered_map<std::string, std::size_t> symbol_owner;
+        for (std::size_t object_index = 0; object_index < objects.size();
+             ++object_index) {
+            for (const auto& symbol : objects[object_index].symbols) {
+                if (symbol.name.empty() ||
+                    symbol.binding == KroSymbolBinding::Local ||
+                    symbol.section == std::numeric_limits<std::uint32_t>::max()) {
+                    continue;
+                }
+                symbol_owner.emplace(symbol.name, object_index);
+            }
+        }
+        const auto entry_owner = symbol_owner.find(options.entry_symbol);
+        if (entry_owner == symbol_owner.end()) {
+            error = "garbage collection found no object defining '" +
+                    options.entry_symbol + "'";
+            return false;
+        }
+        std::vector<std::size_t> pending{entry_owner->second};
+        reachable[entry_owner->second] = true;
+        while (!pending.empty()) {
+            const auto object_index = pending.back();
+            pending.pop_back();
+            const auto& owner = objects[object_index];
+            for (const auto& relocation : owner.relocations) {
+                if (relocation.symbol >= owner.symbols.size()) {
+                    continue;
+                }
+                const auto reached =
+                    symbol_owner.find(owner.symbols[relocation.symbol].name);
+                if (reached == symbol_owner.end() ||
+                    reachable[reached->second]) {
+                    continue;
+                }
+                reachable[reached->second] = true;
+                pending.push_back(reached->second);
+            }
+        }
+    }
+
     for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
         const auto& object = objects[object_index];
         offsets[object_index].assign(object.sections.size(), 0);
+        if (!reachable[object_index]) {
+            continue;
+        }
         for (std::size_t index = 0; index < object.sections.size(); ++index) {
             const auto& section = object.sections[index];
             auto found = section_index.find(section.name);
@@ -292,6 +347,9 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
 
     std::vector<std::uint32_t> output_section_for(objects.size());
     for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
+        if (!reachable[object_index]) {
+            continue;
+        }
         for (std::size_t index = 0; index < objects[object_index].sections.size(); ++index) {
             const auto& name = objects[object_index].sections[index].name;
             const auto found = section_index.find(name);
@@ -306,6 +364,9 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     // Map each source section to its merged section index and final address.
     std::vector<std::vector<std::uint32_t>> source_section(objects.size());
     for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
+        if (!reachable[object_index]) {
+            continue;
+        }
         source_section[object_index].resize(objects[object_index].sections.size());
         for (std::size_t index = 0; index < objects[object_index].sections.size(); ++index) {
             const auto& name = objects[object_index].sections[index].name;
@@ -329,6 +390,9 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     };
     std::unordered_map<std::string, Definition> definitions;
     for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
+        if (!reachable[object_index]) {
+            continue;
+        }
         const auto& object = objects[object_index];
         for (const auto& symbol : object.symbols) {
             if (symbol.section == kUndefinedSection) {
@@ -361,6 +425,9 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     }
 
     for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
+        if (!reachable[object_index]) {
+            continue;
+        }
         const auto& object = objects[object_index];
         for (std::size_t symbol_index = 0; symbol_index < object.symbols.size(); ++symbol_index) {
             const auto& symbol = object.symbols[symbol_index];
@@ -453,6 +520,9 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     };
 
     for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
+        if (!reachable[object_index]) {
+            continue;
+        }
         const auto& object = objects[object_index];
         for (const auto& relocation : object.relocations) {
             if (relocation.section >= object.sections.size()) {

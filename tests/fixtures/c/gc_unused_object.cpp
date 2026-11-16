@@ -1,0 +1,1 @@
+int unused_library_function(void) { return 1; }

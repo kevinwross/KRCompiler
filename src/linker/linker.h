@@ -14,6 +14,9 @@ struct LinkOptions {
     std::uint64_t base = 0x00010000;
     std::string entry_symbol = "_start";
     std::map<std::string, std::uint64_t> section_addresses;
+    // Drop objects the entry point cannot reach. Object-level, because one
+    // section per translation unit is the finest granularity the format has.
+    bool gc_sections = false;
 };
 
 struct LinkedSection {
