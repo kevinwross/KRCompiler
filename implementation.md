@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T01:08:18-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T00:29:25-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4073,3 +4081,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T01:02:10-08:00** — The chain probe answers the question the last round could not: `map_record` **never reaches depth twelve**, so the stack overflow is **not** a deep recursion through it. Round 109's trace showed `Tup__int__uchar__1`, then `Tup`, then `Tup__int__uchar__1` again — three frames, not a thousand — so the duplicate `RecordInfo` is real but it is **not** what overflows the stack.
 - **2026-11-16T01:02:10-08:00** — That splits one symptom into two defects and is the most useful thing to record about this item: there is a duplicate-record defect (one instance, two `RecordInfo`s, measured) and separately a stack overflow somewhere that is neither `map_record` nor a Sema instantiation loop. Nine rounds of instrumenting the likely paths found the first and never touched the second, which is why each fix moved nothing.
 - **2026-11-16T01:02:10-08:00** — The next instrument is a real one: a debugger or a crash handler that prints the faulting stack, because every print-based probe reachable from the front end has now been taken and the overflow is somewhere none of them names. Reverted; suite **677/677**; two commits local.
+- **2026-11-16T01:28:17-08:00** — Host gate `2026-11-16T01:08:18-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the three rounds that refuted every print-reachable hypothesis for the recursive-template crash and finally **split one symptom into two defects**: a duplicate `RecordInfo` for one instance, measured, and a stack overflow that is not a deep recursion through `map_record`.
+- **2026-11-16T01:28:17-08:00** — The sixth objective's last item is therefore open with an accurate description rather than a plausible one: two named defects, a seven-line reproducer, a correct header waiting on them, and a named next instrument — a real stack trace, since every reachable print has now been taken. Five of six items are complete and gated.
