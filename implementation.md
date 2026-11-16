@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T15:56:14-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 665/665
+windows-msvc-release  PASS 665/665
+linux-gcc-debug       PASS 580/580
+linux-gcc-release     PASS 580/580
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T15:20:24-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 663/663
@@ -3781,3 +3789,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T15:55:46-08:00** — `new T(args...)` is narrowed to the IR, and it is not the verifier being strict. `new Item(41)` on a class with a constructor works; the same `new` inside a template whose argument came from an expansion emits `store i16 %args.load, %new` — a scalar store **into the allocated object's pointer** instead of a constructor call — which the verifier then rejects with *store type does not match its pointer*. So the `new` path takes its **initializer** branch for the expanded argument and its **constructor** branch for a spelled one.
 - **2026-11-15T15:55:46-08:00** — The likely cause is the label the expansion carries: the argument reaching the `new` path is an `Identifier` marked `pack-expansion`, and the shape test that chooses between initializer and constructor does not expect that mark. That is a hypothesis, not a measurement — the measurement is the IR, which shows the two branches diverging on identical source.
 - **2026-11-15T15:55:46-08:00** — `make_unique` therefore remains one branch-selection fix away, and the header is accurate as it stands. No code changed this round; the finding is recorded so the next attempt starts at the branch that already has the wrong shape in front of it.
+- **2026-11-15T16:21:59-08:00** — Host gate `2026-11-15T15:56:14-08:00`: `windows-msvc-debug` **665/665**, `windows-msvc-release` **665/665**, `linux-gcc-debug` **580/580**, `linux-gcc-release` **580/580**, from empty build directories and no warnings, first attempt. It publishes **pack expansion in a call argument list** — the first language feature in this run to cross the matrix with a fixture and no findings — along with ADR 0042 and the two scope records for section GC and `new`-with-expansion.
+- **2026-11-15T16:21:59-08:00** — The Linux rows count **580** and Windows **665**: the 85-test difference is the KR16 executed tests, which are not registered without a sibling VM. That line belongs in the record because the two numbers are otherwise read as missing coverage rather than missing hardware.
