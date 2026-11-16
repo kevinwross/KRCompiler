@@ -542,6 +542,10 @@ bool assemble(std::string_view source, AssemblyResult& result,
               std::string& error) {
     std::vector<Line> lines;
     std::map<std::string, Label> labels;
+    // Where each label sits in the line sequence. Promotion widens an
+    // instruction and moves everything after it, so the fixpoint below needs to
+    // recompute addresses rather than trust the offsets the parse pass recorded.
+    std::map<std::string, std::size_t> label_positions;
     std::vector<std::string> globals;
     std::vector<std::string> weaks;
     std::vector<std::string> externs;
@@ -568,6 +572,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
                 return false;
             }
             labels[name] = Label{section, offset};
+            label_positions[name] = lines.size();
             continue;
         }
         if (line.front() == '.') {
@@ -654,6 +659,55 @@ bool assemble(std::string_view source, AssemblyResult& result,
         }
         lines.push_back(std::move(parsed));
         offset += static_cast<std::uint64_t>(*size) * 2;
+    }
+
+    // Promote an out-of-range BRA to JMP. Promotion widens the instruction, which
+    // moves every later label, so this repeats until nothing changes. Only BRA is
+    // promoted: an out-of-range conditional needs the inverse condition plus a JMP
+    // over a synthetic label, which this assembler has no way to name (ADR 0043),
+    // and it keeps reporting the range error instead.
+    for (int pass = 0; pass < 64; ++pass) {
+        std::vector<std::uint64_t> line_address(lines.size(), 0);
+        std::uint64_t address = 0;
+        for (std::size_t index = 0; index < lines.size(); ++index) {
+            line_address[index] = address;
+            if (lines[index].mnemonic == ".short") {
+                address += lines[index].operands.size() * 2;
+            } else if (lines[index].mnemonic == ".byte") {
+                address += lines[index].operands.size();
+            } else {
+                std::string size_error;
+                const auto size = instruction_size(lines[index], size_error);
+                address += size ? static_cast<std::uint64_t>(*size) * 2 : 2;
+            }
+        }
+        std::map<std::string, std::uint64_t> addresses;
+        for (const auto& entry : label_positions) {
+            addresses[entry.first] = entry.second < line_address.size()
+                                         ? line_address[entry.second]
+                                         : address;
+        }
+        bool changed = false;
+        for (std::size_t index = 0; index < lines.size(); ++index) {
+            if (lines[index].mnemonic != "BRA" || lines[index].operands.empty()) {
+                continue;
+            }
+            const auto target = addresses.find(trim(lines[index].operands[0]));
+            if (target == addresses.end()) {
+                continue;
+            }
+            const auto displacement =
+                static_cast<std::int64_t>(target->second) -
+                static_cast<std::int64_t>(line_address[index] + 2);
+            const auto words = displacement / 2;
+            if (words < -128 || words > 127) {
+                lines[index].mnemonic = "JMP";
+                changed = true;
+            }
+        }
+        if (!changed) {
+            break;
+        }
     }
 
     section = 0;
