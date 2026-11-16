@@ -603,7 +603,10 @@ std::vector<std::string> Parser::parse_template_argument_list() {
             ++position_;
             continue;
         }
-        if (!current.empty()) {
+        // A pack expansion is written `R...`, and the ellipsis belongs to the name:
+        // emitting `R ...` made the argument spelling unresolvable, so a member
+        // declared `Tup<R...>` fell back to the unparameterised record.
+        if (!current.empty() && !(peek().is("...") && depth == 1)) {
             current += " ";
         }
         current += peek().text;
