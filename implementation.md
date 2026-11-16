@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T09:56:54-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T09:17:27-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4231,3 +4239,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T09:56:28-08:00** — With the rule at `>=`, a print inside `rewrite_instance_tag` records **no renames at all** for the arity-one reproducer, so the crash that rule causes does not come through the class-name rewrite. The rename path is now ruled out by direct observation rather than by inference, which means the arity-one crash has a third cause that neither the selection rule nor the rewrite explains.
 - **2026-11-16T09:56:28-08:00** — Both the rule and the probe were reverted. The tree is back to the published state: `tail1` compiles, suite **677/677**, one record commit local. Five of six objectives are complete and gated thirty times; `tuple` compiles, links and runs with one wrong size.
 - **2026-11-16T09:56:28-08:00** — Session close at round 148, after twenty hours and forty-five rounds on this single item. What the session produced here is worth keeping in one sentence: the crash is fixed and published, the remaining defect is a wrong size whose two candidate causes have both been measured and eliminated, and the next instrument is a print in `instantiate_class_template` for the arity-one case rather than another change to the rule.
+- **2026-11-16T10:17:00-08:00** — Host gate `2026-11-16T09:56:54-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the two records that ruled out the rename path for the arity-one crash.
+- **2026-11-16T10:17:00-08:00** — The session closes here at the operator's request, with `handoff.md` rewritten for a fresh context. The previous handoff is archived as `handoff-2026-11-14.md` because several of its claims — that `<memory>` is blocked, that M10 is the largest gap — are no longer true, and a stale handoff is worse than none.
