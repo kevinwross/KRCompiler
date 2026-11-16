@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T23:55:34-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T23:03:49-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 675/675
@@ -4030,3 +4038,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T23:50:18-08:00** — **Partial specialization works.** A specialization registered against the primary is now selected by argument count: `Holder<int, char>` and `Holder<int, char, long>` both resolve to `Holder<T, Rest...>`, whose `sizeof...(Rest)` is 1 and 2 where the primary would give 2 and 3. The fixture asserts exactly that difference, so it fails if the primary is chosen, and it runs to 42. Suite **677/677**.
 - **2026-11-15T23:50:18-08:00** — The selection rule is three lines and deliberately narrow: a candidate fixes `parameters.size() - 1` parameters -- all but its pack -- and matches when the argument list is at least that long. The primary keeps the empty case. That is argument-count matching, not partial ordering, and it is the whole of what `tuple` needs.
 - **2026-11-15T23:50:18-08:00** — This is the second compiler **feature** to land today after the variadic packs, and both were reached the same way: a measurement of the exact error, a written boundary for the slice being implemented, and then a change small enough to verify on its own. `tuple` now has no compiler prerequisite at all -- it can be written as a recursive class template with a specialization on the pack, which is what the standard header is.
+- **2026-11-16T00:15:42-08:00** — Host gate `2026-11-15T23:55:34-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes **partial specialization of a class template** — parse the template-id head, register the pattern apart from the primary, and select it by argument count — with a fixture that fails if the primary is chosen.
+- **2026-11-16T00:15:42-08:00** — That was the last compiler prerequisite for `tuple`. Item 4's remaining work is a header: a recursive class template with a specialization on the pack, which the front end can now express and select.
