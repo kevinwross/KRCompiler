@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T18:40:31-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 673/673
+windows-msvc-release  PASS 673/673
+linux-gcc-debug       PASS 584/584
+linux-gcc-release     PASS 584/584
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T17:35:09-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 667/667
@@ -3867,3 +3875,5 @@ not verified: native Linux x64, Linux ARM64
   The instance is `define weak %Box__int @make_box(i32 %value)` and its body ends **`ret %Box %temporary.value`**.
 - **2026-11-15T18:39:47-08:00** — The same shape with a **non-template** return type — `Box make_box(int value)` — is emitted as `%Box` throughout and is correct, so the defect is exactly "a template whose return type is a **template-id**". That narrows the search to one function: `Box<T>` in the body of the instance resolves to the pattern's record rather than the instance's, and the declaration's return type resolves correctly, which means the two paths disagree about the same spelling.
 - **2026-11-15T18:39:47-08:00** — The path is `type_from_specifiers` → `instantiate_class_template("Box", {"T"})` → `template_argument_type("T")` → the same specifier mapping that already consults `template_bindings_`, so `T` should bind to `int` here as it does in the declaration. Either the class-template instance is cached under a name that the pattern also answers to, or the body is typed from the pattern before the bindings are active. `box2.cpp` distinguishes those in one dump.
+- **2026-11-15T19:06:27-08:00** — Host gate `2026-11-15T18:40:31-08:00`: `windows-msvc-debug` **673/673**, `windows-msvc-release` **673/673**, `linux-gcc-debug` **584/584**, `linux-gcc-release` **584/584**, from empty build directories and no warnings, first attempt. It publishes the two real compiler fixes — reading a template's parameters through its function declarator, and finding a namespace-qualified template call by its unqualified name — with their fixtures, plus the branch relaxation, section GC and ADR records from the rounds between.
+- **2026-11-15T19:06:27-08:00** — kr32 confirmed that `FMOV`'s function code **`0x032` is frozen**: the operator settled the two questions holding ISA v1 open (Q9, no-FP profile out of scope; Q10, host IEEE with subnormals preserved and single rounding per operation), and neither can move the encoding. No action on this side — the KR32 back end allocates no floating-point register, so nothing it emits encodes `0x60` — but the guarantee is now recorded, and `docs/targets/kr32.md` can cite a frozen encoding when FPR allocation arrives.
