@@ -621,8 +621,24 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
                 template_parameters.push_back(label.substr(prefix.size()));
             }
         }
+        const bool is_specialization =
+            std::find(specifier.labels.begin(), specifier.labels.end(),
+                      "specialization") != specifier.labels.end();
         if (!template_parameters.empty() && !specifier.text.empty() &&
-            templates_.find(specifier.text) == templates_.end()) {
+            is_specialization) {
+            // A partial specialization is registered apart from the primary: it is
+            // a pattern that matches some argument lists, not a second definition
+            // of the name. Its pack parameter is the one the parser labelled, and
+            // every parameter before it is fixed.
+            TemplateInfo info;
+            info.parameters = template_parameters;
+            info.definition = &specifier;
+            info.name = specifier.text;
+            info.is_class = true;
+            info.value_parameters = std::move(record_type_value_parameters);
+            specializations_[specifier.text].push_back(std::move(info));
+        } else if (!template_parameters.empty() && !specifier.text.empty() &&
+                   templates_.find(specifier.text) == templates_.end()) {
             TemplateInfo info;
             info.parameters = template_parameters;
             info.definition = &specifier;
@@ -687,7 +703,9 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
     if (info->complete) {
         // The same specifier is analyzed again when a typedef declaration
         // reaches its declarator; that is not a redefinition.
-        if (info->definition != &specifier) {
+        if (info->definition != &specifier &&
+            std::find(specifier.labels.begin(), specifier.labels.end(),
+                      "specialization") == specifier.labels.end()) {
             error(specifier.location, "redefinition of " +
                                           std::string(is_union ? "union " : "struct ") + tag);
             return type;

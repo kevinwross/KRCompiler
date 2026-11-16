@@ -249,6 +249,12 @@ private:
         std::unordered_set<std::string> value_parameters;
     };
     std::unordered_map<std::string, TemplateInfo> templates_;
+    // Partial specializations, keyed by the primary's name and described by the
+    // parameters they fix before their pack: `Tuple<T, Rest...>` fixes one, so it
+    // matches any arity of at least one and the primary keeps arity zero. That is
+    // the whole of the ordering this slice supports -- argument count, not a
+    // general partial order.
+    std::unordered_map<std::string, std::vector<TemplateInfo>> specializations_;
     // Template parameter bindings active while an instantiation is analyzed.
     std::unordered_map<std::string, TypePtr> template_bindings_;
     // Value parameters bound while a pattern's fallback or an instance is
