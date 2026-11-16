@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T01:35:19-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T01:08:18-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4089,3 +4097,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T01:34:40-08:00** — The crash is **platform-independent**: the Linux GCC build segfaults on the same four-line reproducer that the MSVC build overflows the stack on. So the defect is in shared code, not in a host-specific path, and it is not an MSVC artefact of the probe.
 - **2026-11-16T01:34:40-08:00** — That also means a debugger on either host would produce a usable stack, which is the next instrument and the only one not yet tried. This WSL image has no `gdb`, so the trace needs either a host that does or a crash handler installed in `krc`; both are small work and neither is a guess.
 - **2026-11-16T01:34:40-08:00** — Session close at round 114. Five of six objectives are complete, gated twenty-three times, and published: the milestone table behind a gate, variadic templates with folds and `sizeof...` and pack expansion, all three parts of linker hardening, the KR16 file layer with its `--fs-root` fixture, and the CI workflow with release notes and the Tier 0-2 corpus. The sixth is `tuple`: header written and correct, `functional` shipped, and one arity-two recursion defect with a four-line reproducer, a bisected boundary, two refuted candidates, and a named next instrument. The goal stays active.
+- **2026-11-16T01:55:35-08:00** — Host gate `2026-11-16T01:35:19-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the arity bisect and the platform-independence finding for the remaining `tuple` defect.
+- **2026-11-16T01:55:35-08:00** — The session's last gate. Everything the six-item list asked for is published except `tuple` itself: five items complete, twenty-four gates passed, and one defect left with a four-line reproducer, a bisected boundary (arity 1 compiles, arity 2 crashes), a confirmed platform-independent failure, and a named next instrument.
