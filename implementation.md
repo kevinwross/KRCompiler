@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T07:17:01-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T06:20:41-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4158,3 +4166,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T07:10:46-08:00** — The print answers it in one line. At the moment a member's specifier is resolved, `MID label=Tup packs=0 bindings=0` and the specifier's labels are `[Tup] [template-id] [template-arg:int] [template-arg:int]`. So the member declared `Tup<R...>` is being resolved with **the enclosing instance's own two arguments** — `Tup<int, int>` — and not with the pack's remaining element.
 - **2026-11-16T07:10:46-08:00** — That is the whole defect, and it explains the self-reference directly: substituting the enclosing instance's arguments into the member's specifier makes the member's type the record being built. The arity map is empty at that point (`packs=0`) because this resolution happens before `record_type` installs it, which is what round 129's guard was testing for.
 - **2026-11-16T07:10:46-08:00** — So the fix is in the **substitution that rewrites the member's specifier labels** — it copies the enclosing arguments wholesale where it should expand `R...` to the tail — and it must happen before the specifier reaches type resolution. That is a named function and a named label list, not a hypothesis. Reverted, suite **677/677**, seven commits local.
+- **2026-11-16T07:40:04-08:00** — Host gate `2026-11-16T07:17:01-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the round that found the whole defect: a member's specifier carries the **enclosing** instance's arguments, so the member's type is the record being built.
+- **2026-11-16T07:40:04-08:00** — It also publishes the one landed fix from this stretch — a pack expansion is spelled `R...` rather than `R ...` — and eight records, six of which are refutations. The refutations are the part worth keeping: they say which layers have been measured and excluded, so the next attempt starts at type substitution rather than at layout or instantiation.
