@@ -1565,6 +1565,24 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
         !pattern->second.definition) {
         return nullptr;
     }
+    // A registered partial specialization wins over the primary when its fixed
+    // parameters fit the argument list: Tuple<T, Rest...> fixes one, so it takes
+    // every arity of at least one and the primary keeps the empty case. That is the
+    // whole ordering this slice supports -- argument count, not a partial order.
+    const TemplateInfo* selected = &pattern->second;
+    if (const auto found = specializations_.find(tag);
+        found != specializations_.end()) {
+        for (const auto& candidate : found->second) {
+            const auto fixed = candidate.parameters.empty()
+                                   ? 0
+                                   : candidate.parameters.size() - 1;
+            if (arguments.size() >= fixed) {
+                selected = &candidate;
+                break;
+            }
+        }
+    }
+    const TemplateInfo& pattern_info = *selected;
     std::unordered_map<std::string, TypePtr> bindings;
     std::unordered_map<std::string, long long> value_bindings;
     // A pack's arity, keyed by the pack's name, so the instance's signature can
@@ -1574,17 +1592,17 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // exactly one argument, which is what makes `Pack<int, char>` an instance
     // with arity 2 (ADR 0045). The parameter is identified by the label the parser
     // records on the pattern's specifier.
-    std::size_t pack_index = pattern->second.parameters.size();
-    if (!pattern->second.definition->children.empty() &&
-        pattern->second.definition->children.front()) {
-        std::vector<std::string> pattern_labels = pattern->second.definition->labels;
-        for (const auto& label : pattern->second.definition->children.front()->labels) {
+    std::size_t pack_index = pattern_info.parameters.size();
+    if (!pattern_info.definition->children.empty() &&
+        pattern_info.definition->children.front()) {
+        std::vector<std::string> pattern_labels = pattern_info.definition->labels;
+        for (const auto& label : pattern_info.definition->children.front()->labels) {
             pattern_labels.push_back(label);
         }
-        for (std::size_t index = 0; index < pattern->second.parameters.size();
+        for (std::size_t index = 0; index < pattern_info.parameters.size();
              ++index) {
             const auto label = std::string("template-pack-param:") +
-                               pattern->second.parameters[index];
+                               pattern_info.parameters[index];
             if (std::find(pattern_labels.begin(), pattern_labels.end(), label) !=
                 pattern_labels.end()) {
                 pack_index = index;
@@ -1592,8 +1610,8 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
             }
         }
     }
-    if (pack_index == pattern->second.parameters.size()) {
-        if (arguments.size() != pattern->second.parameters.size()) {
+    if (pack_index == pattern_info.parameters.size()) {
+        if (arguments.size() != pattern_info.parameters.size()) {
             return nullptr;
         }
     } else if (arguments.size() < pack_index) {
@@ -1601,11 +1619,11 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
         return nullptr;
     }
     for (std::size_t index = 0; index < arguments.size(); ++index) {
-        if (pack_index != pattern->second.parameters.size() && index >= pack_index) {
+        if (pack_index != pattern_info.parameters.size() && index >= pack_index) {
             // Every remaining argument belongs to the pack. Its arity is what
             // sizeof... folds to, and each element is bound under its own name so
             // a body can refer to them without expanding the pack.
-            const auto pack_parameter = pattern->second.parameters[pack_index];
+            const auto pack_parameter = pattern_info.parameters[pack_index];
             const auto element = template_argument_type(arguments[index]);
             if (!element) {
                 return nullptr;
@@ -1618,8 +1636,8 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
             }
             continue;
         }
-        const auto parameter = pattern->second.parameters[index];
-        if (pattern->second.value_parameters.count(parameter) != 0) {
+        const auto parameter = pattern_info.parameters[index];
+        if (pattern_info.value_parameters.count(parameter) != 0) {
             long long value = 0;
             if (!parse_integer_text(arguments[index], value)) {
                 return nullptr;
@@ -1644,7 +1662,7 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // reference through a template parameter (Box<T>) and one through the
     // type (Box<int>) name the same instance.
     const auto instance_tag =
-        class_instance_tag(tag, pattern->second.parameters, bindings, value_bindings,
+        class_instance_tag(tag, pattern_info.parameters, bindings, value_bindings,
                           pack_arities);
     if (const auto cached = class_instances_.find(instance_tag);
         cached != class_instances_.end()) {
@@ -1658,7 +1676,7 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     }
     // The null entry marks the instance as in progress for that self-reference.
     class_instances_.emplace(instance_tag, nullptr);
-    auto clone = clone_ast(*pattern->second.definition);
+    auto clone = clone_ast(*pattern_info.definition);
     clone->text = instance_tag;
     // Code generation collects a class's methods from its declaration
     // specifiers, so the instantiation is kept in a holder of that shape.
