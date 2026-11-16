@@ -1622,17 +1622,25 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
         // A pack may be empty, but the fixed parameters before it may not.
         return nullptr;
     }
+    // The pack's arity is recorded before the arguments are walked, so a
+    // zero-argument instance gets one: an empty pack is arity zero, and leaving it
+    // unset made the instance tag say `unknown`, which is not a stable key -- the
+    // same tag then described every empty instance, and a recursive record such as
+    // tuple<> recursed forever looking for it.
+    if (pack_index != pattern_info.parameters.size()) {
+        pack_arities[pattern_info.parameters[pack_index]] =
+            arguments.size() - pack_index;
+    }
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         if (pack_index != pattern_info.parameters.size() && index >= pack_index) {
-            // Every remaining argument belongs to the pack. Its arity is what
-            // sizeof... folds to, and each element is bound under its own name so
-            // a body can refer to them without expanding the pack.
+            // Every remaining argument belongs to the pack. Each element is bound
+            // under its own name so a body can refer to them without expanding the
+            // pack.
             const auto pack_parameter = pattern_info.parameters[pack_index];
             const auto element = template_argument_type(arguments[index]);
             if (!element) {
                 return nullptr;
             }
-            pack_arities[pack_parameter] = arguments.size() - pack_index;
             bindings.emplace(pack_parameter + std::to_string(index - pack_index),
                              element);
             if (index == pack_index) {
