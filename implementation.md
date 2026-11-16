@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T23:03:49-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 675/675
+windows-msvc-release  PASS 675/675
+linux-gcc-debug       PASS 585/585
+linux-gcc-release     PASS 585/585
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T22:08:30-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 673/673
@@ -4001,3 +4009,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T22:57:42-08:00** — **Variadic class templates work, at arity 1 through 3, with correct values.** `Pack<int>.count` is 1, `Pack<int, char>.count` is 2, `Pack<int, char, long>.count` is 3, and the fixture runs to 42. Suite **675/675**; the four arity probes all compile; the fixture is a link-and-run pair.
 - **2026-11-15T22:57:42-08:00** — It took **two** fixes, and each was invisible without the other. The **instance tag** omitted the pack arity, so `Pack<int>`, `Pack<int, char>` and `Pack<int, char, long>` all hashed to `P__int` — one instance, one analysed body, and `sizeof...` folded to whichever arity was live first. That is round 94's "shared body" finding and its cause. And the **label** lives on the definition rather than only its first child, so the pack was never detected and the arity was never computed. Fixing the tag alone made the instances distinct and the `sizeof...` error returned; fixing both made the values right.
 - **2026-11-15T22:57:42-08:00** — Seventeen rounds, and the pattern is the one this goal keeps teaching: the two fixes are each three lines, and neither was reachable by reasoning about which function was wrong. `pack_index=1` and `SIC ... packs=1` — two prints at two sites — is what located them. The `tuple` prerequisite is now met: a class template whose parameters are a pack instantiates per arity and folds `sizeof...` correctly in its member bodies.
+- **2026-11-15T23:25:21-08:00** — Host gate `2026-11-15T23:03:49-08:00`: `windows-msvc-debug` **675/675**, `windows-msvc-release` **675/675**, `linux-gcc-debug` **585/585**, `linux-gcc-release` **585/585**, from empty build directories and no warnings, first attempt. It publishes **variadic class templates that work**: `Pack<int>`, `Pack<int, char>` and `Pack<int, char, long>` fold `sizeof...(Ts)` to 1, 2 and 3 respectively and run to 42, as a link-and-run pair.
+- **2026-11-15T23:25:21-08:00** — With that, item 4's `tuple` has no compiler prerequisite left. The remaining work is the header itself — a recursive class template with a specialization on the pack — which the front end can now express.
