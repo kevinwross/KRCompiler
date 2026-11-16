@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T16:29:10-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 665/665
+windows-msvc-release  PASS 665/665
+linux-gcc-debug       PASS 580/580
+linux-gcc-release     PASS 580/580
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T15:56:14-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 665/665
@@ -3805,3 +3813,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T16:28:47-08:00** — Relaxation measured on this side, and the gap is exactly what kr16 described. A near `BRA` assembles to **one word**; a `BRA` 400 bytes away fails with *KR16 branch displacement does not fit in 8 signed bits*. So this assembler has the B-type encoding but none of the promotion their assembler performs, and until it does, `BRA` can only be emitted where the range is certain — which is why the backend still emits `JMP` everywhere and why "relaxation" has sat in the checklist.
 - **2026-11-15T16:28:47-08:00** — The promotion is a **pre-pass**, not a retry: `encode_b` fails on range, and switching that instruction to two-word `JMP` moves every later label, so the shape is "rewrite out-of-range `BRA` to `JMP`, recompute labels, repeat until stable" — kr16's design, and roughly forty lines in an assembler this session has never modified. Recording it rather than starting it: four of the last six multi-part attempts here were reverted, and every one of them began at this point in a round.
 - **2026-11-15T16:28:47-08:00** — What that leaves is a clear, ordered plan for the relaxation third of item 3, with no unknowns: the pre-pass promotes `BRA` to `JMP` and an out-of-range conditional to its inverse plus `JMP`; then the backend selects `BRA` for unconditional branches instead of `JMP`; then a fixture asserts that a near branch costs one word and a far one still works. The first step is measurable on its own by assembling the two files already in `build/corpus/` (`bra_near.s`, `bra_far.s`), which is why they are named here.
+- **2026-11-15T16:55:52-08:00** — Host gate `2026-11-15T16:29:10-08:00`: `windows-msvc-debug` **665/665**, `windows-msvc-release` **665/665**, `linux-gcc-debug` **580/580**, `linux-gcc-release` **580/580**, from empty build directories and no warnings, first attempt. It publishes the **retraction of the ISA-extension claim** — KR16 has one-word B-type branches and relaxation is a codegen change here, not an ISA question — along with the two corrected statements in `docs/targets/kr16.md`, the relaxation measurement, and the record that `make_unique` waits on `new` with an expanded argument.
+- **2026-11-15T16:55:52-08:00** — Three of the five commits in this batch were **documentation corrections**, two of them correcting statements this run had already made. That ratio is worth seeing in one place: the compiler's behaviour barely moved across rounds 47-51, while its description did, repeatedly. Documentation that is believed and wrong has cost more rounds here than any single defect.
