@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T21:06:32-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 673/673
+windows-msvc-release  PASS 673/673
+linux-gcc-debug       PASS 584/584
+linux-gcc-release     PASS 584/584
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T20:31:17-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 673/673
@@ -3954,3 +3962,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T20:59:10-08:00** — **ADR 0045** answers the question rounds 78-84 kept arriving at: a template whose parameter list contains a pack is **never served by the int-substituted pattern**, because no substitution represents a pack — one `int` is not the pack and zero `int`s are not the pack. It narrows ADR 0031's scope rather than repealing it, and it is the reason the pattern-level `sizeof...` diagnostic can simply stop being emitted for these templates: they have no fallback body to diagnose.
 - **2026-11-15T20:59:10-08:00** — The ADR states the general shape too, which is what made the last three rounds look like new defects each time: *a template body is analysed to find type errors, but a diagnostic that depends on an instance's bindings is not a property of the program.* Emitting it at pattern level reports a fact about a template as a fact about a program. That is a named distinction now, not a rule rediscovered per defect.
 - **2026-11-15T20:59:10-08:00** — It also records the two facts from rounds 82-83 as consequences rather than as findings to rediscover: a pack's arity is unknown in a pattern and must not fold to zero (zero is a legal arity), and an instance's arity travels with the instance's cloned subtree because a member body is analysed after any instantiation scope has closed.
+- **2026-11-15T21:32:40-08:00** — Host gate `2026-11-15T21:06:32-08:00`: `windows-msvc-debug` **673/673**, `windows-msvc-release` **673/673**, `linux-gcc-debug` **584/584**, `linux-gcc-release` **584/584**, from empty build directories and no warnings, first attempt. It publishes **ADR 0045** — a template whose parameters include a pack is never served by the int-substituted pattern — with the two facts recorded in rounds 82-83 as its stated consequences, plus the docs verification.
+- **2026-11-15T21:32:40-08:00** — Step (3) of the ADR — skipping a pack template's member bodies at pattern level — was **attempted and reverted**: the condition compiled and the two errors were unchanged, so the diagnostic is emitted by a pass the skip does not reach. Recorded rather than left in place, because a change that cannot demonstrate its effect is not a fix.
