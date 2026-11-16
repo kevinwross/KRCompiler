@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T00:29:25-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T23:55:34-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4052,3 +4060,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T00:23:00-08:00** — The empty instance's arity is now recorded **before** the arguments are walked, so a zero-argument pack gets arity zero instead of leaving the tag to say `unknown`. That is a correct fix on its own terms and it does **not** end the crash.
 - **2026-11-16T00:23:00-08:00** — The print that the last round specified answers it in one line: **`ICI tag=Tup args=2`** is the *only* instantiation. `Tup<char>` never instantiates at all, so the recursion is not in Sema and the empty-instance tag was the wrong suspect. The recursion is in **IRGen's `map_record`**, lowering a record whose member has the same type as the record being lowered.
 - **2026-11-16T00:23:00-08:00** — So the remaining defect is: `map_record` caches by `RecordInfo` address and inserts the forward declaration first, which terminates for **distinct** records; it does not terminate when a member's record *is* the record being lowered. That is a property of the front end handing IRGen the same `RecordInfo` for `Tup<char>` and `Tup<int, char>`, or of the lowering ignoring the forward declaration it already inserted — one print in `map_record` decides which, and the answer is the last thing between this goal and `tuple`.
+- **2026-11-16T00:49:31-08:00** — Host gate `2026-11-16T00:29:25-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the last four rounds: the specialization-selection rule that requires strictly more arguments than fixed parameters, the empty pack's arity recorded before the argument walk, and the two records localising the recursive-template crash.
+- **2026-11-16T00:49:31-08:00** — The crash is now localised to IRGen's `map_record`, with the measurement that established it: only one instantiation occurs for a recursive tuple, so the recursion is not in Sema. Item 4's remaining work is one print in `map_record` and whatever it shows.
