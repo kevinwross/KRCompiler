@@ -1,0 +1,74 @@
+#pragma once
+
+// std::tuple for the supported subset (M10).
+//
+// The shape is a recursive variadic class template: `tuple<int, char>` is
+// `{ int head; tuple<char> tail; }`, and `tuple<>` is the empty primary.
+//
+// Construction is in place rather than through a factory, because a factory
+// returns the tuple by value and KR16 rejects aggregate returns.
+//
+// Element access is named rather than indexed: the free functions `tuple_head` and
+// `tuple_tail`, and the members `.head` / `.tail`. `get<I>` is not provided because
+// it needs a member template or a partial specialisation over a non-type argument,
+// and this front end has neither; both are measured in implementation.md. Reach
+// element k by chaining members (`pair.tail.head`).
+//
+// Four limits are real, and each is measured rather than assumed:
+//
+//   * **There is no element constructor.** `tuple(T first, Rest... rest)` is a
+//     *class member* whose signature carries a pack parameter, and this front end
+//     expands such a signature for one element only: `tuple<int, char> p(41, 'x')`
+//     compiles and then fails to link with `undefined symbol 'tuple_ctor_0_value'`,
+//     because the call binds to the pattern's constructor rather than an instance's.
+//     Construct by default and assign instead, which works at any arity:
+//
+//         tuple<int, char, long> t;
+//         t.head = 1; t.tail.head = 'y'; t.tail.tail.head = 9;
+//
+//   * **No by-value factory.** `make_tuple` would return the tuple by value, which
+//     KR16 rejects as an aggregate return, and it would be built on the constructor
+//     above. It is provided on neither target rather than on one.
+//
+//   * **An empty tuple cannot be a local.** `tuple<> t;` emits a call to the
+//     pattern's constructor and fails to link with the same undefined symbol. An
+//     empty tuple reached as a member is fine -- `tuple_size(pair.tail.tail)` is
+//     zero -- so the empty type exists and only a local of it is affected.
+//
+//   * **Do not chain the free functions on one line.**
+//     `tuple_head(tuple_tail(pair))` crashes the compiler: a reference-returning
+//     call passed as an argument is an unrelated defect. The member form
+//     (`tuple_tail(pair).head`) works.
+
+namespace std {
+
+template <typename... Ts>
+struct tuple {
+};
+
+template <typename T, typename... Rest>
+struct tuple<T, Rest...> {
+    T head;
+    tuple<Rest...> tail;
+
+    tuple() : head(), tail() {}
+};
+
+// The number of elements, for the primary and for every specialization: the pack
+// is the whole parameter list, so one function answers both.
+template <typename... Ts>
+int tuple_size(tuple<Ts...>& value) {
+    return sizeof...(Ts);
+}
+
+template <typename T, typename... Rest>
+T& tuple_head(tuple<T, Rest...>& value) {
+    return value.head;
+}
+
+template <typename T, typename... Rest>
+tuple<Rest...>& tuple_tail(tuple<T, Rest...>& value) {
+    return value.tail;
+}
+
+}  // namespace std
