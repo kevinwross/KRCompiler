@@ -1753,7 +1753,17 @@ std::string Sema::instantiate_template_call(
                   "'; write it explicitly");
         return {};
     }
-    const auto& parameters = pattern->second.definition->children[1]->children;
+    // The parameters hang off the FunctionDeclarator, which may sit under a
+    // PointerDeclarator when the return type has indirection: `T* construct(...)`
+    // nests the function declarator one level down, and reading the outer node's
+    // children yields the function declarator itself rather than the parameters.
+    // That made the deduction loop see a single non-parameter child, so a pack in
+    // such a signature was never considered and its type stayed unbound.
+    const auto* pattern_function =
+        find_function_declarator(*pattern->second.definition->children[1]);
+    const auto& parameters =
+        pattern_function ? pattern_function->children
+                         : pattern->second.definition->children[1]->children;
     std::unordered_map<std::string, TypePtr> bindings;
     std::unordered_map<std::string, long long> value_bindings;
     // A pack's arity, keyed by the pack's name, so the instance's signature can
