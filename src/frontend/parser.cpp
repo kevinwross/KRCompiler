@@ -162,9 +162,13 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
         // A parameter written with a type before its name (int N) is a value
         // parameter: N stands for a number, not a type (ADR 0033).
         std::vector<bool> parameter_is_value;
+        // A parameter written `typename... Ts` is a pack: it absorbs the tail of an
+        // instance's argument list rather than matching exactly one argument.
+        std::vector<bool> parameter_is_pack;
         if (match("<")) {
             while (!check(">") && !at_end()) {
                 bool is_value = false;
+                bool is_pack = false;
                 while (peek().kind == TokenKind::Keyword &&
                        is_decl_specifier_keyword(peek().text) &&
                        peek().text != "class") {
@@ -182,13 +186,16 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
                 if (peek().kind == TokenKind::Identifier &&
                     (peek().text == "typename" || peek().text == "class")) {
                     ++position_;
-                    // 	ypename... Ts names a pack. The ellipsis is accepted so
-                    // the name is read as a parameter rather than swallowed.
-                    static_cast<void>(match("..."));
+                    // `typename... Ts` names a pack. The ellipsis is recorded so
+                    // the instantiation can let this parameter absorb the tail of
+                    // the argument list; discarding it left a class template unable
+                    // to say which of its parameters was a pack.
+                    is_pack = match("...");
                 }
                 if (peek().kind == TokenKind::Identifier) {
                     parameters.push_back(peek().text);
                     parameter_is_value.push_back(is_value);
+                    parameter_is_pack.push_back(is_pack);
                     if (!is_value) {
                         typedef_names_.insert(peek().text);
                     }
@@ -231,9 +238,14 @@ std::unique_ptr<AstNode> Parser::parse_external_declaration() {
                 for (std::size_t index = 0; index < parameters.size(); ++index) {
                     const bool is_value =
                         index < parameter_is_value.size() && parameter_is_value[index];
+                    const bool is_pack =
+                        index < parameter_is_pack.size() && parameter_is_pack[index];
                     node.labels.push_back(
                         (is_value ? "template-value-param:" : "template-param:") +
                         parameters[index]);
+                    if (is_pack) {
+                        node.labels.push_back("template-pack-param:" + parameters[index]);
+                    }
                 }
             };
             const auto tag_definition = [&](AstNode& definition) {
