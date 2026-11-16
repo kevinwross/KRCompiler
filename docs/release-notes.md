@@ -64,17 +64,17 @@ absent. `AGENTS.local.md` records the environment assumptions, and
   `thread_local` is static storage with a guarded initializer.
 - A debugger user interface. The symbols are complete and documented; consuming
   them is the debugger's job.
-- Template machinery beyond the recorded subset: partial specialisation, member
-  templates, explicit template arguments on a *class* template, pack expansion in
-  an expression (`f(values)...`), multiple packs in one template, and the fold
-  forms other than `(expr op ...)`. Variadic function templates, `sizeof...(pack)`
-  and left folds over a binary operator do work.
-- A complete `<tuple>`. `<array>`, `<memory>` and `<utility>` are in, `<functional>`
-  provides the comparison, arithmetic and logical function objects, and `<array>`
-  works for element access, size, size queries, fill and data. A `tuple` needs
-  variadic *class* templates, which the front end does not have, and calling a
-  callable supplied as a *template parameter* is still rejected, so no generic
-  algorithm can take a function object.
+- Template machinery beyond the recorded subset: member templates, explicit
+  template arguments on a *class* template, multiple packs in one template, and
+  the fold forms other than `(expr op ...)`. Variadic function and class
+  templates, `sizeof...(pack)`, left folds over a binary operator, pack expansion
+  in a call or a `new` argument list, partial specialisation of a class template
+  selected by argument count, and recursive variadic class templates do work.
+- A `<tuple>` header. A recursive variadic class template — the shape a tuple
+  needs — compiles and runs, but the header itself is not written, so `<tuple>`
+  cannot be included.
+- A callable supplied as a *template parameter* is still rejected, so no generic
+  algorithm can take `std::function`-style function objects.
 - Release tagging. The `v1.0` tag is an operator decision and is not created by
   this document.
 

@@ -292,6 +292,12 @@ private:
     // Resolves the spelling of an explicit template argument (double) to a
     // type, or null when it is not a type this front end knows.
     [[nodiscard]] TypePtr template_argument_type(const std::string& spelling) const;
+    // Replaces a pack-expansion argument (`Rest...`) with one argument per element
+    // of the enclosing instance's pack, named the way instantiation binds them
+    // (`Rest0`, `Rest1`). An argument list carrying no expansion is returned
+    // unchanged, and a pack of arity zero expands to nothing.
+    [[nodiscard]] std::vector<std::string> expand_template_arguments(
+        const std::vector<std::string>& arguments) const;
     // Non-zero while a catch body is being analysed; `throw;` needs a handler.
     int handler_depth_ = 0;
     void check_dynamic_cast(const AstNode& expression, TypePtr target, TypePtr source);

@@ -462,6 +462,7 @@ TypePtr Sema::base_type_from_specifiers(const AstNode& specifiers, bool& is_type
             if (arguments.empty()) {
                 continue;
             }
+            arguments = expand_template_arguments(arguments);
             const auto instance = instantiate_class_template(label, arguments);
             if (!instance) {
                 continue;
@@ -1446,6 +1447,31 @@ const AstNode* function_name_declarator(const AstNode& declarator) {
 
 namespace {
 
+// The position of a class template's pack parameter, or the parameter count when
+// it has none. The parser records the pack as a label on the pattern's specifier,
+// which lands on the definition or on its first child depending on the form, so
+// both are read. A pattern's pack is always its last parameter in the ordering
+// this slice supports, but the position is computed rather than assumed.
+std::size_t pack_parameter_index(const std::vector<std::string>& parameters,
+                                 const AstNode* definition) {
+    if (definition == nullptr || parameters.empty()) {
+        return parameters.size();
+    }
+    std::vector<std::string> labels = definition->labels;
+    if (!definition->children.empty() && definition->children.front()) {
+        for (const auto& label : definition->children.front()->labels) {
+            labels.push_back(label);
+        }
+    }
+    for (std::size_t index = 0; index < parameters.size(); ++index) {
+        const auto label = std::string("template-pack-param:") + parameters[index];
+        if (std::find(labels.begin(), labels.end(), label) != labels.end()) {
+            return index;
+        }
+    }
+    return parameters.size();
+}
+
 // The mangled tag for an instantiated class: `Box__double` (ADR 0032).
 std::string class_instance_tag(const std::string& tag,
                                const std::vector<std::string>& parameters,
@@ -1583,14 +1609,18 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     if (const auto found = specializations_.find(tag);
         found != specializations_.end()) {
         for (const auto& candidate : found->second) {
-            const auto fixed = candidate.parameters.empty()
-                                   ? 0
-                                   : candidate.parameters.size() - 1;
-            // Strictly greater: a specialization fixing N parameters still needs one
-            // argument for its pack, and arity N is the primary's case. Matching on
-            // >= here makes the empty instance select the specialization and recurse
-            // onto itself.
-            if (arguments.size() > fixed) {
+            const auto pack =
+                pack_parameter_index(candidate.parameters, candidate.definition);
+            // The pack absorbs whatever the fixed parameters leave, which may be
+            // nothing: `Tup<char>` matches `Tup<T, Rest...>` with an empty Rest, so
+            // arity equal to the fixed count belongs to the specialization. Asking
+            // for one argument per pack instead gave that arity to the primary, whose
+            // members differ -- which is why `Tup<int, char>::tail` had no size.
+            const bool matches =
+                pack != candidate.parameters.size()
+                    ? arguments.size() >= pack
+                    : arguments.size() == candidate.parameters.size();
+            if (matches) {
                 selected = &candidate;
                 break;
             }
@@ -1606,24 +1636,8 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // exactly one argument, which is what makes `Pack<int, char>` an instance
     // with arity 2 (ADR 0045). The parameter is identified by the label the parser
     // records on the pattern's specifier.
-    std::size_t pack_index = pattern_info.parameters.size();
-    if (!pattern_info.definition->children.empty() &&
-        pattern_info.definition->children.front()) {
-        std::vector<std::string> pattern_labels = pattern_info.definition->labels;
-        for (const auto& label : pattern_info.definition->children.front()->labels) {
-            pattern_labels.push_back(label);
-        }
-        for (std::size_t index = 0; index < pattern_info.parameters.size();
-             ++index) {
-            const auto label = std::string("template-pack-param:") +
-                               pattern_info.parameters[index];
-            if (std::find(pattern_labels.begin(), pattern_labels.end(), label) !=
-                pattern_labels.end()) {
-                pack_index = index;
-                break;
-            }
-        }
-    }
+    const auto pack_index =
+        pack_parameter_index(pattern_info.parameters, pattern_info.definition);
     if (pack_index == pattern_info.parameters.size()) {
         if (arguments.size() != pattern_info.parameters.size()) {
             return nullptr;
@@ -1748,13 +1762,20 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     auto saved_scopes = std::move(scopes_);
     scopes_.clear();
     scopes_.push_back(std::move(saved_scopes.front()));
+    // A nested instantiation replaces both maps for its own analysis, and building
+    // one record can instantiate another -- a `tail` member names a shorter tuple.
+    // The enclosing instance's maps are restored afterwards so the rest of this
+    // record is still analysed with its own bindings; clearing them instead left a
+    // later member, or a member body, resolving `T` to its `int` stub.
+    auto saved_bindings = std::move(template_bindings_);
+    auto saved_pack_arities = std::move(template_pack_arities_);
     template_bindings_ = bindings;
     // sizeof...(pack) in a member body reads this map, so it must be live for the
     // duration of the instance's analysis (ADR 0045).
     template_pack_arities_ = pack_arities;
     auto type = record_type(*specifier, false);
-    template_pack_arities_.clear();
-    template_bindings_.clear();
+    template_pack_arities_ = std::move(saved_pack_arities);
+    template_bindings_ = std::move(saved_bindings);
     saved_scopes.front() = std::move(scopes_.front());
     scopes_ = std::move(saved_scopes);
     class_instantiations_.push_back(clone.get());
@@ -1764,7 +1785,39 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     }
     return type;
 }
+std::vector<std::string> Sema::expand_template_arguments(
+    const std::vector<std::string>& arguments) const {
+    std::vector<std::string> expanded;
+    for (const auto& argument : arguments) {
+        constexpr std::string_view ellipsis = "...";
+        if (argument.size() <= ellipsis.size() ||
+            argument.compare(argument.size() - ellipsis.size(), ellipsis.size(),
+                             ellipsis) != 0) {
+            expanded.push_back(argument);
+            continue;
+        }
+        const auto pack = argument.substr(0, argument.size() - ellipsis.size());
+        const auto arity = template_pack_arities_.find(pack);
+        if (arity == template_pack_arities_.end()) {
+            expanded.push_back(argument);
+            continue;
+        }
+        for (std::size_t index = 0; index < arity->second; ++index) {
+            expanded.push_back(pack + std::to_string(index));
+        }
+    }
+    return expanded;
+}
+
 TypePtr Sema::template_argument_type(const std::string& spelling) const {
+    // A pack expansion reaches this point only when there was no instance pack to
+    // expand it: a member written `Tup<Rest...>` is expanded into the pack's element
+    // names before its arguments are resolved. Answering with the `int` stub instead
+    // made the member's type the enclosing instance's first argument, and inside a
+    // recursive template that names the record being built.
+    if (spelling.find("...") != std::string::npos) {
+        return nullptr;
+    }
     // The spelling is turned back into specifier labels so the one place that
     // maps labels to types stays authoritative.
     auto specifiers = make_ast(AstKind::DeclSpecifiers, SourceLocation{});
@@ -1804,6 +1857,7 @@ TypePtr Sema::type_of_name(const AstNode& node) {
     if (arguments.empty()) {
         return type_named(node.text);
     }
+    arguments = expand_template_arguments(arguments);
     if (const auto instance = instantiate_class_template(node.text, arguments)) {
         return instance;
     }
