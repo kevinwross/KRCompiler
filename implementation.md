@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-15T19:52:44-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 673/673
+windows-msvc-release  PASS 673/673
+linux-gcc-debug       PASS 584/584
+linux-gcc-release     PASS 584/584
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-15T19:16:38-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 673/673
@@ -3911,3 +3919,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-15T19:52:21-08:00** — **The record-returning template defect is fixed**, and `make_unique` works on KR32. `box2`'s instance now emits all three consistently — `alloca %Box__int`, `call @Box__int_ctor_1_value(ptr<%Box__int>`, `ret %Box__int` — where before it emitted the pattern's record for the temporary and the return while the constructor came out right. `sysroot/include/memory` provides `make_unique` for every arity, and `mu2.cpp` compiles to an object on KR32.
 - **2026-11-15T19:52:21-08:00** — The fix is one accessor and one call site: `Sema::type_of_name(const AstNode&)` reads `template-arg:` labels from a **name node** and asks `instantiate_class_template`, falling back to the spelled type when there are none; `c_irgen.cpp`'s constructor-call path calls it instead of `type_named(expression.children[0]->text)`. Sixteen rounds of probing became a twenty-line change once the mechanism was named — the last four rounds of measurement each narrowed to it, and round 75's `CTOR spec=Box named=13 cached=13 cached_tag=Box` was the probe that ended it.
 - **2026-11-15T19:52:21-08:00** — **KR16 still rejects it**, and not for a template reason: `KR16 aggregate returns are not implemented`. That is the same limit that stops any function returning a record by value, so it is a target-profile boundary rather than a defect in this work, and the header now says so — `make_unique` on KR16, `unique_ptr<T> owner(new T(...))` otherwise, with KR32 compiling and running the template.
+- **2026-11-15T20:14:32-08:00** — Host gate `2026-11-15T19:52:44-08:00`: `windows-msvc-debug` **673/673**, `windows-msvc-release` **673/673**, `linux-gcc-debug` **584/584**, `linux-gcc-release` **584/584**, from empty build directories and no warnings, first attempt. It publishes **`Sema::type_of_name`** — the fix for the record-returning template defect that took sixteen rounds to find and twenty lines to make — together with `make_unique` for KR32 and the header's honest statement of the KR16 aggregate-return limit.
+- **2026-11-15T20:14:32-08:00** — Item 4 is now three of four headers usable: `array`, `memory` (`unique_ptr` and `make_unique`) and `functional` all compile and run on KR32, with `make_unique` the one blocked on KR16 by a target restriction rather than a compiler gap. What remains of the whole six-item list is `tuple` — variadic **class** templates — and the callable-as-template-parameter gap in ADR 0042, which shares its first defect with the class-template machinery.
