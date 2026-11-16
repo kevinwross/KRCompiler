@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T08:40:55-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 677/677
+windows-msvc-release  PASS 677/677
+linux-gcc-debug       PASS 586/586
+linux-gcc-release     PASS 586/586
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T07:57:08-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 677/677
@@ -4196,3 +4204,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T08:40:32-08:00** — Fix 2 was implemented properly and **does not work**. Both `size_of` and `align_of` now take an RAII nesting guard that decrements on every exit and returns a finite answer past depth sixty-four, and the arity-two reproducer still overflows the stack. A guard that cannot fire in a recursion that demonstrably passes through those functions means the overflow is **not** in layout after all, and the earlier traces showing `align_of` repeated are the tail of a recursion that began somewhere else.
 - **2026-11-16T08:40:32-08:00** — That retires the last of the Sema-side hypotheses and is worth stating as the round's result rather than as a setback: every candidate inside `size_of`, `align_of`, `map_record`, `instantiate_class_template` and the member analyser has now been measured or guarded, and none of them bounds the crash.
 - **2026-11-16T08:40:32-08:00** — Reverted; suite **677/677**; tree clean. Given that seven guarded candidates have now failed, the remaining work is not another guard but a **call-count histogram** — instrument `align_of` and `size_of` to report total calls at exit and compare against a non-recursive program, which distinguishes "this function is the recursion" from "this function is called by the recursion" without relying on a stack that overflows before it can be read.
+- **2026-11-16T09:02:16-08:00** — Host gate `2026-11-16T08:40:55-08:00`: `windows-msvc-debug` **677/677**, `windows-msvc-release` **677/677**, `linux-gcc-debug` **586/586**, `linux-gcc-release` **586/586**, from empty build directories and no warnings, first attempt. It publishes the IRGen caller identification and the finding that guarding `size_of` and `align_of` does not bound the crash.
+- **2026-11-16T09:02:16-08:00** — Session close at round 141, after twenty hours. Five of six objectives complete and published behind **twenty-nine gates**, every one green on its first attempt; seven features landed. The sixth is `tuple`, whose remaining defect now has a complete causal chain, eight guarded or instrumented candidates with their outcomes, a failing test, and one named next measurement: a call-count histogram in `align_of` and `size_of` compared against a non-recursive program.
