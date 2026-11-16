@@ -1576,7 +1576,11 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
             const auto fixed = candidate.parameters.empty()
                                    ? 0
                                    : candidate.parameters.size() - 1;
-            if (arguments.size() >= fixed) {
+            // Strictly greater: a specialization fixing N parameters still needs one
+            // argument for its pack, and arity N is the primary's case. Matching on
+            // >= here makes the empty instance select the specialization and recurse
+            // onto itself.
+            if (arguments.size() > fixed) {
                 selected = &candidate;
                 break;
             }
