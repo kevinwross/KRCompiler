@@ -1512,12 +1512,22 @@ bool parse_integer_text(const std::string& text, long long& value) {
 // `C* self()` inside `C<int>` means `C__int*` (ADR 0032).
 void rewrite_instance_tag(AstNode& node, const std::string& from,
                           const std::string& to) {
+    // A node that carries its own template arguments names a **different**
+    // instantiation, so its class name is not the injected one. Renaming it too
+    // turned `Tup<R...>` inside `Tup<int, int>` into `Tup__int__int__1` — the
+    // record currently being built — whose layout then contains itself.
+    const bool names_another_instantiation =
+        std::any_of(node.labels.begin(), node.labels.end(),
+                    [](const std::string& label) {
+                        return label.rfind("template-arg:", 0) == 0;
+                    });
     for (auto& label : node.labels) {
-        if (label == from) {
+        if (!names_another_instantiation && label == from) {
             label = to;
         }
     }
-    if (node.kind == AstKind::Identifier && node.text == from) {
+    if (!names_another_instantiation && node.kind == AstKind::Identifier &&
+        node.text == from) {
         node.text = to;
     }
     for (auto& child : node.children) {
