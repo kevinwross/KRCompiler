@@ -5,13 +5,13 @@
 // accessors. Copying is deleted, so the compiler selects the move constructor
 // for a returned or explicitly moved value.
 //
-// make_unique is not provided, and the reason changed: variadic function
-// templates now exist, so one template would cover every arity. What it needs
-// is pack expansion in an expression -- `new T(args...)` -- which is still
-// rejected. Construct an owner directly instead: unique_ptr<T> owner(new T(...));
+// make_unique is one template for every arity, using pack expansion inside an
+// expression: `new T(args...)`.
 //
-// A one-argument form would compile today and is deliberately not provided: an
-// API that silently accepts one argument and rejects two is a trap.
+// KR16 does not support aggregate returns, so on that target make_unique does
+// not compile -- the same limit that stops any function returning a record by
+// value. Construct the owner explicitly there: unique_ptr<T> owner(new T(...));
+// KR32 compiles and runs it.
 
 namespace std {
 
@@ -69,5 +69,12 @@ public:
 private:
     T* pointer;
 };
+
+// One template covers every arity now that variadic templates and pack
+// expansion exist, so there is no overload set to collide.
+template <typename T, typename... Args>
+unique_ptr<T> make_unique(Args... args) {
+    return unique_ptr<T>(new T(args...));
+}
 
 }  // namespace std

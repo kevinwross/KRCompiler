@@ -95,6 +95,11 @@ public:
         return found == cast_operands_.end() ? nullptr : found->second;
     }
     [[nodiscard]] TypePtr bool_type() const { return bool_type_; }
+    // Resolves a name node that may carry template arguments, as a constructor
+    // call does: `Box<T>(value)` names `Box` with a template-arg label, and a
+    // plain spelling lookup would answer with the unparameterised record. Callers
+    // that have a node rather than a string must use this, not type_named.
+    [[nodiscard]] TypePtr type_of_name(const AstNode& node);
     [[nodiscard]] TypePtr type_named(std::string_view name) {
         if (name == "bool" || name == "_Bool") {
             return bool_type_;

@@ -1673,6 +1673,28 @@ TypePtr Sema::template_argument_type(const std::string& spelling) const {
     return const_cast<Sema*>(this)->type_from_specifiers(*specifiers);
 }
 
+TypePtr Sema::type_of_name(const AstNode& node) {
+    // A name node that carries `template-arg:` labels names a template-id, as a
+    // constructor call `Box<T>(value)` does. Resolving it by spelling would answer
+    // with the unparameterised record, so the instantiation is asked instead --
+    // the same call `type_from_specifiers` makes when the specifier carries the
+    // labels. Without this the instance's body is emitted against the pattern.
+    std::vector<std::string> arguments;
+    const std::string prefix = "template-arg:";
+    for (const auto& label : node.labels) {
+        if (label.rfind(prefix, 0) == 0) {
+            arguments.push_back(label.substr(prefix.size()));
+        }
+    }
+    if (arguments.empty()) {
+        return type_named(node.text);
+    }
+    if (const auto instance = instantiate_class_template(node.text, arguments)) {
+        return instance;
+    }
+    return type_named(node.text);
+}
+
 namespace {
 
 // Rewrites a fold node in place into a left-associative chain over the pack's
