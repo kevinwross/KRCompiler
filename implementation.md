@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T17:22:57-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 697/697
+windows-msvc-release  PASS 697/697
+linux-gcc-debug       PASS 596/596
+linux-gcc-release     PASS 596/596
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T15:17:00-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 696/696
@@ -4297,3 +4305,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T17:12:39-08:00** — First: a field-wise copy in `create_call_instruction` is the right *shape* and the wrong *source*. Written that way, the IR is exactly what a correct copy looks like — `%argument.copy.element = extractvalue %Three %three.load, 0` followed by one `store i8` per field — and KR16 rejects it with `KR16 backend does not support opcode extractvalue`. `extractvalue` is unimplemented in **both** backends, so it is not a target gap to fill in one place.
 - **2026-11-16T17:12:39-08:00** — Second, and this is why filling it would not help: `%three.load` is a **loaded aggregate**. A record value is carried as one machine word — that is what `ST [R1], R0` in the KR16 `Store` case means — so a three-byte record does not survive the load and `extractvalue` on it could never recover byte three. The copy cannot start from a value; it must start from the **address** of the source.
 - **2026-11-16T17:12:39-08:00** — The address is available upstream and thrown away: the dump shows `%three.addr = alloca %Three` beside the load. `CIRGen::emit_initializer(ast, address, type)` already copies a record into an address field by field, so the fix belongs at the call-argument site — emit the argument **into the copy** instead of loading it and storing the value — not in `create_call_instruction`, which only ever sees values. Attempt reverted; tree clean at the committed state.
+- **2026-11-16T17:50:33-08:00** — Priority task 1 is **fixed**. A by-value memory-class aggregate is now copied from the argument's **address**, one field per `gep` + `load` + `store`, instead of by storing the loaded record as one machine word. `small_aggregate_argument` returns **42** on KR16 where it returned 1, and `krc_run_kr16_small_aggregate_argument` is registered — the skip that excluded it is gone, which is why the suite is **697** on Windows rather than 696.
+- **2026-11-16T17:50:33-08:00** — The fix is at the call-argument site, not in `create_call_instruction`, exactly as the round-1 measurement said it had to be: the value handed to the callee has already been truncated by the load, so no amount of work downstream can recover the third byte. The copy is built from `emit_lvalue` when the argument is addressable, and a record-returning call keeps the previous store path rather than inventing a third one.
+- **2026-11-16T17:50:33-08:00** — Host gate `2026-11-16T17:22:57-08:00`: **697/697**, **697/697**, **596/596**, **596/596**, from empty build directories and no warnings, first attempt. Linux counts 596 because it has no KR16 VM, so the newly registered run test is not registered there.

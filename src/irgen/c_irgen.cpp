@@ -8893,6 +8893,34 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         return reference_result(call, method->second,
                                 method->second->type->return_type);
     };
+    // A memory-class aggregate travels as a pointer to a caller-owned copy, and that
+    // copy must come from the argument's **address**: a record value is carried as one
+    // machine word, so storing the loaded value loses everything past it -- a
+    // three-byte record arrived as two bytes on KR16 while KR32's four-byte word hid
+    // it. `extractvalue` cannot recover the fields because neither backend implements
+    // it and the value is already truncated. Copying field by field from an address
+    // uses only gep, load and store, which both targets lower.
+    const auto copy_record_fields = [&](ir::Value* source, ir::Value* target,
+                                        ir::TypePtr type, const auto& self) -> void {
+        if (type && type->kind == ir::TypeKind::Struct) {
+            auto* zero = module_->constant_int(int_type(), 0);
+            for (std::size_t field = 0; field < type->fields.size(); ++field) {
+                auto* index =
+                    module_->constant_int(int_type(), static_cast<std::int64_t>(field));
+                auto* from = builder_.create_gep(type, source, {zero, index}, false,
+                                                 "argument.copy.source");
+                from->type = module_->types().pointer_type(type->fields[field]);
+                auto* to = builder_.create_gep(type, target, {zero, index}, false,
+                                               "argument.copy.destination");
+                to->type = module_->types().pointer_type(type->fields[field]);
+                self(from, to, type->fields[field], self);
+            }
+            return;
+        }
+        auto* loaded =
+            builder_.create_load(type, source, false, 0, "argument.copy.value");
+        builder_.create_store(loaded, target);
+    };
     for (std::size_t index = 0; index < argument_nodes.size(); ++index) {
         if (!argument_nodes[index]) {
             continue;
@@ -8960,6 +8988,49 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
             argument.type = argument.value->type;
         }
         if (index < function_type->parameters.size()) {
+            const auto parameter_type = function_type->parameters[index];
+            // A by-value memory-class aggregate: build the caller's copy here, from
+            // the argument's address, and pass the copy. The pointer type means
+            // create_call_instruction leaves it alone instead of storing the value
+            // as one word.
+            if (parameter_type && parameter_type->kind == ir::TypeKind::Pointer &&
+                parameter_type->element &&
+                parameter_type->element->kind == ir::TypeKind::Struct &&
+                argument.type && argument.type->kind == ir::TypeKind::Struct) {
+                const auto& node = *argument_nodes[index];
+                const bool addressable =
+                    node.kind == frontend::AstKind::Identifier ||
+                    node.kind == frontend::AstKind::MemberExpression ||
+                    node.kind == frontend::AstKind::SubscriptExpression ||
+                    (node.kind == frontend::AstKind::UnaryExpression &&
+                     node.text == "*");
+                ir::Value* source = nullptr;
+                if (addressable) {
+                    const auto reference = emit_lvalue(node);
+                    if (reference.value && reference.value->type &&
+                        reference.value->type->kind == ir::TypeKind::Pointer &&
+                        reference.value->type->element == argument.type) {
+                        source = reference.value;
+                    }
+                }
+                auto* copy = builder_.create_alloca(argument.type, 0, "argument.copy");
+                if (source != nullptr) {
+                    copy_record_fields(source, copy, argument.type, copy_record_fields);
+                } else {
+                    // No address to read from -- a call returning a record, which
+                    // already arrives as one word. The store keeps the previous
+                    // behaviour rather than inventing a path.
+                    builder_.create_store(argument.value, copy);
+                }
+                argument.value =
+                    copy->type == parameter_type
+                        ? static_cast<ir::Value*>(copy)
+                        : builder_.create(ir::Opcode::BitCast, parameter_type, {copy},
+                                          "argument.pointer");
+                argument.type = parameter_type;
+                arguments.push_back(argument.value);
+                continue;
+            }
             argument = convert_record_argument(argument, *argument_nodes[index],
                                                function_type->parameters[index]);
             argument.value = promote(argument.value, argument.type,

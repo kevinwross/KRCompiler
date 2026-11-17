@@ -5,12 +5,10 @@
 // it. The same source must work on both, with the caller's copy untouched by the
 // callee's writes. Returns 42.
 //
-// KR16 is registered for the link only, and the reason is a separate defect: the
-// caller's copy of a memory-class argument is emitted as one whole-record load and
-// store, which the back end moves as one word -- two bytes on KR16, so the third
-// byte never arrives and this program returns 1 there. KR32's four-byte word hides
-// it. The copy wants the argument's address, which `create_call_instruction` does
-// not have; that is recorded in implementation.md, not worked around here.
+// The caller's copy is built from the argument's **address**, one store per field.
+// Copying the loaded record instead moves a single machine word -- two bytes on
+// KR16 -- which dropped this record's third byte and made the program return 1
+// there, while KR32's four-byte word hid it.
 
 struct Three { char a; char b; char c; };
 

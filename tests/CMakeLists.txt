@@ -6165,21 +6165,14 @@ foreach(record_fixture
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_${record_fixture}.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
     if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
-        # small_aggregate_argument links on KR16 but does not run there: the copy of
-        # a memory-class argument moves one word, which is two bytes on KR16, so the
-        # third byte of the record never reaches the callee. Recorded in
-        # implementation.md; the link alone pins that aggregate_rules keeps the
-        # parameter from being rejected as a register-class aggregate.
-        if(NOT record_fixture STREQUAL "small_aggregate_argument")
-            add_test(NAME krc_run_kr16_${record_fixture}
-                COMMAND ${CMAKE_COMMAND}
-                        -DVM=${KRC_KR16_VM}
-                        -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_${record_fixture}.kex
-                        -DEXPECT_EXIT=42
-                        -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
-            set_tests_properties(krc_run_kr16_${record_fixture} PROPERTIES
-                DEPENDS krc_link_kr16_${record_fixture})
-        endif()
+        add_test(NAME krc_run_kr16_${record_fixture}
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_${record_fixture}.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_${record_fixture} PROPERTIES
+            DEPENDS krc_link_kr16_${record_fixture})
     endif()
 endforeach()
 
