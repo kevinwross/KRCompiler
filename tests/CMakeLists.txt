@@ -6505,3 +6505,18 @@ add_test(NAME krc_debug_cxx_lines
 set_tests_properties(krc_debug_cxx_lines PROPERTIES
     PASS_REGULAR_EXPRESSION "source=0 line=15"
     DEPENDS krc_link_debug_cxx_class)
+
+# FileOpen.cpp opens the host's native file dialog, so it links and cannot be run
+# automatically: the dialog blocks waiting for input, which was measured rather than
+# assumed. It reached the syntax-only list because it was recorded as failing on an
+# implicit declaration of sys_open_dialog; that function is declared in stdio.h and
+# implemented in fileio.s, and the file links.
+add_test(NAME krc_link_FileOpen
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier2/FileOpen.cpp
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/FileOpen_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)

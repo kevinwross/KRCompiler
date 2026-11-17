@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T00:31:50-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 770/770
+windows-msvc-release  PASS 770/770
+linux-gcc-debug       PASS 770/770
+linux-gcc-release     PASS 770/770
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-17T00:01:15-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 769/769
@@ -4473,3 +4481,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T00:20:46-08:00** — `strings.c` was recorded as **unable to link** because "libcrt does not provide `memmove`". The runtime has provided `memmove` at `targets/kr32/runtime/libc.c:1517` all along, and the file links **and runs on both targets** with the output it prints: `strcpy/strcat: hello world`, `memmove: ababcd`, and the rest. It is now registered link-and-run with `memmove: ababcd` required, on KR32 and KR16.
 - **2026-11-17T00:20:46-08:00** — That is the **third stale instruction** this session has found and corrected, after the milestone rows that listed finished work as remaining and the comment saying the run tests register "on a Windows host only". Each was believed for a while, and each cost work: the corpus stayed syntax-only for a runtime routine that existed, which is exactly the "full Tier 0–2 corpus green" gap the M8 checklist has carried.
 - **2026-11-17T00:20:46-08:00** — Host gate `2026-11-17T00:01:15-08:00`: **769/769** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-17T00:50:27-08:00** — `FileOpen.cpp` was recorded as failing on an **implicit declaration of `sys_open_dialog`**. The function is declared in `sysroot/include/stdio.h:127` and implemented in `fileio.s`, and the file compiles and links. That is the **fourth** stale record corrected in two rounds, and the pattern is now clear enough to state: this repository's prose about its own corpus aged faster than the corpus.
+- **2026-11-17T00:50:27-08:00** — It still cannot be run automatically, and that was measured rather than assumed: the program prints the selected path from the host's file dialog, so a run **blocks waiting for input** and had to be killed. Registered as `krc_link_FileOpen`, which pins that `sys_open_dialog` resolves and that the include/implementation pair agree.
+- **2026-11-17T00:50:27-08:00** — Every extracted corpus file now either executes or links with a stated reason. `types.c`, `varargs.c` and `libc-test.c` remain KR32-only because the IP16 profile rejects `double`, which is a target limit rather than a gap.
+- **2026-11-17T00:50:27-08:00** — Host gate `2026-11-17T00:31:50-08:00`: **770/770** on all four configurations, from empty build directories and no warnings, first attempt.
