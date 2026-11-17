@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T09:15:39-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 789/789
+windows-msvc-release  PASS 789/789
+linux-gcc-debug       PASS 789/789
+linux-gcc-release     PASS 789/789
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-17T08:33:29-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 785/785
@@ -4567,3 +4575,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T10:10:00-08:00** — Defect 2 advanced again and **reverted again**, but the blocking question is now identified exactly. With the registration, selection and tag changes in place, instrumenting both callers showed the two instantiations are **different** -- `arg0=int` then `arg0=char` -- so there is no re-entrancy at all; the round-2 reading of "enters twice" was two separate types. What actually happens is that `Named<int>` enters and never completes.
 - **2026-11-17T10:10:00-08:00** — The reason is an arity check in `instantiate_class_template` that excludes every explicit specialization: `pack_index` is 0 and `parameters.size()` is 0, so `pack_index == parameters.size()` is trivially true and the next line compares the argument count against **zero** and returns null. Guarding it with `!parameters.empty()` lets `Named<int>` past -- and the compiler then **crashes** deeper in, so the guard is necessary but not sufficient. That crash is the next question and it starts from a specialization whose instantiation is finally in progress.
 - **2026-11-17T10:10:00-08:00** — Reverted to keep the tree green; `src/frontend/sema.cpp` is unmodified. Everything above is reproducible from the three changes plus the arity guard.
+- **2026-11-17T09:42:04-08:00** — Defect 2 is **fixed**, and it was four separate guards rather than one registration question. (a) Registration in `record_type` required `!template_parameters.empty()`, which a `template <>` never has. (b) Selection matched by parameter count, so a zero-parameter candidate could not match one argument; it now matches the `template-arg:` labels the specifier spells. (c) The instance tag came from the parameter walk, which contributes nothing for a specialization, so it collapsed to the primary's own tag. (d) The arity check compared the argument count against the empty parameter list and returned null for a specialization already selected -- and with that fixed, the binding loop walked the arguments while indexing `parameters[index]`, indexing `parameters[0]` out of range and **crashing** the compiler at `std::vector<std::string>::operator[]`.
+- **2026-11-17T09:42:04-08:00** — The round-2 reading of "instantiated re-entrantly" was **wrong**: printing the argument showed `arg0=int` then `arg0=char`, two different instantiations. The real behaviour was that `Named<int>` entered and never completed. That distinction is what led to the arity check, which led to the crash.
+- **2026-11-17T09:42:04-08:00** — `explicit_specialization.cpp` pins it: two specializations of one template answering differently, a member that differs by specialization, and an unspecialised type still reaching the primary. Link and run on both targets, 42 on each.
+- **2026-11-17T09:42:04-08:00** — Host gate `2026-11-17T09:15:39-08:00`: **789/789** on all four configurations, from empty build directories and no warnings, first attempt. With this the five-defect list is closed: 1, 2, 3 and 4 fixed; 5 refuted with a regression test in its place.

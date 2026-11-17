@@ -625,8 +625,7 @@ TypePtr Sema::record_type(const AstNode& specifier, bool is_union) {
         const bool is_specialization =
             std::find(specifier.labels.begin(), specifier.labels.end(),
                       "specialization") != specifier.labels.end();
-        if (!template_parameters.empty() && !specifier.text.empty() &&
-            is_specialization) {
+        if (!specifier.text.empty() && is_specialization) {
             // A partial specialization is registered apart from the primary: it is
             // a pattern that matches some argument lists, not a second definition
             // of the name. Its pack parameter is the one the parser labelled, and
@@ -1738,6 +1737,22 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     if (const auto found = specializations_.find(tag);
         found != specializations_.end()) {
         for (const auto& candidate : found->second) {
+            if (candidate.parameters.empty()) {
+                std::vector<std::string> spelled;
+                if (candidate.definition) {
+                    constexpr std::string_view prefix = "template-arg:";
+                    for (const auto& label : candidate.definition->labels) {
+                        if (label.rfind(prefix, 0) == 0) {
+                            spelled.push_back(label.substr(prefix.size()));
+                        }
+                    }
+                }
+                if (!spelled.empty() && spelled == arguments) {
+                    selected = &candidate;
+                    break;
+                }
+                continue;
+            }
             const auto pack =
                 pack_parameter_index(candidate.parameters, candidate.definition);
             // The pack absorbs whatever the fixed parameters leave, which may be
@@ -1767,11 +1782,13 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // records on the pattern's specifier.
     const auto pack_index =
         pack_parameter_index(pattern_info.parameters, pattern_info.definition);
-    if (pack_index == pattern_info.parameters.size()) {
+    if (!pattern_info.parameters.empty() &&
+        pack_index == pattern_info.parameters.size()) {
         if (arguments.size() != pattern_info.parameters.size()) {
             return nullptr;
         }
-    } else if (arguments.size() < pack_index) {
+    } else if (!pattern_info.parameters.empty() &&
+               arguments.size() < pack_index) {
         // A pack may be empty, but the fixed parameters before it may not.
         return nullptr;
     }
@@ -1790,7 +1807,12 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // positions, so an instance built with one records nothing.
     std::vector<TypePtr> argument_types;
     bool has_value_argument = false;
-    for (std::size_t index = 0; index < arguments.size(); ++index) {
+    // A specialization binds no parameters: it names its arguments in its specifier and
+    // its body is used verbatim. This loop walks the arguments and indexes the parameter
+    // list at the same position, so entering it with no parameters indexed
+    // `parameters[0]` out of range and crashed the compiler.
+    for (std::size_t index = 0;
+         index < arguments.size() && !pattern_info.parameters.empty(); ++index) {
         if (pack_index != pattern_info.parameters.size() && index >= pack_index) {
             // Every remaining argument belongs to the pack. Each element is bound
             // under its own name so a body can refer to them without expanding the
@@ -1835,9 +1857,15 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
     // The cache is keyed by the instance's tag, not the spelled arguments: a
     // reference through a template parameter (Box<T>) and one through the
     // type (Box<int>) name the same instance.
-    const auto instance_tag =
+    auto instance_tag =
         class_instance_tag(tag, pattern_info.parameters, bindings, value_bindings,
                           pack_arities);
+    if (pattern_info.parameters.empty() && !arguments.empty()) {
+        instance_tag = tag;
+        for (const auto& argument : arguments) {
+            instance_tag += "__" + argument;
+        }
+    }
     if (!has_value_argument) {
         class_instance_arguments_.emplace(instance_tag, argument_types);
     }

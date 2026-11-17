@@ -6683,3 +6683,48 @@ if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
     set_tests_properties(krc_run_kr16_nested_macro PROPERTIES
         DEPENDS krc_link_kr16_nested_macro)
 endif()
+
+# An explicit specialization is instantiated for the type it specialises, and a type
+# without one still gets the primary. Three guards each rejected specializations before
+# this: registration, the arity check, and the binding loop that crashed the compiler.
+add_test(NAME krc_link_explicit_specialization
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/explicit_specialization.cpp
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/explicit_specialization_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_run_explicit_specialization
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/explicit_specialization_linked.k32
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+    set_tests_properties(krc_run_explicit_specialization PROPERTIES
+        DEPENDS krc_link_explicit_specialization)
+endif()
+
+add_test(NAME krc_link_kr16_explicit_specialization
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+            -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+            -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+            -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/explicit_specialization.cpp
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_explicit_specialization.kex
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+    add_test(NAME krc_run_kr16_explicit_specialization
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR16_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_explicit_specialization.kex
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+    set_tests_properties(krc_run_kr16_explicit_specialization PROPERTIES
+        DEPENDS krc_link_kr16_explicit_specialization)
+endif()
