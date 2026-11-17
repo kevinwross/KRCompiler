@@ -497,6 +497,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T10:44:05-08:00 — host gate (Linux ARM64, first)
+
+linux-gcc-debug    PASS 789/789
+linux-gcc-release  PASS 789/789
+not verified: native Linux x64, Windows x64
+
+First compile and test attempt on ARM64. Both rows were configured and built from
+absent build directories at `-j2` with `ulimit -s unlimited`, one row at a time.
+The initial clean builds passed 646/646 with no VM present; the arm64 VM copies
+were then placed in `build/vm/`, the presets were reconfigured so the executed
+tests registered, and both rows re-ran green at 789/789 (139 executed tests).
+The VM binaries are arm64 builds; the x64 hashes differ.
+
+    build/vm/krc_kr32  sha256 c10e0e1d3d51183b47c637568c28e082380ced5adccd824cd041a5309495ae20  kr32 0.1.0
+    build/vm/krc_kr16  sha256 a3f737f9aa98601823468e0cf389c59043a7f421a7abbc7c0607101227d8cfe2  kr16 1.0.0
+
 ### 2026-11-17T10:32:04-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 789/789
