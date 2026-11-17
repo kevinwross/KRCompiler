@@ -805,10 +805,10 @@ if(TARGET krc)
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
     # Corpus fixtures extracted from ../kr32/examples. hello, mainentry and
     # binarytree link and run: they need the C library, so LIBCRT is passed.
-    # strings.c compiles but cannot link -- it calls memmove, which libcrt does
-    # not provide -- so it stays syntax-only, and types.c, varargs.c and
-    # libc-test.c use double or float, which the KR16 profile rejects, so they
-    # are KR32-only and not registered here.
+    # strings.c links and runs on both targets too — libcrt does provide memmove —
+    # and the Tier 1 list below executes it. types.c, varargs.c and libc-test.c use
+    # double or float, which the KR16 profile rejects, so they are KR32-only and not
+    # registered here.
     # Tier 2 sources. The first three compile on both targets; floats.c and
     # cxx_tls.cpp use double and long long, which the KR16 profile rejects, so
     # they are KR32-only. matrix.cpp is not extracted: it needs kr32/matrix.hpp,
@@ -6367,10 +6367,16 @@ endforeach()
 # varargs and printf (plan.md 5.2). Each program covers one feature area and is
 # linked and executed on both targets. printf compares its text as well as its exit
 # status, because a conversion that prints nothing still exits 0.
-foreach(tier1_source IN ITEMS structs pointers arrays control preprocessor varargs printf)
+foreach(tier1_source IN ITEMS structs pointers arrays control preprocessor varargs printf strings)
     set(tier1_expect_output "")
     if(tier1_source STREQUAL "printf")
         set(tier1_expect_output "signed 42.*negative -17.*mixed 1 b c 4")
+    endif()
+    if(tier1_source STREQUAL "strings")
+        # The string and memory routines, executed rather than only linked. This file
+        # was recorded as unable to link because libcrt supposedly lacked memmove, and
+        # the runtime has provided it all along.
+        set(tier1_expect_output "memmove: ababcd")
     endif()
 
     add_test(NAME krc_link_tier1_${tier1_source}

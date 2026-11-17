@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T00:01:15-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 769/769
+windows-msvc-release  PASS 769/769
+linux-gcc-debug       PASS 769/769
+linux-gcc-release     PASS 769/769
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-16T23:38:16-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 765/765
@@ -4462,3 +4470,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T23:59:55-08:00** — **Line records were invisible**, and that was a gap in this repository's tooling rather than in KDBG: an image carries `lines=10587`, and neither the text dump nor the JSON dump printed a single one, so nothing could assert that a source line maps to an address. `dump_kdbg_text` now prints them, and `krc_debug_cxx_lines` requires `source=0 line=15` from the fixture.
 - **2026-11-16T23:59:55-08:00** — `krc_debug_cxx_variables` pins the local, so the debug tests now assert a method name, a class type, a field offset, a variable record and a line record -- five properties where the suite previously only linked and stopped.
 - **2026-11-16T23:59:55-08:00** — Host gate `2026-11-16T23:38:16-08:00`: **765/765** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-17T00:20:46-08:00** — `strings.c` was recorded as **unable to link** because "libcrt does not provide `memmove`". The runtime has provided `memmove` at `targets/kr32/runtime/libc.c:1517` all along, and the file links **and runs on both targets** with the output it prints: `strcpy/strcat: hello world`, `memmove: ababcd`, and the rest. It is now registered link-and-run with `memmove: ababcd` required, on KR32 and KR16.
+- **2026-11-17T00:20:46-08:00** — That is the **third stale instruction** this session has found and corrected, after the milestone rows that listed finished work as remaining and the comment saying the run tests register "on a Windows host only". Each was believed for a while, and each cost work: the corpus stayed syntax-only for a runtime routine that existed, which is exactly the "full Tier 0–2 corpus green" gap the M8 checklist has carried.
+- **2026-11-17T00:20:46-08:00** — Host gate `2026-11-17T00:01:15-08:00`: **769/769** on all four configurations, from empty build directories and no warnings, first attempt.
