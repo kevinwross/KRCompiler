@@ -515,6 +515,12 @@ std::string dump_kdbg_text(const KdbgImage& image) {
     for (const auto& source : image.sources) {
         out << "source " << source.id << " " << source.path << '\n';
     }
+    // Line records are the largest part of an image and were the only kind the dump
+    // never printed, so nothing could assert that a source line maps to an address.
+    for (const auto& line : image.lines) {
+        out << "line 0x" << std::hex << line.address << std::dec << " source="
+            << line.source << " line=" << line.line << " column=" << line.column << '\n';
+    }
     for (const auto& function : image.functions) {
         out << "function " << function.name << " 0x" << std::hex << function.start << "-0x"
             << function.end << std::dec << " frame=" << function.frame

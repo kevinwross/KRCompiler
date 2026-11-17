@@ -6481,3 +6481,21 @@ add_test(NAME krc_debug_cxx_members
 set_tests_properties(krc_debug_cxx_members PROPERTIES
     PASS_REGULAR_EXPRESSION "member value_ offset=0 type=i32"
     DEPENDS krc_link_debug_cxx_class)
+
+# A local's record: name, frame offset, type and size. This is what a debugger reads to
+# show `counter` while stopped in main.
+add_test(NAME krc_debug_cxx_variables
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_linked.k32)
+set_tests_properties(krc_debug_cxx_variables PROPERTIES
+    PASS_REGULAR_EXPRESSION "variable main\\.counter offset=8 type=Counter"
+    DEPENDS krc_link_debug_cxx_class)
+
+# A line record maps an address to a source line. Line records are the largest part of
+# an image and were the only kind the dump never printed, so nothing asserted them.
+add_test(NAME krc_debug_cxx_lines
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_linked.k32)
+set_tests_properties(krc_debug_cxx_lines PROPERTIES
+    PASS_REGULAR_EXPRESSION "source=0 line=15"
+    DEPENDS krc_link_debug_cxx_class)

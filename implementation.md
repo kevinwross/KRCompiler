@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T23:38:16-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 765/765
+windows-msvc-release  PASS 765/765
+linux-gcc-debug       PASS 765/765
+linux-gcc-release     PASS 765/765
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-16T23:15:33-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 763/763
@@ -4450,3 +4458,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T23:36:59-08:00** — Field layout **is** recorded, and the previous round's open question is answered rather than assumed: the compiler emits `M Counter value_ 0 i32 4` into the object's debug section, the linker parses the `M` tag into the named type, and the dump prints `member value_ offset=0 type=i32`. So a debugger can show a class's field, not only its method names, and `krc_debug_cxx_members` now asserts it.
 - **2026-11-16T23:36:59-08:00** — A **correction to my own measurement**: I first concluded the linker was dropping members, because a grep for `type ` with a trailing space never matched the member lines, which read `type=i32`. The evidence had been in the output I already had. Filtering by a pattern that assumes the format is how a present value reads as absent, and it is the same mistake as reading silence from a guarded branch.
 - **2026-11-16T23:36:59-08:00** — Host gate `2026-11-16T23:15:33-08:00`: **763/763** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-16T23:59:55-08:00** — Debugger parity now covers all four record kinds. **Variables** were already recorded and printed -- `variable main.counter offset=8 type=Counter size=4`, and `variable Counter_add.amount offset=12 type=i32 size=4` -- so a debugger can show a local and a parameter with their frame offsets.
+- **2026-11-16T23:59:55-08:00** — **Line records were invisible**, and that was a gap in this repository's tooling rather than in KDBG: an image carries `lines=10587`, and neither the text dump nor the JSON dump printed a single one, so nothing could assert that a source line maps to an address. `dump_kdbg_text` now prints them, and `krc_debug_cxx_lines` requires `source=0 line=15` from the fixture.
+- **2026-11-16T23:59:55-08:00** — `krc_debug_cxx_variables` pins the local, so the debug tests now assert a method name, a class type, a field offset, a variable record and a line record -- five properties where the suite previously only linked and stopped.
+- **2026-11-16T23:59:55-08:00** — Host gate `2026-11-16T23:38:16-08:00`: **765/765** on all four configurations, from empty build directories and no warnings, first attempt.
