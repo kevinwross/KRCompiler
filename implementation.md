@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T12:35:27-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 797/797
+windows-msvc-release  PASS 797/797
+linux-gcc-debug       PASS 797/797
+linux-gcc-release     PASS 797/797
+not verified: native Linux x64 (WSL used), Linux ARM64, WSL Clang and sanitizer configurations (clang is not installed on this machine)
+
 ### 2026-11-17T11:13:54-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 793/793
@@ -4656,3 +4664,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T14:10:00-08:00** — Five defects had to be fixed underneath, each measured. (a) The frame layout gave an aggregate-typed value **one two-byte slot** regardless of size. (b) A **whole-record `Load`** moved one word. (c) A **whole-record `Store`** moved one word. (d) My first offset formula counted **all** parameters, but only those past the third reach the stack, so a one-parameter function read the destination from the wrong slot. (e) The caller's pop count ignored the extra pushed word.
 - **2026-11-17T14:10:00-08:00** — Two of my own process errors cost time and are worth recording. I reverted the backend in round 2 and then **failed to re-apply the Load and Store fixes**, so the load truncated the record and the symptom looked like a new bug. And I emitted `LEA R6` earlier without checking what register 6 is: the assembler accepts `R0`-`R7` while the ISA's register 6 is `SR`, so a trap was the only signal. The disassembler naming the register is what identified it.
 - **2026-11-17T14:10:00-08:00** — Suite **797/797** with two new fixtures, `kr16_aggregate_return.cpp` and `kr16_make_unique.cpp`, link-and-run on KR16. Not yet gated or pushed.
+- **2026-11-17T12:47:00-08:00** — Host gate `2026-11-17T12:35:27-08:00`: **797/797** on all four configurations, from empty build directories and no warnings, first attempt. It publishes ADR 0048 and the KR16 aggregate-return implementation, with the two new fixtures, the corrected `docs/abi-kr16.md` returns section, and the `D-048` Appendix A entry.
