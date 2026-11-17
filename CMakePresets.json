@@ -113,7 +113,8 @@
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "execution": { "jobs": 4 }
     },
     {
       "name": "windows-msvc-release",
@@ -121,35 +122,40 @@
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "execution": { "jobs": 4 }
     },
     {
       "name": "linux-gcc-debug",
       "configurePreset": "linux-gcc-debug",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "execution": { "jobs": 4 }
     },
     {
       "name": "linux-gcc-release",
       "configurePreset": "linux-gcc-release",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "execution": { "jobs": 4 }
     },
     {
       "name": "linux-clang-debug",
       "configurePreset": "linux-clang-debug",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "execution": { "jobs": 4 }
     },
     {
       "name": "linux-sanitize",
       "configurePreset": "linux-sanitize",
       "output": {
         "outputOnFailure": true
-      }
+      },
+      "execution": { "jobs": 4 }
     }
   ]
 }

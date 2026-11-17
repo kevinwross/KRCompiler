@@ -6773,3 +6773,13 @@ if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
     set_tests_properties(krc_run_kr16_variadic_temporary PROPERTIES
         DEPENDS krc_link_kr16_variadic_temporary)
 endif()
+
+# The determinism tests compile the same input twice and compare the bytes, so they
+# cannot run alongside another test that is also invoking the compiler.
+set_tests_properties(
+    krc_determinism_object
+    krc_determinism_longlong
+    krc_determinism_kr16_image
+    krc_determinism_kr16_object
+    krc_determinism_kr16_link
+    PROPERTIES RUN_SERIAL TRUE)

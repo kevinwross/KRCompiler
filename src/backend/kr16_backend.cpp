@@ -235,9 +235,21 @@ Kr16Backend::FrameLayout Kr16Backend::layout_function(
             if (instruction->type && !ir::is_void(instruction->type)) {
                 offset = (offset + 1) & ~1u;
                 layout.slots[instruction.get()] = offset;
-                offset += kSlotSize;
+                // An aggregate value needs its whole size, not one slot: a two-byte
+                // slot made a four-byte struct share its tail with the next slot.
+                offset += std::max<std::uint32_t>(kSlotSize, type_size(instruction->type));
             }
         }
+    }
+    // An aggregate return needs a slot for the caller-supplied destination before the
+    // parameters, so their offsets do not depend on the return type (ADR 0047).
+    if (function.type && function.type->return_type &&
+        (function.type->return_type->kind == ir::TypeKind::Struct ||
+         function.type->return_type->kind == ir::TypeKind::Union)) {
+        offset = (offset + 1) & ~1u;
+        layout.return_pointer = offset;
+        layout.has_return_pointer = true;
+        offset += kSlotSize;
     }
     for (const auto& parameter : function.parameters) {
         offset = (offset + 1) & ~1u;
@@ -316,6 +328,11 @@ void Kr16Backend::emit_function(std::string& out,
     out += "    PUSH R4\n";
     out += "    MOV R4, SP\n";
     out += "    LEA SP, [R4-" + std::to_string(layout.frame_size) + "]\n";
+    if (layout.has_return_pointer) {
+        // The destination arrives in R6 and must survive the call; keep it in the
+        // frame until the aggregate is copied to it on return (ADR 0047).
+        out += "    ST [SP+" + std::to_string(layout.return_pointer) + "], R6\n";
+    }
     static const char* arguments[] = {"R1", "R2", "R3"};
     // A variadic callee receives every argument on the stack, so one rule reads
     // both the named parameters and the variable ones (ADR 0029).
@@ -358,6 +375,23 @@ void Kr16Backend::emit_function(std::string& out,
                 break;
             }
             case ir::Opcode::Load:
+                // A whole-record load copies the record, as KR32 does. Moving one word
+                // carried only the first field, which truncated an aggregate return
+                // before it reached the caller (ADR 0047).
+                if (instruction->type &&
+                    (instruction->type->kind == ir::TypeKind::Struct ||
+                     instruction->type->kind == ir::TypeKind::Union)) {
+                    load(instruction->operands[0], "R0");
+                    out += "    MOV R1, R0\n";
+                    const auto size = type_size(instruction->type);
+                    const auto destination = slot(instruction.get());
+                    for (std::uint32_t offset = 0; offset < size; offset += kSlotSize) {
+                        out += "    LD R2, [R1+" + std::to_string(offset) + "]\n";
+                        out += "    ST [SP+" +
+                               std::to_string(destination + offset) + "], R2\n";
+                    }
+                    break;
+                }
                 load(instruction->operands[0], "R0");
                 out += instruction->type && instruction->type->bits == 8
                            ? "    LDB R1, [R0]\n"
@@ -365,6 +399,21 @@ void Kr16Backend::emit_function(std::string& out,
                 store(*instruction, "R1");
                 break;
             case ir::Opcode::Store:
+                // A whole-record store copies the record, like the load above: one word
+                // carried only the first field.
+                if (instruction->operands[0] &&
+                    instruction->operands[0]->type &&
+                    (instruction->operands[0]->type->kind == ir::TypeKind::Struct ||
+                     instruction->operands[0]->type->kind == ir::TypeKind::Union)) {
+                    load(instruction->operands[1], "R1");
+                    const auto size = type_size(instruction->operands[0]->type);
+                    const auto source = slot(instruction->operands[0]);
+                    for (std::uint32_t offset = 0; offset < size; offset += kSlotSize) {
+                        out += "    LD R2, [SP+" + std::to_string(source + offset) + "]\n";
+                        out += "    ST [R1+" + std::to_string(offset) + "], R2\n";
+                    }
+                    break;
+                }
                 load(instruction->operands[0], "R0");
                 load(instruction->operands[1], "R1");
                 out += instruction->operands[0] &&
@@ -554,12 +603,26 @@ void Kr16Backend::emit_function(std::string& out,
                     load(callee, "R0",
                          static_cast<std::uint32_t>(2 * pushed_count));
                 }
+                // An aggregate return goes to a caller-owned destination named in R6
+                // (ADR 0047). It is addressed through the frame pointer because SP
+                // moves while the extra arguments are pushed.
+                const bool aggregate_return =
+                    instruction->type &&
+                    (instruction->type->kind == ir::TypeKind::Struct ||
+                     instruction->type->kind == ir::TypeKind::Union);
+                if (aggregate_return) {
+                    out += "    LEA R6, [R4-" +
+                           std::to_string(layout.frame_size - slot(instruction.get())) +
+                           "]\n";
+                }
                 out += "    CALL R0\n";
                 if (pushed_count > 0) {
                     out += "    LEA SP, [SP+" + std::to_string(2 * pushed_count) +
                            "]\n";
                 }
-                if (instruction->type && !ir::is_void(instruction->type)) {
+                if (aggregate_return) {
+                    // The callee already wrote the aggregate to the destination.
+                } else if (instruction->type && !ir::is_void(instruction->type)) {
                     store(*instruction, "R0");
                 }
                 break;
@@ -653,10 +716,23 @@ void Kr16Backend::emit_function(std::string& out,
                              ir::TypeKind::Struct ||
                          instruction->operands[0]->type->kind ==
                              ir::TypeKind::Union)) {
-                        error = "KR16 aggregate returns are not implemented";
-                        return;
+                        // Copy the aggregate to the caller-owned destination in two-byte
+                        // words, as KR32 copies through R4 (ADR 0047). R0 holds the
+                        // destination and R1 each word; both are dead once returning.
+                        if (!layout.has_return_pointer) {
+                            error = "KR16 aggregate return has no destination";
+                            return;
+                        }
+                        const auto size = type_size(instruction->operands[0]->type);
+                        out += "    LD R0, [SP+" +
+                               std::to_string(layout.return_pointer) + "]\n";
+                        for (std::uint32_t word = 0; word < size; word += kSlotSize) {
+                            load(instruction->operands[0], "R1", word);
+                            out += "    ST [R0+" + std::to_string(word) + "], R1\n";
+                        }
+                    } else {
+                        load(instruction->operands[0], "R0");
                     }
-                    load(instruction->operands[0], "R0");
                 }
                 out += "    BRA .L" + function.name + ".ret\n";
                 break;
