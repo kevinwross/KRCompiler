@@ -96,6 +96,8 @@ add_library(krc_core STATIC
     src/frontend/types.cpp
     src/ir/ir.cpp
     src/irgen/c_irgen.cpp
+    src/irgen/c_irgen_expressions.cpp
+    src/irgen/c_irgen_setup.cpp
     src/target/sysroot_bits.cpp
     src/target/target.cpp
 )

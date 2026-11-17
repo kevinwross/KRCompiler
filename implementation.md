@@ -497,6 +497,17 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T08:33:29-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 785/785
+windows-msvc-release  PASS 785/785
+linux-gcc-debug       PASS 785/785
+linux-gcc-release     PASS 785/785
+not verified: native Linux x64 (WSL used), Linux ARM64
+
+Rows were built from deleted build directories and tested one at a time, interleaved with
+the build-time measurements below rather than as one uninterrupted sequence.
+
 ### 2026-11-17T06:03:07-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 785/785
@@ -4548,3 +4559,8 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T06:22:54-08:00** — Testing it found a **separate, pre-existing defect**, visible in the IR: a temporary of a class that **does** declare a constructor is loaded as a record value and then **bitcast from a record to a pointer** for `this` -- `%temporary.value = load %Holder, %temporary.record` then `%this.cast = bitcast %Holder %temporary.value to ptr<%Holder>`. The callee reads garbage, so `Holder().value()` returns whatever the load happened to contain. The fixture stays on the case that works and the new defect is recorded here.
 - **2026-11-17T06:22:54-08:00** — `krc_check_diag_member_call_on_temporary` was **converted**, not deleted: it required `constructor-initialized class has no constructor`, which is precisely the behaviour just fixed, so its expectation was obsolete. It is now `krc_link_/krc_run_member_call_on_temporary` and asserts the fixed behaviour. The distinction matters -- a test whose expectation encodes a defect must change when the defect is fixed, and this one did.
 - **2026-11-17T06:22:54-08:00** — Host gate `2026-11-17T06:03:07-08:00`: **785/785** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-17T08:53:12-08:00** — Build-time work, measured. A clean build of each configuration: `windows-msvc-debug` 112 s -> **52 s**, `windows-msvc-release` 155 s -> **67 s**, `linux-gcc-debug` 137 s -> 143 s, `linux-gcc-release` 103 s -> 100 s. The Windows win is `/MP`: the Visual Studio generator compiles a target's files one at a time regardless of cores, so adding `/MP` to `cmake/CompilerWarnings.cmake` is what pays. Linux already parallelises through Ninja and gains nothing.
+- **2026-11-17T08:53:12-08:00** — `src/irgen/c_irgen.cpp` is split into `c_irgen_setup.cpp` (2,289 lines), `c_irgen.cpp` (4,269) and `c_irgen_expressions.cpp` (4,114), with the shared helpers moved to `c_irgen_internal.h`. On Windows the split is what gives `/MP` three files to compile at once; on Linux it is **neutral**, and the reason is measured: the largest translation unit still takes **77 s** at half its previous size, because the cost is parsing the shared headers, not the function bodies.
+- **2026-11-17T08:53:12-08:00** — Two corrections to my own earlier claims. The gate is **~21 minutes**, not ~50: builds 507 s, tests 738 s, configure 15 s. I had inferred otherwise from wall-clock between gate rows, which included my own turn latency. And the tests, not the build, are the larger share at 59% -- so pruning tests was the stronger lever all along, and the split is a Windows-only win.
+- **2026-11-17T08:53:12-08:00** — Two further facts for whoever picks up the remaining work. There is **no slow test to prune** (the slowest is 1.21 s, mean 0.35 s): the cost is 785 tests x 4 rows, and 529 of the 785 are compile-or-link only. And `ctest -j4` does **not** help -- 244 s against 275 s -- because it breaks the two determinism tests.
+- **2026-11-17T08:53:12-08:00** — The split needed `inline` on the helpers in `c_irgen_internal.h`: they sit in an anonymous namespace, so each including translation unit has its own copy, and GCC's `-Werror=unused-function` rejected the ones a smaller unit did not use. An intermediate measurement of "35 s" for the Linux build was a **failed** build that had stopped early, not a win; the working build is 143 s.
