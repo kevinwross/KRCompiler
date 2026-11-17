@@ -8338,13 +8338,25 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 const auto& argument_nodes = expression.children[1]->children;
                 auto* constructor = select_constructor(
                     record->second->tag, argument_nodes.size(), 0);
-                if (!constructor) {
-                    error(expression.location,
-                          "constructor-initialized class has no constructor");
-                    return {};
-                }
                 auto* storage =
                     builder_.create_alloca(type, 0, "temporary.record");
+                if (!constructor) {
+                    // A class with no declared constructor is still constructible: an
+                    // implicit default constructor zero-initialises it, exactly as a
+                    // declared local of this type is initialised. Requiring a declared
+                    // constructor made `One().value()` an error for a class with
+                    // nothing wrong with it. A call passing arguments that match no
+                    // constructor stays an error.
+                    if (!argument_nodes.empty()) {
+                        error(expression.location,
+                              "constructor-initialized class has no constructor");
+                        return {};
+                    }
+                    emit_zero_initializer(storage, type);
+                    auto* initialized = builder_.create_load(
+                        type, storage, false, 0, "temporary.value");
+                    return {initialized, type};
+                }
                 std::vector<ir::Value*> arguments{storage};
                 for (std::size_t index = 0; index < argument_nodes.size();
                      ++index) {

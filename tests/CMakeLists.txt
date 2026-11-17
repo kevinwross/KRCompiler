@@ -6449,17 +6449,28 @@ foreach(tier2_source IN ITEMS classes inheritance virtual new_delete templates l
     endif()
 endforeach()
 
-# A member call on a temporary must be rejected, not crash the compiler. This pins
-# the conditional-branch recovery: before it, the null operand reached the back end
-# and krc faulted with an access violation instead of reporting the diagnostic.
-add_test(NAME krc_check_diag_member_call_on_temporary
+# A member call on a temporary. This was a diagnostic fixture until the temporary path
+# stopped requiring a declared zero-argument constructor; it is a behaviour fixture now,
+# because the expectation it encoded *was* the defect.
+add_test(NAME krc_link_member_call_on_temporary
     COMMAND ${CMAKE_COMMAND}
-            -DEXE=$<TARGET_FILE:krc>
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
             -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/member_call_on_temporary.cpp
-            -DTARGET=kr32
-            -DEXPECT=constructor-initialized class has no constructor
-            -DOBJECT=${KRC_TEST_OUTPUT_DIR}/member_call_on_temporary.k32
-            -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/member_call_on_temporary_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_run_member_call_on_temporary
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/member_call_on_temporary_linked.k32
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+    set_tests_properties(krc_run_member_call_on_temporary PROPERTIES
+        DEPENDS krc_link_member_call_on_temporary)
+endif()
 
 # C++ debug parity. The other debug fixtures link and stop; this one reads the records
 # back and requires the class's methods and type to be named, which is what "parity for

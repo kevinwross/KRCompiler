@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T06:03:07-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 785/785
+windows-msvc-release  PASS 785/785
+linux-gcc-debug       PASS 785/785
+linux-gcc-release     PASS 785/785
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-17T05:24:00-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 784/784
@@ -4536,3 +4544,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T05:46:20-08:00** — The fixture also pins stringize and paste, which must take the **raw** argument: `substitute` already distinguished `raw_argument` from `expanded_argument`, and this change had to leave that alone. `nested_macro.c` checks four nesting shapes plus `#` and `##`, link-and-run on both targets.
 - **2026-11-17T05:46:20-08:00** — One correction while writing it: my first expected value for `DOUBLE(DOUBLE(ADD(DOUBLE(1), 1)))` was 16 and the program returned 5. The expression is 12 -- `DOUBLE(1)`=2, `ADD(2,1)`=3, `DOUBLE(3)`=6, `DOUBLE(6)`=12 -- so the compiler was right and the fixture was wrong.
 - **2026-11-17T05:46:20-08:00** — Host gate `2026-11-17T05:24:00-08:00`: **784/784** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-17T06:22:54-08:00** — Defect 4 is **fixed for the case the list named**: `One().value()` on a class with an **implicit** default constructor. The temporary path called `select_constructor(tag, 0, 0)` and errored when nothing was declared, although such a class is perfectly constructible -- a declared local of the same type is initialised fine. The path now allocates, zero-initialises when no constructor is declared, and keeps the error for a call that passes arguments and matches no constructor.
+- **2026-11-17T06:22:54-08:00** — Testing it found a **separate, pre-existing defect**, visible in the IR: a temporary of a class that **does** declare a constructor is loaded as a record value and then **bitcast from a record to a pointer** for `this` -- `%temporary.value = load %Holder, %temporary.record` then `%this.cast = bitcast %Holder %temporary.value to ptr<%Holder>`. The callee reads garbage, so `Holder().value()` returns whatever the load happened to contain. The fixture stays on the case that works and the new defect is recorded here.
+- **2026-11-17T06:22:54-08:00** — `krc_check_diag_member_call_on_temporary` was **converted**, not deleted: it required `constructor-initialized class has no constructor`, which is precisely the behaviour just fixed, so its expectation was obsolete. It is now `krc_link_/krc_run_member_call_on_temporary` and asserts the fixed behaviour. The distinction matters -- a test whose expectation encodes a defect must change when the defect is fixed, and this one did.
+- **2026-11-17T06:22:54-08:00** — Host gate `2026-11-17T06:03:07-08:00`: **785/785** on all four configurations, from empty build directories and no warnings, first attempt.
