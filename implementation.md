@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T19:27:49-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 717/717
+windows-msvc-release  PASS 717/717
+linux-gcc-debug       PASS 606/606
+linux-gcc-release     PASS 606/606
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T18:52:44-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 705/705
@@ -4347,3 +4355,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T19:23:34-08:00** — `docs/abi.md` said a KR16 aggregate parameter, varargs, floating point and more-than-three arguments were all **deferred**. Three of those four are false: more than three arguments are pushed by the rule already in the appendix, variadic calls are documented under ADR 0029, and a by-value aggregate now travels by hidden pointer. That sentence had been copied forward since before any of it worked.
 - **2026-11-16T19:23:34-08:00** — The KR16 appendix gains an **Aggregate parameters** section stating the rule and the two consequences, both read from the emitted assembly for `small_aggregate_argument.cpp` rather than inferred: the caller builds a copy from the argument's address one field per store, and the callee copies on entry — `sum` stores `R1` and writes the record's three bytes into `[SP+0]`, which is why a write to the parameter cannot reach the caller. Aggregate **returns** stay deferred and are the reason `make_unique` and `make_tuple` are absent on KR16.
 - **2026-11-16T19:23:34-08:00** — The M8 checklist now marks the ABI documents and release notes done and records the corpus measurement in place, so the largest open part of M8 is stated with a number rather than as "the corpus". No code changed, so no gate.
+- **2026-11-16T19:56:46-08:00** — Tier 0 of the corpus now **runs** on both targets: `hello`, `arithmetic` and `functions`, each linked and executed on KR32 and KR16, twelve tests. `tier0/hello.c` already existed and had been registered **nowhere**; `arithmetic.c` and `functions.c` are new. hello's output is compared as well as its exit status, because a smoke test that checked only the status would pass on a garbled string.
+- **2026-11-16T19:56:46-08:00** — `functions.c` exists for one reason beyond smoke coverage: `sum5` takes five arguments, which is the smallest program that exercises KR16's extra-argument rule, where the first three go in `R1`-`R3` and the rest are pushed. `arithmetic.c` stays on integers because the IP16 profile rejects `double`, and it checks the width conversions where an IP16 profile differs most — `(char)300 == 44`.
+- **2026-11-16T19:56:46-08:00** — Host gate `2026-11-16T19:27:49-08:00`: **717/717**, **717/717**, **606/606**, **606/606**, from empty build directories and no warnings, first attempt. Linux counts 606 because the six new link tests register there while the run tests need a VM.

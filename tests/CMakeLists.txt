@@ -6306,3 +6306,59 @@ if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
     set_tests_properties(krc_run_kr16_reference_return_argument PROPERTIES
         DEPENDS krc_link_kr16_reference_return_argument)
 endif()
+
+# Tier 0 -- smoke: hello, arithmetic, functions. The tier definition in
+# plan.md 5.2 says these build **and run** on both targets, so each is linked and
+# executed rather than only syntax-checked. hello's output is compared as well as
+# its exit status, because a smoke test that checked only the status would pass on
+# a garbled string.
+foreach(tier0_source IN ITEMS hello arithmetic functions)
+    set(tier0_expect_output "")
+    if(tier0_source STREQUAL "hello")
+        set(tier0_expect_output "Hello, KR32!")
+    endif()
+
+    add_test(NAME krc_link_tier0_${tier0_source}
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier0/${tier0_source}.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/tier0_${tier0_source}_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        add_test(NAME krc_run_tier0_${tier0_source}
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/tier0_${tier0_source}_linked.k32
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_OUTPUT=${tier0_expect_output}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_tier0_${tier0_source} PROPERTIES
+            DEPENDS krc_link_tier0_${tier0_source})
+    endif()
+
+    add_test(NAME krc_link_kr16_tier0_${tier0_source}
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+                -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+                -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+                -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier0/${tier0_source}.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_tier0_${tier0_source}.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+    if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+        add_test(NAME krc_run_kr16_tier0_${tier0_source}
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_tier0_${tier0_source}.kex
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_OUTPUT=${tier0_expect_output}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_tier0_${tier0_source} PROPERTIES
+            DEPENDS krc_link_kr16_tier0_${tier0_source})
+    endif()
+endforeach()
