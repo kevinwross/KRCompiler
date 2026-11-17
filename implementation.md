@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T22:52:28-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 762/762
+windows-msvc-release  PASS 762/762
+linux-gcc-debug       PASS 762/762
+linux-gcc-release     PASS 762/762
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-16T22:26:40-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 760/760
@@ -4426,3 +4434,8 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T23:35:00-08:00** — First, the parser already does its part: `template <> class Named<int>` arrives as `StructSpecifier 'Named' [class] [template-arg:int] [specialization] [definition]`, so the labels needed are present.
 - **2026-11-16T23:35:00-08:00** — Second, registration dropped it: `specializations_` was filled only when `!template_parameters.empty()`, and `template <>` has no parameters, so an explicit specialization was never registered at all. Relaxing that condition makes selection work — a trace showed `INST tag=Named selected_params=0 arguments=1` for `Named<int>` against `selected_params=1` for `Named<char>`.
 - **2026-11-16T23:35:00-08:00** — Third, selection is not sufficient: with the candidate selected, the instance's tag was the bare `Named` — the primary's own tag — because the parameter walk over an empty parameter list contributes nothing. Encoding the spelled arguments fixed that collision, and the program **still** failed with `member access on a non-record value`, so the instance's record is not being registered under its new tag. That is where the next attempt starts, and it is a different question from selection.
+- **2026-11-16T23:13:48-08:00** — Debugger parity measured, and the measurement was worse than the checklist implied: the debug fixtures that exist **link and stop**. Nothing read the records back, so no test would have noticed a class whose methods never reached KDBG.
+- **2026-11-16T23:13:48-08:00** — The information is there, which is the good half: for a C++ class the dump names `function Counter::Counter`, `function Counter::add` and `function Counter::value` with addresses, frames and types, and records `type Counter size=4 kind=struct`. So C++ debug parity is largely implemented and entirely untested.
+- **2026-11-16T23:13:48-08:00** — `krc_debug_cxx_class` now pins it: the fixture links, then `krc --dump-symbols` runs over the image and the test requires `function Counter::add` to appear. That is the first debug test in this suite that asserts a record rather than a successful link.
+- **2026-11-16T23:13:48-08:00** — The explicit-specialization defect from last round was **not** pursued further. It is a corpus finding rather than one of the five tasks, it has had two rounds and produced measurement without a landing, and the recorded third question -- why the instance's record is not registered under its tag -- is a better start for a session with time to finish it. Left alone deliberately rather than half-fixed.
+- **2026-11-16T23:13:48-08:00** — Host gate `2026-11-16T22:52:28-08:00`: **762/762** on all four configurations, from empty build directories and no warnings, first attempt.

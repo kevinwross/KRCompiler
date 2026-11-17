@@ -6454,3 +6454,21 @@ add_test(NAME krc_check_diag_member_call_on_temporary
             -DEXPECT=constructor-initialized class has no constructor
             -DOBJECT=${KRC_TEST_OUTPUT_DIR}/member_call_on_temporary.k32
             -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)
+
+# C++ debug parity. The other debug fixtures link and stop; this one reads the records
+# back and requires the class's methods and type to be named, which is what "parity for
+# C and C++" means in the M8 checklist.
+add_test(NAME krc_link_debug_cxx_class
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_cxx_class.cpp
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+add_test(NAME krc_debug_cxx_class
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_linked.k32)
+set_tests_properties(krc_debug_cxx_class PROPERTIES
+    PASS_REGULAR_EXPRESSION "function Counter::add"
+    DEPENDS krc_link_debug_cxx_class)
