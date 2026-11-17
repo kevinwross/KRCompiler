@@ -6520,3 +6520,18 @@ add_test(NAME krc_link_FileOpen
             -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
             -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/FileOpen_linked.k32
             -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+
+# The C half of "the debugger works for C and C++". krc_link_debug_struct only linked,
+# so nothing had ever asserted that a C struct's fields and a C local reach KDBG.
+add_test(NAME krc_debug_c_struct
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_struct_linked.k32)
+set_tests_properties(krc_debug_c_struct PROPERTIES
+    PASS_REGULAR_EXPRESSION "member b offset=4 type=i32"
+    DEPENDS krc_link_debug_struct)
+add_test(NAME krc_debug_c_variable
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_struct_linked.k32)
+set_tests_properties(krc_debug_c_variable PROPERTIES
+    PASS_REGULAR_EXPRESSION "variable main\\.pair offset=8 type=Pair"
+    DEPENDS krc_link_debug_struct)
