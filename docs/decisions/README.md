@@ -89,3 +89,4 @@ What was rejected and why.
 - [0045-pattern-body-is-a-template.md](0045-pattern-body-is-a-template.md) — proposed; a template whose parameters include a pack is never served by the int-substituted pattern, because no substitution represents a pack.
 
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
+- [0047-kr16-aggregate-returns.md](0047-kr16-aggregate-returns.md) — accepted; an aggregate return on KR16 passes its destination in `R6`, because `R4` is the frame pointer there.
