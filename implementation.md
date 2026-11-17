@@ -497,6 +497,18 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T20:54:38-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 745/745
+windows-msvc-release  PASS 745/745
+linux-gcc-debug       PASS 745/745
+linux-gcc-release     PASS 745/745
+not verified: native Linux x64 (WSL used), Linux ARM64
+
+**All four rows agree for the first time.** The Linux configurations now run the
+executed tests instead of registering none, so the counts match Windows rather than
+trailing by the number of run tests (620 against 745 in the previous gate).
+
 ### 2026-11-16T20:08:17-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 745/745
@@ -4370,3 +4382,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T20:40:20-08:00** — Writing it found a **real defect, now fixed**: `*(values + 3)` was rejected with `cannot dereference a non-pointer value` on both targets, while `int* p = values + 3;` compiled. The `+` case tested `is_pointer(*left)`, which is false for an **Array**, so it fell through to `usual_arithmetic` and decayed the array all the way to its **element** — the expression was typed `int`, not `int*`. Both `+` and `-` now decay first. This is the first defect the corpus itself produced rather than a fixture written to reproduce a known one.
 - **2026-11-16T20:40:20-08:00** — Two more findings, recorded and **not** fixed because they are outside this task: a **nested function-like macro does not expand** (`DOUBLE(DOUBLE(10))` leaves the inner one as an implicit function call and the IR verifier then rejects the program), and this compiler defines **no target macros**, so `#if defined(__KR16__)` is false on both profiles. The fixtures avoid both rather than failing, and each says so in place.
 - **2026-11-16T20:40:20-08:00** — Host gate `2026-11-16T20:08:17-08:00`: **745/745**, **745/745**, **620/620**, **620/620**, from empty build directories and no warnings, first attempt. Linux counts 620 because the fourteen new link tests register there while the run tests need a VM.
+- **2026-11-16T21:21:32-08:00** — The Linux configurations now **execute** the corpus rather than only linking it. The sibling sessions delivered Linux release binaries to `inbox/` (`linux_kr16` and `linux_kr32`, both SHA-256 verified against their handoff messages and both running in WSL), and the VM lookup in `CMakeLists.txt` no longer assumes a Windows host: the private copy is resolved with `CMAKE_EXECUTABLE_SUFFIX`, so Windows picks `krc_kr16.exe` and Linux picks `krc_kr16`. The sibling-checkout fallbacks stay Windows-only, because those are Windows builds.
+- **2026-11-16T21:21:32-08:00** — The result is that **all four gate rows agree for the first time**: 745/745 on every configuration, from clean builds with no warnings. Before this, a Linux row was 620 and the 125-test difference was exactly the executed tests the host could not run. Every one of them passes, so the corpus now verifies behaviour on two hosts and not only one.
+- **2026-11-16T21:21:32-08:00** — That also retires an accepted limitation rather than a defect: `AGENTS.local.md` said the run tests are registered "on a Windows host only and only when that file exists", and the comment in `CMakeLists.txt` said a WSL host must point the cache variable itself. Both were true, and both are now wrong; the instruction is updated in this change because a stale instruction is believed.

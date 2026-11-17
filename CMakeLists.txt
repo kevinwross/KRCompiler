@@ -27,17 +27,19 @@ option(KRC_BUILD_TESTS "Build the KRCompiler test suite" ON)
 option(KRC_BUILD_TOOLS "Build krc, krld, and the fixture extractor" ON)
 option(KRC_BUILD_TARGET_RUNTIME "Build target runtime objects with krc" ON)
 
-# Executed tests need a KR32 VM. The sibling checkout provides a Windows build,
-# so the default is adopted only on a Windows host and only when that file
-# exists: a WSL or Linux host must point KRC_KR32_VM at a binary it can run,
-# and an empty value registers no run tests, which keeps such a host green.
+# Executed tests need a KR32 VM. A copy kept in this tree is preferred over the
+# sibling checkout, because sibling agents rebuild and run their own binaries in
+# those directories, so a test that launches one there can be killed mid-run. The
+# private copy is looked up with the host's executable suffix, so a Windows host
+# picks up `krc_kr32.exe` and a Linux host `krc_kr32`; both then run the executed
+# tests instead of leaving them unregistered. The sibling fallbacks are Windows
+# builds and are tried only there. An empty result still registers no run tests,
+# which keeps a host without a VM green.
 set(KRC_KR32_VM "" CACHE FILEPATH "Path to a kr32 VM binary for the executed tests")
-if(NOT KRC_KR32_VM AND WIN32)
-    # A copy kept in this tree under a private name is preferred: sibling agents
-    # rebuild and run their own binaries in those directories, so a test that
-    # launches one there can be killed mid-run.
-    set(_krc_default_vm "${CMAKE_CURRENT_SOURCE_DIR}/build/vm/krc_kr32.exe")
-    if(NOT EXISTS "${_krc_default_vm}")
+if(NOT KRC_KR32_VM)
+    set(_krc_default_vm
+        "${CMAKE_CURRENT_SOURCE_DIR}/build/vm/krc_kr32${CMAKE_EXECUTABLE_SUFFIX}")
+    if(WIN32 AND NOT EXISTS "${_krc_default_vm}")
         set(_krc_default_vm "${CMAKE_CURRENT_SOURCE_DIR}/../kr32/build/windows-msvc/Debug/kr32.exe")
     endif()
     if(EXISTS "${_krc_default_vm}")
@@ -46,18 +48,18 @@ if(NOT KRC_KR32_VM AND WIN32)
     endif()
 endif()
 
-# The KR16 VM comes from the sibling checkout the same way. Its `vm` command
-# takes an image and reports the program's exit status, so one runner script
-# covers both targets.
+# The KR16 VM comes from the same place by the same rule. Its `vm` command takes
+# an image and reports the program's exit status, so one runner script covers both
+# targets.
 set(KRC_KR16_VM "" CACHE FILEPATH "Path to a kr16 VM binary for the executed tests")
-if(NOT KRC_KR16_VM AND WIN32)
+if(NOT KRC_KR16_VM)
     set(_krc_default_kr16_vm
-        "${CMAKE_CURRENT_SOURCE_DIR}/build/vm/krc_kr16.exe")
-    if(NOT EXISTS "${_krc_default_kr16_vm}")
+        "${CMAKE_CURRENT_SOURCE_DIR}/build/vm/krc_kr16${CMAKE_EXECUTABLE_SUFFIX}")
+    if(WIN32 AND NOT EXISTS "${_krc_default_kr16_vm}")
         set(_krc_default_kr16_vm
             "${CMAKE_CURRENT_SOURCE_DIR}/../kr16/build/windows-ninja/kr16.exe")
     endif()
-    if(NOT EXISTS "${_krc_default_kr16_vm}")
+    if(WIN32 AND NOT EXISTS "${_krc_default_kr16_vm}")
         set(_krc_default_kr16_vm
             "${CMAKE_CURRENT_SOURCE_DIR}/../kr16/build/shell-debug/kr16.exe")
     endif()
