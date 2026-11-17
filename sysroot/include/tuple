@@ -16,9 +16,21 @@
 //
 // Two limits are real, and each is measured rather than assumed:
 //
-//   * **No by-value factory.** `make_tuple` would return the tuple by value, which
-//     KR16 rejects as an aggregate return. It is provided on neither target rather
-//     than on one.
+//   * **No by-value factory.** `make_tuple` is blocked by two front-end gaps, both
+//     measured on 2026-11-17 and neither of them the aggregate return this note used
+//     to name -- KR16 aggregate returns now work (ADR 0048), and a hand-written
+//     `std::tuple<int, int> make_pair2()` compiles and runs on both targets.
+//
+//     A pack expanded in a function template's **return type and body** is not
+//     substituted at instantiation: `template <typename... Ts> Tup<Ts...>
+//     mk(Ts... values)` fails with `IR verifier: return type does not match the
+//     function`, and the same body reports `constructor-initialized class has no
+//     constructor`. A single-parameter template (`template <typename T> Box<T>
+//     make_box(T)`) works, so the gap is the pack, not dependence.
+//
+//     Function templates are also **not overloadable**: two `make_tuple` declarations
+//     that differ only in arity are a `redefinition of function` error, so the
+//     fixed-arity form cannot stand in for the variadic one.
 //
 //   * **An empty tuple cannot be a local.** `tuple<> t;` emits a call to the
 //     pattern's constructor and fails to link with `undefined symbol

@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T13:19:55-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 797/797
+windows-msvc-release  PASS 797/797
+linux-gcc-debug       PASS 797/797
+linux-gcc-release     PASS 797/797
+not verified: native Linux x64 (WSL used), Linux ARM64, WSL Clang and sanitizer configurations (clang is not installed on this machine)
+
 ### 2026-11-17T12:35:27-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 797/797
@@ -4681,3 +4689,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T16:35:00-08:00** — The general fix worked: `type_of_name` already collected `template-arg:` labels and called `instantiate_class_template`, but with the **qualified** spelling, which is not the registered key, so it fell back to the unparameterised record. Instantiating by the last component fixes every consumer, not one call site. **A by-value tuple factory now compiles and runs on both targets**: `std::tuple<int, int> make_pair2()` returns 42 on KR32 and KR16. Suite **797/797**.
 - **2026-11-17T16:35:00-08:00** — `make_tuple` itself is still blocked, and the blocker is now exact and minimal. Isolated with two probes: `template <typename T> Box<T> make_box(T x)` **works** on both targets, while `template <typename... Ts> Tup<Ts...> mk(Ts... v)` fails with `IR verifier: function 'mk__int__2': return type does not match the function`. So function-template **argument deduction works**, including a pack -- the call produced `mk__int__2` -- but a **pack expansion in the function's return type is not substituted** when the template is instantiated.
 - **2026-11-17T16:35:00-08:00** — Writing `make_tuple` against the header confirmed the same failure inside the body (`constructor-initialized class has no constructor` at `tuple<Ts...>(values...)`), so the gap is not the return type alone: the pack is unsubstituted in the body as well. The header change is reverted; `make_tuple` stays absent, and its documented limit now has a measured reason rather than the outdated one.
+- **2026-11-17T13:35:00-08:00** — `make_tuple` is **blocked by two front-end gaps**, and the header's stated reason was wrong. The old note blamed KR16 aggregate returns; measured after ADR 0048, a hand-written `std::tuple<int, int> make_pair2()` compiles and runs on **both** targets. What blocks the factory is (a) **pack expansion in a function template's return type and body** -- `template <typename... Ts> Tup<Ts...> mk(Ts... values)` fails with `IR verifier: return type does not match the function` and its body reports `constructor-initialized class has no constructor`, while a single-parameter template works, so the gap is the pack and not dependence; and (b) **function templates are not overloadable** -- two `make_tuple` declarations differing only in arity are a `redefinition of function` error, so the fixed-arity form cannot stand in.
+- **2026-11-17T13:35:00-08:00** — Both sema fixes that got this far are kept and gated: `analyze_expression` instantiates a qualified template-id constructor call by its last component, and `type_of_name` does the same for any consumer that re-resolves a name. Together they give the compiler a capability it did not have -- **by-value template factory returns work on both targets** -- which is what the header needed and did not get from the aggregate-return work alone.
+- **2026-11-17T13:35:00-08:00** — `sysroot/include/tuple`'s documented limit now states the two measured reasons instead of the outdated one, so the header is true again. `make_tuple` remains absent, which is the outcome the goal's step 3 allows.
+- **2026-11-17T13:35:00-08:00** — Host gate `2026-11-17T13:19:55-08:00`: **797/797** on all four configurations from empty build directories, no warnings, first attempt.
