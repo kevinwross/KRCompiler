@@ -6581,3 +6581,49 @@ if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
     set_tests_properties(krc_run_kr16_copy_with_destructor PROPERTIES
         DEPENDS krc_link_kr16_copy_with_destructor)
 endif()
+
+# The target macro names the target being compiled for. It was once recorded here as
+# missing because a probe used the uppercase spelling; the descriptor defines "__kr32__"
+# and "__kr16__". This fixture fails to compile if neither is defined, so a descriptor
+# that loses its macro cannot pass silently.
+add_test(NAME krc_link_target_macro
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/target_macro.c
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/target_macro_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_run_target_macro
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/target_macro_linked.k32
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+    set_tests_properties(krc_run_target_macro PROPERTIES
+        DEPENDS krc_link_target_macro)
+endif()
+
+add_test(NAME krc_link_kr16_target_macro
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+            -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+            -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+            -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/target_macro.c
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_target_macro.kex
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+    add_test(NAME krc_run_kr16_target_macro
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR16_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_target_macro.kex
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+    set_tests_properties(krc_run_kr16_target_macro PROPERTIES
+        DEPENDS krc_link_kr16_target_macro)
+endif()

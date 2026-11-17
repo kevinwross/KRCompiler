@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T04:53:26-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 780/780
+windows-msvc-release  PASS 780/780
+linux-gcc-debug       PASS 780/780
+linux-gcc-release     PASS 780/780
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-17T04:22:44-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 776/776
@@ -4512,3 +4520,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T05:55:00-08:00** — Defect 2 attempted again and **reverted**, but the measurement moved substantially. Re-applying the two changes from round 13 -- registering a `template <>` specialization despite having no parameters, and matching it by its spelled arguments -- does make selection work. The instance tag also needed the arguments, because a zero-parameter walk leaves the bare name and that is the primary's own tag.
 - **2026-11-17T05:55:00-08:00** — With all three applied, the remaining failure is **one question narrower than before**: `Named<int>` enters `instantiate_class_template` **twice**, and the second entry hits the in-progress marker, so it returns `type_named("Named__int")` -- an incomplete type -- and the member access on it fails. A trace shows two `ENTER tag=Named argc=1` lines and a single completion, for `Named<char>`. So the instance is being instantiated re-entrantly from inside its own construction, which is the question to answer next rather than the tag or the registration, both of which are now measured as working.
 - **2026-11-17T05:55:00-08:00** — Reverted rather than left half-working, and the tree is clean. The whole exploration is documented so the next attempt starts at re-entrancy rather than at registration.
+- **2026-11-17T06:40:00-08:00** — Defect 5 is **refuted**, and by a spelling mistake of mine. The list said no target macro is defined because `profile_.macro` is "read and never assigned". It is assigned: `src/target/target.cpp` declares `kKr32` with `"__kr32__"` and `kKr16` with `"__kr16__"`, and the preprocessor defines it. My round-17 probe used the **uppercase** spelling `__KR32__`, which is not defined, and I concluded absence from that instead of reading the descriptor. A probe with `__kr32__` returns 0.
+- **2026-11-17T06:40:00-08:00** — Lowercase is the GCC and Clang convention (`__x86_64__`, `__linux__`), so the spelling is right and the finding was wrong. That is the **fourth** measurement this session that read as absence because of an assumption baked into the probe, after the `type ` grep that missed `type=i32`, the guarded branch that read as "not called", and `sys_open_dialog` reading as undeclared.
+- **2026-11-17T06:40:00-08:00** — What lands instead of a fix is a regression test: `target_macro.c` compiles with `#error` when neither macro is defined and returns 42 only when the macro agrees with `sizeof(void*) * 8`, link-and-run on both targets. A descriptor that loses its macro now fails to compile rather than silently taking a third branch.
+- **2026-11-17T05:16:32-08:00** — Host gate `2026-11-17T04:53:26-08:00`: **780/780** on all four configurations, from empty build directories and no warnings, first attempt. It publishes the refutation of defect 5, the `target_macro.c` regression test that replaces it, and the record of defect 2 being narrowed to re-entrancy.
