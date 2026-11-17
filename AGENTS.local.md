@@ -80,8 +80,8 @@ A record saying "all configurations" or "six configurations" is not a record: na
 <!-- project:targets:start — generated from .dev-template.json targets; edit the Notes column, not the rows -->
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
-| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release; remote CI pending. |
-| Linux | x64 | <ubuntu-latest in CI> | WSL Alpine 3.22 GCC 14.2 Debug/Release and Clang 20.1 Debug/ASan; remote CI pending. |
+| Windows | x64 | Local dev machine, MSVC 19.51, Debug/Release. CI workflow committed; whether it runs is unverified. | MSVC 19.51 Debug/Release. |
+| Linux | x64 | WSL 2, Ubuntu 26.04.1 LTS, GCC 15.2.0, Debug/Release. | GCC 15.2 Debug/Release only. Clang is **not installed** here, so `linux-clang-debug` and `linux-sanitize` do not build on this machine and are unverified locally. |
 
 Target-specific notes:
 
@@ -131,4 +131,4 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 - **ABI, object, symbol, target and IR changes need an ADR first.** Not a note in the commit message — a file under `docs/decisions/`.
 - **`D-xxx` identifiers are stable.** A changed decision takes an Appendix A entry; renumbering or deleting a decision breaks every reference that cites it.
 - **The compiler is one program with many outputs** (`-c` object, `-S` assembly, `-o` linked image). Do not grow a second driver to handle a case; extend `krc`.
-- **CI runs the full matrix.** A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.
+- **The CI workflow covers the full matrix; whether it runs is unverified.** `.github/workflows/ci.yml` has a job per preset, including the Clang and sanitizer ones this machine cannot build. A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.
