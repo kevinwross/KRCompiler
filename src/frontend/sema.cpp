@@ -3950,6 +3950,27 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                             analyze_expression(*argument);
                         }
                     }
+                    // `P<int>()` names a template-id: the parser records the arguments as
+                    // labels on the callee. Instantiating here, during analysis, means the
+                    // class instantiation exists before code generation collects class
+                    // methods; returning the symbol's type gave the pattern instead, so a
+                    // member call on the temporary found no member.
+                    bool is_template_id = false;
+                    std::vector<std::string> template_arguments;
+                    for (const auto& label : callee->labels) {
+                        constexpr std::string_view argument_prefix = "template-arg:";
+                        if (label == "template-id") {
+                            is_template_id = true;
+                        } else if (label.rfind(argument_prefix, 0) == 0) {
+                            template_arguments.push_back(label.substr(argument_prefix.size()));
+                        }
+                    }
+                    if (is_template_id && !template_arguments.empty()) {
+                        if (const auto instance = instantiate_class_template(
+                                callee->text, template_arguments)) {
+                            return instance;
+                        }
+                    }
                     return symbol->type;
                 }
                 error(expression.location, "called object has no operator()");

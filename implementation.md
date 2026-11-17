@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T11:13:54-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 793/793
+windows-msvc-release  PASS 793/793
+linux-gcc-debug       PASS 793/793
+linux-gcc-release     PASS 793/793
+not verified: native Linux x64 (WSL used), Linux ARM64, WSL Clang and sanitizer configurations (clang is not installed on this machine)
+
 ### 2026-11-17T10:44:05-08:00 — host gate (Linux ARM64, first)
 
 linux-gcc-debug    PASS 789/789
@@ -4624,3 +4632,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T14:45:00-08:00** — **Open for review, ERRATA:** the M0 evidence rows still read "WSL Alpine 3.22 GCC 14.2 Debug/Release" and "WSL Alpine 3.22 Clang 20.1 Debug/ASan", each `ctest` 8/8. This machine cannot produce the Clang rows and is not Alpine, so either the image changed since 2026-11-09 or those rows predate the current environment. A recorded gate row that cannot be reproduced on the machine that holds it is exactly what this audit is for, so it is left marked rather than silently rewritten -- I did not run those configurations and will not assert what they did.
 - **2026-11-17T11:01:20-08:00** — Host gate `2026-11-17T10:32:04-08:00`: **789/789** on all four configurations, from empty build directories and no warnings, first attempt. It publishes the six documentation commits from rounds 1 to 6: the register-allocator verification, the variadic-temporary chain, the refutation of the link/run merge, the refutation of the lazy-collection fix, and the stale-record audit. No code changed in any of them, so the suite count is the same as the previous gate.
 - **2026-11-17T11:33:23-08:00** — ARM64 host status. This Raspberry Pi 5 (Debian 13 trixie, GCC 14.2.0) is the first native ARM64 host to build and test the tree, and it owns the ARM64 row of the platform table: `linux-gcc-debug` and `linux-gcc-release` build clean from absent build directories at `-j2` with `ulimit -s unlimited`, one row at a time, and both pass 789/789 including the 139 executed tests. The authoritative record is the gate block above (`2026-11-17T10:44:05-08:00`), which also carries the arm64 VM hashes and versions. The executed tests run against the private copies in `build/vm/`; the presets resolve those only at configure time, so a configure that predates the copies registers no run tests and still reports green at 646/646 -- the count is the tell. `linux-clang-debug` and `linux-sanitize` are unrun on this host even though Clang 19.1.7 is installed. The Linux x64 and Windows x64 gates belong to other machines and are not verified from here.
+- **2026-11-17T11:41:41-08:00** — Task 1 is **fixed**. A constructor-style call names its class with an `Identifier` carrying `template-id` and `template-arg:<type>` labels -- not with a specifier, which is why the first attempt (branch on `AstKind::StructSpecifier`) was dead code: the `AstKind` value 51 printed in the earlier trace is `Identifier`. The constructor path in `analyze_expression` ignored those labels and returned the ordinary symbol's type, which is the **pattern**; its record has the methods, but its tag is `P`, so code generation looked up `class_methods_["P__int__1"]`, missed, fell back to a field, and reported `no member named 'c'`.
+- **2026-11-17T11:41:41-08:00** — Instantiating on that path, during analysis, is the fix: the instance now exists before code generation collects class methods, exactly as a declaration puts it there. `variadic_temporary.cpp` pins one, two and three pack elements, a second member, the named form agreeing with the temporary, and a non-variadic template temporary; link and run on both targets, 42 on each.
+- **2026-11-17T11:41:41-08:00** — Host gate `2026-11-17T11:13:54-08:00`: **793/793** on all four configurations, from empty build directories and no warnings, first attempt.
