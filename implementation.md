@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T15:36:56-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 797/797
+windows-msvc-release  PASS 797/797
+linux-gcc-debug       PASS 797/797
+linux-gcc-release     PASS 797/797
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine)
+
 ### 2026-11-17T15:15:40-08:00 — host gate (Linux ARM64)
 
 linux-gcc-debug    PASS 797/797
@@ -4716,3 +4724,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T16:55:00-08:00** — Item 1's shape is now exact, and my second fix is disproven. `instantiate_template_call` **does** set `template_bindings_` and `template_pack_arities_` before analysing the clone (`sema.cpp:2599-2606`), so the instance's **signature is correct**: the IR reads `define %Tup__int__int__1 @mk__int__2(i32 %v, i32 %v1)`. The defect is entirely in the **body**, which emits `alloca %Tup` and `call void @Tup_ctor_2_value(ptr<%Tup> ...)` -- the pattern's constructor -- because irgen's temporary path re-resolves the callee through `sema_.type_of_name` after analysis has cleared those bindings, so `Ts...` can no longer expand.
 - **2026-11-17T16:55:00-08:00** — Sema already caches the analysed type (`expression_type`), and using it there fixes the reproducer's type -- the error moves from `return type does not match` to `use of undeclared identifier 'v'`, i.e. the **argument** pack `v...`. But that change **regressed five fixtures** (`krc_run_tuple_header`, `krc_link_kr16_tuple_header`, `krc_run_kr16_tuple_header`, `krc_link_tier2_virtual`, `krc_run_tier2_virtual`) with the same two errors in `matrix_intrinsics.cpp:57` -- `constructor-initialized class has no constructor` and an undeclared pack element. So resolving the type without also expanding the argument pack breaks existing code rather than fixing it.
 - **2026-11-17T16:55:00-08:00** — Reverted; suite back to **797/797**. The next step is therefore both halves together: use the analysed type **and** expand a value pack in the constructor argument list, since either alone is a regression or a no-op. `matrix_intrinsics.cpp` is the fixture that will say whether it is right.
+- **2026-11-17T16:50:00-08:00** — Host gate `2026-11-17T15:36:56-08:00`: **797/797** on all four configurations, from empty build directories and no warnings, first attempt. It covers the combined tree after rebasing onto the Raspberry Pi's two commits (`cbcb467` moved the private VM copies out of `build/` and taught the presets to read `vm/` first, `b13aabf` generated the ARM64 platform row) plus the stale-record corrections below.
+- **2026-11-17T16:50:00-08:00** — The ARM64 row is **verified at 797/797**, close to the current commit, by the Pi's own gate (`2026-11-17T15:15:40-08:00`). That closes the item I had ranked as needing the hardware: it was the first ARM64 run to include ADR 0048's ABI change.
+- **2026-11-17T16:50:00-08:00** — Item 5 of the current list, first pass: two **shipped headers** still told users KR16 cannot return aggregates. `sysroot/include/memory` said make_unique "does not compile" there, and `sysroot/include/tuple`'s intro blamed the target for the missing factory. Both are corrected, with the measured reason in the tuple header. Verified by building and running `kr16_make_unique.cpp` on the KR16 VM: exit 42.
+- **2026-11-17T16:50:00-08:00** — The same audit **confirmed** two claims rather than finding them stale: `std::tuple<> empty;` still fails to link with `undefined symbol 'tuple_ctor_0_value'`, and `get<I>` is still absent for the documented reason. `docs/planning/tuple-and-layout-priorities.md`'s Item 4 now carries a note that aggregate returns were implemented under ADR 0048.
