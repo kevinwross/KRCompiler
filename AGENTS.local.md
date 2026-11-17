@@ -82,6 +82,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 |---|---|---|---|
 | Windows | x64 | Local dev machine, MSVC 19.51, Debug/Release. CI workflow committed; whether it runs is unverified. | MSVC 19.51 Debug/Release. |
 | Linux | x64 | WSL 2, Ubuntu 26.04.1 LTS, GCC 15.2.0, Debug/Release. | GCC 15.2 Debug/Release only. Clang is **not installed** here, so `linux-clang-debug` and `linux-sanitize` do not build on this machine and are unverified locally. |
+| Linux | ARM64 | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0, Debug/Release. | GCC 14.2 Debug/Release build clean and pass 789/789 including the 139 executed tests; first gate 2026-11-17. Clang 19.1.7 is installed here, but `linux-clang-debug` and `linux-sanitize` have not been run on this host. `build/vm/` holds the arm64 VM copies; their hashes are recorded in `implementation.md`. |
 
 Target-specific notes:
 
