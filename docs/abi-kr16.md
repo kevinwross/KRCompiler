@@ -32,7 +32,14 @@ derives `sizeof`, `_Alignof`, `INT_MAX`, and `PTRDIFF_MAX` from it.
 | `R1`–`R3` | first three scalar arguments |
 | `R4` | frame pointer |
 | `R5` | stack pointer (`SP`) |
-| other registers | caller-saved scratch |
+| `R6` | status register (`SR`) — **not** scratch; writing it traps |
+| `R7` | program counter (`PC`) |
+
+There is **no free general-purpose register**: `R0`–`R5` carry the roles above and `R6`/`R7`
+are the status register and the program counter. A value that must survive a call lives in a
+frame slot, not in a register. The assembler accepts `R6` and `R7` as register names, so a
+mistake here assembles cleanly and traps at run time; the disassembler prints them as `SR`
+and `PC`, which is how such a mistake is found.
 
 `SP` is full-descending. The stack top is `0xF000` and the default stack limit
 is `0xE000`. All slots are two bytes.

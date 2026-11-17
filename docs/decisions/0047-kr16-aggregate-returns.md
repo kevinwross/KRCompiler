@@ -1,8 +1,22 @@
 # 0047 — KR16 aggregate returns
 
-**Status:** accepted (decision only; implementation pending).
+**Status:** **withdrawn** — the decision below chose `R6`, and `R6` turns out to be the
+**status register** (`SR`) on this ISA, so writing it traps. The replacement mechanism is not
+yet chosen; it is recorded in `implementation.md` as an open operator decision. This file is
+kept for the context and the rejected alternative, both of which still hold.
 **Date:** 2026-11-17.
 **Extends:** [ADR 0016](0016-kr16-scalar-abi.md), whose scalar subset this removes one limit from.
+
+## Why this decision was withdrawn
+
+Measured on 2026-11-17: emitting `LEA R6, [R4-4]` assembles cleanly and disassembles as
+`LEA SR, [R4-4]`; the VM then reports `unhandled exception 0`. `parse_register` accepts
+`R0`–`R7`, but the ISA's register 6 is the status register and register 7 the program
+counter. The premise quoted below — "other registers: caller-saved scratch" from
+`docs/abi-kr16.md` — was false for both, and that line has been corrected.
+
+The context and the rejected alternative are unaffected by the error and are why this record
+is kept rather than deleted.
 
 ## Context
 
