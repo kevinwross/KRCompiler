@@ -6417,3 +6417,28 @@ foreach(tier1_source IN ITEMS structs pointers arrays control preprocessor varar
             DEPENDS krc_link_kr16_tier1_${tier1_source})
     endif()
 endforeach()
+
+# Tier 2 -- the C++ core: classes, single inheritance, virtual dispatch. KR32-only,
+# because the plan's tier table gives Tier 2 to KR32 for v1.0 and these fixtures need
+# the C++ ABI that KR16 defers.
+foreach(tier2_source IN ITEMS classes inheritance virtual)
+    add_test(NAME krc_link_tier2_${tier2_source}
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier2/${tier2_source}.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/tier2_${tier2_source}_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        add_test(NAME krc_run_tier2_${tier2_source}
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/tier2_${tier2_source}_linked.k32
+                    -DEXPECT_EXIT=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_tier2_${tier2_source} PROPERTIES
+            DEPENDS krc_link_tier2_${tier2_source})
+    endif()
+endforeach()

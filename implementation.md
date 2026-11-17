@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T21:23:25-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 751/751
+windows-msvc-release  PASS 751/751
+linux-gcc-debug       PASS 751/751
+linux-gcc-release     PASS 751/751
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-16T20:54:38-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 745/745
@@ -4385,3 +4393,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T21:21:32-08:00** — The Linux configurations now **execute** the corpus rather than only linking it. The sibling sessions delivered Linux release binaries to `inbox/` (`linux_kr16` and `linux_kr32`, both SHA-256 verified against their handoff messages and both running in WSL), and the VM lookup in `CMakeLists.txt` no longer assumes a Windows host: the private copy is resolved with `CMAKE_EXECUTABLE_SUFFIX`, so Windows picks `krc_kr16.exe` and Linux picks `krc_kr16`. The sibling-checkout fallbacks stay Windows-only, because those are Windows builds.
 - **2026-11-16T21:21:32-08:00** — The result is that **all four gate rows agree for the first time**: 745/745 on every configuration, from clean builds with no warnings. Before this, a Linux row was 620 and the 125-test difference was exactly the executed tests the host could not run. Every one of them passes, so the corpus now verifies behaviour on two hosts and not only one.
 - **2026-11-16T21:21:32-08:00** — That also retires an accepted limitation rather than a defect: `AGENTS.local.md` said the run tests are registered "on a Windows host only and only when that file exists", and the comment in `CMakeLists.txt` said a WSL host must point the cache variable itself. Both were true, and both are now wrong; the instruction is updated in this change because a stale instruction is believed.
+- **2026-11-16T21:49:42-08:00** — Tier 2 has its OOP half running: `classes`, `inheritance` and `virtual`, each linked and executed on **KR32** (the tier table gives Tier 2 to KR32 for v1.0). They cover constructors, an explicit constructor, a destructor counted at scope exit, member functions, static data and functions, single inheritance with a base pointer, and virtual dispatch through a base pointer including a non-virtual member that reaches the override from inside the base.
+- **2026-11-16T21:49:42-08:00** — Writing them found a **precise defect**: copy construction combined with a **user-declared destructor** fails with `IR verifier: function 'main': call argument type mismatch`, while either alone compiles. The minimal reproduction is a class with `Counter()`, `~Counter()` and `int copy(original);` — fifteen lines. `classes.cpp` keeps its destructor and drops the copy check, with the reason in place.
+- **2026-11-16T21:49:42-08:00** — Tier 2 is **partial**: `new`/`delete`, templates, lambdas and `constexpr` have no program yet, so the tier's own definition is not met and M8's corpus item stays open. Stated as the next piece rather than assumed.
+- **2026-11-16T21:49:42-08:00** — Host gate `2026-11-16T21:23:25-08:00`: **751/751** on all four configurations, from empty build directories and no warnings, first attempt. All four rows still agree, which they have since the Linux VMs were adopted.
