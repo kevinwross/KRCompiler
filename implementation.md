@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T21:51:21-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 759/759
+windows-msvc-release  PASS 759/759
+linux-gcc-debug       PASS 759/759
+linux-gcc-release     PASS 759/759
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-16T21:23:25-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 751/751
@@ -4397,3 +4405,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T21:49:42-08:00** — Writing them found a **precise defect**: copy construction combined with a **user-declared destructor** fails with `IR verifier: function 'main': call argument type mismatch`, while either alone compiles. The minimal reproduction is a class with `Counter()`, `~Counter()` and `int copy(original);` — fifteen lines. `classes.cpp` keeps its destructor and drops the copy check, with the reason in place.
 - **2026-11-16T21:49:42-08:00** — Tier 2 is **partial**: `new`/`delete`, templates, lambdas and `constexpr` have no program yet, so the tier's own definition is not met and M8's corpus item stays open. Stated as the next piece rather than assumed.
 - **2026-11-16T21:49:42-08:00** — Host gate `2026-11-16T21:23:25-08:00`: **751/751** on all four configurations, from empty build directories and no warnings, first attempt. All four rows still agree, which they have since the Linux VMs were adopted.
+- **2026-11-16T22:17:48-08:00** — Tier 2 now covers every feature the tier definition names: `classes`, `inheritance`, `virtual`, `new_delete`, `templates`, `lambdas`, `constexpr2`, each linked and executed on KR32. That is fourteen tests, and the OOP half landed in the previous round.
+- **2026-11-16T22:17:48-08:00** — Writing them found a **compiler crash**, which is the most severe class of defect this corpus has produced: `sizeof...(Ts)` inside a **member function body** of a variadic class template faults with an access violation (`0xC0000005`). Twelve lines reproduce it, and the non-recursive form crashes as well as the recursive one, so it is not about recursion — a plain `int count() const { return sizeof...(Ts); }` is enough. Recorded with the reproduction; the fixture keeps to forms that work.
+- **2026-11-16T22:17:48-08:00** — A second finding: an **explicit** specialisation (`template <> class Named<int>`) is not selected — the primary answers even for `int`. Partial specialisation over a pack does work, which is why `recursive_variadic.cpp` passes; the explicit form is the one that does not.
+- **2026-11-16T22:17:48-08:00** — Host gate `2026-11-16T21:51:21-08:00`: **759/759** on all four configurations, from empty build directories and no warnings, first attempt.

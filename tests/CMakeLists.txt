@@ -6421,7 +6421,7 @@ endforeach()
 # Tier 2 -- the C++ core: classes, single inheritance, virtual dispatch. KR32-only,
 # because the plan's tier table gives Tier 2 to KR32 for v1.0 and these fixtures need
 # the C++ ABI that KR16 defers.
-foreach(tier2_source IN ITEMS classes inheritance virtual)
+foreach(tier2_source IN ITEMS classes inheritance virtual new_delete templates lambdas constexpr2)
     add_test(NAME krc_link_tier2_${tier2_source}
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
