@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T18:15:32-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 701/701
+windows-msvc-release  PASS 701/701
+linux-gcc-debug       PASS 598/598
+linux-gcc-release     PASS 598/598
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T17:22:57-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 697/697
@@ -4311,3 +4319,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T17:50:33-08:00** — Priority task 2 measured, and the objective's premise was one round out of date: **the element constructor already works in the compiler**. A standalone `Tup<int, char> p(41, 'x')` with `Tup(T first, R... rest) : head(first), tail(rest...) {}` compiles, links and runs to 42 on KR16 with no source change at all. The `use of undeclared identifier 'rest'` recorded last round was caused by the signature-expansion attempt made in the same change, not by anything missing — a fix and its opposite in one batch, which is why it read as a missing feature.
 - **2026-11-16T17:50:33-08:00** — Adding that constructor to `sysroot/include/tuple` compiles and links, and `tuple<int, char> p(41, 'x')` runs with `head` correct but `tuple_tail(p).head` wrong — the probe returns **3**, so `tail(rest...)` forwards nothing and the tail's head keeps its default. The suite stays green at 697 throughout, which is exactly the danger: a constructor that silently leaves the tail uninitialised passes every existing test.
 - **2026-11-16T17:50:33-08:00** — So the header change was reverted rather than landed. The remaining work is the `MemberInitializer` pack rewrite in the class path — the half of last round's change that was never the problem — while the signature expansion that broke it should not be repeated. Recorded; tree clean, suite 697.
+- **2026-11-16T18:42:58-08:00** — Priority task 2 is **done**: a class member whose signature carries the class template's pack now takes one parameter per element, and the arguments that forward the pack are rewritten to match. `tuple<int, char> p(41, 'x')` links and returns the right head **and** tail, `tuple<int, char, long>` takes three arguments, and a one-argument tuple leaves a sound empty tail. Fixture `tuple_element_constructor.cpp`, registered to link and **run** on both targets because the failure mode is silent.
+- **2026-11-16T18:42:58-08:00** — The two halves had to land together, and that is the whole finding of task 2: rewriting the signature alone leaves `rest...` naming a parameter that no longer exists — the `use of undeclared identifier 'rest'` that made an earlier attempt look like a missing language feature — while rewriting the arguments alone leaves the instance uncallable at arity three. Measured: arity 3 failed with `expression is not an lvalue` before, and compiles now.
+- **2026-11-16T18:42:58-08:00** — Host gate `2026-11-16T18:15:32-08:00`: **701/701**, **701/701**, **598/598**, **598/598**, from empty build directories and no warnings, first attempt. Linux counts 598 rather than 596 because the two new link tests register there while the run tests need a VM.

@@ -1594,6 +1594,135 @@ void substitute_value_parameters(
 
 }  // namespace
 
+// A class member whose signature carries the pack parameter needs two things done
+// together, and doing only one of them is worse than doing neither.
+//
+// The signature must take one parameter per element: `tuple(T first, Rest... rest)`
+// otherwise has a single parameter for the whole pack, so `tuple<int, char, long>`
+// cannot be called with three arguments at all.
+//
+// The arguments that forward the pack must be rewritten to match, because the
+// expansion named the parameters `rest`, `rest1`, ...: `tail(rest...)` has to become
+// `tail(rest)` at arity one and `tail()` at arity zero. Rewriting the signature
+// alone leaves `rest...` naming a parameter that no longer exists, which is the
+// `use of undeclared identifier 'rest'` that made an earlier attempt look like a
+// missing language feature.
+//
+// The arity is keyed by the *class* template's parameter spelling, which is what the
+// member's pack specifier carries (`Rest`), not the parameter's own name (`rest`).
+void Sema::expand_member_packs(
+    AstNode& specifier,
+    const std::unordered_map<std::string, std::size_t>& arities) {
+    for (auto& member : specifier.children) {
+        if (!member || member->kind != AstKind::FunctionDefinition ||
+            member->children.size() < 2 || !member->children[1]) {
+            continue;
+        }
+        auto* function =
+            const_cast<AstNode*>(find_function_declarator(*member->children[1]));
+        if (function == nullptr) {
+            continue;
+        }
+        auto pack_position = function->children.size();
+        auto spelling = std::string{};
+        for (std::size_t index = 0; index < function->children.size(); ++index) {
+            auto* parameter = function->children[index].get();
+            if (parameter == nullptr ||
+                parameter->kind != AstKind::ParameterDeclaration ||
+                std::find(parameter->labels.begin(), parameter->labels.end(), "pack") ==
+                    parameter->labels.end()) {
+                continue;
+            }
+            pack_position = index;
+            if (!parameter->children.empty() && parameter->children[0]) {
+                for (const auto& label : parameter->children[0]->labels) {
+                    if (label != "const" && label != "volatile") {
+                        spelling = label;
+                    }
+                }
+            }
+            break;
+        }
+        const auto arity = arities.find(spelling);
+        if (pack_position == function->children.size() || spelling.empty() ||
+            arity == arities.end()) {
+            continue;
+        }
+        auto* parameter = function->children[pack_position].get();
+        parameter->labels.erase(
+            std::remove(parameter->labels.begin(), parameter->labels.end(), "pack"),
+            parameter->labels.end());
+        const auto pack_name = parameter->children.size() > 1 && parameter->children[1]
+                                   ? declarator_name(*parameter->children[1])
+                                   : std::string{};
+        if (pack_name.empty()) {
+            continue;
+        }
+        // The arguments that forward the pack, rewritten before the signature grows
+        // so a failure here leaves the member untouched.
+        const auto expand_arguments = [&](auto& self,
+                                          std::vector<std::unique_ptr<AstNode>>& nodes)
+            -> void {
+            for (std::size_t index = 0; index < nodes.size();) {
+                auto& node = nodes[index];
+                if (!node) {
+                    ++index;
+                    continue;
+                }
+                if (node->kind == AstKind::Identifier && node->text == pack_name &&
+                    std::find(node->labels.begin(), node->labels.end(),
+                              "pack-expansion") != node->labels.end()) {
+                    std::vector<std::unique_ptr<AstNode>> expanded;
+                    for (std::size_t element = 0; element < arity->second; ++element) {
+                        auto copy = std::make_unique<AstNode>();
+                        copy->kind = AstKind::Identifier;
+                        copy->location = node->location;
+                        copy->text = element == 0 ? pack_name
+                                                  : pack_name + std::to_string(element);
+                        expanded.push_back(std::move(copy));
+                    }
+                    nodes.erase(nodes.begin() + static_cast<std::ptrdiff_t>(index));
+                    nodes.insert(nodes.begin() + static_cast<std::ptrdiff_t>(index),
+                                 std::make_move_iterator(expanded.begin()),
+                                 std::make_move_iterator(expanded.end()));
+                    index += arity->second;
+                    continue;
+                }
+                self(self, node->children);
+                ++index;
+            }
+        };
+        for (std::size_t index = 2; index < member->children.size(); ++index) {
+            if (member->children[index]) {
+                expand_arguments(expand_arguments, member->children[index]->children);
+            }
+        }
+        // A pack that received nothing contributes no parameter at all.
+        if (arity->second == 0) {
+            function->children.erase(function->children.begin() +
+                                     static_cast<std::ptrdiff_t>(pack_position));
+            continue;
+        }
+        for (std::size_t copy = 1; copy < arity->second; ++copy) {
+            auto duplicated = clone_ast(*parameter);
+            if (duplicated->children.size() > 1 && duplicated->children[1]) {
+                auto* declarator = const_cast<AstNode*>(duplicated->children[1].get());
+                while (declarator != nullptr && declarator->kind != AstKind::Declarator) {
+                    declarator = declarator->children.empty()
+                                     ? nullptr
+                                     : declarator->children.front().get();
+                }
+                if (declarator != nullptr) {
+                    declarator->text = pack_name + std::to_string(copy);
+                }
+            }
+            function->children.insert(function->children.begin() +
+                                          static_cast<std::ptrdiff_t>(pack_position + copy),
+                                      std::move(duplicated));
+        }
+    }
+}
+
 TypePtr Sema::instantiate_class_template(const std::string& tag,
                                          const std::vector<std::string>& arguments) {
     const auto pattern = templates_.find(tag);
@@ -1757,6 +1886,9 @@ TypePtr Sema::instantiate_class_template(const std::string& tag,
             named->text = "~" + instance_tag;
         }
     }
+    // A member whose signature carries the pack takes one parameter per element, and
+    // the arguments that forward the pack are rewritten to match.
+    expand_member_packs(*clone, pack_arities);
     auto holder = make_ast(AstKind::DeclSpecifiers, clone->location);
     auto* specifier = clone.get();
     holder->children.push_back(std::move(clone));

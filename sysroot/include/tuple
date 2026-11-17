@@ -14,31 +14,23 @@
 // and this front end has neither; both are measured in implementation.md. Reach
 // element k by chaining members (`pair.tail.head`).
 //
-// Four limits are real, and each is measured rather than assumed:
-//
-//   * **There is no element constructor.** `tuple(T first, Rest... rest)` is a
-//     *class member* whose signature carries a pack parameter, and this front end
-//     expands such a signature for one element only: `tuple<int, char> p(41, 'x')`
-//     compiles and then fails to link with `undefined symbol 'tuple_ctor_0_value'`,
-//     because the call binds to the pattern's constructor rather than an instance's.
-//     Construct by default and assign instead, which works at any arity:
-//
-//         tuple<int, char, long> t;
-//         t.head = 1; t.tail.head = 'y'; t.tail.tail.head = 9;
+// Three limits are real, and each is measured rather than assumed:
 //
 //   * **No by-value factory.** `make_tuple` would return the tuple by value, which
-//     KR16 rejects as an aggregate return, and it would be built on the constructor
-//     above. It is provided on neither target rather than on one.
+//     KR16 rejects as an aggregate return. It is provided on neither target rather
+//     than on one.
 //
 //   * **An empty tuple cannot be a local.** `tuple<> t;` emits a call to the
-//     pattern's constructor and fails to link with the same undefined symbol. An
-//     empty tuple reached as a member is fine -- `tuple_size(pair.tail.tail)` is
-//     zero -- so the empty type exists and only a local of it is affected.
+//     pattern's constructor and fails to link with `undefined symbol
+//     'tuple_ctor_0_value'`. An empty tuple reached as a member is fine --
+//     `tuple_size(pair.tail.tail)` is zero -- so the empty type exists and only a
+//     local of it is affected. An empty tail built by the element constructor is
+//     fine for the same reason.
 //
 //   * **Do not chain the free functions on one line.**
-//     `tuple_head(tuple_tail(pair))` crashes the compiler: a reference-returning
-//     call passed as an argument is an unrelated defect. The member form
-//     (`tuple_tail(pair).head`) works.
+//     `tuple_head(tuple_tail(pair))` fails with `instruction has a null operand`: a
+//     reference-returning call passed as an argument is an unrelated defect. The
+//     member form (`tuple_tail(pair).head`) works.
 
 namespace std {
 
@@ -52,6 +44,11 @@ struct tuple<T, Rest...> {
     tuple<Rest...> tail;
 
     tuple() : head(), tail() {}
+
+    // The element constructor. Its signature carries the class template's pack, so an
+    // instance takes one argument per element and `rest...` forwards the remainder to
+    // the tail.
+    tuple(T first, Rest... rest) : head(first), tail(rest...) {}
 };
 
 // The number of elements, for the primary and for every specialization: the pack

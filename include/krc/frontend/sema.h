@@ -205,6 +205,12 @@ private:
     [[nodiscard]] TypePtr parameter_type(const AstNode& parameter);
     [[nodiscard]] const AstNode* find_function_declarator(const AstNode& declarator) const;
     [[nodiscard]] std::string declarator_name(const AstNode& declarator) const;
+    // Gives a class member's signature one parameter per pack element and rewrites
+    // the arguments that forward the pack to match. See the definition for why both
+    // halves are needed together.
+    void expand_member_packs(
+        AstNode& specifier,
+        const std::unordered_map<std::string, std::size_t>& arities);
 
     void analyze_declaration(const AstNode& declaration);
     void analyze_function_definition(const AstNode& definition);
