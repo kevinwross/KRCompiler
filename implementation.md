@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T10:32:04-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 789/789
+windows-msvc-release  PASS 789/789
+linux-gcc-debug       PASS 789/789
+linux-gcc-release     PASS 789/789
+not verified: native Linux x64 (WSL used), Linux ARM64, WSL Clang and sanitizer configurations (clang is not installed on this machine)
+
 ### 2026-11-17T09:15:39-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 789/789
@@ -4598,3 +4606,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T14:45:00-08:00** — **Fixed in this change (1):** the M0 evidence block stated the CI workflow "has not run remotely because this checkout has no GitHub remote". It has one: `origin` is `http://github.com/kevinwross/KRCompiler.git`, and this session has pushed to it. Whether the workflow has ever *run* there is still unverified, so the note now says only that.
 - **2026-11-17T14:45:00-08:00** — **Checked and found accurate, no change:** doctest is vendored at `third_party/doctest/doctest.h`; `cmake_minimum_required(VERSION 3.25)` matches the documented floor; `KRC_KR32_VM` and `KRC_KR16_VM` exist with the documented defaults and the run tests are gated on them; `.github/workflows/ci.yml` has six jobs and references only presets that exist in `CMakePresets.json`.
 - **2026-11-17T14:45:00-08:00** — **Open for review, ERRATA:** the M0 evidence rows still read "WSL Alpine 3.22 GCC 14.2 Debug/Release" and "WSL Alpine 3.22 Clang 20.1 Debug/ASan", each `ctest` 8/8. This machine cannot produce the Clang rows and is not Alpine, so either the image changed since 2026-11-09 or those rows predate the current environment. A recorded gate row that cannot be reproduced on the machine that holds it is exactly what this audit is for, so it is left marked rather than silently rewritten -- I did not run those configurations and will not assert what they did.
+- **2026-11-17T11:01:20-08:00** — Host gate `2026-11-17T10:32:04-08:00`: **789/789** on all four configurations, from empty build directories and no warnings, first attempt. It publishes the six documentation commits from rounds 1 to 6: the register-allocator verification, the variadic-temporary chain, the refutation of the link/run merge, the refutation of the lazy-collection fix, and the stale-record audit. No code changed in any of them, so the suite count is the same as the previous gate.
