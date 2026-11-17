@@ -23,10 +23,6 @@ class Kr16Backend {
         std::uint32_t frame_size = 0;
         std::unordered_map<const ir::Value*, std::uint32_t> slots;
         std::unordered_map<const ir::Instruction*, std::uint32_t> allocas;
-        // An aggregate return is copied to a caller-owned destination supplied in R6
-        // (ADR 0047). The callee saves it here before anything else can use R6.
-        std::uint32_t return_pointer = 0;
-        bool has_return_pointer = false;
     };
 
     [[nodiscard]] FrameLayout layout_function(const ir::Function& function,
