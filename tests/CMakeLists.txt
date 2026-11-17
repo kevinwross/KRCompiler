@@ -6472,3 +6472,12 @@ add_test(NAME krc_debug_cxx_class
 set_tests_properties(krc_debug_cxx_class PROPERTIES
     PASS_REGULAR_EXPRESSION "function Counter::add"
     DEPENDS krc_link_debug_cxx_class)
+
+# A class's field layout must survive into the image, not only its method names. The
+# member record is what a debugger reads to show `value_` inside a `Counter`.
+add_test(NAME krc_debug_cxx_members
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_linked.k32)
+set_tests_properties(krc_debug_cxx_members PROPERTIES
+    PASS_REGULAR_EXPRESSION "member value_ offset=0 type=i32"
+    DEPENDS krc_link_debug_cxx_class)

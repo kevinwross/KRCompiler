@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T23:15:33-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 763/763
+windows-msvc-release  PASS 763/763
+linux-gcc-debug       PASS 763/763
+linux-gcc-release     PASS 763/763
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-16T22:52:28-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 762/762
@@ -4439,3 +4447,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T23:13:48-08:00** — `krc_debug_cxx_class` now pins it: the fixture links, then `krc --dump-symbols` runs over the image and the test requires `function Counter::add` to appear. That is the first debug test in this suite that asserts a record rather than a successful link.
 - **2026-11-16T23:13:48-08:00** — The explicit-specialization defect from last round was **not** pursued further. It is a corpus finding rather than one of the five tasks, it has had two rounds and produced measurement without a landing, and the recorded third question -- why the instance's record is not registered under its tag -- is a better start for a session with time to finish it. Left alone deliberately rather than half-fixed.
 - **2026-11-16T23:13:48-08:00** — Host gate `2026-11-16T22:52:28-08:00`: **762/762** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-16T23:36:59-08:00** — Field layout **is** recorded, and the previous round's open question is answered rather than assumed: the compiler emits `M Counter value_ 0 i32 4` into the object's debug section, the linker parses the `M` tag into the named type, and the dump prints `member value_ offset=0 type=i32`. So a debugger can show a class's field, not only its method names, and `krc_debug_cxx_members` now asserts it.
+- **2026-11-16T23:36:59-08:00** — A **correction to my own measurement**: I first concluded the linker was dropping members, because a grep for `type ` with a trailing space never matched the member lines, which read `type=i32`. The evidence had been in the output I already had. Filtering by a pattern that assumes the format is how a present value reads as absent, and it is the same mistake as reading silence from a guarded branch.
+- **2026-11-16T23:36:59-08:00** — Host gate `2026-11-16T23:15:33-08:00`: **763/763** on all four configurations, from empty build directories and no warnings, first attempt.
