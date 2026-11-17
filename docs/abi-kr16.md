@@ -63,6 +63,30 @@ bytes, so aggregate locals cannot overlap neighboring slots.
 All registers except `R4` are caller-saved. The compiler currently allocates
 every SSA value to a frame slot rather than to a register.
 
+## Aggregate parameters
+
+A record passed by value is passed **by hidden pointer**, because the target
+descriptor's `aggregate_rules` says a KR16 aggregate is memory class rather than
+because a size threshold decided it. The pointer occupies one argument slot by the
+rule above — `R1`–`R3` in order, or the stack past the third argument — so a
+three-byte record and a pointer cost the same.
+
+Two consequences follow, and both are visible in the emitted code for
+`tests/fixtures/c/small_aggregate_argument.cpp`:
+
+1. **The caller owns a copy.** It builds the copy from the argument's address, one
+   store per field, so a record wider than a machine word keeps all of its bytes. A
+   copy made by storing the loaded record instead moves a single word — two bytes on
+   KR16 — and silently drops the tail.
+2. **The callee copies on entry.** `sum` stores the incoming `R1` and then writes
+   each field of the pointed-to record into its own frame slot (`[SP+0]` for a
+   three-byte record), so a write to the parameter changes only the callee's copy.
+   The caller's object is untouched.
+
+Aggregate **returns** are not implemented: a record-returning function is rejected
+before code generation, which is why `<memory>`'s `make_unique` and `tuple`'s
+`make_tuple` are absent on KR16 and present on KR32.
+
 ## Frame layout
 
 ```text
@@ -125,7 +149,7 @@ functions defined in the same image or resolved by the linker.
 
 ## Deferred
 
-- Aggregate parameters and returns.
+- Aggregate returns. (Aggregate *parameters* travel by hidden pointer; see above.)
 - Floating-point arguments and results.
 - Callee-saved register allocation.
 - `.data`/`.rodata` section splitting and KEX symbols/debug records.
