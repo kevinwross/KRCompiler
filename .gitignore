@@ -30,6 +30,11 @@ node_modules/
 *.bin
 *.lst
 
+# Private VM copies for the executed tests (see Arm64-readme.md). Kept outside
+# build/ so a clean gate does not delete them, and never committed: they are
+# ~50 MB of binaries that belong to the sibling repositories.
+/vm/
+
 # Keep extracted fixtures and expected-output files under tests/fixtures.
 !tests/fixtures/**
 

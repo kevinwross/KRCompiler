@@ -1,9 +1,9 @@
 # Verifying the ARM64 host
 
 This is the checklist for the Raspberry Pi 5 (Debian 13, GCC 14.2) host. It exists because the
-ARM64 row of the platform table in `AGENTS.local.md` records a gate at **789 tests**, and the tree
-has since moved to **797** with an ABI change among them (ADR 0048 gives KR16 aggregate returns a
-hidden stack argument). A stale gate row is believed, so it needs refreshing rather than trusting.
+ARM64 row of the platform table in `AGENTS.local.md` records a gate, and the tree moves between
+gates. A stale gate row is believed, so refresh it rather than trusting it: re-run the two presets
+and record the count you actually observed.
 
 ## What this host is verifying
 
@@ -13,37 +13,33 @@ only independent check on portability.
 
 ## The one trap that will waste your time
 
-**`build/vm/` lives inside `build/`, and a clean gate deletes build directories.**
+**The VM binaries are resolved only at configure time, then cached.**
 
-The presets look for the VM binaries at:
+The presets look for them in `vm/` first, then in the legacy `build/vm/`:
 
 ```
-build/vm/krc_kr32      # CMAKE_EXECUTABLE_SUFFIX is empty on Linux
-build/vm/krc_kr16
+vm/krc_kr32            # CMAKE_EXECUTABLE_SUFFIX is empty on Linux
+vm/krc_kr16
 ```
 
-That path is resolved **only at configure time** and then cached, so:
+`vm/` sits outside `build/` on purpose: a clean gate deletes build directories, the binaries are
+not reproducible from this tree, and losing them drops the executed tests silently. `build/vm/` is
+still read after `vm/` so a checkout that predates the move keeps working, but do not put new
+copies there.
 
-- Placing the binaries *after* configuring still registers **no** run tests, and the suite reports
-  green with a lower count. Nothing fails; the count is the only tell.
-- Deleting `build/` to get a clean gate deletes the binaries too, and the same silent loss happens.
-
-So either keep the binaries outside the tree and copy them in after configuring:
+Because the path is cached, placing the binaries *after* configuring still registers **no** run
+tests, and the suite reports green with a lower count. Nothing fails; the count is the only tell.
+Copy them in first, then configure:
 
 ```sh
-mkdir -p build/vm
-cp /path/to/arm64/krc_kr32 build/vm/krc_kr32
-cp /path/to/arm64/krc_kr16 build/vm/krc_kr16
+mkdir -p vm
+cp /path/to/arm64/krc_kr32 vm/krc_kr32
+cp /path/to/arm64/krc_kr16 vm/krc_kr16
 cmake --preset linux-gcc-debug        # configure AFTER the copies land
 ```
 
-or delete only the preset directories rather than all of `build/`:
-
-```sh
-rm -rf build/linux-gcc-debug build/linux-gcc-release
-```
-
-Both are fine. Deleting `build/` wholesale is the one to avoid unless the binaries are backed up.
+`rm -rf build` is now safe: it no longer touches the copies. Only `git clean -xdf` would delete
+`vm/`, since the directory is ignored, not tracked.
 
 ## The count check
 
@@ -55,7 +51,7 @@ This is the whole point of the checklist:
 | **650** | the VM binaries were not seen at configure time; 147 run tests were silently skipped |
 
 `650` is not a failure — the suite is green — which is exactly why the count has to be read
-deliberately. If it is 650, delete the two preset directories, put the binaries in `build/vm/`,
+deliberately. If it is 650, delete the two preset directories, put the binaries in `vm/`,
 reconfigure, and rebuild.
 
 ## The sequence
@@ -67,10 +63,10 @@ them concurrently makes one read `libkrcrt.kro` while the other rebuilds it, whi
 ```sh
 cd /path/to/KRCompiler
 ulimit -s unlimited                       # this image has shown GCC tree-GC segfaults
-rm -rf build/linux-gcc-debug build/linux-gcc-release
+rm -rf build                              # safe: the VM copies live in vm/
 
-mkdir -p build/vm                         # re-copy the binaries if build/vm was removed
-# cp .../krc_kr32 build/vm/krc_kr32 ; cp .../krc_kr16 build/vm/krc_kr16
+# Re-copy the binaries only if vm/ is missing or stale:
+# mkdir -p vm ; cp .../krc_kr32 vm/krc_kr32 ; cp .../krc_kr16 vm/krc_kr16
 
 cmake --preset linux-gcc-debug
 cmake --build --preset linux-gcc-debug -j2
@@ -107,7 +103,7 @@ not verified: Windows x64, Linux x64, WSL Clang and sanitizer configurations
 Also worth reporting, because they are the things that would surprise someone reading it later:
 
 - the **exact suite count** for each preset, not just "green";
-- whether `build/vm/` was present before the gate or had to be restored;
+- which directory supplied the VM binaries — `vm/` or the legacy `build/vm/`;
 - the sha256 of each VM binary if they were rebuilt, since the x64 and arm64 hashes differ.
 
 ## What is expected to fail

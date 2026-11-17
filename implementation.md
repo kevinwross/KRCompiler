@@ -497,6 +497,21 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T15:15:40-08:00 — host gate (Linux ARM64)
+
+linux-gcc-debug    PASS 797/797
+linux-gcc-release  PASS 797/797
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+
+Both rows were configured and built from an absent `build/` tree (`rm -rf build`) at `-j2`
+with `ulimit -s unlimited`, one row at a time; no warnings. The 147 executed tests (143
+`krc_run_*` plus 4 `krc_corpus_kr16_run_*`) ran against the VM copies in `vm/`, which is
+the point of this gate: `build/vm/` was moved to `vm/` so a clean gate can delete `build/`
+without silently dropping them. The binaries were not rebuilt; their arm64 hashes are
+`c10e0e1d...495ae20` (kr32 0.1.0) and `a3f737f9...78cfe2` (kr16 1.0.0), as recorded in the
+2026-11-17T10:44:05 block. Debug used a plain serial `ctest` (228.58 s); release used
+`ctest --preset` with the preset's `jobs: 4` (44.76 s).
+
 ### 2026-11-17T13:19:55-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 797/797
@@ -4693,3 +4708,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T13:35:00-08:00** — Both sema fixes that got this far are kept and gated: `analyze_expression` instantiates a qualified template-id constructor call by its last component, and `type_of_name` does the same for any consumer that re-resolves a name. Together they give the compiler a capability it did not have -- **by-value template factory returns work on both targets** -- which is what the header needed and did not get from the aggregate-return work alone.
 - **2026-11-17T13:35:00-08:00** — `sysroot/include/tuple`'s documented limit now states the two measured reasons instead of the outdated one, so the header is true again. `make_tuple` remains absent, which is the outcome the goal's step 3 allows.
 - **2026-11-17T13:35:00-08:00** — Host gate `2026-11-17T13:19:55-08:00`: **797/797** on all four configurations from empty build directories, no warnings, first attempt.
+- **2026-11-17T15:25:26-08:00** — The private VM copies moved from `build/vm/` to `vm/`. `build/` is the one directory the gate policy deletes, and the copies are not reproducible from this tree, so keeping them inside it made a clean gate drop the 147 executed tests while the suite stayed green. `CMakeLists.txt` now resolves `vm/krc_kr<32|16>` first and the legacy `build/vm/` second, so the Windows/x64 checkout keeps working until it follows; `.gitignore` covers `/vm/` because the binaries are not ours to commit. `Arm64-readme.md` is rewritten for the new path and the resolved trap is stated as the count check, not the deletion risk. Verified by the `2026-11-17T15:15:40-08:00` gate: both Linux ARM64 rows configured from a deleted `build/`, picked the copies up from `vm/` (cache confirmed), and passed 797/797 with 147 executed tests.

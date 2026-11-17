@@ -30,21 +30,31 @@ option(KRC_BUILD_TARGET_RUNTIME "Build target runtime objects with krc" ON)
 # Executed tests need a KR32 VM. A copy kept in this tree is preferred over the
 # sibling checkout, because sibling agents rebuild and run their own binaries in
 # those directories, so a test that launches one there can be killed mid-run. The
-# private copy is looked up with the host's executable suffix, so a Windows host
-# picks up `krc_kr32.exe` and a Linux host `krc_kr32`; both then run the executed
-# tests instead of leaving them unregistered. The sibling fallbacks are Windows
-# builds and are tried only there. An empty result still registers no run tests,
-# which keeps a host without a VM green.
+# copy lives in `vm/`, not under `build/`: `build/` is deleted for a clean gate and
+# the binaries are not reproducible from this tree, so a gate that removed them
+# would silently drop the executed tests while the suite stayed green. `build/vm/`
+# is read after `vm/` so a checkout that still keeps the copies there keeps
+# working. The lookup uses the host's executable suffix, so a Windows host picks up
+# `krc_kr32.exe` and a Linux host `krc_kr32`; both then run the executed tests
+# instead of leaving them unregistered. The sibling fallbacks are Windows builds
+# and are tried only there. An empty result still registers no run tests, which
+# keeps a host without a VM green.
 set(KRC_KR32_VM "" CACHE FILEPATH "Path to a kr32 VM binary for the executed tests")
 if(NOT KRC_KR32_VM)
-    set(_krc_default_vm
-        "${CMAKE_CURRENT_SOURCE_DIR}/build/vm/krc_kr32${CMAKE_EXECUTABLE_SUFFIX}")
-    if(WIN32 AND NOT EXISTS "${_krc_default_vm}")
-        set(_krc_default_vm "${CMAKE_CURRENT_SOURCE_DIR}/../kr32/build/windows-msvc/Debug/kr32.exe")
-    endif()
-    if(EXISTS "${_krc_default_vm}")
-        set(KRC_KR32_VM "${_krc_default_vm}" CACHE FILEPATH
-            "Path to a kr32 VM binary for the executed tests" FORCE)
+    foreach(_krc_vm_dir IN ITEMS
+            "${CMAKE_CURRENT_SOURCE_DIR}/vm"
+            "${CMAKE_CURRENT_SOURCE_DIR}/build/vm")
+        if(NOT KRC_KR32_VM AND EXISTS "${_krc_vm_dir}/krc_kr32${CMAKE_EXECUTABLE_SUFFIX}")
+            set(KRC_KR32_VM "${_krc_vm_dir}/krc_kr32${CMAKE_EXECUTABLE_SUFFIX}"
+                CACHE FILEPATH "Path to a kr32 VM binary for the executed tests" FORCE)
+        endif()
+    endforeach()
+    if(WIN32 AND NOT KRC_KR32_VM)
+        set(_krc_sibling_vm "${CMAKE_CURRENT_SOURCE_DIR}/../kr32/build/windows-msvc/Debug/kr32.exe")
+        if(EXISTS "${_krc_sibling_vm}")
+            set(KRC_KR32_VM "${_krc_sibling_vm}" CACHE FILEPATH
+                "Path to a kr32 VM binary for the executed tests" FORCE)
+        endif()
     endif()
 endif()
 
@@ -53,19 +63,23 @@ endif()
 # targets.
 set(KRC_KR16_VM "" CACHE FILEPATH "Path to a kr16 VM binary for the executed tests")
 if(NOT KRC_KR16_VM)
-    set(_krc_default_kr16_vm
-        "${CMAKE_CURRENT_SOURCE_DIR}/build/vm/krc_kr16${CMAKE_EXECUTABLE_SUFFIX}")
-    if(WIN32 AND NOT EXISTS "${_krc_default_kr16_vm}")
-        set(_krc_default_kr16_vm
-            "${CMAKE_CURRENT_SOURCE_DIR}/../kr16/build/windows-ninja/kr16.exe")
-    endif()
-    if(WIN32 AND NOT EXISTS "${_krc_default_kr16_vm}")
-        set(_krc_default_kr16_vm
-            "${CMAKE_CURRENT_SOURCE_DIR}/../kr16/build/shell-debug/kr16.exe")
-    endif()
-    if(EXISTS "${_krc_default_kr16_vm}")
-        set(KRC_KR16_VM "${_krc_default_kr16_vm}" CACHE FILEPATH
-            "Path to a kr16 VM binary for the executed tests" FORCE)
+    foreach(_krc_vm_dir IN ITEMS
+            "${CMAKE_CURRENT_SOURCE_DIR}/vm"
+            "${CMAKE_CURRENT_SOURCE_DIR}/build/vm")
+        if(NOT KRC_KR16_VM AND EXISTS "${_krc_vm_dir}/krc_kr16${CMAKE_EXECUTABLE_SUFFIX}")
+            set(KRC_KR16_VM "${_krc_vm_dir}/krc_kr16${CMAKE_EXECUTABLE_SUFFIX}"
+                CACHE FILEPATH "Path to a kr16 VM binary for the executed tests" FORCE)
+        endif()
+    endforeach()
+    if(WIN32 AND NOT KRC_KR16_VM)
+        foreach(_krc_sibling_vm IN ITEMS
+                "${CMAKE_CURRENT_SOURCE_DIR}/../kr16/build/windows-ninja/kr16.exe"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../kr16/build/shell-debug/kr16.exe")
+            if(NOT KRC_KR16_VM AND EXISTS "${_krc_sibling_vm}")
+                set(KRC_KR16_VM "${_krc_sibling_vm}" CACHE FILEPATH
+                    "Path to a kr16 VM binary for the executed tests" FORCE)
+            endif()
+        endforeach()
     endif()
 endif()
 
