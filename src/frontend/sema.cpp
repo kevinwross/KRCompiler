@@ -2110,7 +2110,16 @@ TypePtr Sema::type_of_name(const AstNode& node) {
         return type_named(node.text);
     }
     arguments = expand_template_arguments(arguments);
-    if (const auto instance = instantiate_class_template(node.text, arguments)) {
+    // The pattern is registered under the unqualified name, so a qualified template-id
+    // must be instantiated by its last component. Passing the qualified spelling found
+    // no pattern, fell back to the unparameterised record below, and code generation
+    // then emitted the pattern's constructor for `std::tuple<int, int>(3, 4)`.
+    std::string pattern_name = node.text;
+    if (const auto separator = pattern_name.rfind("::");
+        separator != std::string::npos) {
+        pattern_name = pattern_name.substr(separator + 2);
+    }
+    if (const auto instance = instantiate_class_template(pattern_name, arguments)) {
         return instance;
     }
     return type_named(node.text);
