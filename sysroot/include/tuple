@@ -5,8 +5,10 @@
 // The shape is a recursive variadic class template: `tuple<int, char>` is
 // `{ int head; tuple<char> tail; }`, and `tuple<>` is the empty primary.
 //
-// Construction is in place rather than through a factory, because a factory
-// returns the tuple by value and KR16 rejects aggregate returns.
+// Construction is in place rather than through a factory: a factory returning the
+// tuple by value is blocked by a front-end gap, not by the target. KR16 now supports
+// aggregate returns (ADR 0048) and a hand-written `std::tuple<int, int>` factory
+// works on both targets; see the measured limit below.
 //
 // Element access is named rather than indexed: the free functions `tuple_head` and
 // `tuple_tail`, and the members `.head` / `.tail`. `get<I>` is not provided because

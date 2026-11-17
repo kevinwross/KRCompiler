@@ -92,6 +92,8 @@ member accessors (`tp3`), and — once items 1 and 2 land — free
 accessors) enough for M10, or is `get<I>` in scope? Everything below is unchanged
 either way; only the size of the item moves.
 
+> **Resolved 2026-11-17.** KR16 aggregate returns are implemented ([ADR 0048](../../docs/decisions/0048-kr16-aggregate-return-destination.md)): the destination travels as a hidden stack argument, and `make_unique` now compiles and runs on both targets. The paragraph below records the state when this list was written; its closing suggestion -- implement aggregate returns, which is an ABI item needing an ADR -- is what happened. `make_tuple` is still absent, but for a different reason: a pack expanded in a function template return type and body is not substituted.
+
 ### Item 4 — **FIX-BEFORE**. KR16 rejects aggregate returns, so no by-value tuple factory
 
 `make_tuple(...)` returning `tuple<T, R...>` is an aggregate return, which KR16

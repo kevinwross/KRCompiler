@@ -6,12 +6,8 @@
 // for a returned or explicitly moved value.
 //
 // make_unique is one template for every arity, using pack expansion inside an
-// expression: `new T(args...)`.
-//
-// KR16 does not support aggregate returns, so on that target make_unique does
-// not compile -- the same limit that stops any function returning a record by
-// value. Construct the owner explicitly there: unique_ptr<T> owner(new T(...));
-// KR32 compiles and runs it.
+// expression: `new T(args...)`. It works on both targets; the pack is expanded in
+// an expression there, not in a return type, which is the case that does not.
 
 namespace std {
 
