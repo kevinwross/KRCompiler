@@ -8700,6 +8700,18 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 const auto& method = method_function;
                 std::vector<ir::Value*> arguments;
                 auto* this_argument = base.value;
+                // A member call needs the object's **address**. When the base is a
+                // temporary it arrives as a record value, and bitcasting that to a
+                // pointer handed the callee garbage -- `Holder().value()` read whatever
+                // the load happened to contain. Materialise the value and pass its
+                // address.
+                if (this_argument && this_argument->type &&
+                    this_argument->type->kind == ir::TypeKind::Struct) {
+                    auto* storage = builder_.create_alloca(
+                        this_argument->type, 0, "temporary.this");
+                    builder_.create_store(this_argument, storage);
+                    this_argument = storage;
+                }
                 if (this_argument && this_argument->type &&
                     method->type->parameters[0] != this_argument->type) {
                     this_argument = builder_.create(
