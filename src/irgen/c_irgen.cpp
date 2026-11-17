@@ -633,7 +633,7 @@ ir::Function* CIRGen::ensure_member_destructor(
             int_type(), static_cast<std::int64_t>(entry_it->count));
         auto* compare = builder_.create_icmp(ir::ICmpPredicate::Ult, index,
                                              limit, "member.dtor.cmp");
-        builder_.create_cond_br(compare, body, done);
+        emit_conditional_branch(compare, body, done);
         builder_.set_insert_point(body);
         auto* element = builder_.create_gep(
             type->fields[position], field, {zero, index}, false,
@@ -1013,7 +1013,7 @@ void CIRGen::generate_global_constructors() {
                 auto* compare = builder_.create_icmp(
                     ir::ICmpPredicate::Ult, index, limit,
                     "global.member.dtor.cmp");
-                builder_.create_cond_br(compare, body, done);
+                emit_conditional_branch(compare, body, done);
                 builder_.set_insert_point(body);
                 auto* element = builder_.create_gep(
                     type->fields[position], field, {zero, index}, false,
@@ -2874,7 +2874,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         auto* then_block = current_function_->add_block("if.then");
         auto* else_block = current_function_->add_block("if.else");
         auto* end_block = current_function_->add_block("if.end");
-        builder_.create_cond_br(condition, then_block, else_block);
+        emit_conditional_branch(condition, then_block, else_block);
 
         builder_.set_insert_point(then_block);
         emit_statement(*statement.children[1]);
@@ -2901,7 +2901,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         emit_branch(condition_block);
         builder_.set_insert_point(condition_block);
         auto* condition = emit_condition(*statement.children[0]);
-        builder_.create_cond_br(condition, body_block, end_block);
+        emit_conditional_branch(condition, body_block, end_block);
         builder_.set_insert_point(body_block);
         break_targets_.push_back({end_block, local_cleanups_.size()});
         continue_targets_.push_back({condition_block, local_cleanups_.size()});
@@ -2930,7 +2930,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         emit_branch(condition_block);
         builder_.set_insert_point(condition_block);
         auto* condition = emit_condition(*statement.children[1]);
-        builder_.create_cond_br(condition, body_block, end_block);
+        emit_conditional_branch(condition, body_block, end_block);
         builder_.set_insert_point(end_block);
         break;
     }
@@ -3044,7 +3044,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         auto* limit = module_->constant_int(int_type(), static_cast<std::int64_t>(count));
         auto* condition =
             builder_.create_icmp(ir::ICmpPredicate::Ult, index_value, limit, "range.cmp");
-        builder_.create_cond_br(condition, body_block, end_block);
+        emit_conditional_branch(condition, body_block, end_block);
 
         builder_.set_insert_point(body_block);
         auto* element = builder_.create_gep(element_ir, range.value, {index_value}, false,
@@ -3095,7 +3095,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
         builder_.set_insert_point(condition_block);
         if (statement.children[1]) {
             auto* condition = emit_condition(*statement.children[1]);
-            builder_.create_cond_br(condition, body_block, end_block);
+            emit_conditional_branch(condition, body_block, end_block);
         } else {
             builder_.create_br(body_block);
         }
@@ -3229,7 +3229,7 @@ void CIRGen::emit_statement(const frontend::AstNode& statement) {
                 ir::ICmpPredicate::Eq, condition.value, value,
                 "switch.compare");
             auto* next = current_function_->add_block("switch.check");
-            builder_.create_cond_br(comparison, block, next);
+            emit_conditional_branch(comparison, block, next);
             builder_.set_insert_point(next);
         }
         emit_branch(default_block);
@@ -3407,7 +3407,7 @@ void CIRGen::emit_cleanup_sequence(const std::vector<LocalCleanup>& cleanups) {
             int_type(), static_cast<std::int64_t>(cleanup.count));
         auto* compare = builder_.create_icmp(ir::ICmpPredicate::Ult, index,
                                              limit, "dtor.cmp");
-        builder_.create_cond_br(compare, body, done);
+        emit_conditional_branch(compare, body, done);
         builder_.set_insert_point(body);
         auto* zero = module_->constant_int(int_type(), 0);
         auto* element = builder_.create_gep(
@@ -3667,7 +3667,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                     "static.init." + std::to_string(id));
                 auto* end_block = current_function_->add_block(
                     "static.end." + std::to_string(id));
-                builder_.create_cond_br(condition, init_block, end_block);
+                emit_conditional_branch(condition, init_block, end_block);
                 builder_.set_insert_point(init_block);
                 builder_.create_store(
                     module_->constant_int(module_->types().int_type(8), 1),
@@ -3700,7 +3700,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                         "static.init." + std::to_string(id));
                     auto* end_block = current_function_->add_block(
                         "static.end." + std::to_string(id));
-                    builder_.create_cond_br(condition, init_block, end_block);
+                    emit_conditional_branch(condition, init_block, end_block);
                     builder_.set_insert_point(init_block);
                     builder_.create_store(
                         module_->constant_int(module_->types().int_type(8), 1), guard);
@@ -3750,7 +3750,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                             "static.init." + std::to_string(id));
                         auto* end_block = current_function_->add_block(
                             "static.end." + std::to_string(id));
-                        builder_.create_cond_br(condition, init_block,
+                        emit_conditional_branch(condition, init_block,
                                                 end_block);
                         builder_.set_insert_point(init_block);
                         builder_.create_store(
@@ -3837,7 +3837,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                             "static.array.init." + std::to_string(id));
                         auto* end_block = current_function_->add_block(
                             "static.array.end." + std::to_string(id));
-                        builder_.create_cond_br(condition, init_block,
+                        emit_conditional_branch(condition, init_block,
                                                 end_block);
                         builder_.set_insert_point(init_block);
                         builder_.create_store(
@@ -4921,6 +4921,22 @@ void CIRGen::emit_branch(ir::BasicBlock* target) {
     }
 }
 
+void CIRGen::emit_conditional_branch(ir::Value* condition, ir::BasicBlock* then_block,
+                                     ir::BasicBlock* else_block) {
+    if (!builder_.insert_block() || builder_.insert_block()->terminated()) {
+        return;
+    }
+    // A null condition means the expression it came from already reported an error.
+    // Branching on it would put a null operand in the IR, which the verifier rejects
+    // and the back ends fault on, so the then-branch is skipped instead: the
+    // diagnostic is already emitted, and this keeps the rest of the function valid.
+    if (condition == nullptr) {
+        builder_.create_br(else_block);
+        return;
+    }
+    builder_.create_cond_br(condition, then_block, else_block);
+}
+
 void CIRGen::emit_return(const frontend::AstNode& statement) {
     if (statement.children.empty() || !statement.children.front()) {
         builder_.create_ret(nullptr);
@@ -5959,7 +5975,7 @@ CIRGen::Expression CIRGen::emit_condition_expression(
     auto* then_block = current_function_->add_block("cond.then");
     auto* else_block = current_function_->add_block("cond.else");
     auto* end_block = current_function_->add_block("cond.end");
-    builder_.create_cond_br(condition, then_block, else_block);
+    emit_conditional_branch(condition, then_block, else_block);
 
     builder_.set_insert_point(then_block);
     auto then_value = emit_expression(*expression.children[1]);
@@ -6411,7 +6427,7 @@ CIRGen::Expression CIRGen::emit_binary(const frontend::AstNode& expression) {
             module_->constant_int(bool_type, is_and ? 0 : 1), slot);
         auto* right_block = current_function_->add_block("logic.rhs");
         auto* merge_block = current_function_->add_block("logic.end");
-        builder_.create_cond_br(left_bool, is_and ? right_block : merge_block,
+        emit_conditional_branch(left_bool, is_and ? right_block : merge_block,
                                 is_and ? merge_block : right_block);
         // The right operand is lowered inside its own block, so its side
         // effects run only when the left operand does not decide the result.
@@ -7078,7 +7094,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                         builder_.create_load(size_type(), index, false, 0, "new.i");
                     auto* condition = builder_.create_icmp(ir::ICmpPredicate::Ult, current,
                                                            count_value, "new.cmp");
-                    builder_.create_cond_br(condition, body_block, end_block);
+                    emit_conditional_branch(condition, body_block, end_block);
                     builder_.set_insert_point(body_block);
                     auto* element = builder_.create_gep(type, pointer, {current}, false,
                                                         "new.element");
@@ -7151,7 +7167,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             auto* null_value = module_->constant_null(operand.type);
             auto* is_null = builder_.create_icmp(
                 ir::ICmpPredicate::Eq, operand.value, null_value, "delete.isnull");
-            builder_.create_cond_br(is_null, done_block, nonnull_block);
+            emit_conditional_branch(is_null, done_block, nonnull_block);
             builder_.set_insert_point(nonnull_block);
             const auto element = operand.type && operand.type->kind == ir::TypeKind::Pointer
                                      ? operand.type->element
@@ -7317,7 +7333,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                     builder_.create_load(size_type(), index, false, 0, "delete.i");
                 auto* condition = builder_.create_icmp(ir::ICmpPredicate::Ult, current,
                                                        count, "delete.cmp");
-                builder_.create_cond_br(condition, body_block, end_block);
+                emit_conditional_branch(condition, body_block, end_block);
                 builder_.set_insert_point(body_block);
                 auto* element_pointer = builder_.create_gep(
                     operand.type->element, operand.value, {current}, false,
@@ -8195,7 +8211,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         auto* then_block = current_function_->add_block("minmax.then");
         auto* else_block = current_function_->add_block("minmax.else");
         auto* end_block = current_function_->add_block("minmax.end");
-        builder_.create_cond_br(condition, then_block, else_block);
+        emit_conditional_branch(condition, then_block, else_block);
         builder_.set_insert_point(then_block);
         builder_.create_store(left.value, storage);
         builder_.create_br(end_block);
@@ -9878,7 +9894,7 @@ bool CIRGen::emit_range_for_class(const frontend::AstNode& statement,
     auto* finished = builder_.create_load(pointer_type, limit, false, 0, "range.stop");
     auto* condition =
         builder_.create_icmp(ir::ICmpPredicate::Ne, current, finished, "range.cmp");
-    builder_.create_cond_br(condition, body_block, end_block);
+    emit_conditional_branch(condition, body_block, end_block);
     builder_.set_insert_point(body_block);
     if (bound_by_reference) {
         builder_.create_store(current, value_address);
@@ -10220,7 +10236,7 @@ CIRGen::Expression CIRGen::emit_dynamic_cast(const frontend::AstNode& expression
             "dynamic_cast.failed");
         auto* throw_block = current_function_->add_block("dynamic_cast.throw");
         auto* ok_block = current_function_->add_block("dynamic_cast.ok");
-        builder_.create_cond_br(failed, throw_block, ok_block);
+        emit_conditional_branch(failed, throw_block, ok_block);
         builder_.set_insert_point(throw_block);
         const auto info = sema_.type_named("std::bad_cast");
         if (!info || info->kind != frontend::TypeKind::Record || !info->record) {
@@ -10414,7 +10430,7 @@ void CIRGen::emit_try(const frontend::AstNode& statement) {
         }
         auto* handler = current_function_->add_block("catch.handler");
         auto* next = current_function_->add_block("catch.next");
-        builder_.create_cond_br(condition, handler, next);
+        emit_conditional_branch(condition, handler, next);
         builder_.set_insert_point(handler);
         create_call_instruction(begin_catch, {exception}, byte_pointer,
                                 "catch.begin");

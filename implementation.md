@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T22:26:40-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 760/760
+windows-msvc-release  PASS 760/760
+linux-gcc-debug       PASS 760/760
+linux-gcc-release     PASS 760/760
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-16T21:51:21-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 759/759
@@ -4409,3 +4417,8 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T22:17:48-08:00** — Writing them found a **compiler crash**, which is the most severe class of defect this corpus has produced: `sizeof...(Ts)` inside a **member function body** of a variadic class template faults with an access violation (`0xC0000005`). Twelve lines reproduce it, and the non-recursive form crashes as well as the recursive one, so it is not about recursion — a plain `int count() const { return sizeof...(Ts); }` is enough. Recorded with the reproduction; the fixture keeps to forms that work.
 - **2026-11-16T22:17:48-08:00** — A second finding: an **explicit** specialisation (`template <> class Named<int>`) is not selected — the primary answers even for `int`. Partial specialisation over a pack does work, which is why `recursive_variadic.cpp` passes; the explicit form is the one that does not.
 - **2026-11-16T22:17:48-08:00** — Host gate `2026-11-16T21:51:21-08:00`: **759/759** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-16T22:48:05-08:00** — The crash recorded last round was a **secondary failure**, and the stack said so: `cdb` put it in `Kr32Backend::emit_instruction`, not in Sema, and the IR dump showed why — `br <missing>, label %if.then, label %if.else`. The real diagnostics were `constructor-initialized class has no constructor` and `member access on a non-record value`, emitted correctly; what followed was a conditional branch on a null operand, which the back end faults on.
+- **2026-11-16T22:48:05-08:00** — So the fix is error recovery, not the feature: `CIRGen::emit_conditional_branch` branches to the else-block when the condition is null, because the diagnostic has already been reported and a null operand is not valid IR. All 23 conditional-branch sites now route through it. A member call on a **temporary** (`Pack<int>().count()`) is still rejected — the named-object form works — and that gap is recorded rather than closed.
+- **2026-11-16T22:48:05-08:00** — A regression test pins the recovery: `krc_check_diag_member_call_on_temporary` requires the diagnostic and a non-zero exit, so a future change that reaches the back end with a null operand fails the suite instead of faulting.
+- **2026-11-16T22:48:05-08:00** — One self-inflicted failure worth keeping: the mechanical rename of `builder_.create_cond_br(` to `emit_conditional_branch(` also rewrote the call **inside** the new function, so it called itself. The symptom was a stack overflow while the build compiled the runtime (`MSB8066`, exit `-1073741571`), which reads like a compiler defect and was a two-line mistake. Caught by reading the function rather than the error.
+- **2026-11-16T22:48:05-08:00** — Host gate `2026-11-16T22:26:40-08:00`: **760/760** on all four configurations, from empty build directories and no warnings, first attempt.

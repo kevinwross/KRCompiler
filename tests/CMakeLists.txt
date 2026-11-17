@@ -6442,3 +6442,15 @@ foreach(tier2_source IN ITEMS classes inheritance virtual new_delete templates l
             DEPENDS krc_link_tier2_${tier2_source})
     endif()
 endforeach()
+
+# A member call on a temporary must be rejected, not crash the compiler. This pins
+# the conditional-branch recovery: before it, the null operand reached the back end
+# and krc faulted with an access violation instead of reporting the diagnostic.
+add_test(NAME krc_check_diag_member_call_on_temporary
+    COMMAND ${CMAKE_COMMAND}
+            -DEXE=$<TARGET_FILE:krc>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/member_call_on_temporary.cpp
+            -DTARGET=kr32
+            -DEXPECT=constructor-initialized class has no constructor
+            -DOBJECT=${KRC_TEST_OUTPUT_DIR}/member_call_on_temporary.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/CheckDiagnostic.cmake)

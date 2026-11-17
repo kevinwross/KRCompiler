@@ -229,6 +229,12 @@ private:
 
     [[nodiscard]] ir::Value* emit_condition(const frontend::AstNode& expression);
     void emit_branch(ir::BasicBlock* target);
+    // Emits a two-way branch on `condition`, or a one-way branch to `else_block` when
+    // the condition is null because the expression it came from already failed. A null
+    // operand is not valid IR and a back end faults on it, so the recovery belongs
+    // here rather than in each back end.
+    void emit_conditional_branch(ir::Value* condition, ir::BasicBlock* then_block,
+                                 ir::BasicBlock* else_block);
     void emit_return(const frontend::AstNode& statement);
 
     [[nodiscard]] ir::Value* promote(ir::Value* value, ir::TypePtr from, ir::TypePtr to);
