@@ -3884,6 +3884,33 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                 const auto separator = callee->text.rfind("::");
                 const auto class_name = callee->text.substr(0, separator);
                 const auto method_name = callee->text.substr(separator + 2);
+                // A qualified template-id is a constructor call, not a method call: the
+                // template arguments are labels on the callee, and the pattern is
+                // registered under the last component (`tuple`), not the qualified
+                // spelling. Instantiating here makes the expression's type the instance;
+                // without it `std::tuple<int, int>(3, 4)` was typed as the primary
+                // pattern and the IR verifier rejected the return.
+                bool is_template_id = false;
+                std::vector<std::string> template_arguments;
+                for (const auto& label : callee->labels) {
+                    constexpr std::string_view argument_prefix = "template-arg:";
+                    if (label == "template-id") {
+                        is_template_id = true;
+                    } else if (label.rfind(argument_prefix, 0) == 0) {
+                        template_arguments.push_back(label.substr(argument_prefix.size()));
+                    }
+                }
+                if (is_template_id && !template_arguments.empty()) {
+                    for (const auto& argument : expression.children[1]->children) {
+                        if (argument) {
+                            analyze_expression(*argument);
+                        }
+                    }
+                    if (const auto instance = instantiate_class_template(
+                            method_name, template_arguments)) {
+                        return instance;
+                    }
+                }
                 auto* tag = lookup_tag(class_name);
                 if (tag && tag->type && tag->type->kind == TypeKind::Record &&
                     tag->type->record) {
