@@ -90,9 +90,12 @@ Two consequences follow, and both are visible in the emitted code for
    three-byte record), so a write to the parameter changes only the callee's copy.
    The caller's object is untouched.
 
-Aggregate **returns** are not implemented: a record-returning function is rejected
-before code generation, which is why `<memory>`'s `make_unique` and `tuple`'s
-`make_tuple` are absent on KR16 and present on KR32.
+An aggregate **return** passes its destination as a hidden stack argument placed after every
+declared argument ([ADR 0048](decisions/0048-kr16-aggregate-return-destination.md)). The caller
+pushes the destination address first, so it lands at the highest address; the callee reads it at
+`[R4 + 4 + 2 * (parameters beyond the third)]`, keeps it in a frame slot, and copies the record
+to it in two-byte words. `make_unique` therefore works on KR16 as it does on KR32. `make_tuple`
+is still absent, but for a different reason: `<tuple>` documents no by-value factory.
 
 ## Frame layout
 
@@ -156,7 +159,6 @@ functions defined in the same image or resolved by the linker.
 
 ## Deferred
 
-- Aggregate returns. (Aggregate *parameters* travel by hidden pointer; see above.)
 - Floating-point arguments and results.
 - Callee-saved register allocation.
 - `.data`/`.rodata` section splitting and KEX symbols/debug records.
