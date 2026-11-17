@@ -80,9 +80,9 @@ A record saying "all configurations" or "six configurations" is not a record: na
 <!-- project:targets:start — generated from .dev-template.json targets; edit the Notes column, not the rows -->
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
-| Windows | x64 | Local dev machine, MSVC 19.51, Debug/Release. CI workflow committed; whether it runs is unverified. | MSVC 19.51 Debug/Release. |
-| Linux | x64 | WSL 2, Ubuntu 26.04.1 LTS, GCC 15.2.0, Debug/Release. | GCC 15.2 Debug/Release only. Clang is **not installed** here, so `linux-clang-debug` and `linux-sanitize` do not build on this machine and are unverified locally. |
-| Linux | ARM64 | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0, Debug/Release. | GCC 14.2 Debug/Release build clean and pass 797/797 including the 147 executed tests; latest gate 2026-11-17T15:15:40. Clang 19.1.7 is installed here, but `linux-clang-debug` and `linux-sanitize` have not been run on this host. `vm/` holds the arm64 VM copies (outside `build/`, which a clean gate deletes; the presets read `vm/` first and the legacy `build/vm/` second); their hashes are recorded in `implementation.md`. |
+| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release on the local dev machine. CI workflow committed; whether it runs is unverified. |
+| Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS, GCC 15.2 Debug/Release only. Clang is **not installed** here, so `linux-clang-debug` and `linux-sanitize` do not build on this machine and are unverified locally. |
+| Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0, Debug/Release. Latest gate 2026-11-17T15:15:40 at `cbcb467`: **797/797** on both rows, 147 executed tests. Clang 19.1.7 is installed, but `linux-clang-debug` and `linux-sanitize` have not been run here. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
 
 Target-specific notes:
 
@@ -91,6 +91,10 @@ Target-specific notes:
   - Use the language path API even though Windows accepts `/`; the tool that rejects a slash is usually native, not the runtime.
 - **Linux:**
   - Filename case is significant here. An import that mismatches on-disk case resolves on Windows and fails here.
+- **Linux (Raspberry Pi):**
+  - Confirm every native dependency has a prebuilt artifact for ARM64, or document the build-from-source requirement.
+  - Do not assume word size, byte order, or the presence of SIMD.
+  - No hosted runner here by default: record the machine and the last verified revision, and keep it current.
 <!-- project:targets:end -->
 
 **Host, not VM.** This table is where the toolchain is *built and tested*. The compiler's output targets are KR32 and KR16 — they are not host platforms and do not belong here. ARM64 host CI is deliberately deferred (§15.4); the compiler must nevertheless stay portable C++20, so do not introduce host-specific code without an ADR.
