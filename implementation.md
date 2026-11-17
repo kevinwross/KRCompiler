@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T20:08:17-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 745/745
+windows-msvc-release  PASS 745/745
+linux-gcc-debug       PASS 620/620
+linux-gcc-release     PASS 620/620
+not verified: native Linux x64, Linux ARM64
+
 ### 2026-11-16T19:27:49-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 717/717
@@ -4358,3 +4366,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T19:56:46-08:00** — Tier 0 of the corpus now **runs** on both targets: `hello`, `arithmetic` and `functions`, each linked and executed on KR32 and KR16, twelve tests. `tier0/hello.c` already existed and had been registered **nowhere**; `arithmetic.c` and `functions.c` are new. hello's output is compared as well as its exit status, because a smoke test that checked only the status would pass on a garbled string.
 - **2026-11-16T19:56:46-08:00** — `functions.c` exists for one reason beyond smoke coverage: `sum5` takes five arguments, which is the smallest program that exercises KR16's extra-argument rule, where the first three go in `R1`-`R3` and the rest are pushed. `arithmetic.c` stays on integers because the IP16 profile rejects `double`, and it checks the width conversions where an IP16 profile differs most — `(char)300 == 44`.
 - **2026-11-16T19:56:46-08:00** — Host gate `2026-11-16T19:27:49-08:00`: **717/717**, **717/717**, **606/606**, **606/606**, from empty build directories and no warnings, first attempt. Linux counts 606 because the six new link tests register there while the run tests need a VM.
+- **2026-11-16T20:40:20-08:00** — Tier 1 of the corpus now runs on both targets: seven programs, one per feature area the tier names — `structs`, `pointers`, `arrays`, `control`, `preprocessor`, `varargs`, `printf` — each linked and executed on KR32 and KR16, 28 tests. `printf` compares its text as well as its exit status, because a conversion that prints nothing still exits 0.
+- **2026-11-16T20:40:20-08:00** — Writing it found a **real defect, now fixed**: `*(values + 3)` was rejected with `cannot dereference a non-pointer value` on both targets, while `int* p = values + 3;` compiled. The `+` case tested `is_pointer(*left)`, which is false for an **Array**, so it fell through to `usual_arithmetic` and decayed the array all the way to its **element** — the expression was typed `int`, not `int*`. Both `+` and `-` now decay first. This is the first defect the corpus itself produced rather than a fixture written to reproduce a known one.
+- **2026-11-16T20:40:20-08:00** — Two more findings, recorded and **not** fixed because they are outside this task: a **nested function-like macro does not expand** (`DOUBLE(DOUBLE(10))` leaves the inner one as an implicit function call and the IR verifier then rejects the program), and this compiler defines **no target macros**, so `#if defined(__KR16__)` is false on both profiles. The fixtures avoid both rather than failing, and each says so in place.
+- **2026-11-16T20:40:20-08:00** — Host gate `2026-11-16T20:08:17-08:00`: **745/745**, **745/745**, **620/620**, **620/620**, from empty build directories and no warnings, first attempt. Linux counts 620 because the fourteen new link tests register there while the run tests need a VM.

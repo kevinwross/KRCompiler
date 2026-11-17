@@ -3710,11 +3710,17 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             return int_type_;
         }
         if (operation == "+") {
-            if (left && is_pointer(*left)) {
-                return left;
+            // `array + n` has pointer type, not element type: decay first, because
+            // is_pointer answers false for an Array and the arithmetic fallback then
+            // decayed all the way to the element, so `*(values + 3)` was rejected as
+            // a dereference of a non-pointer.
+            if (const auto pointer = decay(left);
+                pointer && pointer->kind == TypeKind::Pointer) {
+                return pointer;
             }
-            if (right && is_pointer(*right)) {
-                return right;
+            if (const auto pointer = decay(right);
+                pointer && pointer->kind == TypeKind::Pointer) {
+                return pointer;
             }
             return usual_arithmetic(left, right);
         }
@@ -3722,8 +3728,9 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
             if (left && is_pointer(*left) && right && is_pointer(*right)) {
                 return ptrdiff_type_;
             }
-            if (left && is_pointer(*left)) {
-                return left;
+            if (const auto pointer = decay(left);
+                pointer && pointer->kind == TypeKind::Pointer) {
+                return pointer;
             }
             return usual_arithmetic(left, right);
         }
