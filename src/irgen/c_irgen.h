@@ -229,6 +229,12 @@ private:
 
     [[nodiscard]] ir::Value* emit_condition(const frontend::AstNode& expression);
     void emit_branch(ir::BasicBlock* target);
+    // Copies a record field by field from one address to another. A whole-record
+    // store moves one machine word, so this is the only copy that keeps every byte on
+    // a target whose word is narrower than the record. Used for a by-value aggregate
+    // argument and for initialising one record from another when no copy constructor
+    // exists.
+    void copy_record_fields(ir::Value* source, ir::Value* target, ir::TypePtr type);
     // Emits a two-way branch on `condition`, or a one-way branch to `else_block` when
     // the condition is null because the expression it came from already failed. A null
     // operand is not valid IR and a back end faults on it, so the recovery belongs

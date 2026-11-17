@@ -2068,11 +2068,20 @@ ir::Function* CIRGen::select_constructor(const std::string& tag,
             if (reference_mode == 2 && rvalue_parameter) {
                 return function;
             }
-            if (!fallback) {
+            // A mode of 1 or 2 says the argument *is* a reference, so a parameter that
+            // is not one is not a candidate at all. Recording it as a fallback anyway
+            // made `Counter copy(original)` select `explicit Counter(int)` and pass the
+            // record where an int belonged -- the `call argument type mismatch` the IR
+            // verifier reported. Only an unconstrained request keeps a fallback.
+            if (!fallback && reference_mode == 0) {
                 fallback = function;
             }
         }
-        if (argument_count >= required && argument_count <= total) {
+        // `ranged` is the default-argument match, and it too honours the mode: a
+        // caller that says the argument is a reference has already ruled out every
+        // constructor whose parameter is not one.
+        if (reference_mode == 0 && argument_count >= required &&
+            argument_count <= total) {
             ranged = function;
         }
     }
@@ -4173,8 +4182,19 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             if (!argument_nodes.empty() && argument_nodes.front()) {
                 if (argument_nodes.front()->kind == frontend::AstKind::Identifier) {
                     if (auto* local = lookup_local(argument_nodes.front()->text)) {
-                        if (local->frontend_type &&
-                            local->frontend_type->kind == frontend::TypeKind::Record) {
+                        // A reference mode of 1 asks for a **copy construction**, so it
+                        // applies only when the argument is a record of this very type.
+                        // Setting it for any record lvalue made `Consumer consumer(large)`
+                        // ask for a reference parameter and refuse the by-value
+                        // constructor it actually has.
+                        const bool same_record =
+                            type && type->kind == ir::TypeKind::Struct &&
+                            record != ir_records_.end() && record->second &&
+                            local->frontend_type &&
+                            local->frontend_type->kind == frontend::TypeKind::Record &&
+                            local->frontend_type->record &&
+                            local->frontend_type->record->tag == record->second->tag;
+                        if (same_record) {
                             reference_mode = 1;
                         }
                     }
@@ -4196,6 +4216,7 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                                  argument_nodes.size(),
                                                  reference_mode);
             }
+            if (!constructor) {            }
             if (!constructor) {
                 if (argument_nodes.size() == 1 && argument_nodes.front()) {
                     // A record is copied field by field from its own address. A
@@ -4220,6 +4241,19 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                         auto source = emit_lvalue(*argument_nodes.front());
                         if (source.value) {
                             emit_copy(address, source.value, type);
+                            // The object now exists, so its destructor has to run at
+                            // scope exit exactly as it would had a constructor made it.
+                            // Skipping that registration leaked every copy of a class
+                            // that declares a destructor: two objects, one destructor.
+                            if (type->kind == ir::TypeKind::Struct &&
+                                record != ir_records_.end() && record->second) {
+                                if (ir::Function* cleanup =
+                                        ensure_member_destructor(record->second)) {
+                                    note_scope_cleanup();
+                                    local_cleanups_.push_back(
+                                        {address, cleanup, 1, nullptr});
+                                }
+                            }
                             continue;
                         }
                     }
@@ -4338,6 +4372,23 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                              nullptr, "copy.ctor");
                         copied = true;
                     }
+                }
+            }
+            // No copy constructor was available and the initializer names an object of
+            // the same record type. Copy the fields instead of falling through to the
+            // constructor path below, which selected an arity-one **converting**
+            // constructor and passed the record where its parameter type belonged --
+            // the `call argument type mismatch` the IR verifier reported for
+            // `Counter copy(original)` on a class that declares a destructor.
+            if (!copied && type && type->kind == ir::TypeKind::Struct &&
+                init->children.size() > 1 && init->children[1] &&
+                init->children[1]->kind == frontend::AstKind::Identifier) {
+                const auto source = emit_lvalue(*init->children[1]);
+                if (source.value && source.value->type &&
+                    source.value->type->kind == ir::TypeKind::Pointer &&
+                    source.value->type->element == type) {
+                    copy_record_fields(source.value, address, type);
+                    copied = true;
                 }
             }
             if (!copied) {
@@ -4919,6 +4970,27 @@ void CIRGen::emit_branch(ir::BasicBlock* target) {
     if (builder_.insert_block() && !builder_.insert_block()->terminated()) {
         builder_.create_br(target);
     }
+}
+
+void CIRGen::copy_record_fields(ir::Value* source, ir::Value* target,
+                                ir::TypePtr type) {
+    if (type && type->kind == ir::TypeKind::Struct) {
+        auto* zero = module_->constant_int(int_type(), 0);
+        for (std::size_t field = 0; field < type->fields.size(); ++field) {
+            auto* index =
+                module_->constant_int(int_type(), static_cast<std::int64_t>(field));
+            auto* from = builder_.create_gep(type, source, {zero, index}, false,
+                                             "deref.copy.source");
+            from->type = module_->types().pointer_type(type->fields[field]);
+            auto* to = builder_.create_gep(type, target, {zero, index}, false,
+                                           "deref.copy.destination");
+            to->type = module_->types().pointer_type(type->fields[field]);
+            copy_record_fields(from, to, type->fields[field]);
+        }
+        return;
+    }
+    auto* loaded = builder_.create_load(type, source, false, 0, "deref.copy.value");
+    builder_.create_store(loaded, target);
 }
 
 void CIRGen::emit_conditional_branch(ir::Value* condition, ir::BasicBlock* then_block,
@@ -8913,30 +8985,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     // copy must come from the argument's **address**: a record value is carried as one
     // machine word, so storing the loaded value loses everything past it -- a
     // three-byte record arrived as two bytes on KR16 while KR32's four-byte word hid
-    // it. `extractvalue` cannot recover the fields because neither backend implements
-    // it and the value is already truncated. Copying field by field from an address
-    // uses only gep, load and store, which both targets lower.
-    const auto copy_record_fields = [&](ir::Value* source, ir::Value* target,
-                                        ir::TypePtr type, const auto& self) -> void {
-        if (type && type->kind == ir::TypeKind::Struct) {
-            auto* zero = module_->constant_int(int_type(), 0);
-            for (std::size_t field = 0; field < type->fields.size(); ++field) {
-                auto* index =
-                    module_->constant_int(int_type(), static_cast<std::int64_t>(field));
-                auto* from = builder_.create_gep(type, source, {zero, index}, false,
-                                                 "argument.copy.source");
-                from->type = module_->types().pointer_type(type->fields[field]);
-                auto* to = builder_.create_gep(type, target, {zero, index}, false,
-                                               "argument.copy.destination");
-                to->type = module_->types().pointer_type(type->fields[field]);
-                self(from, to, type->fields[field], self);
-            }
-            return;
-        }
-        auto* loaded =
-            builder_.create_load(type, source, false, 0, "argument.copy.value");
-        builder_.create_store(loaded, target);
-    };
+    // it. `copy_record_fields` is the field-by-field copy that keeps every byte.
     for (std::size_t index = 0; index < argument_nodes.size(); ++index) {
         if (!argument_nodes[index]) {
             continue;
@@ -9040,7 +9089,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 }
                 auto* copy = builder_.create_alloca(argument.type, 0, "argument.copy");
                 if (source != nullptr) {
-                    copy_record_fields(source, copy, argument.type, copy_record_fields);
+                    copy_record_fields(source, copy, argument.type);
                 } else {
                     // No address to read from -- a call returning a record, which
                     // already arrives as one word. The store keeps the previous

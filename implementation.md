@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T04:22:44-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 776/776
+windows-msvc-release  PASS 776/776
+linux-gcc-debug       PASS 776/776
+linux-gcc-release     PASS 776/776
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-17T00:51:35-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 772/772
@@ -4497,3 +4505,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T01:10:30-08:00** — The **C half of debugger parity** was the last thing with no assertion: `krc_link_debug_struct` only linked. A C struct does record its layout -- `member a offset=0 type=i32`, `member b offset=4 type=i32`, `variable main.pair offset=8 type=Pair` -- and `krc_debug_c_struct` and `krc_debug_c_variable` now require it. With the four C++ assertions, the debugger is pinned for both languages.
 - **2026-11-17T01:10:30-08:00** — The M8 checklist is therefore fully ticked, and one **interpretive question is left to the operator rather than decided here**: three extracted Tier 1 files (`types.c`, `varargs.c`, `libc-test.c`) use `double`/`float` and are KR32-only because the IP16 profile rejects floating point, while KR16's varargs coverage is the integer-only `tier1/varargs.c`. Whether "Tier 0–1 green on KR16" means those extracted files or the Tier 1 feature areas decides whether the item is fully met. The `v1.0` tag remains an operator decision, as the goal records.
 - **2026-11-17T01:10:30-08:00** — Host gate `2026-11-17T00:51:35-08:00`: **772/772** on all four configurations, from empty build directories and no warnings, first attempt.
+- **2026-11-17T04:48:36-08:00** — Defect 1 of the new list is **fixed**, and its cause was not where the symptom pointed. `Counter copy(original)` on a class with `explicit Counter(int)` and a destructor emitted `invoke @Counter_ctor_1_value(ptr<%Counter>, %Counter)` -- the **converting** constructor called with the record where an `int` belonged, which the IR verifier rejected. `select_constructor` matched by arity and then honoured `reference_mode` only in its early returns: a mode-1 request (copy construction) still fell back to `fallback` and `ranged`, both of which accepted a constructor whose parameter is not a reference. A trace of the selection showed `mode=1 chosen=Counter_ctor_1_value` before the fix and `mode=1 chosen=none` after it, which is what routes the declaration into the field-wise copy path.
+- **2026-11-17T04:48:36-08:00** — My first attempt at the fix **over-reached** and the suite caught it: `krc_run_aggregate_arguments` failed with `expected exit 42, got 7` because the caller set `reference_mode = 1` for *any* record lvalue, so `Consumer consumer(large)` asked for a reference parameter and refused the by-value constructor it actually has. The mode now means copy construction specifically -- the argument's record tag must equal the type being constructed.
+- **2026-11-17T04:48:36-08:00** — Testing the fix found a **second defect in the same path**: the copy branch `continue`d past the scope-cleanup registration, so two objects ran **one** destructor -- the fixture measured `destructed = 1`. The branch now registers the destructor exactly as a constructed local does. `copy_with_destructor.cpp` pins both, link-and-run on both targets.
+- **2026-11-17T04:48:36-08:00** — Host gate `2026-11-17T04:22:44-08:00`: **776/776** on all four configurations, from empty build directories and no warnings, first attempt.
