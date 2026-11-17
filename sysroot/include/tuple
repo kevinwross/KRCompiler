@@ -14,7 +14,7 @@
 // and this front end has neither; both are measured in implementation.md. Reach
 // element k by chaining members (`pair.tail.head`).
 //
-// Three limits are real, and each is measured rather than assumed:
+// Two limits are real, and each is measured rather than assumed:
 //
 //   * **No by-value factory.** `make_tuple` would return the tuple by value, which
 //     KR16 rejects as an aggregate return. It is provided on neither target rather
@@ -26,11 +26,6 @@
 //     `tuple_size(pair.tail.tail)` is zero -- so the empty type exists and only a
 //     local of it is affected. An empty tail built by the element constructor is
 //     fine for the same reason.
-//
-//   * **Do not chain the free functions on one line.**
-//     `tuple_head(tuple_tail(pair))` fails with `instruction has a null operand`: a
-//     reference-returning call passed as an argument is an unrelated defect. The
-//     member form (`tuple_tail(pair).head`) works.
 
 namespace std {
 

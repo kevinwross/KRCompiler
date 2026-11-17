@@ -8947,6 +8947,15 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                     builder_.create_store(value.value, storage);
                     argument.value = storage;
                     argument.type = value.type;
+                } else if (value.value && value.type &&
+                           value.type->kind == ir::TypeKind::Pointer) {
+                    // A call returning a reference already yields the address the
+                    // parameter wants, so it is bound directly. Leaving the argument
+                    // empty here dropped the *outer* call entirely: `head(pick(x))`
+                    // emitted `pick` and never `head`, and the comparison consuming
+                    // it then had a null operand.
+                    argument.value = value.value;
+                    argument.type = value.type;
                 }
             } else {
                 // Only an addressable argument is bound directly; an rvalue

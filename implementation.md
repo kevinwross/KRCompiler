@@ -497,6 +497,21 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-16T18:52:44-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 705/705
+windows-msvc-release  PASS 705/705
+linux-gcc-debug       PASS 600/600
+linux-gcc-release     PASS 600/600
+not verified: native Linux x64, Linux ARM64
+
+Both Windows rows ran against the **refreshed sibling VMs** delivered to `inbox/`
+at 18:49 and 18:55: kr16 `1.0.0 (ISA 1, container 1, host ABI 1, debug 1)`
+SHA-256 `A9AC577F…284F`, and kr32 `0.1.0 (ISA 1, container 1, M7 host services)`
+SHA-256 `D4D19287…5F29` with `SDL2.dll` beside it. Both hashes match the handoff
+messages. Row 1's tests were re-run after the swap, so every row above reflects the
+adopted pair rather than the private copies they replaced.
+
 ### 2026-11-16T18:15:32-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 701/701
@@ -4325,3 +4340,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-16T18:42:58-08:00** — Priority task 3 done, and the table was more stale than the task named: **five rows**, not three. M2 and M3 still listed `relocation/relaxation` and `weak/COMDAT, section GC, and relaxation` as remaining, though `krc_run_kr16_branch_promotion` and `krc_run_kr16_gc_sections` both pass. Each corrected row now names the fixture that contradicts it, so the claim can be checked rather than believed.
 - **2026-11-16T18:42:58-08:00** — Corrected against measurement, not memory: 7 registrations each for `gc_sections`, `branch_promotion`, `recursive_variadic` and `pack_template_parameter`; 20 for `thread_local`; 2 for `FS_ROOT`; 41 for `fileio`. `weak` and `comdat` match **nothing**, which is why the rows now claim weak symbols (implemented in the assembler and linker) but leave **COMDAT groups** open, and why `initializer_list` stays listed.
 - **2026-11-16T18:42:58-08:00** — M8 no longer claims the Tier 0–2 corpus and release notes are outstanding — the corpus is extracted and registered and `docs/release-notes.md` exists — and it now says the `v1.0` tag is an operator decision, which the checklist already said and the table did not. M10 gains the element constructor and keeps an empty tuple as a local, which this session measured as still failing to link.
+- **2026-11-16T19:23:34-08:00** — Priority task 4 is **done**: a call returning a reference, passed as an argument, no longer loses the outer call. The IR showed it exactly — `%call = call ptr<%Item> @pick(...)` followed by `br <missing>, label %if.then, label %if.else` — the inner call emitted and `head` absent, so the comparison's left operand was null. The branch that binds a reference parameter handled a record returned **by value** and nothing else; a reference return already yields the address the parameter wants, so it binds directly. Fixture `reference_return_argument.cpp` (link and run on both targets), which also writes through the returned reference and reads it back.
+- **2026-11-16T19:23:34-08:00** — The tuple header's warning not to chain the accessors is deleted, because the reason for it is gone: `tuple_head(tuple_tail(pair))` now returns the tail's head. That limit had been documented as a workaround for two sessions.
+- **2026-11-16T19:23:34-08:00** — Host gate `2026-11-16T18:52:44-08:00`: **705/705**, **705/705**, **600/600**, **600/600**, from empty build directories and no warnings, first attempt, run against the refreshed kr16 and kr32 release binaries the siblings delivered to `inbox/`. Both SHA-256 values were checked against the handoff messages before adoption, and row 1's tests were re-run after the swap so no row reports the old pair.
