@@ -1046,7 +1046,12 @@ std::vector<Token> Preprocessor::expand(const std::vector<Token>& input,
                 index = close_index + 1;
                 continue;
             }
-            auto replacement = substitute(macro, arguments, token, next_disabled);
+            // The arguments are expanded before substitution, and at that point this
+            // macro is **not** yet disabled: C expands `D(D(10))` by expanding the inner
+            // invocation first. Passing `next_disabled` disabled `D` too early, so the
+            // inner one was substituted unexpanded and the rescan below could not
+            // recover it -- the output was `( ( D ( 10 ) ) * 2 )`.
+            auto replacement = substitute(macro, arguments, token, disabled);
             auto expanded = expand(replacement, next_disabled, depth + 1);
             output.insert(output.end(), std::make_move_iterator(expanded.begin()),
                           std::make_move_iterator(expanded.end()));

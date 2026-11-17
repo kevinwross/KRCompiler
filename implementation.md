@@ -497,6 +497,14 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T05:24:00-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 784/784
+windows-msvc-release  PASS 784/784
+linux-gcc-debug       PASS 784/784
+linux-gcc-release     PASS 784/784
+not verified: native Linux x64 (WSL used), Linux ARM64
+
 ### 2026-11-17T04:53:26-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 780/780
@@ -4524,3 +4532,7 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T06:40:00-08:00** — Lowercase is the GCC and Clang convention (`__x86_64__`, `__linux__`), so the spelling is right and the finding was wrong. That is the **fourth** measurement this session that read as absence because of an assumption baked into the probe, after the `type ` grep that missed `type=i32`, the guarded branch that read as "not called", and `sys_open_dialog` reading as undeclared.
 - **2026-11-17T06:40:00-08:00** — What lands instead of a fix is a regression test: `target_macro.c` compiles with `#error` when neither macro is defined and returns 42 only when the macro agrees with `sizeof(void*) * 8`, link-and-run on both targets. A descriptor that loses its macro now fails to compile rather than silently taking a third branch.
 - **2026-11-17T05:16:32-08:00** — Host gate `2026-11-17T04:53:26-08:00`: **780/780** on all four configurations, from empty build directories and no warnings, first attempt. It publishes the refutation of defect 5, the `target_macro.c` regression test that replaces it, and the record of defect 2 being narrowed to re-entrancy.
+- **2026-11-17T05:46:20-08:00** — Defect 3 is **fixed**, and the preprocessor's own output named the cause: `DOUBLE(DOUBLE(10))` preprocessed to `( ( D ( 10 ) ) * 2 )`. The outer macro expanded and the inner one was substituted **unexpanded** and never recovered. `substitute` already pre-expands its arguments, but it was handed `next_disabled`, which contains the macro being expanded -- so the argument expansion skipped that same macro. C expands arguments before substitution, while the macro is not yet disabled. Passing the pre-substitution set is the whole fix; the rescan still uses `next_disabled`.
+- **2026-11-17T05:46:20-08:00** — The fixture also pins stringize and paste, which must take the **raw** argument: `substitute` already distinguished `raw_argument` from `expanded_argument`, and this change had to leave that alone. `nested_macro.c` checks four nesting shapes plus `#` and `##`, link-and-run on both targets.
+- **2026-11-17T05:46:20-08:00** — One correction while writing it: my first expected value for `DOUBLE(DOUBLE(ADD(DOUBLE(1), 1)))` was 16 and the program returned 5. The expression is 12 -- `DOUBLE(1)`=2, `ADD(2,1)`=3, `DOUBLE(3)`=6, `DOUBLE(6)`=12 -- so the compiler was right and the fixture was wrong.
+- **2026-11-17T05:46:20-08:00** — Host gate `2026-11-17T05:24:00-08:00`: **784/784** on all four configurations, from empty build directories and no warnings, first attempt.
