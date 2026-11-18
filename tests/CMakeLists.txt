@@ -37,8 +37,13 @@ krc_apply_warnings(krc_tests)
 # include with a #warning -- "<ciso646> is not a standard header since C++20" -- and
 # Clang routes #warning through -W#warnings, which -Werror makes fatal. The diagnostic is
 # not ours and cannot be fixed from our code, so it is demoted rather than silenced: the
-# warning still prints, and every project source stays under -Werror. Upstream tracks the
-# include as doctest issue #900, and a doctest upgrade that drops it retires this line.
+# warning still prints, and every project source stays under -Werror.
+#
+# Measured, because "demoted" sounds like it could hide one of ours: a #warning written in
+# a test file still fails the build. -Wpedantic reports it as a C++23 extension, and that
+# error is untouched by -Wno-error=#warnings. Only a #warning from a *system* header is
+# demoted, which is exactly the ciso646 case and nothing else. Upstream tracks the include
+# as doctest issue #900, and a doctest upgrade that drops it retires this line.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(krc_tests PRIVATE "-Wno-error=#warnings")
 endif()
