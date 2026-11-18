@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T07:43:36-08:00 — host gate (Linux ARM64)
+Revision: eb013e7
+
+```
+linux-gcc-debug    PASS 828/828
+linux-clang-debug  PASS 828/828
+linux-sanitize     PASS 828/828
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate. The previous gate covered `179f6fd`; the push then lost a race and the one rebase
+absorbed ten incoming commits, so they were present in the tree but not in any gate. They are
+`7c4a452` (adds `--dump-stats`, the only compiler-code change, in `src/tools/krc/main.cpp`), `bb8b7bd`
+and `aec7978` (ADR 0049 and decision D-049), the `benchmarks/` scripts and compute workload, and the
+tick-runner diagnosis chain. The count is unchanged at 828 with 161 executed tests, correct for
+tooling and documentation around an opt-in flag. Test times were 94.84 s (GCC debug), 91.55 s (Clang
+debug) and 386.97 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at
+`-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances. This is the second
+rebase to absorb ungated code; the loop now checks the delta from the gate base on every poll, not only
+when the remote has advanced.
+
 2026-11-18T07:33:05-08:00 — host gate (Windows)
 Revision: 7c4a452
 
