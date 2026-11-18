@@ -85,7 +85,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
 | Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release on the local dev machine. CI workflow committed; whether it runs is unverified. |
-| Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS, GCC 15.2 Debug/Release only. Clang is **not installed** here, so `linux-clang-debug` and `linux-sanitize` do not build on this machine and are unverified locally. |
+| Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS. GCC 15.2 Debug/Release. Clang **21.1.8 is installed** (`clang`, with the ASan/UBSan runtimes from `libclang-rt-21-dev`), so `linux-clang-debug` and `linux-sanitize` configure here; neither has been built or tested yet, so both are **unverified** until they are. |
 | Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0 and Clang 19.1.7, Debug/Release and ASan/UBSan. The ARM64 gate runs **all four** presets: `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize`. Latest gate 2026-11-17T19:51:05 at `e774b72`: 805/805 on both GCC rows, 151 executed tests; the Clang and sanitizer rows were verified separately at 805/805 each on the same tree before being added to the gate. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
 
 Target-specific notes:
@@ -140,4 +140,4 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 - **ABI, object, symbol, target and IR changes need an ADR first.** Not a note in the commit message — a file under `docs/decisions/`.
 - **`D-xxx` identifiers are stable.** A changed decision takes an Appendix A entry; renumbering or deleting a decision breaks every reference that cites it.
 - **The compiler is one program with many outputs** (`-c` object, `-S` assembly, `-o` linked image). Do not grow a second driver to handle a case; extend `krc`.
-- **The CI workflow covers the full matrix; whether it runs is unverified.** `.github/workflows/ci.yml` has a job per preset, including the Clang and sanitizer ones this machine cannot build. A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.
+- **The CI workflow covers the full matrix; whether it runs is unverified.** `.github/workflows/ci.yml` has a job per preset, including the Clang and sanitizer ones, which now configure on this machine but have not yet been built or tested here. A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.
