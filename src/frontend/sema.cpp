@@ -2216,24 +2216,6 @@ std::string Sema::instantiate_template_call(
         !pattern->second.definition->children[1]) {
         return {};
     }
-    // A value parameter is not deduced from an argument's type, so a call that
-    // omits it cannot pick an instance. Say so here, before deduction, because
-    // deduction returns early on a parameter whose type is a template-id and the
-    // check later in this function would never be reached.
-    for (std::size_t index = 0; index < pattern->second.parameters.size();
-         ++index) {
-        const auto& name = pattern->second.parameters[index];
-        if (pattern->second.value_parameters.count(name) == 0) {
-            continue;
-        }
-        if (index < explicit_arguments.size()) {
-            continue;
-        }
-        error(callee.location,
-              "cannot deduce the value template parameter '" + name +
-                  "'; write it explicitly");
-        return {};
-    }
     // The parameters hang off the FunctionDeclarator, which may sit under a
     // PointerDeclarator when the return type has indirection: `T* construct(...)`
     // nests the function declarator one level down, and reading the outer node's
@@ -2247,6 +2229,80 @@ std::string Sema::instantiate_template_call(
                          : pattern->second.definition->children[1]->children;
     std::unordered_map<std::string, TypePtr> bindings;
     std::unordered_map<std::string, long long> value_bindings;
+    // A value parameter is not reached by the positional deduction loop below, which
+    // returns early on a parameter whose type is a template-id. Deduce it here instead,
+    // from the argument whose parameter type names it: for `int f(Fixed<N>&)` called with
+    // `Fixed<2>`, the argument's type records the instance tag `Fixed__2`, so the value is
+    // the integer after the pattern's name. The parameter list carries the function's own
+    // name at index 0, so the parameter at position p takes argument p - 1.
+    for (std::size_t index = 0; index < pattern->second.parameters.size(); ++index) {
+        const auto& name = pattern->second.parameters[index];
+        if (pattern->second.value_parameters.count(name) == 0) {
+            continue;
+        }
+        if (index < explicit_arguments.size()) {
+            continue;
+        }
+        for (std::size_t position = 1; position < parameters.size(); ++position) {
+            const AstNode* specifier =
+                parameters[position] && !parameters[position]->children.empty()
+                    ? parameters[position]->children[0].get()
+                    : nullptr;
+            if (specifier == nullptr) {
+                continue;
+            }
+            std::string pattern_name;
+            bool names_this_parameter = false;
+            for (const auto& label : specifier->labels) {
+                if (label == "template-id") {
+                    continue;
+                }
+                if (label.rfind("template-arg:", 0) == 0) {
+                    if (label.substr(std::strlen("template-arg:")) == name) {
+                        names_this_parameter = true;
+                    }
+                    continue;
+                }
+                if (pattern_name.empty()) {
+                    pattern_name = label;
+                }
+            }
+            if (!names_this_parameter || pattern_name.empty()) {
+                continue;
+            }
+            const auto argument_index = position - 1;
+            if (argument_index >= arguments.size() || !arguments[argument_index]) {
+                continue;
+            }
+            const auto& argument = arguments[argument_index];
+            std::shared_ptr<RecordInfo> record;
+            if (argument->record) {
+                record = argument->record;
+            } else if (argument->element && argument->element->record) {
+                record = argument->element->record;
+            }
+            if (!record) {
+                continue;
+            }
+            const std::string prefix = pattern_name + "__";
+            if (record->tag.rfind(prefix, 0) != 0) {
+                continue;
+            }
+            const auto digits = record->tag.substr(prefix.size());
+            if (digits.empty() ||
+                digits.find_first_not_of("0123456789") != std::string::npos) {
+                continue;
+            }
+            value_bindings.emplace(name, std::stoll(digits));
+            break;
+        }
+        if (value_bindings.count(name) == 0) {
+            error(callee.location,
+                  "cannot deduce the value template parameter '" + name +
+                      "'; write it explicitly");
+            return {};
+        }
+    }
     // A pack's arity, keyed by the pack's name, so the instance's signature can
     // take that many arguments and sizeof... can fold to it.
     std::unordered_map<std::string, std::size_t> pack_arities;
