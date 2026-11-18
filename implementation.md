@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T05:44:14-08:00 — host gate (Linux ARM64)
+Revision: 1229297
+
+```
+linux-gcc-debug    FAIL build — src/frontend/sema.cpp:2261: std::strlen, no <cstring>
+linux-clang-debug  FAIL build — same error
+linux-sanitize     not run — the same source failed to build
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The tree does not build on either Linux compiler at `1229297`. GCC stops at step 23 of 68:
+`src/frontend/sema.cpp:2261:43: error: 'strlen' is not a member of 'std'`, and Clang reports
+`no member named 'strlen' in namespace 'std'` at the same line. `sema.cpp` includes neither `<cstring>`
+nor `<string.h>`, so the call relies on a transitive include that MSVC supplies and both libstdc++ and
+libc++ do not. No test ran on any row, and `linux-sanitize` was not attempted once the same file failed
+to build. This is a one-line `<cstring>` fix in the file, not a design problem, but it is a build break
+on the pushed head for every non-MSVC host and it arrived after the last green revision `c2e6c90`.
+First build started at 05:44:14 (GCC) and 05:45:06 (Clang); both were clean configurations from a
+deleted `build/`, so the failure is the source, not stale state.
+
 2026-11-18T05:26:50-08:00 — host gate (Linux ARM64)
 Revision: c2e6c90
 
