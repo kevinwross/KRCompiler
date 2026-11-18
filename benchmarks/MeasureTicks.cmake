@@ -18,12 +18,12 @@ endif()
 # The staged runtime, laid out by the build. Passing these is what the test registrations do;
 # omitting them made both link scripts fail with a message about the output file rather than
 # about the missing inputs.
-set(KR32_LIBC "${STAGE}/kr32/lib/libkrcrt.kro")
-set(KR32_CRT0 "${STAGE}/kr32/lib/crt0.s")
-set(KR16_CRT0 "${STAGE}/kr16/lib/crt0.s")
-set(KR16_HOST "${STAGE}/kr16/lib/libkrcrt_host.kro")
-set(KR16_FILEIO "${STAGE}/kr16/lib/libkrcrt_fileio.kro")
-set(KR16_LIBCRT "${STAGE}/kr16/lib/libkrcrt.kro")
+file(TO_NATIVE_PATH "${STAGE}/kr32/lib/libkrcrt.kro" KR32_LIBC)
+file(TO_NATIVE_PATH "${STAGE}/kr32/lib/crt0.s" KR32_CRT0)
+file(TO_NATIVE_PATH "${STAGE}/kr16/lib/crt0.s" KR16_CRT0)
+file(TO_NATIVE_PATH "${STAGE}/kr16/lib/libkrcrt_host.kro" KR16_HOST)
+file(TO_NATIVE_PATH "${STAGE}/kr16/lib/libkrcrt_fileio.kro" KR16_FILEIO)
+file(TO_NATIVE_PATH "${STAGE}/kr16/lib/libkrcrt.kro" KR16_LIBCRT)
 
 set(PROGRAM_DIR "${ROOT}/benchmarks/programs")
 set(WORK_DIR "${ROOT}/build/benchmarks")
@@ -39,17 +39,21 @@ file(WRITE "${OUT}" "program\ttarget\tticks\texit\tstatus\n")
 
 foreach(program IN LISTS PROGRAMS)
     get_filename_component(name "${program}" NAME_WE)
+    file(TO_NATIVE_PATH "${program}" source_native)
 
     # KR32: the image links against the staged runtime through the same script the tests use.
     set(image32 "${WORK_DIR}/${name}.k32")
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
-                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${program}" "-DOUTPUT=${image32}"
+                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image32}"
                 "-DLIBC=${KR32_LIBC}" "-DRUNTIME=${KR32_CRT0}"
                 -P "${ROOT}/cmake/LinkRuntime.cmake"
-        RESULT_VARIABLE link32 OUTPUT_QUIET ERROR_QUIET)
+        RESULT_VARIABLE link32 OUTPUT_QUIET ERROR_VARIABLE err32)
 
     if(KR32VM AND EXISTS "${KR32VM}")
+        if(NOT link32 EQUAL 0)
+            message(STATUS "kr32 link error: ${err32}")
+        endif()
         if(link32 EQUAL 0 AND EXISTS "${image32}")
             execute_process(
                 COMMAND "${KR32VM}" vm "${image32}" --stats
@@ -67,12 +71,15 @@ foreach(program IN LISTS PROGRAMS)
     set(image16 "${WORK_DIR}/${name}.kex")
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
-                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${program}" "-DOUTPUT=${image16}"
+                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image16}"
                 "-DCRT0=${KR16_CRT0}" "-DHOST=${KR16_HOST}" "-DFILEIO=${KR16_FILEIO}" "-DLIBCRT=${KR16_LIBCRT}"
                 -P "${ROOT}/cmake/LinkKr16Host.cmake"
-        RESULT_VARIABLE link16 OUTPUT_QUIET ERROR_QUIET)
+        RESULT_VARIABLE link16 OUTPUT_QUIET ERROR_VARIABLE err16)
 
     if(KR16VM AND EXISTS "${KR16VM}")
+        if(NOT link16 EQUAL 0)
+            message(STATUS "kr16 link error: ${err16}")
+        endif()
         if(link16 EQUAL 0 AND EXISTS "${image16}")
             execute_process(
                 COMMAND "${KR16VM}" vm "${image16}" --stats
