@@ -512,7 +512,7 @@ ARM64 host. Both rows were configured and built clean from a deleted `build/` at
 `vm/`, so all 147 executed tests ran. Test times were 87.71 s (debug) and 38.94 s (release) with
 the preset's `jobs: 4`. No disturbances.
 2026-11-17T16:14:26-08:00 — host gate (Windows)
-Revision: be5c722
+Revision: 56582e1
 
 ```
 windows-msvc-debug    PASS 797/797
