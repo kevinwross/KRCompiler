@@ -505,7 +505,7 @@ no build: documentation only at dbaddadace35057d051eefc2a16962ad9a50e19b
 ```
 
 2026-11-17T16:51:19-08:00 — host gate (Windows)
-Revision: 7346df6
+Revision: 6a8ae15
 
 ```
 windows-msvc-debug    PASS 801/801
