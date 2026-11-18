@@ -821,13 +821,14 @@ if(TARGET krc)
     # Corpus fixtures extracted from ../kr32/examples. hello, mainentry and
     # binarytree link and run: they need the C library, so LIBCRT is passed.
     # strings.c links and runs on both targets too — libcrt does provide memmove —
-    # and the Tier 1 list below executes it. types.c, varargs.c and libc-test.c use
-    # double or float, which the KR16 profile rejects, so they are KR32-only and not
-    # registered here.
-    # Tier 2 sources. The first three compile on both targets; floats.c and
-    # cxx_tls.cpp use double and long long, which the KR16 profile rejects, so
-    # they are KR32-only. matrix.cpp is not extracted: it needs kr32/matrix.hpp,
-    # which this sysroot does not carry.
+    # and the Tier 1 list below executes it. This note used to name three Tier 1 files
+    # (types.c, varargs.c, libc-test.c) as KR32-only for using double or float; two of
+    # those are not in the corpus, and varargs.c uses neither and compiles for KR16.
+    # The sources the profile actually refuses are asserted by
+    # krc_cxx_kr16_rejects_double and krc_cxx_kr16_rejects_longlong above.
+    # Tier 2 sources. The first three compile on both targets; cxx_tls.cpp uses
+    # long long, which the KR16 profile rejects, so it is KR32-only. matrix.cpp is not
+    # extracted: it needs kr32/matrix.hpp, which this sysroot does not carry.
     foreach(corpus_source IN ITEMS
             corpus/extracted/tier2/balanced-tree.cpp
             corpus/extracted/tier2/cxx_libc.cpp
@@ -5659,6 +5660,28 @@ if(TARGET krc)
 # IR verifier refuses the store. Kept as a rejection test so that fixing it breaks this test
 # and the fixer is told to turn it into a passing one. It has to compile rather than run
 # -fsyntax-only, because the verifier is a later stage and syntax-only exits zero.
+# The IP16 profile rejects types it does not have, and these are the two corpus sources that
+# hit it. Asserted rather than described: a change that starts accepting either type fails
+# here, and so does a source that quietly stops being rejected.
+#
+# This replaces a note that named three files. `types.c` and `libc-test.c` are not in the
+# extracted corpus at all, and `tier1/varargs.c` neither uses `double` nor is rejected --
+# it compiles for KR16. The two tests below were derived by compiling every extracted source
+# for KR16 and keeping the ones the profile refused.
+add_test(NAME krc_cxx_kr16_rejects_double
+    COMMAND $<TARGET_FILE:krc> -c --target=kr16
+            "${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier1/floats.c"
+            -o ${KRC_TEST_OUTPUT_DIR}/kr16_rejects_double.kro)
+set_tests_properties(krc_cxx_kr16_rejects_double PROPERTIES
+    PASS_REGULAR_EXPRESSION "'double' is not supported by the kr16 profile")
+
+add_test(NAME krc_cxx_kr16_rejects_longlong
+    COMMAND $<TARGET_FILE:krc> -c --target=kr16
+            "${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier2/cxx_tls.cpp"
+            -o ${KRC_TEST_OUTPUT_DIR}/kr16_rejects_longlong.kro)
+set_tests_properties(krc_cxx_kr16_rejects_longlong PROPERTIES
+    PASS_REGULAR_EXPRESSION "'long long' is not supported by the kr16 profile")
+
 add_test(NAME krc_cxx_make_tuple_pointer_rejected
     COMMAND $<TARGET_FILE:krc> -c --target=kr32
             "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/make_tuple_pointer.cpp"
