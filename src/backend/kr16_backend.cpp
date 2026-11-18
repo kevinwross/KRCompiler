@@ -586,22 +586,30 @@ void Kr16Backend::emit_function(std::string& out,
                     instruction->type &&
                     (instruction->type->kind == ir::TypeKind::Struct ||
                      instruction->type->kind == ir::TypeKind::Union);
-                // The aggregate destination is the last hidden stack argument, so it
-                // is pushed first: pushes run highest index first, which leaves the
-                // first push at the highest address (ADR 0048).
-                if (aggregate_return) {
-                    out += "    LEA R0, [R4-" +
-                           std::to_string(layout.frame_size - slot(instruction.get())) +
-                           "]\n";
-                    out += "    PUSH R0\n";
-                }
-                // Register arguments first: the staged values are addressed
-                // relative to SP, which pushing the extras moves.
+                // Register arguments first, and before the destination is pushed: the
+                // staged values are addressed relative to SP, so pushing anything first
+                // shifts every one of them. That was the defect behind
+                // `struct { int a; char c; }` losing `c` when returned by value -- the
+                // second argument was loaded as `[SP+4]` after the destination PUSH had
+                // moved SP, so it read the destination pointer instead of the value. It
+                // only showed when an argument came from a stack slot; a call whose
+                // arguments were all immediates was unaffected, which is why `{int, int}`
+                // returned correctly and this did not.
                 if (!variadic_call) {
                     for (std::size_t index = 0;
                          index < argument_count && index < 3; ++index) {
                         load(instruction->operands[index + 1], arguments[index]);
                     }
+                }
+                // The aggregate destination is the last hidden stack argument, so it
+                // is pushed after the register arguments and before the extras: pushes
+                // run highest index first, which leaves the first push at the highest
+                // address (ADR 0048).
+                if (aggregate_return) {
+                    out += "    LEA R0, [R4-" +
+                           std::to_string(layout.frame_size - slot(instruction.get())) +
+                           "]\n";
+                    out += "    PUSH R0\n";
                 }
                 // Extras go out last first, so the first argument ends at the
                 // lowest address and they run upward in declaration order. A
