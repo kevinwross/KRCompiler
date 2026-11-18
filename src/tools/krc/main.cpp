@@ -26,6 +26,7 @@
 #include "krc/version.h"
 #include "linker/kro_object.h"
 #include "linker/kr16_image.h"
+#include "ir/passes.h"
 
 #ifndef KRC_SYSROOT_DIR
 #define KRC_SYSROOT_DIR "sysroot"
@@ -377,6 +378,22 @@ int main(int argc, char** argv) {
                     if (!verifier.verify(*module, verify_error)) {
                         diagnostics.report(krc::frontend::Severity::Error,
                                            "IR verifier: " + verify_error);
+                    }
+                    // The optimiser pipeline. `-O0` runs no pass, which is what
+                    // keeps its output byte-identical to a build without a flag;
+                    // the module is verified again afterwards, so a pass that
+                    // breaks an invariant fails here rather than in a backend.
+                    if (optimization == krc::backend::OptimizationLevel::O1 &&
+                        !diagnostics.has_errors()) {
+                        const auto change = krc::ir::constant_folding(*module);
+                        if (change.changed()) {
+                            std::string optimized_error;
+                            if (!verifier.verify(*module, optimized_error)) {
+                                diagnostics.report(
+                                    krc::frontend::Severity::Error,
+                                    "IR verifier after optimiser: " + optimized_error);
+                            }
+                        }
                     }
                     if (dump_ir) {
                         krc::ir::print_module(*module, std::cout);

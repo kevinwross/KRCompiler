@@ -1,8 +1,8 @@
 workload	target	object_bytes	instructions	status
 kr32/libc.c	kr32	1397390	27091	ok
 kr32/libc.c	kr16	-	-	rejected
-kr16/libc.c	kr32	382133	7121	ok
-kr16/libc.c	kr16	85706	6813	ok
+kr16/libc.c	kr32	382775	7131	ok
+kr16/libc.c	kr16	85930	6824	ok
 arrays.c	kr32	28444	564	ok
 arrays.c	kr16	7382	584	ok
 binarytree.c	kr32	72897	1406	ok

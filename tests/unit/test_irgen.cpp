@@ -8,6 +8,7 @@
 #include "backend/kr32_backend.h"
 #include "doctest.h"
 #include "ir/ir.h"
+#include "ir/passes.h"
 #include "irgen/c_irgen.h"
 #include "krc/frontend/diagnostics.h"
 #include "krc/frontend/parser.h"
@@ -413,6 +414,33 @@ TEST_CASE("-O1 removes a branch to the label that follows it") {
     CHECK(krc::backend::remove_redundant_jumps(kr16).find("BRA") == std::string::npos);
     CHECK(krc::backend::remove_redundant_jumps("    JMP R3\n").find("JMP R3") !=
           std::string::npos);
+}
+
+TEST_CASE("Constant folding replaces a folded operation with its value") {
+    const auto generated = generate(R"SRC(
+int folded(int *values) { return (2 + 3) * 4 + values[-1]; }
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto change = krc::ir::constant_folding(*generated.module);
+    CHECK(change.instructions_folded >= 2);
+    CHECK(change.instructions_removed >= 2);
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    // The folded add is gone, and the un-folded `sub i32 0, 1` that used to feed
+    // the index became the literal the backend carries in the GEP.
+    CHECK(text.find("add i32 2, 3") == std::string::npos);
+    CHECK(text.find("getelementptr i32, %values.load, -1") != std::string::npos);
+
+    // Rewriting operands is what makes a fold dangerous, so the pass's output is
+    // verified rather than assumed.
+    krc::ir::Verifier verifier;
+    std::string verify_error;
+    CHECK(verifier.verify(*generated.module, verify_error));
 }
 
 TEST_CASE("C IRGen lowers mainentry arguments and a for loop") {

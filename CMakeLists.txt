@@ -109,6 +109,7 @@ add_library(krc_core STATIC
     src/frontend/source_manager.cpp
     src/frontend/types.cpp
     src/ir/ir.cpp
+    src/ir/passes.cpp
     src/irgen/c_irgen.cpp
     src/irgen/c_irgen_expressions.cpp
     src/irgen/c_irgen_setup.cpp
