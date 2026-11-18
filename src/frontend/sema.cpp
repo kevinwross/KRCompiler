@@ -2253,12 +2253,15 @@ std::string Sema::instantiate_template_call(
             }
             std::string pattern_name;
             bool names_this_parameter = false;
+            // `<string_view>` is included; `<cstring>` is not, and relying on a transitive
+            // include here broke the GCC and Clang builds while MSVC compiled.
+            constexpr std::string_view template_arg_label{"template-arg:"};
             for (const auto& label : specifier->labels) {
                 if (label == "template-id") {
                     continue;
                 }
-                if (label.rfind("template-arg:", 0) == 0) {
-                    if (label.substr(std::strlen("template-arg:")) == name) {
+                if (label.rfind(template_arg_label, 0) == 0) {
+                    if (label.substr(template_arg_label.size()) == name) {
                         names_this_parameter = true;
                     }
                     continue;
