@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T13:18:58-08:00 — host gate (Linux ARM64)
+Revision: 1934c53
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `f4b3392`, which writes allocated values into their register at `-O1`
+(`src/backend/kr32_backend.cpp` +137, `kr32_backend.h` +16). This is the register allocator ceasing to
+be deliberately unwired — ADR 0049's decision being implemented — so it is the change most likely to
+be affected by host register-file size and calling-convention assumptions, and the sanitizer row is
+where a wrong register write should show up. The count is unchanged at 843 with 168 executed tests,
+which is right only if the pass is correct on every fixture the suite already runs; a register-write
+defect that is silent on these fixtures would not move the count. Test times were 86.24 s (GCC debug),
+88.06 s (Clang debug) and 308.62 s (ASan/UBSan). Rows were configured and built clean from a deleted
+`build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T13:05:30-08:00 — ARM64 poll
 Revision: 56e866e
 
