@@ -5561,5 +5561,3 @@ not verified: native Linux x64, Linux ARM64
   - **21 — no `v1.0`/`v1.1` tag until M10 closes.** M10 is in progress, `get<I>` is still absent, and a silent `make_tuple` truncation was fixed only this morning; a tag would label an unfinished state.
   - **22 — the M8 `double` question is deferred until M8 starts**, and I have recorded that I want to read the three extracted Tier 1 files before recommending anything on it, because I do not have enough detail in context to be useful on it now.
 - **2026-11-18T07:00:00-08:00** — **The optimiser plan joins the todo list as its own item**, at the operator's direction, with the five findings from `docs/optimize-review.md` built into it rather than rediscovered: R1 follows the allocator's ADR, the pass list is reconciled with `plan.md` §8.8 before any code, `--dump-stats` lands before the first pass, the headroom table is split by layer, and the Q3/E6 contradiction is resolved first.
-=======
-<<<<<<< HEAD
