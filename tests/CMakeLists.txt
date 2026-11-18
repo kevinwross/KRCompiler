@@ -32,6 +32,16 @@ target_include_directories(krc_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/third_p
 target_compile_definitions(krc_tests PRIVATE KRC_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_features(krc_tests PRIVATE cxx_std_20)
 krc_apply_warnings(krc_tests)
+# doctest 2.4.11 unconditionally includes <ciso646> when the compiler is Clang
+# (doctest.h:498), to detect libc++ through _LIBCPP_VERSION. libstdc++ 15 answers that
+# include with a #warning -- "<ciso646> is not a standard header since C++20" -- and
+# Clang routes #warning through -W#warnings, which -Werror makes fatal. The diagnostic is
+# not ours and cannot be fixed from our code, so it is demoted rather than silenced: the
+# warning still prints, and every project source stays under -Werror. Upstream tracks the
+# include as doctest issue #900, and a doctest upgrade that drops it retires this line.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(krc_tests PRIVATE "-Wno-error=#warnings")
+endif()
 krc_apply_sanitizers(krc_tests)
 
 add_test(NAME krc_tests COMMAND krc_tests)
