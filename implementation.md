@@ -497,6 +497,33 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T09:36:23-08:00 — routine row (Windows + WSL)
+Revision: d044fcf
+
+```
+windows-msvc-debug    PASS 841/841
+linux-clang-debug     PASS 841/841
+linux-gcc-debug       PASS 841/841
+linux-sanitize        PASS 841/841
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+The **routine row is complete for the first time in this session** — the four configurations that
+differ in compiler or instrumentation, which are the axes that find things. `linux-clang-debug` is
+the second front end the project has been burned by before (`706109b`'s missing `<cstring>`), and
+`linux-sanitize` is the memory and undefined-behaviour checker; both now compile this session's work
+and pass the whole suite, including the twelve new `-O1` tests. `windows-msvc-debug` was 828/828 at
+`b9a9c7d` and 841/841 after the `-O1` tests landed.
+
+Two honest qualifications, because the distinction matters. **The Linux rows are incremental, not
+clean**: their build directories carried over from earlier sessions and were not deleted, so the
+gate's "delete first" rule is satisfied only for the Windows row (clean at `b9a9c7d`). A clean gate
+at `d044fcf` is still owed. And **the timestamp is the first row's build completion**, not its
+start — the start was not sampled, and it points at a moment the gate was demonstrably running. The
+doctor now runs and passes (`msvc 14.51.36231`, `cmake 4.3.1-msvc1`, exit 0); its earlier failure
+was the confined session's pipe denial, as diagnosed at the time, and it is unaffected under the
+current permissions.
+
 2026-11-18T09:13:49-08:00 — host gate (Windows)
 Revision: b9a9c7d
 
@@ -5735,3 +5762,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-18T09:30:25-08:00** — Coordination note for whoever reads the next measurement: an inbound change to `targets/kr16/runtime/libc.c` is expected from another session. That file is both a staged artefact and a workload, so the two `kr16/libc.c` rows (currently 6,813 instructions / 85,706 bytes for KR16, and 7,121 / 382,133 for KR32) **will** move; re-measure and record rather than pinning them back, and treat the shift as the source change rather than a compiler regression.
 - **2026-11-18T09:33:57-08:00** — **The suite now runs at `-O1` as well as `-O0`**, which is ADR 0049's requirement and the half of it that had no evidence. The tier-0 smoke trio (`hello`, `arithmetic`, `functions`) gains an `-O1` twin on both targets: six new link tests and six new run tests, so the suite goes **829 → 841**, all green. These are *executed*, not compiled only — `hello` compares its printed text as well as exit status, and the other two compare exit status — so a text pass that removed a live branch fails here. Every other test still compiles at the default, which is why this is a seed rather than the full matrix: running all 841 at `-O1` would mean threading the level through every registration, and that is worth doing only if `-O1` starts changing more than branch selection.
 - **2026-11-18T09:33:57-08:00** — Both `-O1` halves link the **staged `-O0` runtime**, so the only variable between the `-O0` and `-O1` twin is the level the program itself is compiled at — the same configuration the tick measurement uses, and the reason its numbers are comparable.
+- **2026-11-18T09:49:59-08:00** — **A pre-existing KR16 miscompile is confirmed in the area the allocator will touch, and it is not mine.** `tests/corpus/extracted/tier2/virtual.cpp` returns **0 on KR32** and **158 on KR16** at `d044fcf` with `-O0`; the second session measured the same 158 at `2cc2b92`, so it predates every pass here. What I add is the shape of it: at **`-O1` the KR16 value changes to 24**, while KR32 stays 0. Neither 158 nor 24 is a value the program computes — it returns 7 or 8 on a failed check and 0 on success — so this is not a branch taken differently; the value depends on the code emitted, which points at frame or return-path corruption rather than a dispatch decision. **FIX-BEFORE any allocator wiring** (ADR 0049 Phase 3): register allocation moves values between registers and frame slots, which is exactly where a defect of this shape lives, and its wrong answer is *codegen-sensitive*, so it can move without being fixed. The reproduction is the two link commands in the gate section of this log — `cmake -P cmake/LinkRuntime.cmake` for KR32 and `cmake -P cmake/LinkKr16Host.cmake` for KR16, then `vm\krc_kr32.exe vm ...` and `vm\krc_kr16.exe vm ...`. No test covers it: the tier-2 C++ corpus rows are linked, not executed, on KR16.
+- **2026-11-18T09:49:59-08:00** — The same session reports two environment traps worth keeping even though neither bit this round: a stale `mspdbsrv.exe` makes every translation unit fail with `C1041 cannot open program database` and reads as a broken preset rather than a leftover process (kill the server and it clears), and the nested `cmake -P` `-D` quoting trap this log already records at the benchmark baseline. It works in a separate worktree on branch `libc` and has modified neither `libc.c` nor `src/`, so the `targets/kr16/runtime/libc.c` change flagged in the previous entry is being held there rather than landing here.
