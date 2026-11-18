@@ -497,6 +497,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T12:03:51-08:00 — host gate (Linux ARM64)
+Revision: 5a3cc17
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `4af5b52`, which promotes a single-block alloca whose address does not escape — the
+third `-O1` IR pass, in `src/ir/passes.cpp`/`.h` with `src/tools/krc/main.cpp` wiring and
+`tests/unit/test_irgen.cpp` coverage. The count is unchanged at 843 with 168 executed tests, correct
+for a pass exercised through existing fixtures. Test times were 86.38 s (GCC debug), 79.02 s (Clang
+debug) and 306.73 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at
+`-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T11:35:02-08:00 — host gate (Linux ARM64)
 Revision: cf80fd4
 
