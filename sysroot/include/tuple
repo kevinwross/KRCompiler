@@ -25,12 +25,16 @@
 //
 // One limit is real, and it is measured rather than assumed:
 //
-//   * **An empty tuple cannot be a local.** `tuple<> t;` emits a call to the
-//     pattern's constructor and fails to link with `undefined symbol
-//     'tuple_ctor_0_value'`. An empty tuple reached as a member is fine --
-//     `tuple_size(pair.tail.tail)` is zero -- so the empty type exists and only a
-//     local of it is affected. An empty tail built by the element constructor is
-//     fine for the same reason.
+//   * **`tuple_size` does not link for the empty tuple.** `std::tuple<> empty;
+//     std::tuple_size(empty);` compiles and then fails to link with `undefined symbol
+//     'tuple_size'`: the function template is not instantiated for an empty pack. An
+//     empty tuple reached as a member is fine -- `tuple_size(pair.tail.tail)` is zero --
+//     because that instantiation has a non-empty pack in its signature.
+//
+// An empty tuple **can** be a local: `std::tuple<> empty;` links and runs. It used to
+// emit a call to the partial specialisation's pattern constructor, which is only ever
+// declared (ADR 0032), so the image failed with `undefined symbol 'tuple_ctor_0_value'`.
+// The call is now skipped for a record with no members and no defined constructor.
 //
 // `make_tuple` is provided. It was blocked by a pack that did not substitute in a
 // function template's return type and body; the parser recorded `Tup<Ts...>` in an

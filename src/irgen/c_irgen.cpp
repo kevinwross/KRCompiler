@@ -1949,6 +1949,15 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             if (!constructor && record != ir_records_.end()) {
                 constructor = ensure_default_constructor(record->second);
             }
+            // A constructor that exists only as a class template pattern's declaration
+            // has no body to call: pattern bodies are written for stub types and are
+            // never built (ADR 0032). An instance with no members has nothing to
+            // construct, so the call is skipped. Emitting it left `std::tuple<> empty;`
+            // bound to the pattern's `tuple_ctor_0_value`, which nothing defines.
+            if (constructor && constructor->declaration &&
+                record->second->members.empty()) {
+                constructor = nullptr;
+            }
             if (constructor) {
                 auto* constructor_this = address;
                 if (constructor_this->type != constructor->type->parameters[0]) {
