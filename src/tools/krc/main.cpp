@@ -84,6 +84,7 @@ int main(int argc, char** argv) {
     bool preprocess_only = false;
     bool dump_ast = false;
     bool dump_ir = false;
+    bool dump_stats = false;
     bool emit_assembly = false;
     bool emit_object = false;
     bool emit_object_container = false;
@@ -153,6 +154,10 @@ int main(int argc, char** argv) {
         }
         if (argument == "--dump-ir") {
             dump_ir = true;
+            continue;
+        }
+        if (argument == "--dump-stats") {
+            dump_stats = true;
             continue;
         }
         if (argument == "--dump-symbols") {
@@ -359,6 +364,31 @@ int main(int argc, char** argv) {
                     }
                     if (dump_ir) {
                         krc::ir::print_module(*module, std::cout);
+                    }
+                    if (dump_stats) {
+                        // Counts only. Every optimiser claim has to be compiler output rather
+                        // than a one-off script, and instruction count is the number a pass
+                        // moves; block count is printed beside it so a pass that only
+                        // reshapes control flow is visible too.
+                        std::size_t total_instructions = 0;
+                        std::size_t total_blocks = 0;
+                        for (const auto& function : module->functions()) {
+                            if (!function) {
+                                continue;
+                            }
+                            std::size_t instructions = 0;
+                            for (const auto& block : function->blocks) {
+                                if (block) {
+                                    instructions += block->instructions.size();
+                                }
+                            }
+                            total_instructions += instructions;
+                            total_blocks += function->blocks.size();
+                            std::cout << "stats\t" << function->name << "\t" << instructions
+                                      << "\t" << function->blocks.size() << "\n";
+                        }
+                        std::cout << "stats\tTOTAL\t" << total_instructions << "\t"
+                                  << total_blocks << "\n";
                     }
                     if ((emit_assembly || emit_object) &&
                         profile.id == krc::target::TargetId::Kr16) {
