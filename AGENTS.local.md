@@ -27,9 +27,15 @@ Run only your host's row. Front-end, backend, runtime and test changes that cros
 
 **Build the row concurrently.** Each preset has its own binary directory and they are independent, so launch them as separate background jobs and collect the results rather than running them one after another — four at once on Windows, two on Linux. Never point two presets at one build directory.
 
-**3. Milestone gate — clean builds for this host.** Delete the build directories first; incremental output is not a gate. Build and test this host's full row. On Windows that is six configurations covering Windows x64, Linux x64 GCC, Linux x64 Clang and Linux x64 ASan/UBSan; on a Linux host, four. Both hosts run a row of four Linux presets, which is why the sanitizer and second-compiler configurations are no longer special cases.
+**3. Milestone gate — clean builds for this host.** Delete the build directories first; incremental output is not a gate.
 
-**A gate subsumes the matrix.** If the gate is next — because you are about to push, or a milestone is closing — skip tier 2 and let the gate's clean builds cover it. Running the six configurations incrementally and then deleting them to run the same six again is twelve builds for one answer.
+**A gate is evidence for a revision, not a tax on every commit.** Run one before a milestone closes, before a tag, and at least once per session. It was previously required before every push, and that cost is measurable: about ten gates in one day, roughly twenty minutes each, and not one of them caught a defect the inner loop or a targeted `ctest -R` had not already surfaced. The configurations are still worth running; running all of them several times an hour is not.
+
+**The routine row is the four configurations that differ in compiler or instrumentation:** `windows-msvc-debug`, `linux-gcc-debug`, `linux-clang-debug`, `linux-sanitize`. Those are the axes that find things — a second front end, and a memory and undefined-behaviour checker.
+
+**A gate closing a milestone adds the two release builds:** `windows-msvc-release`, `linux-gcc-release`. Their distinct value is a warning-free optimised compile rather than a second opinion on behaviour, so run them build-only unless the milestone changes something the optimiser could miscompile. A Linux host runs two or four rather than six, because `windows-msvc-*` is not reachable there.
+
+**A gate subsumes the matrix.** If the gate is next — because a milestone is closing — skip tier 2 and let the gate's clean builds cover it. Running the configurations incrementally and then deleting them to run the same ones again is twice the work for one answer.
 
 **The gate closes on this host's row, not on every host.** A Windows gate passing says nothing about native Linux or ARM64, and those are expected to need fixing when first built. Do not wait for them, and do not imply they passed.
 
@@ -40,13 +46,13 @@ Run only your host's row. Front-end, backend, runtime and test changes that cros
 Revision: <short sha the gate covers>
 
 windows-msvc-debug    PASS <n>/<n>
-windows-msvc-release  PASS <n>/<n>
 linux-gcc-debug       PASS <n>/<n>
-linux-gcc-release     PASS <n>/<n>
 linux-clang-debug     PASS <n>/<n>
 linux-sanitize        PASS <n>/<n>
-not verified: native Linux x64, Linux ARM64
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
 ```
+
+A gate closing a milestone adds the two release rows and drops them from the `not verified` list. Recording four when four ran is correct — the block names what ran, not what exists.
 
 <One paragraph of prose: what the gate covers, why any row's count differs from the others, and anything that disturbed the run — a compiler crash that cleared on rebuild, a KRO CRC mismatch from a stale ctest, a row that had to be re-run. Say whether each was traced.>
 
@@ -58,11 +64,11 @@ A record saying "all configurations" or "six configurations" is not a record: na
 
 ## Commits and pushing
 
-**This section authorises local commits without asking, and authorises pushing when a gate passes.**
+**This section authorises local commits without asking, and authorises pushing when the tier the change needed is green.**
 
 - Batch local commits rather than committing each change: hold a commit until five functional changes have accumulated, or the change to source and tests passes 180 lines, whichever comes first. Documentation (implementation.md, handoff.md, docs/) does not count toward that total. A batch is committed once the tier it required is green, and the regression tests covering the batch are run before the commit. Local commits need no permission.
-- **Push when — and only when — a host gate passes.** A gate is tier 3 above: clean builds for every configuration this host can reach. Do not push on a working change, a partial matrix, or a judgement that it "looks good".
-- A tier 2 change stays local until the next gate, unless the operator asks for it to be published.
+- **Push when the tier your change needed is green.** Documentation alone: no build. Source or test changes: the inner loop for this host, and the matrix when the change crosses a boundary. A host gate is evidence for a revision rather than a precondition for every push — run one before a milestone closes, before a tag, and at least once per session, per tier 3 above. The trade is deliberate and worth restating: commits published between gates are verified on the inner loop only, so the once-per-session floor is a floor, not a target, and a period with no gate is a period with one toolchain's opinion.
+- A tier 2 change may be published once its matrix is green; it does not wait for a gate. If the change touches an ABI, the object format, the symbol format or the target descriptor, prefer the gate anyway — those are the changes a second compiler or a sanitizer is most likely to disagree with.
 - **Tidy unpublished history before pushing** if that produces a clearer record — squash fixups, reorder, reword. That rewrites only commits nobody has seen.
 - **Never rewrite or force-push anything already pushed.** If CI fails on a pushed commit, fix forward with a new commit.
 - One logical change per commit; subject imperative, at most 72 characters.
