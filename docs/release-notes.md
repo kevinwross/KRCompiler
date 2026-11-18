@@ -73,7 +73,12 @@ absent. `AGENTS.local.md` records the environment assumptions, and
   specialisation of a class template selected by argument count, and recursive
   variadic class templates do work. Explicit class-template arguments parse and
   instantiate, both `Box<int>` and `template <> struct Box<int>`; `sysroot/include/tuple`
-  depends on the former throughout.
+  depends on the former throughout. Deduction of a non-type template parameter from
+  an argument works: `int size(Fixed<N>&)` called with `Fixed<2>` binds `N` to 2, and
+  the by-value, pointer, two-parameter and alongside-a-pack forms all bind. A
+  qualified use through a template-id with a non-type argument (`Index<0>::pick`)
+  parses but does not resolve: the instance's tag is found and its static members
+  are registered too late for that lookup.
 - `get<I>`, and the parts of `<tuple>` that need it. `sysroot/include/tuple` does
   ship — `tuple_size`, `tuple_head`, `tuple_tail`, the members `.head` / `.tail`,
   in-place construction, and `make_tuple` — with link-and-run fixtures on both

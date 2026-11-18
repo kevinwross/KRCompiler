@@ -24,6 +24,13 @@ declared argument.
 - The **caller** pushes the destination address first, before the other argument pushes.
   Pushes run highest-index argument first, so the first push lands at the highest address —
   which makes the destination the last argument, as ADR 0028 orders stack arguments.
+- The caller loads the register arguments into `R1`–`R3` **before** that push. A staged
+  argument value is addressed relative to `SP`, so pushing the destination first shifts every
+  one of them and the load reads the destination pointer instead of the value. Getting this
+  order wrong shipped once: `struct { int a; char c; }` returned `a` correctly and `c` as 0,
+  because the second argument came from a stack slot and was read one push too high. A call
+  whose arguments were all immediates never read `SP` and was unaffected, which is why the
+  defect looked like a width problem for several rounds.
 - The **callee** reads it at `[R4 + 4 + 2 * parameter_count]` during its prologue and keeps
   it in a frame slot, because nothing survives a call in a register on this target.
 - `Ret` copies the aggregate to that address in two-byte words.
