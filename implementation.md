@@ -513,6 +513,26 @@ The gate covers `7771d7e` and `fe11d38`: character literals are typed `char` in 
 added. Both rows were configured and built clean from a deleted `build/` at `-j2` with
 `ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`.
 Test times were 89.49 s (debug) and 34.10 s (release) with the preset's `jobs: 4`. No disturbances.
+2026-11-17T19:31:09-08:00 — host gate (Windows)
+Revision: cfd7ec6
+
+```
+windows-msvc-debug    PASS 805/805
+windows-msvc-release  PASS 805/805
+linux-gcc-debug       PASS 805/805
+linux-gcc-release     PASS 805/805
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine), Linux ARM64
+```
+
+All four rows report 805. This gate matters more than the count suggests: it publishes a **symbol-name change**. A function
+template's pack is now named by every element's type, not just the head's and the arity, so `tuple_size__int__3` becomes
+`tuple_size__int__int__int__3` and every pack instance in every fixture is renamed. The determinism tests -- which build
+the same input twice and compare byte-for-byte -- passed on all four rows, so the rename is stable within a build. Nothing
+outside this repository was compared against, and no golden symbol files exist, so the rename is not claimed inert for
+consumers; it should be read as a change to generated names rather than an internal detail. The change is what closed gap
+2: `{int, int}` and `{int, char}` at arity two previously shared one instance. Rows ran one at a time from deleted
+directories; no warnings, no compiler crashes, no disturbances. The ARM64 host last gated `730653f` and has not seen this
+change or the four before it.
 
 2026-11-17T19:01:27-08:00 — host gate (Linux ARM64)
 Revision: d5f60dc
