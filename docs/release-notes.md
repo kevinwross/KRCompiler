@@ -75,8 +75,8 @@ absent. `AGENTS.local.md` records the environment assumptions, and
   and in-place construction, with a link-and-run fixture on both targets. What it
   does not have, each reason stated in the header: `get<I>` (a member template or a
   partial specialisation over a non-type argument), an element constructor (a class
-  member's pack signature is expanded for one element only), `make_tuple`, and
-  `tuple<>` declared as a local.
+  member's pack signature is expanded for one element only), a three-element or
+  mixed-element `make_tuple`, and `tuple<>` declared as a local.
 - A callable supplied as a *template parameter* is still rejected, so no generic
   algorithm can take `std::function`-style function objects.
 - Release tagging. The `v1.0` tag is an operator decision and is not created by

@@ -37,8 +37,9 @@
 // expression context as `Ts ...`, so the pack name carried a trailing space and never
 // matched its arity. Fixed on 2026-11-17, together with binding the pack's element types
 // (`Ts0`, `Ts1`, ...) and recording a constructor call's resolved type for code
-// generation. `make_tuple(1, 2)` and `make_tuple(1, 2, 3)` compile and run on both
-// targets.
+// generation. `make_tuple(1, 2)` compiles and returns the right values on both targets.
+// A **three**-element tuple compiles but reads its second element wrong on KR16, so the
+// fixture covers two elements only.
 //
 // A mixed-element tuple through the factory still fails: `make_tuple(41, 'a')` reports
 // `IR verifier: function 'main': store type does not match its pointer`. Construct such a

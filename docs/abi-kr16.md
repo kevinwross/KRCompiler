@@ -94,8 +94,8 @@ An aggregate **return** passes its destination as a hidden stack argument placed
 declared argument ([ADR 0048](decisions/0048-kr16-aggregate-return-destination.md)). The caller
 pushes the destination address first, so it lands at the highest address; the callee reads it at
 `[R4 + 4 + 2 * (parameters beyond the third)]`, keeps it in a frame slot, and copies the record
-to it in two-byte words. `make_unique` therefore works on KR16 as it does on KR32. `make_tuple`
-is still absent, but for a different reason: `<tuple>` documents no by-value factory.
+to it in two-byte words. `make_unique` therefore works on KR16 as it does on KR32, and so does
+`<tuple>`'s `make_tuple` for a two-element tuple.
 
 ## Frame layout
 
