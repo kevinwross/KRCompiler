@@ -45,32 +45,13 @@
 // `{int, char}` are two instances rather than one -- before that, the second call site
 // stored the first one's record type into the other's and the IR verifier refused it.
 //
-// **Known defect: `make_tuple` truncates when the elements have different widths.** The
-// instance is named correctly and the record type is right, but every expanded parameter
-// takes the *head* element's type. `make_tuple('a', 1000)` therefore builds
-// `tuple<char, int>` and narrows the 1000 to a char; on KR16 `make_tuple(41, 'a')` builds
-// `tuple<int, char>` and the char element reads back 0. Both are silent -- no diagnostic and
-// no link error. Construct in place instead: `std::tuple<int, char> t(41, 'a')` gives the
-// right values on both targets for the same element types, because it does not go through
-// the pack expansion.
-//
-// Giving each expanded parameter its own element type fixes the front end, and that change
-// was measured: it produces the correct widths and a correct instance name. It is still not
-// in the tree, because it exposes the second defect below rather than removing it.
-//
-// **Known defect, and it is not specific to `tuple`: KR16 loses a struct's trailing
-// sub-word member when the struct is returned by value.** This is the cause of the KR16 half of the paragraph
-// above, and it reproduces without any of this header:
-//
-//     struct Flat { int a; char c; };
-//     Flat mk(int a, char c) { Flat o; o.a = a; o.c = c; return o; }
-//
-// `o.a` survives the return and `o.c` reads back 0 -- three meaningful bytes padded to four. `tuple<int, char>` contains a nested
-// `tuple<char>`, so it hits the same path; in-place construction works because nothing is
-// returned. A function returning such a record built from *literals* can appear to work
-// because the record is constant-folded -- do not read that as evidence, it measures
-// folding rather than returning. The fix belongs in the KR16 aggregate return convention
-// and needs an ADR if that convention changes.
+// `make_tuple` handles elements of different types and widths. Every expanded parameter
+// takes its own element type, so `make_tuple(41, 'a')` gives `tuple<int, char>` and
+// `make_tuple('a', 1000)` keeps the 1000 instead of narrowing it to a char. Returning a
+// record by value also carried a defect until now: KR16 lost a struct's trailing
+// sub-word member because the hidden destination pointer was pushed before the register
+// arguments were loaded, and those loads address staged values relative to SP. That is
+// fixed in `kr16_backend.cpp`, and the fixture covers the mixed case on both targets.
 //
 namespace std {
 

@@ -2523,8 +2523,32 @@ std::string Sema::instantiate_template_call(
                                                parameter->children[1]
                                            ? declarator_name(*parameter->children[1])
                                            : std::string{};
+                // The pack's template parameter, so a duplicate's type can name its own
+                // element rather than the head's. Without this every expanded parameter
+                // took the head's type: `make_tuple('a', 1000)` narrowed the int to a char
+                // and returned a truncated value. The parameter carries no labels of its
+                // own; its type is the specifier in children[0].
+                std::string pack_template_parameter;
+                if (!parameter->children.empty() && parameter->children[0]) {
+                    for (const auto& label : parameter->children[0]->labels) {
+                        if (std::find(pattern->second.parameters.begin(),
+                                      pattern->second.parameters.end(),
+                                      label) != pattern->second.parameters.end()) {
+                            pack_template_parameter = label;
+                            break;
+                        }
+                    }
+                }
                 for (std::size_t copy = 1; copy < arity; ++copy) {
                     auto duplicated = clone_ast(*parameter);
+                    if (!pack_template_parameter.empty() && !duplicated->children.empty() &&
+                        duplicated->children[0]) {
+                        for (auto& label : duplicated->children[0]->labels) {
+                            if (label == pack_template_parameter) {
+                                label = pack_template_parameter + std::to_string(copy);
+                            }
+                        }
+                    }
                     if (!pack_name.empty() && duplicated->children.size() > 1 &&
                         duplicated->children[1]) {
                         auto* declarator =
