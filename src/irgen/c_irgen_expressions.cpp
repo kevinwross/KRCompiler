@@ -1217,6 +1217,24 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
         }
         return {};
     }
+    // An overloaded operator is a binary or unary expression rather than a
+    // CallExpression, but it returns a value exactly the way a call does. A
+    // record result is materialised into a temporary, which is the lvalue a
+    // copy-initialisation or an assignment from `a + b` needs; a scalar result
+    // is not an lvalue and keeps the diagnostic below.
+    if ((expression.kind == frontend::AstKind::BinaryExpression ||
+         expression.kind == frontend::AstKind::UnaryExpression)) {
+        last_reference_address_ = nullptr;
+        auto value = emit_expression(expression);
+        if (value.value && value.type &&
+            (value.type->kind == ir::TypeKind::Struct ||
+             value.type->kind == ir::TypeKind::Union)) {
+            auto* storage = builder_.create_alloca(value.type, 0, "operator.temp");
+            builder_.create_store(value.value, storage);
+            return {storage, value.type};
+        }
+        return {};
+    }
     error(expression.location, "expression is not an lvalue");
     return {};
 }

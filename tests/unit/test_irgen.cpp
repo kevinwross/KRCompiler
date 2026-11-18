@@ -30,19 +30,22 @@ struct Generated {
     std::string verifier_error;
 };
 
-Generated generate(std::string source) {
+// The language comes from the declaration site rather than a bool at each call,
+// because the front end selects it from the input extension: `generate` is the C
+// path, `generate_cxx` the C++ one.
+Generated generate_in(std::string source, bool cxx) {
     SourceManager sources;
     DiagnosticEngine diagnostics(sources);
-    const auto file = sources.add_buffer("test.c", std::move(source));
+    const auto file = sources.add_buffer(cxx ? "test.cpp" : "test.c", std::move(source));
     const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
     Preprocessor preprocessor(sources, diagnostics, profile);
     auto tokens = preprocessor.preprocess(file);
-    Parser parser(std::move(tokens), diagnostics, sources);
+    Parser parser(std::move(tokens), diagnostics, sources, cxx);
     auto ast = parser.parse_translation_unit();
     if (!ast || parser.had_error()) {
         return Generated{nullptr, diagnostics.has_errors(), {}};
     }
-    Sema sema(diagnostics, profile);
+    Sema sema(diagnostics, profile, cxx);
     sema.analyze(*ast);
     if (diagnostics.has_errors()) {
         return Generated{nullptr, true, {}};
@@ -57,6 +60,14 @@ Generated generate(std::string source) {
         }
     }
     return Generated{std::move(module), diagnostics.has_errors(), std::move(verifier_error)};
+}
+
+Generated generate(std::string source) {
+    return generate_in(std::move(source), false);
+}
+
+Generated generate_cxx(std::string source) {
+    return generate_in(std::move(source), true);
 }
 
 }  // namespace
@@ -337,6 +348,33 @@ int local(int value) {
     // LEA computes its address and no instruction loads it indirectly.
     CHECK(assembly->find("LOAD R0, [R7 + ") != std::string::npos);
     CHECK(assembly->find("LEA R0, [R7 + 8]\n        LOAD R0, [R0]") == std::string::npos);
+}
+
+TEST_CASE("C IRGen initialises a record from an overloaded operator result") {
+    const auto generated = generate_cxx(R"SRC(
+struct Value {
+    int amount;
+    Value operator+(const Value& other) const {
+        Value result;
+        result.amount = amount + other.amount;
+        return result;
+    }
+};
+int total(void) {
+    Value left;
+    Value right;
+    left.amount = 2;
+    right.amount = 3;
+    Value sum = left + right;
+    return sum.amount;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    // An operator call is a binary expression, not a call expression; before the
+    // temporary was materialised this reported "expression is not an lvalue" and
+    // left the module failing the verifier.
+    CHECK(generated.verifier_error.empty());
 }
 
 TEST_CASE("C IRGen lowers mainentry arguments and a for loop") {

@@ -6,10 +6,10 @@ produces, so they can be fixed deliberately rather than rediscovered. It is not
 a plan and it claims nothing about when each will be closed.
 
 **Why this file exists.** `examples/KRlibcpp.cpp` is a 3,500-line C++ body of
-code intended as a code-generation benchmark, and the compiler cannot compile
-it. Working through the rejections produced four distinct gaps. Two of them are
-narrow and mechanical; one is a deliberate design decision; one produces
-invalid IR and is the only hard blocker left.
+code intended as a code-generation benchmark, and the compiler could not compile
+it. Working through the rejections produced four distinct gaps. **Gap 4 is now
+fixed** (it was the only one that produced invalid IR); the other three are open,
+and one of those is a deliberate design decision rather than a defect.
 
 **How each entry was verified.** Every entry was reproduced with a **full
 compile** (`krc -S <file> -o <file>.s`, or `krc -c`), not with `-fsyntax-only`,
@@ -23,7 +23,7 @@ called out.
 | 1 | `new T[n]` with a runtime `n` | `variable length arrays are not supported` | gap |
 | 2 | `throw <scalar>` | `throw requires a class type` | **deliberate**, tested |
 | 3 | Zero-argument functional cast `T()` | `expected expression` / `parenthesized initializer takes exactly one value` | gap |
-| 4 | Initialising or assigning a record from an overloaded-operator result | `expression is not an lvalue`, then `IR verifier: ... getelementptr has an invalid base or result` | gap, **blocks the benchmark** |
+| 4 | Initialising or assigning a record from an overloaded-operator result | `expression is not an lvalue`, then `IR verifier: ... getelementptr has an invalid base or result` | **fixed**, see below |
 
 ---
 
@@ -152,15 +152,15 @@ int from_operator() {
 }
 ```
 
-**Diagnostics:**
+**Diagnostics, before the fix:**
 
 ```text
 gap4.cpp:7:13: error: expression is not an lvalue
       M c = a + b;
 ```
 
-The assignment form fails identically, and in the same function the module then
-fails verification:
+The assignment form failed identically, and in the same function the module then
+failed verification:
 
 ```text
 gap4-assign.cpp:8:11: error: expression is not an lvalue
@@ -168,12 +168,26 @@ gap4-assign.cpp:8:11: error: expression is not an lvalue
 error: IR verifier: function 'assign_from_operator': getelementptr has an invalid base or result
 ```
 
-**Site:** `src/irgen/c_irgen_expressions.cpp:1220`, the fall-through in
-`emit_lvalue`. That function handles a subscript, a member, a move call and a
-`CallExpression` — materialising a temporary for a call that does not return a
-reference — and everything else is "not an lvalue". An overloaded operator is an
+**Site:** `src/irgen/c_irgen_expressions.cpp`, the fall-through in `emit_lvalue`.
+That function handles a subscript, a member, a move call and a `CallExpression` —
+materialising a temporary for a call that does not return a reference — and
+everything else was "not an lvalue". An overloaded operator is an
 `AstKind::BinaryExpression` (or unary), not a `CallExpression`, so it never
-reaches the temporary-materialising branch.
+reached the temporary-materialising branch.
+
+**Fix:** `emit_lvalue` now handles a binary or unary expression the way it
+handles a call: it emits the expression, and when the result is a record it
+materialises it into a temporary and returns that as the lvalue. A *scalar*
+operator result is still not an lvalue and keeps the diagnostic, so this did not
+widen into "any expression is assignable". The regression is pinned by
+`C IRGen initialises a record from an overloaded operator result`
+(`tests/unit/test_irgen.cpp`), which needed a C++ front-end entry point in that
+file — `generate_cxx`, because the front end selects the language from the input
+extension and the existing helper parsed everything as C.
+
+**Consequence:** `examples/KRlibcpp.krc.cpp` now compiles for KR32 and
+`examples/KRlibcpp.S` is its assembly — 31,188 instruction lines across 224
+global functions. `examples/KRlibcpp.cpp` itself still needs gaps 1 and 2.
 
 **Controls that compile** (verified):
 
@@ -224,21 +238,32 @@ a rejection that is expected to fail later than syntax analysis must be
 ## State of `examples/KRlibcpp.krc.cpp`
 
 The original `examples/KRlibcpp.cpp` is untouched. `examples/KRlibcpp.krc.cpp`
-is a copy carrying the smallest adaptations that let it compile once gap 4 is
-fixed, each marked in the file with a comment:
+is a copy carrying the smallest adaptations for the gaps that are still open,
+each marked in the file with a comment:
 
 | Gap | Adaptation in the copy |
 |---|---|
 | 1 | `reserve()` caps the capacity it records and allocates a fixed block (`new int[1024]`) |
 | 2 | `KRError` (one `int code` field) plus a `KRThrow(int)` helper; handlers catch `KRError&` and read `.code` |
 | 3 | `T sum = 0;` / `T total = 0;` in the two templates |
-| 4 | **not adapted** — this is the remaining blocker |
+| 4 | none — the gap is fixed in the compiler |
 
-It does not compile yet, and no `.S` has been produced from it. The earlier
-attempt to emit one is deliberately not kept: the compiler wrote output before
-failing, and an assembly file from a failed compile is a misleading artefact.
+It compiles for KR32, and `examples/KRlibcpp.S` is the assembly it produces:
+
+```text
+krc -S --target=kr32 examples/KRlibcpp.krc.cpp -o examples/KRlibcpp.S
+```
+
+That file is generated and is deliberately **not checked in** — the examples
+directory carries sources, not artefacts, and the command above reproduces it.
+
+31,188 instruction lines across 224 global functions, 1.25 MB — comparable to
+`targets/kr32/runtime/libc.c` (27,091 instructions), which makes it a plausible
+second size-and-ticks workload once gaps 1-3 close and the original file can be
+used unmodified. It has **not** been added to `benchmarks/`: a workload whose
+source needs three adaptations measures the adapted source, not the file.
 
 The file's own header names its compile line as `kr32 cxx ... -S -O1`, i.e. it
 was authored for the sibling `kr32` compiler. Some of these gaps are therefore
 differences between the two front ends rather than defects in either — worth
-knowing before treating all four as bugs.
+knowing before treating the rest as bugs.
