@@ -2617,15 +2617,94 @@ std::unique_ptr<AstNode> Parser::parse_primary_expression() {
             return parse_offsetof_expression();
         }
         ++position_;
-        if (cxx_mode_ && check("::") && peek(1).kind == TokenKind::Identifier) {
+        if (cxx_mode_) {
+            // A qualified name whose prefix is a template-id: `Box<int>::pick`. The `<` was
+            // otherwise read as a comparison, so the `::` after the closing `>` had nowhere
+            // to go and the whole expression failed with `expected expression`. The scan
+            // below only commits when the `>` is followed by a scope, which keeps `a < b`
+            // an ordinary comparison; `;`, `{` and `}` cannot appear inside a template
+            // argument list, so they end the scan early rather than running to end of file.
             std::string qualified = token.text;
-            while (check("::") && peek(1).kind == TokenKind::Identifier) {
+            std::vector<std::string> template_arguments;
+            bool qualified_any = false;
+            for (;;) {
+                if (check("::") && peek(1).kind == TokenKind::Identifier) {
+                    ++position_;
+                    qualified += "::";
+                    qualified += peek().text;
+                    ++position_;
+                    qualified_any = true;
+                    continue;
+                }
+                if (!check("<")) {
+                    break;
+                }
+                const auto saved = position_;
                 ++position_;
-                qualified += "::";
-                qualified += peek().text;
-                ++position_;
+                std::vector<std::string> arguments;
+                std::string current;
+                int depth = 1;
+                bool closed = false;
+                bool hopeless = false;
+                while (!at_end()) {
+                    if (check(";") || check("{") || check("}")) {
+                        hopeless = true;
+                        break;
+                    }
+                    if (check("<")) {
+                        ++depth;
+                    } else if (check(">")) {
+                        --depth;
+                        if (depth == 0) {
+                            ++position_;
+                            closed = true;
+                            break;
+                        }
+                    } else if (check(",") && depth == 1) {
+                        arguments.push_back(current);
+                        current.clear();
+                        ++position_;
+                        continue;
+                    }
+                    if (!current.empty() && !(peek().is("...") && depth == 1)) {
+                        current += " ";
+                    }
+                    current += peek().text;
+                    ++position_;
+                }
+                if (hopeless || !closed) {
+                    position_ = saved;
+                    break;
+                }
+                if (!current.empty()) {
+                    arguments.push_back(current);
+                }
+                if (!(check("::") && peek(1).kind == TokenKind::Identifier)) {
+                    position_ = saved;
+                    break;
+                }
+                qualified += "<";
+                for (std::size_t index = 0; index < arguments.size(); ++index) {
+                    if (index != 0) {
+                        qualified += ", ";
+                    }
+                    qualified += arguments[index];
+                }
+                qualified += ">";
+                template_arguments = arguments;
+                qualified_any = true;
             }
-            return make_ast(AstKind::Identifier, token.location, std::move(qualified));
+            if (qualified_any) {
+                auto node =
+                    make_ast(AstKind::Identifier, token.location, std::move(qualified));
+                if (!template_arguments.empty()) {
+                    node->labels.push_back("template-id");
+                    for (const auto& argument : template_arguments) {
+                        node->labels.push_back("template-arg:" + argument);
+                    }
+                }
+                return node;
+            }
         }
         return make_ast(AstKind::Identifier, token.location, token.text);
     case TokenKind::Keyword:
