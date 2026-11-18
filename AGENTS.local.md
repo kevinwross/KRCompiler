@@ -20,16 +20,16 @@ Use the preset form: `cmake --build --preset <preset>`, then `ctest --preset <pr
 
 | Host | Configurations |
 |---|---|
-| Windows | `windows-msvc-debug`, `windows-msvc-release`, plus `linux-gcc-debug`, `linux-gcc-release` in WSL |
-| Linux x64 | `linux-gcc-debug`, `linux-gcc-release` |
+| Windows | `windows-msvc-debug`, `windows-msvc-release`, plus `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize` in WSL |
+| Linux x64 | `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize` |
 
 Run only your host's row. Front-end, backend, runtime and test changes that cross none of those boundaries stay on the inner loop until the gate.
 
 **Build the row concurrently.** Each preset has its own binary directory and they are independent, so launch them as separate background jobs and collect the results rather than running them one after another — four at once on Windows, two on Linux. Never point two presets at one build directory.
 
-**3. Milestone gate — clean builds for this host.** Delete the build directories first; incremental output is not a gate. Build and test this host's full row. On Windows that is four configurations covering Windows x64 and Linux x64; on a Linux host, two.
+**3. Milestone gate — clean builds for this host.** Delete the build directories first; incremental output is not a gate. Build and test this host's full row. On Windows that is six configurations covering Windows x64, Linux x64 GCC, Linux x64 Clang and Linux x64 ASan/UBSan; on a Linux host, four. Both hosts run a row of four Linux presets, which is why the sanitizer and second-compiler configurations are no longer special cases.
 
-**A gate subsumes the matrix.** If the gate is next — because you are about to push, or a milestone is closing — skip tier 2 and let the gate's clean builds cover it. Running the four configurations incrementally and then deleting them to run the same four again is eight builds for one answer.
+**A gate subsumes the matrix.** If the gate is next — because you are about to push, or a milestone is closing — skip tier 2 and let the gate's clean builds cover it. Running the six configurations incrementally and then deleting them to run the same six again is twelve builds for one answer.
 
 **The gate closes on this host's row, not on every host.** A Windows gate passing says nothing about native Linux or ARM64, and those are expected to need fixing when first built. Do not wait for them, and do not imply they passed.
 
@@ -43,6 +43,8 @@ windows-msvc-debug    PASS <n>/<n>
 windows-msvc-release  PASS <n>/<n>
 linux-gcc-debug       PASS <n>/<n>
 linux-gcc-release     PASS <n>/<n>
+linux-clang-debug     PASS <n>/<n>
+linux-sanitize        PASS <n>/<n>
 not verified: native Linux x64, Linux ARM64
 ```
 
@@ -85,7 +87,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
 | Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release on the local dev machine. CI workflow committed; whether it runs is unverified. |
-| Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS. GCC 15.2 Debug/Release. Clang **21.1.8 is installed** (`clang`, with the ASan/UBSan runtimes from `libclang-rt-21-dev`), so `linux-clang-debug` and `linux-sanitize` configure here; neither has been built or tested yet, so both are **unverified** until they are. |
+| Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS. GCC 15.2 and Clang 21.1.8, Debug/Release and ASan/UBSan: all four Linux presets are built and tested here. Clang's ASan/UBSan runtimes come from `libclang-rt-21-dev`, a separate package from `clang`. |
 | Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0 and Clang 19.1.7, Debug/Release and ASan/UBSan. The ARM64 gate runs **all four** presets: `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize`. Latest gate 2026-11-17T19:51:05 at `e774b72`: 805/805 on both GCC rows, 151 executed tests; the Clang and sanitizer rows were verified separately at 805/805 each on the same tree before being added to the gate. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
 
 Target-specific notes:
@@ -122,7 +124,7 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 - CMake 3.25 or newer; C++20; no external runtime dependencies.
 - The Linux presets use the Ninja generator, so `ninja` must exist on the Linux host. A WSL image may ship without it; configuring `linux-gcc-debug` then fails on the missing generator, which is a provisioning gap rather than a broken preset.
 - MSVC on Windows and GCC/Clang on Linux, both with warnings as errors. Sanitizers (ASan/UBSan) are configured on Linux only.
-- GCC 15 in this WSL image segfaults while garbage-collecting its own trees, which surfaces as `internal compiler error: Segmentation fault` inside standard headers. It is intermittent and hits different files, so build the Linux rows with `ulimit -s unlimited` and at most `-j2`, and rebuild once when it happens before treating a build as failed. With all four presets running at once it also fails on small files, so run the two Linux presets one after the other.
+- GCC 15 in this WSL image segfaults while garbage-collecting its own trees, which surfaces as `internal compiler error: Segmentation fault` inside standard headers. It is intermittent and hits different files, so build the Linux rows with `ulimit -s unlimited` and at most `-j2`, and rebuild once when it happens before treating a build as failed. With all four presets running at once it also fails on small files, so run the four Linux presets one at a time.
 - Run the gate rows one at a time on this machine, and run each row's test suite with nothing else building. With four rows running at once, `ctest` reads the staged `libkrcrt.kro` while another job is rebuilding it, which surfaces as `krld: KRO CRC mismatch` in a single link test that passes on its own; the concurrency the build policy asks for assumes headroom this machine does not have.
 - doctest is vendored for tests — do not replace it with a fetched framework.
 - The executed tests run a linked image under a VM and check its exit status and, where it is meaningful, its output, which a link-only test cannot do. Two cache variables name the binaries: `KRC_KR32_VM` and `KRC_KR16_VM`. Each is resolved at configure time from the first of `vm/krc_kr<32|16>[.exe]`, the legacy `build/vm/krc_kr<32|16>[.exe]`, and — on Windows only — the sibling checkout's build output that exists. `vm/` is deliberately outside `build/`, which a clean gate deletes. The run tests are not registered otherwise, so a host without a runnable VM still passes.
@@ -140,4 +142,4 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 - **ABI, object, symbol, target and IR changes need an ADR first.** Not a note in the commit message — a file under `docs/decisions/`.
 - **`D-xxx` identifiers are stable.** A changed decision takes an Appendix A entry; renumbering or deleting a decision breaks every reference that cites it.
 - **The compiler is one program with many outputs** (`-c` object, `-S` assembly, `-o` linked image). Do not grow a second driver to handle a case; extend `krc`.
-- **The CI workflow covers the full matrix; whether it runs is unverified.** `.github/workflows/ci.yml` has a job per preset, including the Clang and sanitizer ones, which now configure on this machine but have not yet been built or tested here. A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.
+- **The CI workflow covers the full matrix; whether it runs is unverified.** `.github/workflows/ci.yml` has a job per preset, including the Clang and sanitizer ones, which are built and tested on both hosts here. A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.

@@ -497,6 +497,30 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T20:50:00-08:00 — host gate (Windows)
+Revision: de9436c
+
+```
+windows-msvc-debug    PASS 805/805
+windows-msvc-release  PASS 805/805
+linux-gcc-debug       PASS 805/805
+linux-gcc-release     PASS 805/805
+linux-clang-debug     PASS 805/805
+linux-sanitize        PASS 805/805
+not verified: native Linux x64 (WSL used), Linux ARM64
+```
+
+The first six-row gate: `linux-clang-debug` and `linux-sanitize` join this host's row. All six report 805, and the
+`not verified` list shrinks by two configurations. Both new rows needed one build fix, and it was not in this project's
+code: doctest 2.4.11 includes `<ciso646>` under Clang, libstdc++ 15 answers with `#warning`, and `-Werror` made that
+fatal, so the test binary could not be built at all. `-Wno-error=#warnings` on `krc_tests`, Clang only, demotes it --
+the warning still prints 46 times, once per translation unit that includes doctest, which is visible in this gate's log
+rather than suppressed. The library itself built cleanly under Clang 21 before that fix, so no project source needed a
+change. `linux-sanitize` reports **zero** AddressSanitizer, LeakSanitizer and UBSan diagnostics across the suite, so the
+leak detector that runs by default at exit found nothing either. Rows ran one at a time from deleted directories; no
+warnings beyond the demoted doctest one, no compiler crashes, no disturbances. The ARM64 host now runs all four presets
+there and last gated `e774b72`.
+
 2026-11-17T20:25:57-08:00 — ARM64 poll
 Revision: d26250d
 
