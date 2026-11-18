@@ -516,6 +516,24 @@ Both rows were configured and built clean from a deleted `build/` at `-j2` with 
 unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`, so the
 executed tests registered. Test times were 80.03 s (debug) and 34.55 s (release) with the preset's
 `jobs: 4`. No disturbances.
+2026-11-17T17:14:26-08:00 — host gate (Windows)
+Revision: 8c1685f
+
+```
+windows-msvc-debug    PASS 801/801
+windows-msvc-release  PASS 801/801
+linux-gcc-debug       PASS 801/801
+linux-gcc-release     PASS 801/801
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine), Linux ARM64
+```
+
+All four rows report 801, unchanged from the previous gate: this one carries documentation only -- the item-1
+diagnosis, the two audit passes, and the empty-tuple narrowing -- so it is a check that nothing drifted while
+those were written, not a check of new code. The audit is what the counts are here for: it corrected a header
+claim that a three-element `make_tuple` runs on both targets when it only compiles, which the fixture would
+have caught had it asserted that case. Rows ran one at a time from deleted directories; no warnings, no
+compiler crashes, no disturbances. The ARM64 host last gated `cbcb467` and has not seen the pack fix or
+`make_tuple`.
 
 2026-11-17T16:32:30-08:00 — ARM64 poll
 Revision: dbaddad
