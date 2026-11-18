@@ -60,6 +60,14 @@ private:
     [[nodiscard]] bool is_memory_class_return(ir::TypePtr type) const;
     void emit_function(std::string& out, const ir::Function& function,
                        const FrameLayout& layout) const;
+    // A `phi` has no code of its own: its value arrives on the incoming edge, so
+    // the copy is emitted at the end of each predecessor, before its terminator.
+    // An edge that is critical at both ends has nowhere to put that copy, so it
+    // is refused loudly rather than miscompiled — see `docs/optimize.md` E6,
+    // whose pass splits those edges before inserting any `phi`.
+    void emit_phi_copies(std::string& out, const ir::Function& function,
+                         const FrameLayout& layout, const ir::BasicBlock& block,
+                         const ir::Instruction& terminator) const;
     void emit_instruction(std::string& out, const ir::Function& function,
                           const FrameLayout& layout, const ir::Instruction& instruction) const;
     void load_value(std::string& out, const ir::Function& function, const FrameLayout& layout,

@@ -1106,6 +1106,13 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
             if (folded_conditions_.count(instruction.get()) != 0) {
                 continue;
             }
+            // A phi's value is written on the edge into its block, not here.
+            if (instruction->opcode == ir::Opcode::Phi) {
+                continue;
+            }
+            if (ir::is_terminator(instruction->opcode)) {
+                emit_phi_copies(out, function, layout, *block, *instruction);
+            }
             if (instruction->debug.valid()) {                auto source = debug_sources_.find(instruction->debug.file);
                 if (source == debug_sources_.end()) {
                     const auto id = next_debug_source_++;
@@ -1227,6 +1234,58 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
         out += "        .word " + region.pad + "\n";
     }
     out += "        .text\n";
+}
+
+void Kr32Backend::emit_phi_copies(std::string& out, const ir::Function& function,
+                                  const FrameLayout& layout, const ir::BasicBlock& block,
+                                  const ir::Instruction& terminator) const {
+    std::size_t successor_count = 0;
+    for (const auto* successor : terminator.successors) {
+        if (successor) {
+            ++successor_count;
+        }
+    }
+    for (const auto* successor : terminator.successors) {
+        if (!successor) {
+            continue;
+        }
+        std::size_t predecessor_count = 0;
+        for (const auto& candidate : function.blocks) {
+            if (!candidate) {
+                continue;
+            }
+            for (const auto& other : candidate->instructions) {
+                if (!other) {
+                    continue;
+                }
+                for (const auto* target : other->successors) {
+                    if (target == successor) {
+                        ++predecessor_count;
+                    }
+                }
+            }
+        }
+        // The copy belongs to this edge alone. When the source has another
+        // successor and the destination another predecessor, this edge is shared
+        // and there is nowhere to put the write.
+        const bool critical = successor_count > 1 && predecessor_count > 1;
+        for (const auto& instruction : successor->instructions) {
+            if (!instruction || instruction->opcode != ir::Opcode::Phi) {
+                continue;
+            }
+            for (const auto& incoming : instruction->incoming) {
+                if (incoming.second != &block || !incoming.first) {
+                    continue;
+                }
+                if (critical) {
+                    out += "        HALT ; phi on a critical edge: split the edge first\n";
+                    continue;
+                }
+                load_value(out, function, layout, incoming.first, "R0");
+                store_value(out, function, layout, *instruction, "R0");
+            }
+        }
+    }
 }
 
 void Kr32Backend::emit_instruction(std::string& out, const ir::Function& function,

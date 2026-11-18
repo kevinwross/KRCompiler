@@ -462,6 +462,59 @@ void Kr16Backend::emit_function(std::string& out,
             if (folded_conditions_.count(instruction.get()) != 0) {
                 continue;
             }
+            // A phi has no code of its own: its value is written on the incoming
+            // edge, so the copy goes at the end of each predecessor.
+            if (instruction->opcode == ir::Opcode::Phi) {
+                continue;
+            }
+            if (ir::is_terminator(instruction->opcode)) {
+                std::size_t successor_count = 0;
+                for (const auto* successor : instruction->successors) {
+                    if (successor) {
+                        ++successor_count;
+                    }
+                }
+                for (const auto* successor : instruction->successors) {
+                    if (!successor) {
+                        continue;
+                    }
+                    std::size_t predecessor_count = 0;
+                    for (const auto& candidate : function.blocks) {
+                        if (!candidate) {
+                            continue;
+                        }
+                        for (const auto& other : candidate->instructions) {
+                            if (!other) {
+                                continue;
+                            }
+                            for (const auto* target : other->successors) {
+                                if (target == successor) {
+                                    ++predecessor_count;
+                                }
+                            }
+                        }
+                    }
+                    // The copy belongs to this edge alone; an edge that is
+                    // critical at both ends has nowhere to put it.
+                    const bool critical = successor_count > 1 && predecessor_count > 1;
+                    for (const auto& phi : successor->instructions) {
+                        if (!phi || phi->opcode != ir::Opcode::Phi) {
+                            continue;
+                        }
+                        for (const auto& incoming : phi->incoming) {
+                            if (incoming.second != block.get() || !incoming.first) {
+                                continue;
+                            }
+                            if (critical) {
+                                out += "    HALT ; phi on a critical edge: split the edge first\n";
+                                continue;
+                            }
+                            load(incoming.first, "R0");
+                            store(*phi, "R0");
+                        }
+                    }
+                }
+            }
             switch (instruction->opcode) {
             case ir::Opcode::Alloca:
                 break;

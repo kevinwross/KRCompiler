@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "asm/kr32_assembler.h"
+#include "backend/kr16_backend.h"
 #include "backend/kr32_backend.h"
 #include "doctest.h"
 #include "ir/ir.h"
@@ -414,6 +415,83 @@ TEST_CASE("-O1 removes a branch to the label that follows it") {
     CHECK(krc::backend::remove_redundant_jumps(kr16).find("BRA") == std::string::npos);
     CHECK(krc::backend::remove_redundant_jumps("    JMP R3\n").find("JMP R3") !=
           std::string::npos);
+}
+
+namespace {
+
+// A diamond whose join reads a `phi`. IRGen never builds one — it stages such
+// values through an alloca — so this is hand-built to exercise the lowering the
+// pass layer will depend on (docs/optimize.md E6).
+void build_phi_diamond(krc::ir::Module& module) {
+    const auto i32 = module.types().int_type(32);
+    const auto i1 = module.types().int_type(1);
+    const auto type = module.types().function_type(
+        i32, std::vector<krc::ir::TypePtr>{i32, i32, i32});
+    auto* function = module.add_function("pick", type, krc::ir::Linkage::External);
+    auto* flag = function->add_parameter(i32, "flag");
+    auto* left = function->add_parameter(i32, "left");
+    auto* right = function->add_parameter(i32, "right");
+    auto* entry = function->add_block("entry");
+    auto* take_left = function->add_block("take.left");
+    auto* take_right = function->add_block("take.right");
+    auto* join = function->add_block("join");
+
+    krc::ir::IRBuilder builder(module.types());
+    builder.set_insert_point(entry);
+    auto* condition =
+        builder.create_icmp(krc::ir::ICmpPredicate::Ne, flag, module.constant_int(i32, 0), "cond");
+    builder.create_cond_br(condition, take_left, take_right);
+
+    builder.set_insert_point(take_left);
+    builder.create_br(join);
+
+    builder.set_insert_point(take_right);
+    builder.create_br(join);
+
+    builder.set_insert_point(join);
+    auto* result = builder.create_phi(i32, "result");
+    result->type = i32;
+    result->incoming.push_back({left, take_left});
+    result->incoming.push_back({right, take_right});
+    builder.create_ret(result);
+    static_cast<void>(i1);
+}
+
+}  // namespace
+
+TEST_CASE("A phi's value is written on the incoming edges") {
+    // A phi has no code of its own. Each predecessor must store its incoming
+    // value before branching, and the join must read the slot the edges wrote.
+    for (const auto target : {krc::target::TargetId::Kr32, krc::target::TargetId::Kr16}) {
+        krc::ir::Module module(target);
+        build_phi_diamond(module);
+        const auto& profile = krc::target::get_target(target);
+
+        std::string assembly_error;
+        std::optional<std::string> assembly;
+        if (target == krc::target::TargetId::Kr32) {
+            krc::backend::Kr32Backend backend(module, profile);
+            assembly = backend.emit(assembly_error);
+        } else {
+            krc::backend::Kr16Backend backend(module, profile);
+            assembly = backend.emit(assembly_error);
+        }
+        REQUIRE_MESSAGE(assembly, assembly_error);
+        CHECK(assembly_error.empty());
+        CHECK(assembly->find("phi on a critical edge") == std::string::npos);
+        CHECK(assembly->find("HALT") == std::string::npos);
+        // Both arms carry a store into the phi's slot before their branch. The
+        // two targets spell a store differently, so the check accepts either.
+        for (const std::string arm : {".Lpick.take.left:", ".Lpick.take.right:"}) {
+            const auto start = assembly->find(arm);
+            REQUIRE(start != std::string::npos);
+            const auto end = assembly->find("\n.L", start + arm.size());
+            const auto body = assembly->substr(start, end - start);
+            const bool stored = body.find("STORE R0, [") != std::string::npos ||
+                                body.find("ST [SP+") != std::string::npos;
+            CHECK(stored);
+        }
+    }
 }
 
 TEST_CASE("Empty-block elimination removes an empty arm and keeps an EH block") {
