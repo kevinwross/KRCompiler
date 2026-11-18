@@ -3530,7 +3530,10 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                    ? float_type_
                    : double_type_;
     case AstKind::CharLiteral:
-        return int_type_;
+        // C++ gives a character literal the type char; C gives it int. Typing it int in
+        // C++ made `make_tuple(41, 'a')` deduce `tuple<int, int>`, which could not be
+        // assigned to the `tuple<int, char>` it was written into.
+        return cxx_mode_ ? char_type_ : int_type_;
     case AstKind::StringLiteral:
         return pointer_to(char_type_);
     case AstKind::LambdaExpression: {

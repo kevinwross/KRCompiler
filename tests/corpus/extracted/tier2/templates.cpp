@@ -42,7 +42,7 @@ public:
 int main() {
     // A function template at two types.
     if (twice(21) != 42) { return 1; }
-    if (twice('a') != 194) { return 2; }
+    if (twice((char)20) != 40) { return 2; }
 
     // A class template, default-constructed and assigned, and one constructed with a
     // value.
