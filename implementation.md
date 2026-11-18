@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T05:43:49-08:00 — host gate (Windows)
+Revision: 37d60e2
+
+```
+windows-msvc-debug    PASS 821/821
+linux-gcc-debug       PASS 821/821
+linux-clang-debug     PASS 821/821
+linux-sanitize        PASS 821/821
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+821 tests, four more than the previous gate: the per-element parameter widths fixture, a link and an executed
+test each on both targets. The gate also covers the value-template-parameter deduction added in `706109b` and
+the `std::strlen` fix in `37d60e2`. That fix exists because **the ARM64 host found a break my gate had not
+reached yet**: `706109b` used `std::strlen` without `<cstring>`, which GCC and Clang reject and MSVC accepts
+through a transitive include, so the first row of this gate passed on a tree the other three could not build.
+Rows then ran one at a time from deleted directories, and `windows-msvc-debug` was **re-run** after the fix so
+the whole record covers one revision rather than two. No warnings beyond the demoted doctest one on the Clang
+row; `linux-sanitize` reports zero AddressSanitizer, LeakSanitizer and UBSan diagnostics.
+
 2026-11-18T05:44:14-08:00 — host gate (Linux ARM64)
 Revision: 1229297
 
@@ -5429,3 +5449,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-18T06:50:00-08:00** — **Item 11 done: a value template parameter is now deduced from an argument.** `size_of(five)` binds `N` to 5 and `size_of(two)` binds it to 2; before this it was a hard compile error at every call. The refusal sat **before** any deduction attempt, so nothing ever tried. The deduction reads the argument's recorded instance tag: `Fixed<5>` records as `Fixed__5`, so the value is the integer after the pattern's name. It binds only when a function parameter's type names that value parameter, and falls through to the same error when nothing does, so the diagnostic is unchanged for the shapes that genuinely cannot be deduced.
 - **2026-11-18T06:50:00-08:00** — The implementation was shaped by one instrumented run rather than by reading: the parameter list carries the function's **own name at index 0**, so parameter p takes argument p - 1, and the parameter's specifier labels read `Fixed|template-id|template-arg:N`. Neither fact is documented anywhere, and guessing either would have produced a plausible-looking loop that silently bound the wrong argument -- the failure mode that cost six rounds on item 12.
 - **2026-11-18T06:50:00-08:00** — Fixture added and executed on both targets: `nontype_deduction.cpp` uses **two different values** (2 and 5) precisely so a binding hard-coded to one of them cannot pass, and re-reads the argument afterwards so a deduction that consumed it would fail. Suite **821/821**, four tests more than before.
+- **2026-11-18T05:50:00-08:00** — **My previous commit broke the Linux build, and the ARM64 host found it before my gate did.** `706109b` used `std::strlen` in `sema.cpp` without including `<cstring>`; GCC and Clang both fail, MSVC compiles because its transitive includes provide the declaration. Fixed by using `constexpr std::string_view` for the label prefix, which `<string_view>` already provides, so the dependency is the one the file already declares. Verified: `linux-gcc-debug` builds with **zero errors** and passes **821/821**. This is the "warnings-as-errors cuts both ways" trap in its plainest form -- the inner loop was MSVC-only for that change, and a header the compiler happened to pull in made it work there.
+- **2026-11-18T06:10:00-08:00** — **The ARM64 host answered, and its answer resolves P0 item 1.** It confirmed the mechanism I guessed and gave the exact one: the poll diffed `<old local HEAD>..<new remote HEAD>`, where the old head was its own log commit -- and rebasing that commit onto the remote makes the remote's code an **ancestor**, so `git diff` from it never shows the code. It verified `git merge-base --is-ancestor` returns true for both `76f58d9` and `01a6b9d`, confirming they entered through its rebase at 22:46 rather than through a pull, and that nothing in its record ever built them. It then built `c2e6c90`, which contains both fixes: **813/813 on `linux-gcc-debug`, `linux-clang-debug` and `linux-sanitize`**, 155 executed tests. So the KR16 argument-order fix and the per-element width fix now have **two architectures of evidence**. It also fixed the range: the loop now diffs from the most recent `Revision:` under an ARM64 gate block, so a rebase can no longer hide code.
+- **2026-11-18T06:10:00-08:00** — It also corrected one thing in my message and was right to: the `no build` verdict for `1500a0e` was correct **for that commit**, whose own diff is documentation only. The error was the range, not the commit. Recorded because I had implied the verdict itself was wrong.
