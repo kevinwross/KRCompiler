@@ -515,7 +515,7 @@ built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one row
 warnings; the VM copies were resolved from `vm/`. Test times were 85.45 s (debug) and 44.15 s
 (release) with the preset's `jobs: 4`. No disturbances.
 2026-11-17T18:41:01-08:00 — host gate (Windows)
-Revision: 9dad6e1
+Revision: 7e878f4
 
 ```
 windows-msvc-debug    PASS 805/805
