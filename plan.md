@@ -642,6 +642,8 @@ instruction
 
 **`-O0`:** no semantic-changing optimisation; straightforward lowering; all variables in frame slots; full debug info.
 
+Lowering *quality* is not an optimisation level. A literal operand instead of a load, a direct conditional branch instead of a materialised boolean, or an addressing mode instead of a `LEA` plus a load are all things `-O0` should emit; doing otherwise is lowering badly, not declining to optimise. Anything that changes what the program computes, or moves a variable out of its frame slot, is a pass and belongs to `-O1`.
+
 **`-O1`:** mem2reg, constant folding, dead code elimination, common subexpression elimination, copy propagation, CFG simplification, branch folding, peepholes, graph-colouring register allocation. No inlining, LTO, loop-invariant code motion, or vectorisation in v1.
 
 The optimiser MUST preserve:
@@ -1559,6 +1561,8 @@ Survey decision IDs use the `S-G` prefix to avoid collision with acceptance gate
 | D-041 | KR16 image | `krc -c --target=kr16` keeps the minimal single-unit EXEC `.kex` (ADR 0017); `--emit-object` writes KRO objects and `krld` links them into a KR16 EXEC (ADR 0019). | G7 needs a runnable image and a relocatable link path. |
 | D-042 | Global construction | Static objects are initialized by `__krc_init_globals` and destroyed by `__krc_destroy_globals` — function-local statics destruct at exit after namespace-scope objects — both called from a generated `main` wrapper (ADR 0018); cross-TU ordering is deferred. | Static constructors must run before user `main` without changing the runtime entry symbol. |
 | D-048 | ABI (KR16) | Aggregate returns pass their destination as a hidden stack argument after every declared argument, because KR16 has no free general-purpose register: `R6` is the status register and `R7` the program counter. The callee keeps the destination in a frame slot and copies the record in two-byte words. | Removes the last gap that kept `make_unique` KR32-only, and reuses the stack-argument convention of `D-028` rather than shifting every argument out of `R1`-`R3`. | [ADR 0048](docs/decisions/0048-kr16-aggregate-return-destination.md) |
+
+| D-049 | Optimisation contract | `-O0` is straightforward lowering and gains no pass; **selection quality is not an optimisation level** — S1–S5-shaped improvements apply at every level, because emitting a literal operand or a direct conditional branch is lower quality lowering, not optimisation. `-O1` is §8.8's list and additionally permits global CSE and two text-level peepholes. Named locals **are** promoted at `-O1`, and the debug-info cost is documented rather than avoided. No optimiser pass lands before `--dump-stats` exists to measure it. | The review of `docs/optimize.md` found the proposal exceeded §8.8 by five selection passes, global CSE and two text passes, and that its Q3 recommendation (do not promote named locals) contradicted its own E6 pass. This row settles all three, and makes measurement the precondition rather than a later step. | — |
 
 Changing a `D-xxx` decision requires editing its row here and adding an ADR under `docs/decisions/` when the change touches ABI, object format, symbol format, target description, or IR.
 
