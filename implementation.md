@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T23:43:42-08:00 — host gate (Linux ARM64)
+Revision: 6607c8a
+
+```
+linux-gcc-debug    PASS 813/813
+linux-clang-debug  PASS 813/813
+linux-sanitize     PASS 813/813
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `6607c8a`, with the diagnosis in `eade9146` and `4e60113` behind it: the tuple
+header's defect note now names the real cause, KR16 losing a nested struct when it is returned by
+value, after narrowing the element loss to the parameter-to-return path. It touches
+`sysroot/include/tuple` (the note) and the tracker; no source or test changed. All three rows report
+813 with 155 executed tests, unchanged from the previous gate, which is correct for a
+documentation-only header edit. Test times were 88.34 s (GCC debug), 85.49 s (Clang debug) and
+372.79 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-17T23:17:49-08:00 — host gate (Windows)
 Revision: 193ea5b
 
