@@ -2,14 +2,15 @@
 
 This is the checklist for the Raspberry Pi 5 (Debian 13, GCC 14.2) host. It exists because the
 ARM64 row of the platform table in `AGENTS.local.md` records a gate, and the tree moves between
-gates. A stale gate row is believed, so refresh it rather than trusting it: re-run the two presets
+gates. A stale gate row is believed, so refresh it rather than trusting it: re-run the presets
 and record the count you actually observed.
 
 ## What this host is verifying
 
-`linux-gcc-debug` and `linux-gcc-release` — the same two presets the Linux x64 host runs. ARM64 is
-the only host that builds the tree with a compiler other than MSVC and Linux x64 GCC, so it is the
-only independent check on portability.
+All four Linux presets: `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug` and
+`linux-sanitize`. ARM64 is the only host built by a compiler other than MSVC and Linux x64 GCC or
+Clang, so it is the only independent check on portability, and the second architecture on which the
+sanitizers run.
 
 ## The one trap that will waste your time
 
@@ -51,12 +52,12 @@ This is the whole point of the checklist:
 | **650** | the VM binaries were not seen at configure time; 147 run tests were silently skipped |
 
 `650` is not a failure — the suite is green — which is exactly why the count has to be read
-deliberately. If it is 650, delete the two preset directories, put the binaries in `vm/`,
+deliberately. If it is 650, delete the four preset directories, put the binaries in `vm/`,
 reconfigure, and rebuild.
 
 ## The sequence
 
-Run one preset at a time. The two presets share the staged runtime under `build/`, and running
+Run one preset at a time. The presets share the staged runtime under `build/`, and running
 them concurrently makes one read `libkrcrt.kro` while the other rebuilds it, which surfaces as
 `krld: KRO CRC mismatch` in a single link test that passes on its own.
 
@@ -108,9 +109,10 @@ Also worth reporting, because they are the things that would surprise someone re
 
 ## What is expected to fail
 
-Nothing, if the counts are right. But these have **never** been run on this host and are not part
-of the two presets above:
+Nothing, if the counts are right. `linux-clang-debug` and `linux-sanitize` were added to this host's
+row and pass at the same count as the GCC presets, so a failure there is news rather than a known
+gap — and a sanitizer report on ARM64 is worth a second look precisely because the allocator is
+different from x86_64's, so a heap error one host tolerates can surface on the other.
 
-- `linux-clang-debug` and `linux-sanitize` — Clang 19.1.7 is installed on the Pi, so these *could*
-  run here even though they cannot run on the Windows/Linux-x64 machine. That would be new
-  coverage; it is not part of this checklist and should be a separate change with its own record.
+What remains unrun here is nothing among the four Linux presets. The Windows presets do not exist on
+this host, and there is no hosted runner for it, so the row is refreshed by hand.
