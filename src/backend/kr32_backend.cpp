@@ -1219,6 +1219,20 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
 void Kr32Backend::emit_instruction(std::string& out, const ir::Function& function,
                                    const FrameLayout& layout,
                                    const ir::Instruction& instruction) const {
+    // The frame slot a pointer names directly, when the value is an alloca in
+    // this function. Used to fold a load or store into an addressing mode.
+    const auto frame_object =
+        [&](const ir::Value* value) -> std::optional<std::uint32_t> {
+        const auto* pointer = dynamic_cast<const ir::Instruction*>(value);
+        if (!pointer || pointer->opcode != ir::Opcode::Alloca) {
+            return std::nullopt;
+        }
+        const auto found = layout.alloca_offsets.find(pointer);
+        if (found == layout.alloca_offsets.end()) {
+            return std::nullopt;
+        }
+        return found->second;
+    };
     const auto binary_instruction = [&](std::string_view mnemonic, bool commutative) {
         if (is_wide(instruction.operands[0]->type)) {
             emit_wide_binary(out, function, layout, instruction);
@@ -1376,6 +1390,18 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         store_value(out, function, layout, instruction, "R0");
         break;
     case ir::Opcode::Load: {
+        // A pointer that names a frame slot addresses it directly, so the load
+        // is an addressing mode rather than a LEA followed by an indirect load.
+        const bool scalar_result =
+            !is_wide(instruction.type) && !ir::is_float(instruction.type) &&
+            !(instruction.type && instruction.type->kind == ir::TypeKind::Struct);
+        if (const auto object = frame_object(instruction.operands[0]);
+            object && scalar_result) {
+            out += "        " + load_opcode(instruction.type) + " R0, [R7 + " +
+                   std::to_string(*object) + "]\n";
+            store_value(out, function, layout, instruction, "R0");
+            break;
+        }
         load_value(out, function, layout, instruction.operands[0], "R0");
         if (is_wide(instruction.type)) {
             out += "        LOAD R1, [R0 + 4]\n";
@@ -1436,6 +1462,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             load_value(out, function, layout, instruction.operands[1], "R2");
             out += "        STORE R0, [R2]\n";
             out += "        STORE R1, [R2 + 4]\n";
+        } else if (const auto object = frame_object(instruction.operands[1]); object) {
+            // Storing through a frame slot is an addressing mode too.
+            load_value(out, function, layout, instruction.operands[0], "R0");
+            out += "        " + store_opcode(instruction.operands[0]->type) +
+                   " R0, [R7 + " + std::to_string(*object) + "]\n";
         } else {
             load_value(out, function, layout, instruction.operands[0], "R0");
             load_value(out, function, layout, instruction.operands[1], "R1");

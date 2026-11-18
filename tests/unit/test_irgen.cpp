@@ -315,6 +315,30 @@ int wide(long long left, long long right) {
     CHECK(assembly->find(".icmp64.") != std::string::npos);
 }
 
+TEST_CASE("KR32 backend addresses a local without a LEA") {
+    const auto generated = generate(R"SRC(
+int local(int value) {
+    int stored = value + 1;
+    return stored;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+
+    // The local's slot is addressed by the load and the store themselves, so no
+    // LEA computes its address and no instruction loads it indirectly.
+    CHECK(assembly->find("LOAD R0, [R7 + ") != std::string::npos);
+    CHECK(assembly->find("LEA R0, [R7 + 8]\n        LOAD R0, [R0]") == std::string::npos);
+}
+
 TEST_CASE("C IRGen lowers mainentry arguments and a for loop") {
     const auto generated = generate(R"SRC(
 int printf(const char *format, ...);
