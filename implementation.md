@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T06:41:29-08:00 — host gate (Linux ARM64)
+Revision: 3b76a1a
+
+```
+linux-gcc-debug    PASS 826/826
+linux-clang-debug  PASS 826/826
+linux-sanitize     PASS 826/826
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `aee29f7`, which consumes a template-id as a name prefix in an expression
+(`src/frontend/parser.cpp`), the four deduction shapes in `nontype_deduction_shapes.cpp`, the pointer
+pack that is still rejected in `make_tuple_pointer.cpp`, and `17b12e4`'s rebuild of the target
+artifacts with the `stage/` trap recorded. `docs/decisions/0048`, the release notes and
+`docs/optimize-review.md` changed too but do not affect the build. The count rises to **826** from 821
+because the two fixtures add five tests; the executed count rises from 159 to 161. All three rows
+agree. Test times were 95.94 s (GCC debug), 92.65 s (Clang debug) and 382.12 s (ASan/UBSan). Rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time,
+with no warnings. No disturbances.
+
 2026-11-18T06:17:34-08:00 — host gate (Linux ARM64)
 Revision: ae2f9d9
 
