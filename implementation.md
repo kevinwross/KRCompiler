@@ -497,6 +497,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T19:51:05-08:00 — host gate (Linux ARM64)
+Revision: e774b72
+
+```
+linux-gcc-debug    PASS 805/805
+linux-gcc-release  PASS 805/805
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+```
+
+The gate covers `abe98d9`: each pack element's type is carried in the instance name, so two
+instantiations that differ only in an element type no longer share a mangled symbol. It touches
+`src/frontend/sema.cpp`, `sysroot/include/tuple`, and `tests/fixtures/c/make_tuple.cpp`. The count
+is unchanged at **805** with 151 executed tests, because the existing fixture was extended and no
+test was added. Both rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`.
+Test times were 85.28 s (debug) and 37.83 s (release) with the preset's `jobs: 4`. No disturbances.
+
 2026-11-17T19:22:44-08:00 — host gate (Linux ARM64)
 Revision: 5ac1e68
 
