@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T23:13:14-08:00 — host gate (Linux ARM64)
+Revision: 80daf27
+
+```
+linux-gcc-debug    PASS 813/813
+linux-clang-debug  PASS 813/813
+linux-sanitize     PASS 813/813
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The first routine gate in the new shape: three rows, the configurations that differ in compiler or
+instrumentation. It covers `80daf27`, which stops a pack's first element being appended twice to an
+instance name in `src/frontend/sema.cpp`. All three rows report 813 with 155 executed tests, the
+same as the previous gate, because the change is a mangling correction and adds no test; the count
+being identical across rows is the check that `vm/` registered every executed test. Test times were
+88.25 s (GCC debug), 87.00 s (Clang debug) and 371.66 s (ASan/UBSan). Rows were configured and
+built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no
+warnings. No disturbances.
+
 2026-11-17T22:58:44-08:00 — ARM64 poll
 Revision: 00abd22
 
