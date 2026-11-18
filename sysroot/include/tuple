@@ -55,10 +55,23 @@
 // the pack expansion.
 //
 // Giving each expanded parameter its own element type fixes the front end, and that change
-// was measured: it produces the correct widths and a correct instance name, and it leaves
-// `krc_run_kr16_make_tuple` failing for a reason that is still under investigation. It is
-// therefore not in the tree. Do not describe the mixed case as working until that test
-// passes.
+// was measured: it produces the correct widths and a correct instance name. It is still not
+// in the tree, because it exposes the second defect below rather than removing it.
+//
+// **Known defect, and it is not specific to `tuple`: KR16 loses a nested struct member when
+// a record is returned by value.** This is the cause of the KR16 half of the paragraph
+// above, and it reproduces without any of this header:
+//
+//     struct Inner { char c; };
+//     struct Outer { int a; Inner in; };
+//     Outer mk(int a, char c) { Outer o; o.a = a; o.in.c = c; return o; }
+//
+// `o.a` survives the return and `o.in.c` reads back 0. `tuple<int, char>` contains a nested
+// `tuple<char>`, so it hits the same path; in-place construction works because nothing is
+// returned. A function returning such a record built from *literals* can appear to work
+// because the record is constant-folded -- do not read that as evidence, it measures
+// folding rather than returning. The fix belongs in the KR16 aggregate return convention
+// and needs an ADR if that convention changes.
 //
 namespace std {
 
