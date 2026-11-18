@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T10:46:07-08:00 — host gate (Linux ARM64)
+Revision: 8fa5dbf
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate. The previous record covered `4430f64`; the push then lost a race and the single rebase
+absorbed three commits that were never classified: `9e63af6` steps vtable dispatch by the target's
+pointer width (`src/irgen/c_irgen_expressions.cpp`), and `d67be37`/`ef937ab` add the KR16 C++ test that
+reaches the second vtable slot and verify it fails without the fix
+(`tests/CMakeLists.txt`, `kr16_virtual_two_slots.cpp`). The count is **843** with 168 executed tests,
+up from 841/167, and all three rows agree. This is the vtable defect's first non-WSL evidence: the fix
+is pointer-width dependent, which is exactly what a second architecture is for. Test times were 79.58 s
+(GCC debug), 77.42 s (Clang debug) and 309.45 s (ASan/UBSan). Rows were configured and built clean from
+a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No
+disturbances.
+
 2026-11-18T10:30:57-08:00 — host gate (Linux ARM64)
 Revision: 4430f64
 
