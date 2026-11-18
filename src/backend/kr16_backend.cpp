@@ -395,9 +395,47 @@ void Kr16Backend::emit_function(std::string& out,
     }
 
     std::size_t synthetic_label = 0;
+    // A comparison whose only use is the conditional branch that tests it does
+    // not need a boolean in a frame slot: the branch can consume the comparison
+    // directly. That holds only while the comparison has exactly one use, so the
+    // uses are counted for the whole function first.
+    folded_conditions_.clear();
+    {
+        std::unordered_map<const ir::Value*, std::size_t> uses;
+        for (const auto& block : function.blocks) {
+            for (const auto& instruction : block->instructions) {
+                for (const auto* operand : instruction->operands) {
+                    if (operand) {
+                        ++uses[operand];
+                    }
+                }
+            }
+        }
+        for (const auto& block : function.blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode != ir::Opcode::CondBr ||
+                    instruction->operands.empty()) {
+                    continue;
+                }
+                const auto* condition =
+                    dynamic_cast<const ir::Instruction*>(instruction->operands[0]);
+                if (!condition || condition->opcode != ir::Opcode::ICmp ||
+                    condition->operands.empty()) {
+                    continue;
+                }
+                if (uses[condition] != 1) {
+                    continue;
+                }
+                folded_conditions_.insert(condition);
+            }
+        }
+    }
     for (const auto& block : function.blocks) {
         out += label_for(*block) + ":\n";
         for (const auto& instruction : block->instructions) {
+            if (folded_conditions_.count(instruction.get()) != 0) {
+                continue;
+            }
             switch (instruction->opcode) {
             case ir::Opcode::Alloca:
                 break;
@@ -596,6 +634,30 @@ void Kr16Backend::emit_function(std::string& out,
                 if (instruction->successors.size() < 2) {
                     error = "KR16 conditional branch needs two destinations";
                     return;
+                }
+                if (const auto* condition =
+                        dynamic_cast<const ir::Instruction*>(instruction->operands[0]);
+                    condition && folded_conditions_.count(condition) != 0) {
+                    load(condition->operands[0], "R0");
+                    if (const auto* literal = inline_literal(condition->operands[1])) {
+                        out += "    CMP R0, #" + std::to_string(literal->value) + "\n";
+                    } else {
+                        load(condition->operands[1], "R1");
+                        out += "    CMP R0, R1\n";
+                    }
+                    const auto false_label =
+                        ".Lcond.false." + function.name + "." +
+                        std::to_string(synthetic_label);
+                    ++synthetic_label;
+                    out += "    " +
+                           inverse_condition_for(condition->icmp_predicate) + " " +
+                           false_label + "\n";
+                    out += "    BRA " + label_for(*instruction->successors[0]) +
+                           "\n";
+                    out += false_label + ":\n";
+                    out += "    BRA " + label_for(*instruction->successors[1]) +
+                           "\n";
+                    break;
                 }
                 load(instruction->operands[0], "R0");
                 out += "    CMP R0, #0\n";

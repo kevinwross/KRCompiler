@@ -1,6 +1,6 @@
 # 0043 — Branch promotion in the KR16 assembler
 
-- Status: proposed
+- Status: accepted, implemented at `185aa0e`
 - Date: 2026-11-15
 - Decision: the assembler promotes an out-of-range `BRA` to `JMP`, and the
   backend may then select `BRA` wherever a short branch fits
@@ -14,11 +14,11 @@ bytes — and `BRA` is its always condition. `JMP` and `CALL` are the two-word
 C-type with a 16-bit signed displacement. This compiler's encoder has both
 (`encode_b`, `encode_c_relative`) and its assembler accepts `BRA`.
 
-What it does **not** do is promote. A `BRA` whose target is 400 bytes away fails
-with `KR16 branch displacement does not fit in 8 signed bits`, so the backend
-must emit `JMP` everywhere and a near unconditional branch costs two words
-where one would do. The sibling assembler promotes instead, and its ADR 0003
-describes the behaviour.
+Before this decision the assembler did not promote: a `BRA` whose target was 400
+bytes away failed with `KR16 branch displacement does not fit in 8 signed bits`,
+so the backend had to reach a far target with a two-word `JMP` and a near
+unconditional branch cost two words where one would do. The sibling assembler
+promotes instead, and its ADR 0003 describes the behaviour.
 
 ## Decision
 
@@ -35,14 +35,19 @@ describes the behaviour.
 - Once promotion exists, the backend may emit `BRA` for an unconditional branch
   wherever it already emits `JMP`, and let the assembler widen what does not fit.
 
-## What blocks it today
+## Implementation
 
-Labels are recorded **during the parse pass** and are not stored in `lines`, so
-after a promotion there is nothing to recompute them from. The first step is
-therefore to record each label's position in the line sequence — a small change
-— and only then to run the fixpoint. Attempting the fixpoint first would produce
-exactly the failure mode this project has already paid for three times: a change
-that cannot see the state it needs to maintain.
+Both parts landed at `185aa0e`. `KR16Assembler` records each label's position in
+the line sequence during parsing, runs the promotion fixpoint over `lines`
+(`kr16_assembler.cpp`, "Promote an out-of-range BRA to JMP"), and rewrites the
+label offsets from the final layout before encoding — the step without which a
+promoted instruction encodes a displacement to where the label used to be. The
+backend emits `BRA` for every unconditional branch and no longer carries a range
+check.
+
+`tests/fixtures/c/branch_promotion.s` is the regression: a `BRA` over 200 `NOP`s,
+which the assembler must widen, and `krc_run_kr16_branch_promotion` executes the
+result under the VM expecting exit 42.
 
 ## Consequences
 

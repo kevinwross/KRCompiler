@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "ir/ir.h"
 #include "krc/target/target.h"
@@ -36,6 +37,10 @@ class Kr16Backend {
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;
+    // The comparisons of the function currently being emitted whose only use is
+    // a conditional branch, so the branch carries the comparison and the boolean
+    // is never materialised.
+    mutable std::unordered_set<const ir::Instruction*> folded_conditions_;
 };
 
 }  // namespace krc::backend

@@ -1,3 +1,3 @@
 program	target	ticks	exit	status
 bench	kr32	218938	42	ok
-bench	kr16	255802	42	ok
+bench	kr16	218356	42	ok
