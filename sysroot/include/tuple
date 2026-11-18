@@ -42,9 +42,9 @@
 // matched its arity. Fixed on 2026-11-17, together with binding the pack's element types
 // (`Ts0`, `Ts1`, ...) and recording a constructor call's resolved type for code
 // generation. `make_tuple(1, 2)` compiles and returns the right values on both targets.
-// A **three**-element tuple compiles but reads its second element wrong on KR16, so the
-// fixture covers two elements only.
-//
+// Two-element and three-element tuples both return the right values on both targets; the
+// fixture covers both, because a three-element pack exposed a separate defect in the
+// signature expansion that a two-element one could not.
 // A mixed-element tuple through the factory still fails: `make_tuple(41, 'a')` reports
 // `IR verifier: function 'main': store type does not match its pointer`. Construct such a
 // tuple in place -- `tuple<int, char> p(41, 'a');` -- which works.
