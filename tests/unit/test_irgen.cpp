@@ -246,6 +246,75 @@ int walk(int *values, int index) { return values[index]; }
     CHECK(assembly->find("MUL R1, R1, #4") != std::string::npos);
 }
 
+TEST_CASE("KR32 backend branches on a comparison without materialising a boolean") {
+    const auto generated = generate(R"SRC(
+int classify(int value) {
+    if (value < 5) return 1;
+    return 2;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+
+    // The comparison reaches the branch directly, so no boolean is built in R2
+    // and stored to a slot.
+    CHECK(assembly->find("CMP R0, #5") != std::string::npos);
+    CHECK(assembly->find(".icmp.") == std::string::npos);
+}
+
+TEST_CASE("KR32 backend materialises a comparison that another use reads") {
+    const auto generated = generate(R"SRC(
+int reuse(int left, int right) {
+    int compared = left < right;
+    return compared + compared;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+
+    // Two uses: the value is needed beyond the branch, so the boolean survives.
+    CHECK(assembly->find(".icmp.") != std::string::npos);
+}
+
+TEST_CASE("KR32 backend does not fold a 64-bit comparison into a branch") {
+    const auto generated = generate(R"SRC(
+int wide(long long left, long long right) {
+    if (left < right) return 1;
+    return 2;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+
+    // A 64-bit comparison is a sequence over the register pair, so its flags are
+    // not the ones a conditional branch tests: the materialised form stays.
+    CHECK(assembly->find(".icmp64.") != std::string::npos);
+}
+
 TEST_CASE("C IRGen lowers mainentry arguments and a for loop") {
     const auto generated = generate(R"SRC(
 int printf(const char *format, ...);

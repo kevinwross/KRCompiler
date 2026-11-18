@@ -1053,9 +1053,52 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     }
 
     eh_regions_.clear();
+    // A comparison whose only use is the conditional branch that tests it does
+    // not need a boolean in a frame slot: the branch can consume the comparison
+    // directly. That holds only while the comparison has exactly one use, so the
+    // uses are counted for the whole function first.
+    folded_conditions_.clear();
+    {
+        std::unordered_map<const ir::Value*, std::size_t> uses;
+        for (const auto& block : function.blocks) {
+            for (const auto& instruction : block->instructions) {
+                for (const auto* operand : instruction->operands) {
+                    if (operand) {
+                        ++uses[operand];
+                    }
+                }
+            }
+        }
+        for (const auto& block : function.blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode != ir::Opcode::CondBr ||
+                    instruction->operands.empty()) {
+                    continue;
+                }
+                const auto* condition =
+                    dynamic_cast<const ir::Instruction*>(instruction->operands[0]);
+                if (!condition || condition->opcode != ir::Opcode::ICmp ||
+                    condition->operands.empty()) {
+                    continue;
+                }
+                // A 64-bit comparison lowers into a sequence whose flags are not
+                // the ones a conditional branch tests.
+                if (is_wide(condition->operands[0]->type)) {
+                    continue;
+                }
+                if (uses[condition] != 1) {
+                    continue;
+                }
+                folded_conditions_.insert(condition);
+            }
+        }
+    }
     for (const auto& block : function.blocks) {
         out += block_label(function, *block) + ":\n";
         for (const auto& instruction : block->instructions) {
+            if (folded_conditions_.count(instruction.get()) != 0) {
+                continue;
+            }
             if (instruction->debug.valid()) {                auto source = debug_sources_.find(instruction->debug.file);
                 if (source == debug_sources_.end()) {
                     const auto id = next_debug_source_++;
@@ -1516,9 +1559,27 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         if (is_wide(instruction.operands[0]->type)) {
             load_wide(out, function, layout, instruction.operands[0]);
             out += "        OR R0, R0, R1\n";
-        } else {
-            load_value(out, function, layout, instruction.operands[0], "R0");
+            out += "        CMP R0, #0\n";
+            out += "        JNZ " + block_label(function, *instruction.successors[0]) + "\n";
+            out += "        JMP " + block_label(function, *instruction.successors[1]) + "\n";
+            break;
         }
+        if (const auto* condition =
+                dynamic_cast<const ir::Instruction*>(instruction.operands[0]);
+            condition && folded_conditions_.count(condition) != 0) {
+            load_value(out, function, layout, condition->operands[0], "R0");
+            if (const auto* literal = inline_literal(condition->operands[1])) {
+                out += "        CMP R0, #" + std::to_string(literal->value) + "\n";
+            } else {
+                load_value(out, function, layout, condition->operands[1], "R1");
+                out += "        CMP R0, R1\n";
+            }
+            out += "        " + condition_for(condition->icmp_predicate) + " " +
+                   block_label(function, *instruction.successors[0]) + "\n";
+            out += "        JMP " + block_label(function, *instruction.successors[1]) + "\n";
+            break;
+        }
+        load_value(out, function, layout, instruction.operands[0], "R0");
         out += "        CMP R0, #0\n";
         out += "        JNZ " + block_label(function, *instruction.successors[0]) + "\n";
         out += "        JMP " + block_label(function, *instruction.successors[1]) + "\n";

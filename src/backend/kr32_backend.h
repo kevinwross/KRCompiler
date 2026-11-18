@@ -96,6 +96,10 @@ private:
     mutable std::size_t wide_label_counter_ = 0;
     // The call sites of the function currently being emitted.
     mutable std::vector<EhRegion> eh_regions_;
+    // The comparisons of the function currently being emitted whose only use is
+    // a conditional branch, so the branch carries the comparison and the boolean
+    // is never materialised.
+    mutable std::unordered_set<const ir::Instruction*> folded_conditions_;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;
