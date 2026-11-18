@@ -514,6 +514,25 @@ executed tests: the fixtures were extended, but no test was added. Both rows wer
 built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one row at a time, with no
 warnings; the VM copies were resolved from `vm/`. Test times were 85.45 s (debug) and 44.15 s
 (release) with the preset's `jobs: 4`. No disturbances.
+2026-11-17T18:41:01-08:00 — host gate (Windows)
+Revision: 9dad6e1
+
+```
+windows-msvc-debug    PASS 805/805
+windows-msvc-release  PASS 805/805
+linux-gcc-debug       PASS 805/805
+linux-gcc-release     PASS 805/805
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine), Linux ARM64
+```
+
+All four rows report 805, unchanged again: this gate publishes the placement-new guard, and the fixture that covers it
+was already registered, so its two forms -- a local and `new (buffer) T()` -- run inside an existing test rather than as a
+new one. The count staying flat across four gates with three behavioural fixes is worth stating plainly: closed gaps
+that correct behaviour under existing fixtures do not move a test count, and a flat number here is the expected shape,
+not evidence that nothing changed. That branch was reachable through placement new after a print had suggested it was
+not, which is the reason the fixture now covers both entry points. Rows ran one at a time from deleted directories; no
+warnings, no compiler crashes, no disturbances. The ARM64 host last gated `6a06757` and has not seen the pack-order,
+empty-instance or placement-new fixes.
 
 2026-11-17T17:57:55-08:00 — host gate (Linux ARM64)
 Revision: 6a06757
