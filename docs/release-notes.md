@@ -64,18 +64,23 @@ absent. `AGENTS.local.md` records the environment assumptions, and
   `thread_local` is static storage with a guarded initializer.
 - A debugger user interface. The symbols are complete and documented; consuming
   them is the debugger's job.
-- Template machinery beyond the recorded subset: member templates, explicit
-  template arguments on a *class* template, multiple packs in one template, and
-  the fold forms other than `(expr op ...)`. Variadic function and class
-  templates, `sizeof...(pack)`, left folds over a binary operator, pack expansion
-  in a call or a `new` argument list, partial specialisation of a class template
-  selected by argument count, and recursive variadic class templates do work.
+- Template machinery beyond the recorded subset: member templates, multiple packs
+  in one template, and the fold forms other than `(expr op ...)`. A function
+  template is not overloadable: two declarations that differ only in arity are
+  `redefinition of function`, because the template table is keyed by bare name.
+  Variadic function and class templates, `sizeof...(pack)`, left folds over a
+  binary operator, pack expansion in a call or a `new` argument list, partial
+  specialisation of a class template selected by argument count, and recursive
+  variadic class templates do work. Explicit class-template arguments parse and
+  instantiate, both `Box<int>` and `template <> struct Box<int>`; `sysroot/include/tuple`
+  depends on the former throughout.
 - `get<I>`, and the parts of `<tuple>` that need it. `sysroot/include/tuple` does
   ship — `tuple_size`, `tuple_head`, `tuple_tail`, the members `.head` / `.tail`,
   in-place construction, and `make_tuple` — with link-and-run fixtures on both
   targets. The element constructor takes one argument per element and works for three
   as readily as for two, `make_tuple` returns two-element, three-element and
-  mixed-type tuples, and `tuple<>` can be declared as a local. `get<I>` is the one
+  mixed-type tuples with each element keeping its own width, and `tuple<>` can be
+  declared as a local. `get<I>` is the one
   absence, and the header states its measured reason: a member function template does
   not parse here, and neither does a qualified use through a template-id with a
   non-type argument.
