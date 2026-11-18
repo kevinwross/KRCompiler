@@ -1290,9 +1290,12 @@ void Kr32Backend::compute_allocation(const ir::Function& function) const {
             if (found == allocation.registers.end()) {
                 continue;
             }
-            // Only a plain 32-bit integer is a candidate: a wide value travels as
-            // a pair and an aggregate is copied word by word.
-            if (!instruction->type || instruction->type->kind != ir::TypeKind::Integer ||
+            // A word-sized scalar is a candidate: an integer or a pointer, which
+            // is one word on this target. A wide value travels as the R0/R1 pair
+            // and an aggregate is copied word by word, so neither is.
+            if (!instruction->type ||
+                (instruction->type->kind != ir::TypeKind::Integer &&
+                 instruction->type->kind != ir::TypeKind::Pointer) ||
                 instruction->type->bits > 32) {
                 continue;
             }
@@ -1683,7 +1686,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         }
         break;
     case ir::Opcode::GetElementPtr: {
-        load_value(out, function, layout, instruction.operands[0], "R0");
+        // The address is computed in the register the result belongs in, so an
+        // allocated address costs no move at the end of the chain.
+        const auto destination = result_register(instruction);
+        load_value(out, function, layout, instruction.operands[0], destination);
         ir::TypePtr current = instruction.source_type;
         // A constant index or member offset is a byte displacement the address
         // register can take directly, so the offset accumulates here and leaves
@@ -1694,7 +1700,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             if (pending == 0) {
                 return;
             }
-            out += "        ADD R0, R0, #" +
+            out += "        ADD " + destination + ", " + destination + ", #" +
                    std::to_string(static_cast<std::int32_t>(
                        static_cast<std::uint32_t>(pending))) + "\n";
             pending = 0;
@@ -1759,10 +1765,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             if (stride != 1) {
                 out += "        MUL R1, R1, #" + std::to_string(stride) + "\n";
             }
-            out += "        ADD R0, R0, R1\n";
+            out += "        ADD " + destination + ", " + destination + ", R1\n";
         }
         flush_pending();
-        store_value(out, function, layout, instruction, "R0");
+        store_value(out, function, layout, instruction, destination);
         break;
     }
     case ir::Opcode::ICmp: {
