@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T13:46:57-08:00 — host gate (Linux ARM64)
+Revision: 57e9062
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `ec5233b`, which loads an allocated value straight into its register rather than
+through memory (`src/backend/kr32_backend.cpp`, 16 changed lines). It is the second step of the
+register-allocator wiring that `1934c53` began, so it is still in the class of changes where a
+register-file or addressing assumption can be wrong on one architecture and right on another. The
+count is unchanged at 843 with 168 executed tests. Test times were 79.64 s (GCC debug), 81.73 s
+(Clang debug) and 286.38 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/`
+at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T13:18:58-08:00 — host gate (Linux ARM64)
 Revision: 1934c53
 
