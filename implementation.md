@@ -497,6 +497,17 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+### 2026-11-17T15:56:10-08:00 — host gate (Linux ARM64)
+
+linux-gcc-debug    PASS 797/797
+linux-gcc-release  PASS 797/797
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+
+Built `5671843` ("Record the combined gate and the ARM64 verification", which also carries the
+`sysroot/include/memory` and `sysroot/include/tuple` corrections). Clean builds from a deleted
+`build/` at `-j2` with `ulimit -s unlimited`, one row at a time, no warnings; the VM copies were
+resolved from `vm/` and all tests ran. Debug 85.47 s, release 33.46 s with the preset's `jobs: 4`.
+
 ### 2026-11-17T15:36:56-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 797/797
