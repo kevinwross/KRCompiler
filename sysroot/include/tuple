@@ -45,6 +45,21 @@
 // `{int, char}` are two instances rather than one -- before that, the second call site
 // stored the first one's record type into the other's and the IR verifier refused it.
 //
+// **Known defect: `make_tuple` truncates when the elements have different widths.** The
+// instance is named correctly and the record type is right, but every expanded parameter
+// takes the *head* element's type. `make_tuple('a', 1000)` therefore builds
+// `tuple<char, int>` and narrows the 1000 to a char; on KR16 `make_tuple(41, 'a')` builds
+// `tuple<int, char>` and the char element reads back 0. Both are silent -- no diagnostic and
+// no link error. Construct in place instead: `std::tuple<int, char> t(41, 'a')` gives the
+// right values on both targets for the same element types, because it does not go through
+// the pack expansion.
+//
+// Giving each expanded parameter its own element type fixes the front end, and that change
+// was measured: it produces the correct widths and a correct instance name, and it leaves
+// `krc_run_kr16_make_tuple` failing for a reason that is still under investigation. It is
+// therefore not in the tree. Do not describe the mixed case as working until that test
+// passes.
+//
 namespace std {
 
 template <typename... Ts>
