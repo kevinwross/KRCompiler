@@ -175,4 +175,133 @@ PassChange constant_folding(Module& module) {
     return change;
 }
 
+namespace {
+
+// A pure expression two instructions can share. The type, both predicates, the
+// source type of a `getelementptr` and the operand sequence all take part: two
+// GEPs over the same operands but different source types are different values,
+// and a signed and an unsigned comparison of the same pair are different
+// results.
+struct ExpressionKey {
+    Opcode opcode = Opcode::Unreachable;
+    TypePtr type;
+    TypePtr source_type;
+    ICmpPredicate icmp_predicate = ICmpPredicate::Eq;
+    FCmpPredicate fcmp_predicate = FCmpPredicate::False;
+    std::vector<const Value*> operands;
+
+    [[nodiscard]] bool operator<(const ExpressionKey& other) const {
+        if (opcode != other.opcode) {
+            return opcode < other.opcode;
+        }
+        if (type != other.type) {
+            return type < other.type;
+        }
+        if (source_type != other.source_type) {
+            return source_type < other.source_type;
+        }
+        if (icmp_predicate != other.icmp_predicate) {
+            return icmp_predicate < other.icmp_predicate;
+        }
+        if (fcmp_predicate != other.fcmp_predicate) {
+            return fcmp_predicate < other.fcmp_predicate;
+        }
+        return std::lexicographical_compare(
+            operands.begin(), operands.end(), other.operands.begin(),
+            other.operands.end());
+    }
+};
+
+// The pure, non-trapping operations this pass will share. Everything with a
+// memory effect, a trap, or an ordering is absent by construction, so the
+// whitelist is the safety argument rather than a guard after the fact.
+bool is_shareable(const Instruction& instruction) {
+    if (instruction.is_volatile) {
+        return false;
+    }
+    switch (instruction.opcode) {
+    case Opcode::Add:
+    case Opcode::Sub:
+    case Opcode::Mul:
+    case Opcode::And:
+    case Opcode::Or:
+    case Opcode::Xor:
+    case Opcode::Shl:
+    case Opcode::LShr:
+    case Opcode::AShr:
+    case Opcode::ICmp:
+    case Opcode::FCmp:
+    case Opcode::GetElementPtr:
+    case Opcode::BitCast:
+    case Opcode::PtrToInt:
+    case Opcode::IntToPtr:
+    case Opcode::ZExt:
+    case Opcode::SExt:
+    case Opcode::Trunc:
+        return true;
+    default:
+        return false;
+    }
+}
+
+}  // namespace
+
+PassChange copy_propagation(Module& module) {
+    PassChange change;
+    for (const auto& function : module.functions()) {
+        if (!function || function->declaration) {
+            continue;
+        }
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            // One table per block: this is local CSE, so a value is available
+            // only below its definition in the same block and no dominance
+            // reasoning across edges is needed.
+            std::map<ExpressionKey, const Value*> available;
+            std::map<const Value*, const Value*> replaced;
+            for (const auto& instruction : block->instructions) {
+                if (!instruction) {
+                    continue;
+                }
+                for (auto*& operand : instruction->operands) {
+                    const auto found = replaced.find(operand);
+                    if (found != replaced.end()) {
+                        operand = const_cast<Value*>(found->second);
+                    }
+                }
+                if (!is_shareable(*instruction)) {
+                    continue;
+                }
+                ExpressionKey key;
+                key.opcode = instruction->opcode;
+                key.type = instruction->type;
+                key.source_type = instruction->source_type;
+                key.icmp_predicate = instruction->icmp_predicate;
+                key.fcmp_predicate = instruction->fcmp_predicate;
+                key.operands.assign(instruction->operands.begin(),
+                                    instruction->operands.end());
+                const auto existing = available.find(key);
+                if (existing == available.end()) {
+                    available.emplace(std::move(key), instruction.get());
+                    continue;
+                }
+                replaced[instruction.get()] = existing->second;
+            }
+            if (replaced.empty()) {
+                continue;
+            }
+            change.instructions_removed += replaced.size();
+            const auto dead = std::remove_if(
+                block->instructions.begin(), block->instructions.end(),
+                [&](const std::unique_ptr<Instruction>& instruction) {
+                    return instruction && replaced.count(instruction.get()) != 0;
+                });
+            block->instructions.erase(dead, block->instructions.end());
+        }
+    }
+    return change;
+}
+
 }  // namespace krc::ir

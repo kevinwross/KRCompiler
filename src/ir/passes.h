@@ -32,4 +32,23 @@ struct PassChange {
 // takes the count modulo the word size instead.
 [[nodiscard]] PassChange constant_folding(Module& module);
 
+// E2: local common-subexpression elimination, which is copy propagation over the
+// values an expression produces. Two instructions in the **same block** that
+// compute the same pure expression on the same operands produce the same value,
+// so the second is replaced by the first everywhere and removed.
+//
+// What it refuses, and why:
+//  * anything with a memory effect — `load`, `store`, `alloca`, `call`,
+//    `invoke`, atomics. Two loads from one address are not one value: a store
+//    may sit between them, and this pass makes no aliasing assumption at all;
+//  * `volatile` operations, which §8.4 keeps in order and count;
+//  * operations that can trap — division and remainder — because two of them
+//    are only interchangeable while neither has trapped;
+//  * anything across a block boundary: it is *local* CSE, so dominance is the
+//    block's own order and no CFG reasoning is needed.
+//
+// The debug location of the surviving instruction is the earlier one's, so
+// merging cannot move a reported line forward.
+[[nodiscard]] PassChange copy_propagation(Module& module);
+
 }  // namespace krc::ir

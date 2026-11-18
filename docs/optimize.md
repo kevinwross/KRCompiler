@@ -359,6 +359,14 @@ Ordered as the work should land. "Metric" is what the corpus table (§11) must s
 required**. E6 needs `phi` lowering, which the IR already models and the backends do not
 implement — that is completing the frozen contract, not changing it.
 
+**E1 and E2 have landed, and E2's measurement changes the order below it.** E2 removes **2
+instructions on the whole corpus**, because IRGen loads every variable read: the same source
+expression twice produces `%a.load` and `%a.load.3`, different SSA values, so "SSA value identity"
+almost never holds. `kr32/libc.c` sits at 10,476 IR instructions at `-O1` with and without E2. So
+**E4 (alloca promotion) is the enabler for E2, E3 and E7** rather than merely the next row: promotion
+is what turns repeated loads into repeated uses of one value, and the passes above it start paying
+only after it. The ordering in the table is otherwise unchanged.
+
 ---
 
 ## 8. The safety contract (write this before the rewrites)

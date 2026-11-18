@@ -416,6 +416,36 @@ TEST_CASE("-O1 removes a branch to the label that follows it") {
           std::string::npos);
 }
 
+TEST_CASE("Copy propagation never merges two loads of one address") {
+    // `*p + *p` reads the same address twice. Two loads are two reads — a store
+    // could sit between them — so this pass must leave both, and the adds that
+    // consume them are not shareable either because their operands differ.
+    const auto generated = generate(R"SRC(
+int twice(int *pointer) { return *pointer + *pointer; }
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto change = krc::ir::copy_propagation(*generated.module);
+    CHECK(change.instructions_removed == 0);
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    // Both reads survive: count the i32 loads rather than a generated name.
+    std::size_t loads = 0;
+    for (std::size_t at = text.find("= load i32"); at != std::string::npos;
+         at = text.find("= load i32", at + 1)) {
+        ++loads;
+    }
+    CHECK(loads == 2);
+
+    krc::ir::Verifier verifier;
+    std::string verify_error;
+    CHECK(verifier.verify(*generated.module, verify_error));
+}
+
 TEST_CASE("Constant folding replaces a folded operation with its value") {
     const auto generated = generate(R"SRC(
 int folded(int *values) { return (2 + 3) * 4 + values[-1]; }

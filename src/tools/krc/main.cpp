@@ -385,7 +385,10 @@ int main(int argc, char** argv) {
                     // breaks an invariant fails here rather than in a backend.
                     if (optimization == krc::backend::OptimizationLevel::O1 &&
                         !diagnostics.has_errors()) {
-                        const auto change = krc::ir::constant_folding(*module);
+                        auto change = krc::ir::constant_folding(*module);
+                        const auto shared = krc::ir::copy_propagation(*module);
+                        change.instructions_removed += shared.instructions_removed;
+                        change.instructions_folded += shared.instructions_folded;
                         if (change.changed()) {
                             std::string optimized_error;
                             if (!verifier.verify(*module, optimized_error)) {
