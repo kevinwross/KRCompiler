@@ -60,6 +60,16 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 }
                 auto* constructor = select_constructor(
                     record->second->tag, argument_count);
+                // A constructor that exists only as a class template pattern's
+                // declaration has no body to call (ADR 0032), and a placement-new'd
+                // record with no members has nothing to construct. Emitting the call left
+                // `new (buffer) std::tuple<>()` bound to an undefined
+                // `tuple_ctor_0_value`; the local-initialisation path carries the same
+                // guard for the same reason.
+                if (constructor && constructor->declaration &&
+                    record->second->members.empty()) {
+                    constructor = nullptr;
+                }
                 if (constructor) {
                     std::vector<ir::Value*> arguments{pointer};
                     if (expression.children.size() > 2 &&
