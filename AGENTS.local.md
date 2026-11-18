@@ -86,7 +86,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 |---|---|---|---|
 | Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release on the local dev machine. CI workflow committed; whether it runs is unverified. |
 | Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS, GCC 15.2 Debug/Release only. Clang is **not installed** here, so `linux-clang-debug` and `linux-sanitize` do not build on this machine and are unverified locally. |
-| Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0, Debug/Release. Latest gate 2026-11-17T15:15:40 at `cbcb467`: **797/797** on both rows, 147 executed tests. Clang 19.1.7 is installed, but `linux-clang-debug` and `linux-sanitize` have not been run here. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
+| Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0 and Clang 19.1.7, Debug/Release and ASan/UBSan. The ARM64 gate runs **all four** presets: `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize`. Latest gate 2026-11-17T19:51:05 at `e774b72`: 805/805 on both GCC rows, 151 executed tests; the Clang and sanitizer rows were verified separately at 805/805 each on the same tree before being added to the gate. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
 
 Target-specific notes:
 
