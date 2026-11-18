@@ -497,6 +497,34 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T09:13:49-08:00 — host gate (Windows)
+Revision: b9a9c7d
+
+```
+windows-msvc-debug    PASS 828/828
+windows-msvc-release  PASS 828/828
+not verified: linux-gcc-debug, linux-gcc-release, linux-clang-debug, linux-sanitize (WSL is denied in this session), native Linux x64, Linux ARM64
+```
+
+Both build trees were deleted and reconfigured before this gate, so these are clean builds rather
+than incremental ones. It covers every change since the previous gate at `7c4a452`: S1 (constant
+operands inline), S3's constant-offset half, S2 on both targets, S3's load/store half on both
+targets, the C++ operator-result fix, and the corrections to `docs/targets/kr16.md` and ADR 0043.
+The release rows were **run as well as built** — the policy allows build-only for a gate that does
+not close a milestone, but this one covers five codegen changes, so the second optimiser level was
+worth the two minutes.
+
+Two things disturbed the run and neither is a defect in the tree. First, **the doctor could not
+run**: `pwsh -File .agents/doctor.msvc.ps1` invokes `vswhere.exe` and captures its output, which the
+confined session's pipe rule denies, so it reported "the MSVC C++ build tools are not installed" and
+"cmake is neither on PATH nor provided by Visual Studio" — both false, and the configure step
+immediately after resolved MSVC 19.51.36260.0 and CMake from the Visual Studio installation. The
+doctor is unusable under this sandbox and its verdict was ignored in favour of the build evidence.
+Second, the **VM copies had to be moved first**: `vm/` did not exist and the binaries were only in
+`build/vm/`, which a clean gate deletes, so they were copied to `vm/` (gitignored) before the trees
+were removed — the executed rows ran from there. No row was retried and no warning appeared in
+either configuration.
+
 2026-11-18T07:43:36-08:00 — host gate (Linux ARM64)
 Revision: eb013e7
 
@@ -5696,3 +5724,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-18T09:11:13-08:00** — **Gap 4 of the C++ gaps document is fixed**, which is what unblocks an assembly file for `examples/KRlibcpp.cpp`'s adapted copy. `emit_lvalue` (`c_irgen_expressions.cpp`) treated only a `CallExpression` as value-producing, so `M c = a + b;` and `c = a * b;` reported "expression is not an lvalue" and left the module failing the verifier. It now handles a binary or unary expression the same way: emit it, and when the result is a record materialise a temporary and return that as the lvalue. A **scalar** operator result is still not an lvalue, so this did not turn every expression into an assignable one — the narrowness is deliberate.
 - **2026-11-18T09:11:13-08:00** — The regression test needed an addition to the test harness that is worth recording: `tests/unit/test_irgen.cpp`'s `generate()` labelled its buffer `test.c` and built the parser and sema without the C++ flag, so a C++ case there failed at *parse* time — the first version of the test reported `had_errors` for a source the CLI compiles. The front end selects the language from the input extension, so the helper now has two named entry points, `generate` (C) and `generate_cxx`, sharing one implementation. `C IRGen initialises a record from an overloaded operator result` pins the fix.
 - **2026-11-18T09:11:13-08:00** — **`examples/KRlibcpp.S` now exists**: 31,188 instruction lines across 224 global functions, 1.25 MB, from `examples/KRlibcpp.krc.cpp` for KR32. The original `examples/KRlibcpp.cpp` still needs gaps 1 (runtime `new[]`) and 2 (scalar `throw`, deliberate), so no assembly of it unmodified is claimed. `docs/cxx-front-end-gaps.md` is updated: gap 4 marked fixed with its mechanism and test, the adaptation table now lists only gaps 1-3, and the document no longer says the benchmark cannot be compiled. The workload is **not** in `benchmarks/**: a source needing three adaptations measures the adapted source.
+- **2026-11-18T09:20:12-08:00** — **A host gate is recorded at `b9a9c7d`** under `## Gate verification`: `windows-msvc-debug` and `windows-msvc-release` both **828/828**, clean from deleted build directories, zero warnings, no retried row. It covers all five codegen changes since `7c4a452` — S1, S3's constant-offset half, S2, S3's load/store half on both targets, and the C++ operator fix. The Linux and ARM64 rows are **not verified**: WSL is denied in this session, so six of the eight configurations this project cares about remain unbuilt for these commits.
+- **2026-11-18T09:20:12-08:00** — Two environment facts made the gate harder than the record shows, and both cost time. The **doctor cannot run here**: `.agents/doctor.msvc.ps1` captures `vswhere.exe` output, the sandbox denies the pipe, and it reports MSVC and CMake missing while the very next configure resolves MSVC 19.51.36260.0. Its verdict was therefore recorded as a false negative rather than obeyed. And **`vm/` did not exist** — the VM copies lived only in `build/vm/`, which a clean gate deletes — so they were copied to the gitignored `vm/` first; without that the 740 executed rows would have silently vanished from the count rather than failed. Both are now written into `AGENTS.local.md` as traps, because each one produces a plausible-looking wrong answer.
