@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T21:38:02-08:00 — host gate (Windows)
+Revision: 01e1651
+
+```
+windows-msvc-debug    PASS 813/813
+windows-msvc-release  PASS 813/813
+linux-gcc-debug       PASS 813/813
+linux-gcc-release     PASS 813/813
+linux-clang-debug     PASS 813/813
+linux-sanitize        PASS 813/813
+not verified: native Linux x64 (WSL used), Linux ARM64
+```
+
+All six rows report 813, eight more than the previous gate: the character-literal fixtures, a link and an executed
+test each on both targets for the C++ and the C form. `linux-sanitize` again reports **zero** AddressSanitizer,
+LeakSanitizer and UBSan diagnostics, so nothing in this change leaks or trips UB. The gate covers three commits -- the
+`sizeof` fix in `src/irgen/`, the release-notes corrections, and item 11's measurement of the pack-head truncation.
+That `sizeof` fix came from the new fixture rather than from a report: `sizeof('a')` folded to 1 in Sema and to 4 in
+code generation, so a `static_assert` passed and a run-time check failed in the same build. Rows ran one at a time
+from deleted directories; no warnings beyond the demoted doctest one on the Clang rows, no compiler crashes, no
+disturbances. The ARM64 host last gated `e774b72` and has not seen these three commits.
 2026-11-17T21:22:28-08:00 — host gate (Linux ARM64)
 Revision: df16ecc
 
