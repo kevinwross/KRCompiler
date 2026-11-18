@@ -51,4 +51,22 @@ struct PassChange {
 // merging cannot move a reported line forward.
 [[nodiscard]] PassChange copy_propagation(Module& module);
 
+// E4: single-block alloca promotion. An `alloca` whose address is named by no
+// `V` record and whose only uses are a load or a store in its own block is not
+// an object the program can observe — it is a temporary the emitter introduced —
+// so its loads become plain uses of the last value stored and the round trips
+// disappear. This is what turns `store; load; store; load` into SSA uses, and it
+// is the change that lets E2 and E3 start to fire.
+//
+// What it refuses, and why:
+//  * an alloca named `<variable>.addr`, which is a source variable with a `V`
+//    record: promoting it would leave the debugger pointing at a dead slot;
+//  * an address that escapes — a `getelementptr` of it, a store of the pointer,
+//    an argument, a return. Only `load` and `store` uses are accepted, and only
+//    in the alloca's own block;
+//  * a load before any store, because the memory then holds nothing this pass
+//    can name;
+//  * a `volatile` load or store, which §8.4 keeps in order and count.
+[[nodiscard]] PassChange alloca_promotion(Module& module);
+
 }  // namespace krc::ir

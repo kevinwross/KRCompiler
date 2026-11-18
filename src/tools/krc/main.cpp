@@ -386,6 +386,13 @@ int main(int argc, char** argv) {
                     if (optimization == krc::backend::OptimizationLevel::O1 &&
                         !diagnostics.has_errors()) {
                         auto change = krc::ir::constant_folding(*module);
+                        // Promotion runs before CSE deliberately: E2 shares only
+                        // expressions whose operands are identical SSA values, and
+                        // until the alloca round trips are gone every variable
+                        // read is a distinct load, so E2 has almost nothing to
+                        // share. Measured, not assumed — see implementation.md.
+                        const auto promoted = krc::ir::alloca_promotion(*module);
+                        change.instructions_removed += promoted.instructions_removed;
                         const auto shared = krc::ir::copy_propagation(*module);
                         change.instructions_removed += shared.instructions_removed;
                         change.instructions_folded += shared.instructions_folded;

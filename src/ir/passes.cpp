@@ -304,4 +304,155 @@ PassChange copy_propagation(Module& module) {
     return change;
 }
 
+namespace {
+
+// A source variable is the alloca IRGen named `<variable>.addr`; the backend
+// writes a `V` record for it (docs/symbols.md), so the address must survive.
+bool is_recorded_variable(const Instruction& alloca) {
+    const auto& name = alloca.name;
+    return name.size() > 5 && name.compare(name.size() - 5, 5, ".addr") == 0;
+}
+
+// True when every use of `alloca` is a load or a store in `block`, and none of
+// them is volatile: the address neither escapes nor is observed anywhere else.
+bool is_promotable(const Instruction& alloca, const BasicBlock& block,
+                   const Function& function) {
+    if (alloca.opcode != Opcode::Alloca || alloca.is_volatile ||
+        !alloca.allocated_type || is_recorded_variable(alloca)) {
+        return false;
+    }
+    for (const auto& candidate_block : function.blocks) {
+        if (!candidate_block) {
+            continue;
+        }
+        for (const auto& instruction : candidate_block->instructions) {
+            if (!instruction) {
+                continue;
+            }
+            bool uses_address = false;
+            for (const auto* operand : instruction->operands) {
+                if (operand != &alloca) {
+                    continue;
+                }
+                uses_address = true;
+                const bool is_load = instruction->opcode == Opcode::Load &&
+                                     instruction->operands[0] == &alloca;
+                const bool is_store = instruction->opcode == Opcode::Store &&
+                                      instruction->operands[1] == &alloca;
+                if ((!is_load && !is_store) || candidate_block.get() != &block ||
+                    instruction->is_volatile) {
+                    return false;
+                }
+            }
+            static_cast<void>(uses_address);
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+PassChange alloca_promotion(Module& module) {
+    PassChange change;
+    for (const auto& function : module.functions()) {
+        if (!function || function->declaration) {
+            continue;
+        }
+        // One candidate at a time: promoting changes the instruction list, and a
+        // restart is simpler to reason about than an iterator that survives
+        // erasure. A function has few unrecorded allocas, so the cost is trivial.
+        bool promoted_any = true;
+        while (promoted_any) {
+            promoted_any = false;
+            for (const auto& block : function->blocks) {
+                if (!block) {
+                    continue;
+                }
+                const Instruction* target = nullptr;
+                for (const auto& instruction : block->instructions) {
+                    if (instruction && is_promotable(*instruction, *block, *function)) {
+                        target = instruction.get();
+                        break;
+                    }
+                }
+                if (!target) {
+                    continue;
+                }
+                // Walk the block in order, resolving every load to the value last
+                // stored. A load before any store means the memory holds nothing
+                // this pass can name, so the candidate is left alone.
+                std::map<const Value*, const Value*> loaded;
+                std::vector<const Instruction*> dead;
+                const Value* current = nullptr;
+                bool usable = true;
+                for (const auto& instruction : block->instructions) {
+                    if (!instruction) {
+                        continue;
+                    }
+                    if (instruction->opcode == Opcode::Load &&
+                        instruction->operands[0] == target) {
+                        if (!current) {
+                            usable = false;
+                            break;
+                        }
+                        loaded[instruction.get()] = current;
+                        dead.push_back(instruction.get());
+                        continue;
+                    }
+                    if (instruction->opcode == Opcode::Store &&
+                        instruction->operands[1] == target) {
+                        const Value* stored = instruction->operands[0];
+                        const auto found = loaded.find(stored);
+                        if (found != loaded.end()) {
+                            stored = found->second;
+                        }
+                        current = stored;
+                        dead.push_back(instruction.get());
+                    }
+                }
+                if (!usable || dead.empty()) {
+                    continue;
+                }
+                // Rewrite the loads' uses across the whole function, because a
+                // value loaded here may flow into another block.
+                for (const auto& any_block : function->blocks) {
+                    if (!any_block) {
+                        continue;
+                    }
+                    for (const auto& instruction : any_block->instructions) {
+                        if (!instruction) {
+                            continue;
+                        }
+                        for (auto*& operand : instruction->operands) {
+                            const auto found = loaded.find(operand);
+                            if (found != loaded.end()) {
+                                operand = const_cast<Value*>(found->second);
+                            }
+                        }
+                    }
+                }
+                dead.push_back(target);
+                const auto dead_count = dead.size();
+                for (const auto& any_block : function->blocks) {
+                    if (!any_block) {
+                        continue;
+                    }
+                    const auto removed = std::remove_if(
+                        any_block->instructions.begin(), any_block->instructions.end(),
+                        [&](const std::unique_ptr<Instruction>& instruction) {
+                            return instruction &&
+                                   std::find(dead.begin(), dead.end(), instruction.get()) !=
+                                       dead.end();
+                        });
+                    any_block->instructions.erase(removed, any_block->instructions.end());
+                }
+                change.instructions_removed += dead_count;
+                promoted_any = true;
+                break;
+            }
+        }
+    }
+    return change;
+}
+
 }  // namespace krc::ir

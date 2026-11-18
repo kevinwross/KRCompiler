@@ -416,6 +416,30 @@ TEST_CASE("-O1 removes a branch to the label that follows it") {
           std::string::npos);
 }
 
+TEST_CASE("Alloca promotion refuses a named variable and an escaping temporary") {
+    // `named` is a source variable: its alloca is `<name>.addr` and carries a V
+    // record, so promoting it would leave the debugger pointing at a dead slot.
+    // `&named` also makes the address escape, which is refused independently —
+    // this asserts the count is zero rather than which of the two rules fired.
+    const auto generated = generate(R"SRC(
+int named_local(int a) {
+    int named = a + 1;
+    int *taken = &named;
+    return *taken;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto change = krc::ir::alloca_promotion(*generated.module);
+    CHECK(change.instructions_removed == 0);
+
+    krc::ir::Verifier verifier;
+    std::string verify_error;
+    CHECK(verifier.verify(*generated.module, verify_error));
+}
+
 TEST_CASE("Copy propagation never merges two loads of one address") {
     // `*p + *p` reads the same address twice. Two loads are two reads — a store
     // could sit between them — so this pass must leave both, and the adds that
