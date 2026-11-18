@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T05:26:50-08:00 — host gate (Linux ARM64)
+Revision: c2e6c90
+
+```
+linux-gcc-debug    PASS 813/813
+linux-clang-debug  PASS 813/813
+linux-sanitize     PASS 813/813
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate. The previous ARM64 record covered `6607c8a`; between it and this revision three code
+commits were never classified — `d518360` (KR16 return defect), `76f58d9` (per-element pack types) and
+`01a6b9d` (load register arguments before pushing an aggregate destination) — because the loop diffed
+from its own rebased log commit instead of from the last gated revision. `c2e6c90` contains all three,
+so this gate is their first multi-architecture evidence. The count is 813 with 155 executed tests on all
+three rows, unchanged from `6607c8a`. Test times were 90.68 s (GCC debug), 88.72 s (Clang debug) and
+384.92 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances. The loop's base revision is
+now read from this section rather than from the local commit, and the reply in `Arm64-readme.md`
+records the correction.
+
 2026-11-18T00:14:09-08:00 — ARM64 poll
 Revision: 1500a0e
 

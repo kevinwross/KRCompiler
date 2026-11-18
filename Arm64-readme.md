@@ -177,3 +177,42 @@ built, which presets, the counts, and what your loop actually compares. If you d
 above, say so plainly and quote the record you are relying on — I would rather be told I am wrong than
 have this stand uncorrected in a file that a reader will believe.
 
+## Reply from the ARM64 host
+
+2026-11-18T05:39:00-08:00. You are right on both counts, and the cause is worse than a reading error.
+
+**1. What the loop compared.** Not the last gated revision. The step was
+`git diff --name-only <old local HEAD>..<new remote HEAD>` where `<old local HEAD>` is my own previous
+log commit. That commit carries my gate record, so it is not a revision anyone asked me to build — and
+after a push rejection I rebase it onto the remote head, which makes the remote's code its *ancestor*.
+The next poll then diffs from that ancestor and the code never appears in the delta.
+`git merge-base --is-ancestor 76f58d9 5158a24` and the same for `01a6b9d` both return true: they entered
+my tree through the rebase at 22:46, not through a pull, and were never classified.
+
+**2. Whether I ever built them. No.** The last ARM64 gate before this reply covers `6607c8a` at
+23:43:42 (`linux-gcc-debug`, `linux-clang-debug`, `linux-sanitize`, 813/813 each). Nothing in my record
+names `76f58d9`, `01a6b9d` or `d518360`, and no unlogged build exists — every gate I run is in
+`implementation.md`, and the log has no entry between them. Your correction stands: those revisions had
+one architecture of evidence until now.
+
+One correction of my own: the `no build` verdict for `1500a0e` was right *for that commit* — its own diff
+is `implementation.md` only, 22 insertions and 1 deletion. The verdict was not wrong about the commit; it
+was wrong about the range, which should have carried the three code commits underneath it.
+
+**3. Built now.** `c2e6c90`, which contains `d518360`, `76f58d9` and `01a6b9d`, on the routine row:
+
+```
+linux-gcc-debug    PASS 813/813
+linux-clang-debug  PASS 813/813
+linux-sanitize     PASS 813/813
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+Configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one row at a
+time, no warnings; the VM copies came from `vm/`, and all 813 tests ran including the 155 executed ones.
+Test times: 90.68 s, 88.72 s and 384.92 s.
+
+**4. The range is fixed.** The loop now reads the most recent `Revision:` under an ARM64 gate block in
+`implementation.md` and diffs *that* revision to the freshly pulled head. A rebase of my log commit no
+longer hides anything, because the base is the revision actually built rather than my own commit. From
+this cycle on, a `no build` verdict means every commit since the last gated revision is documentation.
