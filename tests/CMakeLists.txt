@@ -6422,6 +6422,65 @@ foreach(tier0_source IN ITEMS hello arithmetic functions)
     endif()
 endforeach()
 
+# The same three smoke programs built at -O1. ADR 0049 requires the suite to run
+# at both levels rather than only at the default, and these are the checks that
+# execute: a text pass that removed a live branch fails here and nowhere else,
+# because every other test compiles at -O0. The runtime is linked as the staged
+# -O0 object in both halves, so the only difference from the tests above is the
+# level the program itself is compiled at.
+foreach(tier0_source IN ITEMS hello arithmetic functions)
+    set(tier0_expect_output "")
+    if(tier0_source STREQUAL "hello")
+        set(tier0_expect_output "Hello, KR32!")
+    endif()
+
+    add_test(NAME krc_link_tier0_${tier0_source}_o1
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DLEVEL=-O1
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier0/${tier0_source}.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/tier0_${tier0_source}_o1_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        add_test(NAME krc_run_tier0_${tier0_source}_o1
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/tier0_${tier0_source}_o1_linked.k32
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_OUTPUT=${tier0_expect_output}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_tier0_${tier0_source}_o1 PROPERTIES
+            DEPENDS krc_link_tier0_${tier0_source}_o1)
+    endif()
+
+    add_test(NAME krc_link_kr16_tier0_${tier0_source}_o1
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DLEVEL=-O1
+                -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+                -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+                -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+                -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier0/${tier0_source}.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_tier0_${tier0_source}_o1.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+    if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+        add_test(NAME krc_run_kr16_tier0_${tier0_source}_o1
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_tier0_${tier0_source}_o1.kex
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_OUTPUT=${tier0_expect_output}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_tier0_${tier0_source}_o1 PROPERTIES
+            DEPENDS krc_link_kr16_tier0_${tier0_source}_o1)
+    endif()
+endforeach()
+
 # Tier 1 -- the C core: structs, pointers, arrays, control flow, preprocessor,
 # varargs and printf (plan.md 5.2). Each program covers one feature area and is
 # linked and executed on both targets. printf compares its text as well as its exit
