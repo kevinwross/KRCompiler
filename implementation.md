@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T17:29:39-08:00 — host gate (Linux ARM64)
+Revision: e58e1b0
+
+```
+linux-gcc-debug    PASS 801/801
+linux-gcc-release  PASS 801/801
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+```
+
+The gate covers `94c1cda` and `2b6c95d`: three stale claims about `make_tuple` corrected in
+`sysroot/include/tuple`, and the empty-tuple constructor narrowed to a function that is added but
+left bodyless. `docs/abi-kr16.md` and `docs/release-notes.md` changed too, but the header is what
+makes this a code change. The count is unchanged at **801** with 149 executed tests, which is the
+expected shape: the commit corrects documentation in a header and adds no test. Both rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one row at a
+time, with no warnings; the VM copies were resolved from `vm/`. Test times were 83.37 s (debug) and
+34.63 s (release) with the preset's `jobs: 4`. No disturbances.
+
 2026-11-17T17:08:15-08:00 — host gate (Linux ARM64)
 Revision: 79d9003
 
