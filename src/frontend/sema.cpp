@@ -2446,6 +2446,23 @@ std::string Sema::instantiate_template_call(
     }
     std::string mangled = pattern->second.name;
     for (const auto& name : pattern->second.parameters) {
+        // A pack contributes every element's type and its arity, and nothing else. Its
+        // own binding is the first element, so appending that as well produced
+        // `tuple_head__int__uchar__uchar__1` for a one-element pack: the accessor was
+        // instantiated under a name its call sites never asked for. The separator is
+        // emitted per piece here rather than once up front, because a pack emits none of
+        // its own.
+        if (const auto arity = pack_arities.find(name); arity != pack_arities.end()) {
+            for (std::size_t index = 0; index < arity->second; ++index) {
+                const auto element = bindings.find(name + std::to_string(index));
+                mangled += "__";
+                mangled += element == bindings.end()
+                               ? "unknown"
+                               : template_type_tag(element->second);
+            }
+            mangled += "__" + std::to_string(arity->second);
+            continue;
+        }
         mangled += "__";
         const auto value_binding = value_bindings.find(name);
         if (value_binding != value_bindings.end()) {
@@ -2455,21 +2472,6 @@ std::string Sema::instantiate_template_call(
         const auto binding = bindings.find(name);
         mangled += binding == bindings.end() ? "unknown"
                                              : template_type_tag(binding->second);
-        // A pack is distinguished by its arity: the same pattern instantiated
-        // for three arguments and for two is two functions. Each element's type is
-        // part of the name as well, or `{int, int}` and `{int, char}` at arity two are
-        // one instance returning one record type, and the second call site fails with
-        // `store type does not match its pointer`.
-        const auto arity = pack_arities.find(name);
-        if (arity != pack_arities.end()) {
-            for (std::size_t index = 0; index < arity->second; ++index) {
-                const auto element = bindings.find(name + std::to_string(index));
-                mangled += "__";
-                mangled += element == bindings.end() ? "unknown"
-                                                     : template_type_tag(element->second);
-            }
-            mangled += "__" + std::to_string(arity->second);
-        }
     }
     if (instantiated_names_.count(mangled) != 0) {
         return mangled;
