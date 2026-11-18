@@ -514,6 +514,24 @@ expected shape: the commit corrects documentation in a header and adds no test. 
 configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one row at a
 time, with no warnings; the VM copies were resolved from `vm/`. Test times were 83.37 s (debug) and
 34.63 s (release) with the preset's `jobs: 4`. No disturbances.
+2026-11-17T17:37:47-08:00 — host gate (Windows)
+Revision: 46ee9a3
+
+```
+windows-msvc-debug    PASS 805/805
+windows-msvc-release  PASS 805/805
+linux-gcc-debug       PASS 805/805
+linux-gcc-release     PASS 805/805
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine), Linux ARM64
+```
+
+All four rows report 805, four more than the previous gate: a link and an executed test for the empty tuple as a
+local, one pair per target. This gate publishes item 2 -- the local-initialisation path no longer emits a call to a
+constructor that exists only as a class template pattern's declaration, which is what left `std::tuple<> empty;`
+bound to an undefined `tuple_ctor_0_value`. The fixture also builds a two-element `make_tuple`, so it exercises the
+neighbouring path in the same image rather than testing the empty local in isolation. Rows ran one at a time from
+deleted directories; no warnings, no compiler crashes, no disturbances. The ARM64 host last gated `79d9003` and has
+not seen this fix, the pack fix, or `make_tuple`.
 
 2026-11-17T17:08:15-08:00 — host gate (Linux ARM64)
 Revision: 79d9003
