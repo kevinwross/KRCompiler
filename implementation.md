@@ -517,7 +517,7 @@ unlimited`, one row at a time, with no warnings; the VM copies were resolved fro
 executed tests registered. Test times were 80.03 s (debug) and 34.55 s (release) with the preset's
 `jobs: 4`. No disturbances.
 2026-11-17T17:14:26-08:00 — host gate (Windows)
-Revision: 8c1685f
+Revision: 2b6c95d
 
 ```
 windows-msvc-debug    PASS 801/801
