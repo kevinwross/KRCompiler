@@ -497,6 +497,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T19:22:44-08:00 — host gate (Linux ARM64)
+Revision: 5ac1e68
+
+```
+linux-gcc-debug    PASS 805/805
+linux-gcc-release  PASS 805/805
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+```
+
+The gate covers `7771d7e` and `fe11d38`: character literals are typed `char` in C++ rather than
+`int`, which is what a heterogeneous pack needs before its elements can be compared. It touches
+`src/frontend/sema.cpp` and `tests/corpus/extracted/tier2/templates.cpp`. The count is unchanged at
+**805** with 151 executed tests, because the existing corpus fixture was corrected and no test was
+added. Both rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`.
+Test times were 89.49 s (debug) and 34.10 s (release) with the preset's `jobs: 4`. No disturbances.
+
 2026-11-17T19:01:27-08:00 — host gate (Linux ARM64)
 Revision: d5f60dc
 
