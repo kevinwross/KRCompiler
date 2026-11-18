@@ -186,6 +186,19 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_runtime.kex
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
 
+    # A virtual call must reach the second vtable slot. The stride was the literal 4 while a KR16
+    # pointer is two bytes, so slot 1 read the second entry and called whatever sat there; the
+    # program raised an unhandled exception instead of returning a wrong value.
+    add_test(NAME krc_link_kr16_virtual_two_slots
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr16/runtime/crt0.s
+                -DRUNTIME=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_virtual_two_slots.cpp
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_virtual_two_slots.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Runtime.cmake)
+
     # The executed KR16 tests report the program's exit status from the sibling
     # VM; a host without a runnable VM registers none of them, as for KR32.
     if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
@@ -197,6 +210,14 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
         set_tests_properties(krc_run_kr16_pack_template_parameter PROPERTIES
             DEPENDS krc_link_kr16_pack_template_parameter)
+        add_test(NAME krc_run_kr16_virtual_two_slots
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_virtual_two_slots.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_virtual_two_slots PROPERTIES
+            DEPENDS krc_link_kr16_virtual_two_slots)
         add_test(NAME krc_run_kr16_recursive_variadic
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR16_VM}
