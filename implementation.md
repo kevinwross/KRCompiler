@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T05:53:20-08:00 — host gate (Linux ARM64)
+Revision: 37d60e2
+
+```
+linux-gcc-debug    PASS 821/821
+linux-clang-debug  PASS 821/821
+linux-sanitize     PASS 821/821
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The fix for the build break recorded below. `37d60e2` replaces the `std::strlen` at
+`src/frontend/sema.cpp:2261` with something both libstdc++ and libc++ can see, and the tree builds on
+GCC and Clang again. The count is **821**, up from 813, because the two fixtures that arrived in
+`706109b` (`make_tuple_widths.cpp`, `nontype_deduction.cpp`) add eight tests that the failed gate never
+ran; the executed count rises to 159. All three rows agree, which is the check that `vm/` registered
+them. Test times were 93.38 s (GCC debug), 89.40 s (Clang debug) and 381.00 s (ASan/UBSan). Rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time,
+with no warnings. No disturbances.
+
 2026-11-18T05:43:49-08:00 — host gate (Windows)
 Revision: 37d60e2
 
