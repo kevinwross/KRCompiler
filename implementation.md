@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T17:08:15-08:00 — host gate (Linux ARM64)
+Revision: 79d9003
+
+```
+linux-gcc-debug    PASS 801/801
+linux-gcc-release  PASS 801/801
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+```
+
+The gate covers `6a8ae15` and `5ce439d`, the first change that makes `make_tuple` work: a function
+template's pack is substituted in its return type and body, and the parser tolerates the space
+before the ellipsis in an expression template-id. It touches `src/frontend/parser.cpp`,
+`src/frontend/sema.cpp`, `include/krc/frontend/sema.h`, `src/irgen/c_irgen_expressions.cpp`,
+`sysroot/include/tuple`, and the new `tests/fixtures/c/make_tuple.cpp`. The count is **801**, not the
+previous 797, because that fixture adds four tests; 149 of the 801 run a linked image under a VM.
+Both rows were configured and built clean from a deleted `build/` at `-j2` with `ulimit -s
+unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`, so the
+executed tests registered. Test times were 80.03 s (debug) and 34.55 s (release) with the preset's
+`jobs: 4`. No disturbances.
+
 2026-11-17T16:32:30-08:00 — ARM64 poll
 Revision: dbaddad
 
