@@ -42,6 +42,24 @@ std::string inverse_condition_for(ir::ICmpPredicate predicate) {
     return "BNE";
 }
 
+// A sixteen-bit machine spends a whole instruction moving a literal into a
+// register, so an ALU or shift instruction takes one directly when it fits the
+// assembler's literal range, which ADR 0034 fixes at -32768..65535. Outside that
+// range the value keeps the register form the emitter already used.
+bool fits_inline_literal(std::int64_t value) {
+    return value >= -32768 && value <= 65535;
+}
+
+// Returns the literal an instruction can carry inline, or null when the operand
+// has to reach it through a register.
+const ir::ConstantInt* inline_literal(const ir::Value* value) {
+    if (!value || value->kind != ir::ValueKind::ConstantInt) {
+        return nullptr;
+    }
+    const auto* constant = static_cast<const ir::ConstantInt*>(value);
+    return fits_inline_literal(constant->value) ? constant : nullptr;
+}
+
 // The alignment a field is laid out with. A field narrower than a word is aligned
 // by its own width, so a three-`char` record is three bytes and `sizeof` agrees
 // with the object the back end actually lays out. Rounding every field up to the
@@ -458,23 +476,28 @@ void Kr16Backend::emit_function(std::string& out,
                 break;
             case ir::Opcode::Shl:
             case ir::Opcode::LShr:
-            case ir::Opcode::AShr:
+            case ir::Opcode::AShr: {
+                const auto mnemonic = instruction->opcode == ir::Opcode::Shl
+                                          ? "SHL"
+                                          : (instruction->opcode == ir::Opcode::LShr
+                                                 ? "SHR"
+                                                 : "SAR");
                 load(instruction->operands[0], "R0");
-                load(instruction->operands[1], "R1");
-                out += instruction->opcode == ir::Opcode::Shl
-                           ? "    SHL R0, R1\n"
-                           : (instruction->opcode == ir::Opcode::LShr
-                                  ? "    SHR R0, R1\n"
-                                  : "    SAR R0, R1\n");
+                if (const auto* literal = inline_literal(instruction->operands[1])) {
+                    out += "    " + std::string(mnemonic) + " R0, #" +
+                           std::to_string(literal->value) + "\n";
+                } else {
+                    load(instruction->operands[1], "R1");
+                    out += "    " + std::string(mnemonic) + " R0, R1\n";
+                }
                 store(*instruction, "R0");
                 break;
+            }
             case ir::Opcode::Add:
             case ir::Opcode::Sub:
             case ir::Opcode::And:
             case ir::Opcode::Or:
             case ir::Opcode::Xor: {
-                load(instruction->operands[0], "R0");
-                load(instruction->operands[1], "R1");
                 const auto mnemonic =
                     instruction->opcode == ir::Opcode::Add
                         ? "ADD"
@@ -485,14 +508,38 @@ void Kr16Backend::emit_function(std::string& out,
                                       : (instruction->opcode == ir::Opcode::Or
                                              ? "OR"
                                              : "XOR")));
-                out += "    " + std::string(mnemonic) + " R0, R1\n";
+                // A literal operand travels in the instruction. Reversing the
+                // operands of a commutative op puts the literal in that position;
+                // the value the instruction computes is unchanged.
+                const bool commutative = instruction->opcode != ir::Opcode::Sub;
+                const auto* right_literal = inline_literal(instruction->operands[1]);
+                const auto* left_literal =
+                    commutative ? inline_literal(instruction->operands[0]) : nullptr;
+                const ir::Value* register_operand = right_literal
+                                                        ? instruction->operands[0]
+                                                    : left_literal
+                                                        ? instruction->operands[1]
+                                                        : instruction->operands[0];
+                const auto* literal = right_literal ? right_literal : left_literal;
+                load(register_operand, "R0");
+                if (literal) {
+                    out += "    " + std::string(mnemonic) + " R0, #" +
+                           std::to_string(literal->value) + "\n";
+                } else {
+                    load(instruction->operands[1], "R1");
+                    out += "    " + std::string(mnemonic) + " R0, R1\n";
+                }
                 store(*instruction, "R0");
                 break;
             }
             case ir::Opcode::ICmp: {
                 load(instruction->operands[0], "R0");
-                load(instruction->operands[1], "R1");
-                out += "    CMP R0, R1\n";
+                if (const auto* literal = inline_literal(instruction->operands[1])) {
+                    out += "    CMP R0, #" + std::to_string(literal->value) + "\n";
+                } else {
+                    load(instruction->operands[1], "R1");
+                    out += "    CMP R0, R1\n";
+                }
                 const auto false_label =
                     ".Lcmp.false." + function.name + "." +
                     std::to_string(synthetic_label);

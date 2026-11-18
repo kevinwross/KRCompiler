@@ -80,6 +80,27 @@ std::string store_opcode(ir::TypePtr type) {
     }
 }
 
+// The KR32 ALU class takes its second operand either from the register named by
+// bits 16..13 or from the 11-bit inline field, sign-extended. A constant in that
+// field (-1024..1023) therefore need not be materialised into a register first;
+// the bound is the assembler's own inline-immediate test
+// (docs/targets/kr32.md: "inline 11-bit immediates with extension words").
+bool fits_inline_literal(std::int64_t value) {
+    return value >= -1024 && value <= 1023;
+}
+
+// Returns the literal an instruction can carry inline, or null when the operand
+// has to reach it through a register. An out-of-range constant keeps the
+// register form deliberately: an extension-word operand is a separate change
+// with its own measurement, so this one covers the inline field only.
+const ir::ConstantInt* inline_literal(const ir::Value* value) {
+    if (!value || value->kind != ir::ValueKind::ConstantInt) {
+        return nullptr;
+    }
+    const auto* constant = static_cast<const ir::ConstantInt*>(value);
+    return fits_inline_literal(constant->value) ? constant : nullptr;
+}
+
 std::string condition_for(ir::ICmpPredicate predicate) {
     switch (predicate) {
     case ir::ICmpPredicate::Eq:
@@ -1155,14 +1176,29 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
 void Kr32Backend::emit_instruction(std::string& out, const ir::Function& function,
                                    const FrameLayout& layout,
                                    const ir::Instruction& instruction) const {
-    const auto binary_instruction = [&](std::string_view mnemonic) {
+    const auto binary_instruction = [&](std::string_view mnemonic, bool commutative) {
         if (is_wide(instruction.operands[0]->type)) {
             emit_wide_binary(out, function, layout, instruction);
             return;
         }
-        load_value(out, function, layout, instruction.operands[0], "R0");
-        load_value(out, function, layout, instruction.operands[1], "R1");
-        out += "        " + std::string(mnemonic) + " R0, R0, R1\n";
+        // A literal operand travels in the instruction rather than through a
+        // register. Reversing the operands of a commutative op puts the literal
+        // in that position; the value the instruction computes is unchanged.
+        const auto* right_literal = inline_literal(instruction.operands[1]);
+        const auto* left_literal =
+            commutative ? inline_literal(instruction.operands[0]) : nullptr;
+        const ir::Value* register_operand = right_literal ? instruction.operands[0]
+                                            : left_literal ? instruction.operands[1]
+                                                           : instruction.operands[0];
+        const auto* literal = right_literal ? right_literal : left_literal;
+        load_value(out, function, layout, register_operand, "R0");
+        if (literal) {
+            out += "        " + std::string(mnemonic) + " R0, R0, #" +
+                    std::to_string(literal->value) + "\n";
+        } else {
+            load_value(out, function, layout, instruction.operands[1], "R1");
+            out += "        " + std::string(mnemonic) + " R0, R0, R1\n";
+        }
         store_value(out, function, layout, instruction, "R0");
     };
 
@@ -1243,43 +1279,43 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         store_value(out, function, layout, instruction, "R0");
         break;
     case ir::Opcode::Add:
-        binary_instruction("ADD");
+        binary_instruction("ADD", true);
         break;
     case ir::Opcode::Sub:
-        binary_instruction("SUB");
+        binary_instruction("SUB", false);
         break;
     case ir::Opcode::Mul:
-        binary_instruction("MUL");
+        binary_instruction("MUL", true);
         break;
     case ir::Opcode::SDiv:
-        binary_instruction("DIVS");
+        binary_instruction("DIVS", false);
         break;
     case ir::Opcode::UDiv:
-        binary_instruction("DIV");
+        binary_instruction("DIV", false);
         break;
     case ir::Opcode::SRem:
-        binary_instruction("MODS");
+        binary_instruction("MODS", false);
         break;
     case ir::Opcode::URem:
-        binary_instruction("MOD");
+        binary_instruction("MOD", false);
         break;
     case ir::Opcode::And:
-        binary_instruction("AND");
+        binary_instruction("AND", true);
         break;
     case ir::Opcode::Or:
-        binary_instruction("OR");
+        binary_instruction("OR", true);
         break;
     case ir::Opcode::Xor:
-        binary_instruction("XOR");
+        binary_instruction("XOR", true);
         break;
     case ir::Opcode::Shl:
-        binary_instruction("SHL");
+        binary_instruction("SHL", false);
         break;
     case ir::Opcode::LShr:
-        binary_instruction("SHR");
+        binary_instruction("SHR", false);
         break;
     case ir::Opcode::AShr:
-        binary_instruction("SAR");
+        binary_instruction("SAR", false);
         break;
     case ir::Opcode::Alloca: {
         const auto object = layout.alloca_offsets.find(&instruction);
@@ -1433,8 +1469,12 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             break;
         }
         load_value(out, function, layout, instruction.operands[0], "R0");
-        load_value(out, function, layout, instruction.operands[1], "R1");
-        out += "        CMP R0, R1\n";
+        if (const auto* literal = inline_literal(instruction.operands[1])) {
+            out += "        CMP R0, #" + std::to_string(literal->value) + "\n";
+        } else {
+            load_value(out, function, layout, instruction.operands[1], "R1");
+            out += "        CMP R0, R1\n";
+        }
         out += "        MOV R2, #0\n";
         const auto serial = compare_label_counter_++;
         const auto true_label = ".L" + function.name + ".icmp." +
