@@ -2371,15 +2371,12 @@ std::string Sema::instantiate_template_call(
                 }
                 return true;
             };
-            for (std::size_t position = argument_index;
-                 position < arguments.size(); ++position) {
-                if (!same_shape(arguments[position], element, same_shape)) {
-                    error(callee.location,
-                          "a parameter pack with mixed argument types is not "
-                          "implemented yet");
-                    return {};
-                }
-            }
+            // A pack whose elements differ is allowed: the instance name carries each
+            // element's type, so `{int, int}` and `{int, char}` are two instances rather
+            // than one. Before that, enabling this made the second call site store a
+            // `tuple<int, int>` into a `tuple<int, char>`, so the refusal was right until
+            // the name distinguished them.
+            (void)same_shape;
             bindings.emplace(*template_parameter, element);
             const auto arity = arguments.size() - argument_index;
             pack_arities.emplace(*template_parameter, arity);
@@ -2459,9 +2456,18 @@ std::string Sema::instantiate_template_call(
         mangled += binding == bindings.end() ? "unknown"
                                              : template_type_tag(binding->second);
         // A pack is distinguished by its arity: the same pattern instantiated
-        // for three arguments and for two is two functions.
+        // for three arguments and for two is two functions. Each element's type is
+        // part of the name as well, or `{int, int}` and `{int, char}` at arity two are
+        // one instance returning one record type, and the second call site fails with
+        // `store type does not match its pointer`.
         const auto arity = pack_arities.find(name);
         if (arity != pack_arities.end()) {
+            for (std::size_t index = 0; index < arity->second; ++index) {
+                const auto element = bindings.find(name + std::to_string(index));
+                mangled += "__";
+                mangled += element == bindings.end() ? "unknown"
+                                                     : template_type_tag(element->second);
+            }
             mangled += "__" + std::to_string(arity->second);
         }
     }

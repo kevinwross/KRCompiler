@@ -40,10 +40,11 @@
 // Two-element and three-element tuples both return the right values on both targets; the
 // fixture covers both, because a three-element pack exposed a separate defect in the
 // signature expansion that a two-element one could not.
-// A mixed-element tuple through the factory still fails: `make_tuple(41, 'a')` reports
-// `IR verifier: function 'main': store type does not match its pointer`. Construct such a
-// tuple in place -- `tuple<int, char> p(41, 'a');` -- which works.
-
+// A mixed-element tuple works too: `make_tuple(41, 'a')` returns `tuple<int, char>`. The
+// instance name carries each element's type, so a call with `{int, int}` and one with
+// `{int, char}` are two instances rather than one -- before that, the second call site
+// stored the first one's record type into the other's and the IR verifier refused it.
+//
 namespace std {
 
 template <typename... Ts>
