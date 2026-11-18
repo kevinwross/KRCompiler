@@ -1402,6 +1402,20 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
     case ir::Opcode::GetElementPtr: {
         load_value(out, function, layout, instruction.operands[0], "R0");
         ir::TypePtr current = instruction.source_type;
+        // A constant index or member offset is a byte displacement the address
+        // register can take directly, so the offset accumulates here and leaves
+        // as one ADD. The width is 32-bit because every emitted ADD and MUL
+        // wraps at that width; unsigned arithmetic keeps the wrapping defined.
+        std::uint64_t pending = 0;
+        const auto flush_pending = [&]() {
+            if (pending == 0) {
+                return;
+            }
+            out += "        ADD R0, R0, #" +
+                   std::to_string(static_cast<std::int32_t>(
+                       static_cast<std::uint32_t>(pending))) + "\n";
+            pending = 0;
+        };
         for (std::size_t index = 1; index < instruction.operands.size(); ++index) {
             std::string error;
             std::uint64_t stride = 1;
@@ -1436,9 +1450,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                     return;
                 }
                 current = current->fields[static_cast<std::size_t>(constant->value)];
-                if (offset != 0) {
-                    out += "        ADD R0, R0, #" + std::to_string(offset) + "\n";
-                }
+                pending += offset;
                 continue;
             }
             if (index == 1) {
@@ -1454,12 +1466,19 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 out += "        HALT ; " + error + "\n";
                 return;
             }
+            if (const auto* constant =
+                    dynamic_cast<const ir::ConstantInt*>(instruction.operands[index])) {
+                pending += static_cast<std::uint64_t>(constant->value) * stride;
+                continue;
+            }
+            flush_pending();
             load_low_word(out, function, layout, instruction.operands[index], "R1");
             if (stride != 1) {
                 out += "        MUL R1, R1, #" + std::to_string(stride) + "\n";
             }
             out += "        ADD R0, R0, R1\n";
         }
+        flush_pending();
         store_value(out, function, layout, instruction, "R0");
         break;
     }

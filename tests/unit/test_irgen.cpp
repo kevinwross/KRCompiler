@@ -161,7 +161,10 @@ int main(void) {
     const auto assembly = backend.emit(assembly_error);
     REQUIRE(assembly);
     CHECK(assembly_error.empty());
-    CHECK(assembly->find("MOV R1, #4") != std::string::npos);
+    // `node.next` sits at byte offset 4, so the member offset is carried by the
+    // ADD itself rather than materialised into R1 and scaled by the stride.
+    CHECK(assembly->find("ADD R0, R0, #4") != std::string::npos);
+    CHECK(assembly->find("MOV R1, #4") == std::string::npos);
     CHECK(assembly->find("HALT ; unsupported") == std::string::npos);
 
     krc::asmkr32::AssemblyResult assembled;
@@ -216,6 +219,31 @@ int past_limit(int value) { return value + 1024; }
     // 1023 is the largest value the eleven-bit inline field holds.
     CHECK(assembly->find("ADD R0, R0, #1023") != std::string::npos);
     CHECK(assembly->find("MOV R1, #1024") != std::string::npos);
+}
+
+TEST_CASE("KR32 backend folds a constant element index into the address") {
+    const auto generated = generate(R"SRC(
+int third(int *values) { return values[3]; }
+int member(struct Pair { int first; int second; } *pair) { return pair->second; }
+int walk(int *values, int index) { return values[index]; }
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    krc::backend::Kr32Backend backend(*generated.module, profile);
+    std::string assembly_error;
+    const auto assembly = backend.emit(assembly_error);
+    REQUIRE(assembly);
+    CHECK(assembly_error.empty());
+
+    // values[3] is 3 * sizeof(int) bytes from the base, so the index never
+    // reaches a register and no stride multiply is emitted for it.
+    CHECK(assembly->find("ADD R0, R0, #12") != std::string::npos);
+    CHECK(assembly->find("ADD R0, R0, #4") != std::string::npos);
+    // A computed index still scales in a register; the fold is for literals.
+    CHECK(assembly->find("MUL R1, R1, #4") != std::string::npos);
 }
 
 TEST_CASE("C IRGen lowers mainentry arguments and a for loop") {
