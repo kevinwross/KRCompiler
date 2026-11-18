@@ -48,6 +48,7 @@ void print_usage(std::ostream& out) {
         << "  -E                     Preprocess only\n"
         << "  --dump-ast             Print the parsed C AST\n"
         << "  --dump-ir              Lower to typed SSA IR and print it\n"
+        << "  --dump-stats           Print IR instruction and block counts per function\n"
         << "  --dump-symbols FILE    Dump KDBG symbols from a .k32 image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
         << "  -S                     Emit KR32 assembly to stdout, or to -o FILE\n"
