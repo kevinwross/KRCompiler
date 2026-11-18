@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T21:22:28-08:00 — host gate (Linux ARM64)
+Revision: df16ecc
+
+```
+linux-gcc-debug    PASS 805/805
+linux-gcc-release  PASS 805/805
+linux-clang-debug  PASS 805/805
+linux-sanitize     PASS 805/805
+not verified: Windows x64, native Linux x64
+```
+
+The first ARM64 gate to run all four presets. It covers `772b65a`, which demotes doctest's
+`ciso646` warning on the Clang test target in `tests/CMakeLists.txt` -- a build-configuration
+boundary, so every row had to run -- plus the `AGENTS.local.md` six-configuration record and the
+implementation log in `cfc4ac4`/`df16ecc`. All four rows report the same 805 with 151 executed
+tests, which is the expected shape: the change is warning policy for one target, and the VM copies
+in `vm/` let every configuration register the same tests. Test times were 94.69 s (GCC debug),
+43.22 s (GCC release), 87.29 s (Clang debug) and 375.98 s (ASan/UBSan); the sanitizer row costs
+about four times its uninstrumented sibling. Rows were configured and built clean from a deleted
+`build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-17T20:50:00-08:00 — host gate (Windows)
 Revision: 772b65a
 
