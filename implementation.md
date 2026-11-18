@@ -552,6 +552,32 @@ Second, the **VM copies had to be moved first**: `vm/` did not exist and the bin
 were removed — the executed rows ran from there. No row was retried and no warning appeared in
 either configuration.
 
+2026-11-18T08:31:51-08:00 — ARM64 poll
+Revision: d849969
+
+```
+no build: documentation only at d84996909b3e8ced8fef8a3f0f7640e7881d3af5
+```
+
+2026-11-18T08:07:56-08:00 — host gate (Linux ARM64)
+Revision: 7832371
+
+```
+linux-gcc-debug    PASS 828/828
+linux-clang-debug  PASS 828/828
+linux-sanitize     PASS 828/828
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers the delta from the previous record: `34a1bd2` documents `--dump-stats` in the
+compiler's help output (`src/tools/krc/main.cpp`), `b9909da` and `6b5c54f` complete the tick baseline
+and confirm both baselines reproduce (`benchmarks/`), `fb4a8fa` accepts ADR 0049, and `7832371` scopes
+S1 with the finding that the encoder already takes immediates and the loader does not pass them.
+`8511e50` defers item 14 as a recorded gap with its mechanism. The count is unchanged at 828 with 161
+executed tests, correct for tooling, benchmarks and documentation. Test times were 94.20 s (GCC
+debug), 90.82 s (Clang debug) and 382.71 s (ASan/UBSan). Rows were configured and built clean from a
+deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T07:43:36-08:00 — host gate (Linux ARM64)
 Revision: eb013e7
 
