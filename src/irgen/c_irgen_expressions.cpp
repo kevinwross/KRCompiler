@@ -565,7 +565,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                                 byte_type, table,
                                 {module_->constant_int(
                                     size_type(),
-                                    static_cast<std::int64_t>(slot) * 4)},
+                                    static_cast<std::int64_t>(slot) * static_cast<std::int64_t>(target::get_target(module_->target()).pointer_bits / 8))},
                                 false, "delete.slot");
                             function_slot->type = module_->types().pointer_type(
                                 module_->types().pointer_type(byte_type));
@@ -720,7 +720,7 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                         byte_type, table,
                         {module_->constant_int(
                             size_type(),
-                            static_cast<std::int64_t>(destructor_slot) * 4)},
+                            static_cast<std::int64_t>(destructor_slot) * static_cast<std::int64_t>(target::get_target(module_->target()).pointer_bits / 8))},
                         false, "delete.slot");
                     function_slot->type = module_->types().pointer_type(
                         module_->types().pointer_type(byte_type));
@@ -1914,7 +1914,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                                 byte_type, table,
                                 {module_->constant_int(
                                     size_type(),
-                                    static_cast<std::int64_t>(slot) * 4)},
+                                    static_cast<std::int64_t>(slot) * static_cast<std::int64_t>(target::get_target(module_->target()).pointer_bits / 8))},
                                 false, "this.slot");
                             function_slot->type =
                                 module_->types().pointer_type(
@@ -2141,7 +2141,7 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                         auto* function_slot = builder_.create_gep(
                             byte_type, table,
                             {module_->constant_int(
-                                size_type(), static_cast<std::int64_t>(slot) * 4)},
+                                size_type(), static_cast<std::int64_t>(slot) * static_cast<std::int64_t>(target::get_target(module_->target()).pointer_bits / 8))},
                             false, "vslot");
                         function_slot->type = module_->types().pointer_type(
                             module_->types().pointer_type(byte_type));
