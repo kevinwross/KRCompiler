@@ -511,6 +511,26 @@ ARM64 host. Both rows were configured and built clean from a deleted `build/` at
 `ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from
 `vm/`, so all 147 executed tests ran. Test times were 87.71 s (debug) and 38.94 s (release) with
 the preset's `jobs: 4`. No disturbances.
+2026-11-17T16:14:26-08:00 — host gate (Windows)
+Revision: be5c722
+
+```
+windows-msvc-debug    PASS 797/797
+windows-msvc-release  PASS 797/797
+linux-gcc-debug       PASS 797/797
+linux-gcc-release     PASS 797/797
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine)
+```
+
+All four rows report the same count, which is the expected shape here rather than a coincidence: both VMs are
+configured, so the 147 executed tests register on every configuration, and the count is the check that they did.
+This gate publishes two list items and one diagnosis. The register allocator's status is now recorded rather than
+implied -- `allocate_registers` is built, unit-tested and called from nowhere, and its header says so. The `get<I>`
+entry in `sysroot/include/tuple` states what was measured instead of what was assumed: non-type parameters work in
+declarations and as explicit call arguments, while member function templates and qualified template-id use do not
+parse. The item-1 diagnosis is recorded with its stack trace, which named `expression_type` as re-analysing
+expressions during code generation. Rows ran one at a time from deleted directories; no warnings, no compiler
+crashes, no disturbances. The ARM64 host last gated `5671843`, which does not include these three commits.
 
 ### 2026-11-17T15:56:10-08:00 — host gate (Linux ARM64)
 

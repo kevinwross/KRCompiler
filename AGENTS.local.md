@@ -36,13 +36,17 @@ Run only your host's row. Front-end, backend, runtime and test changes that cros
 **Record the gate** in `implementation.md` under a `## Gate verification` heading, one block per gate, most recent first — a line per configuration and an explicit list of what remains unverified:
 
 ```
-### <iso timestamp> — host gate (Windows)
+<iso timestamp> — host gate (Windows)
+Revision: <short sha the gate covers>
+
 windows-msvc-debug    PASS <n>/<n>
 windows-msvc-release  PASS <n>/<n>
 linux-gcc-debug       PASS <n>/<n>
 linux-gcc-release     PASS <n>/<n>
 not verified: native Linux x64, Linux ARM64
 ```
+
+<One paragraph of prose: what the gate covers, why any row's count differs from the others, and anything that disturbed the run — a compiler crash that cleared on rebuild, a KRO CRC mismatch from a stale ctest, a row that had to be re-run. Say whether each was traced.>
 
 **The timestamp is when the gate's builds started**, not when the record is written. Take it from the first build job's start line. `local-datetime` answers "what time is it now", which is the wrong question for a record of something that has already finished — a block stamped 14:45 for a gate that built at 14:41 points at a moment when nothing was built, and the timestamp exists to identify which gate this is.
 
