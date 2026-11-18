@@ -2512,8 +2512,12 @@ std::string Sema::instantiate_template_call(
                             declarator->text = pack_name + std::to_string(copy);
                         }
                     }
+                    // Each duplicate goes after the previous one. Inserting every copy at
+                    // `index + 1` pushed the earlier ones right, so a three-element pack
+                    // arrived as `values, values2, values1` and the instance read its
+                    // second element from the third argument.
                     function->children.insert(function->children.begin() +
-                                                  static_cast<std::ptrdiff_t>(index + 1),
+                                                  static_cast<std::ptrdiff_t>(index + copy),
                                               std::move(duplicated));
                 }
                 break;
