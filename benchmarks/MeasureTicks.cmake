@@ -55,7 +55,7 @@ foreach(program IN LISTS PROGRAMS)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
                 "-DKRC=${KRC_FOR_CMAKE}" "-DKRLD=${KRLD_FOR_CMAKE}" "-DSOURCE=${source_native}" "-DOUTPUT=${image32_native}"
-                "-DLIBC=${KR32_LIBC}" "-DRUNTIME=${KR32_CRT0}"
+                "-DLIBC=${KR32_LIBC}" "-DRUNTIME=${KR32_CRT0}" "-DLEVEL=${LEVEL}"
                 -P "${ROOT}/cmake/LinkRuntime.cmake"
         RESULT_VARIABLE link32 OUTPUT_QUIET ERROR_VARIABLE err32)
 
@@ -82,7 +82,7 @@ foreach(program IN LISTS PROGRAMS)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
                 "-DKRC=${KRC_FOR_CMAKE}" "-DKRLD=${KRLD_FOR_CMAKE}" "-DSOURCE=${source_native}" "-DOUTPUT=${image16_native}"
-                "-DCRT0=${KR16_CRT0}" "-DHOST=${KR16_HOST}" "-DFILEIO=${KR16_FILEIO}" "-DLIBCRT=${KR16_LIBCRT}"
+                "-DCRT0=${KR16_CRT0}" "-DHOST=${KR16_HOST}" "-DFILEIO=${KR16_FILEIO}" "-DLIBCRT=${KR16_LIBCRT}" "-DLEVEL=${LEVEL}"
                 -P "${ROOT}/cmake/LinkKr16Host.cmake"
         RESULT_VARIABLE link16 OUTPUT_QUIET ERROR_VARIABLE err16)
 

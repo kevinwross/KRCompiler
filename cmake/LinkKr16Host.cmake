@@ -38,12 +38,19 @@ endif()
 
 file(REMOVE "${crt_object}" ${user_objects} "${OUTPUT}")
 
+# Optional: LEVEL is a compiler flag such as `-O1`, applied to every compile this
+# script performs, so an image can be linked at a named optimisation level.
+set(level_args)
+if(DEFINED LEVEL AND NOT LEVEL STREQUAL "")
+    list(APPEND level_args "${LEVEL}")
+endif()
+
 foreach(pair IN LISTS inputs)
     string(FIND "${pair}" "|" separator)
     string(SUBSTRING "${pair}" 0 ${separator} input)
     math(EXPR after "${separator} + 1")
     string(SUBSTRING "${pair}" ${after} -1 object)
-    execute_process(COMMAND "${KRC}" -c --target=kr16 --emit-object
+    execute_process(COMMAND "${KRC}" -c --target=kr16 ${level_args} --emit-object
                             "${input}" -o "${object}"
                     RESULT_VARIABLE result)
     if(NOT result EQUAL 0)

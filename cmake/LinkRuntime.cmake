@@ -4,8 +4,14 @@ if(NOT DEFINED KRC OR NOT DEFINED KRLD OR NOT DEFINED SOURCE OR
 endif()
 
 set(object "${OUTPUT}.kro")
+# Optional: LEVEL is a compiler flag such as `-O1`, applied to every compile this
+# script performs, so an image can be linked at a named optimisation level.
+set(level_args)
+if(DEFINED LEVEL AND NOT LEVEL STREQUAL "")
+    list(APPEND level_args "${LEVEL}")
+endif()
 file(REMOVE "${object}" "${OUTPUT}")
-execute_process(COMMAND "${KRC}" -c "${SOURCE}" -o "${object}"
+execute_process(COMMAND "${KRC}" -c ${level_args} "${SOURCE}" -o "${object}"
                 RESULT_VARIABLE compile_result)
 if(NOT compile_result EQUAL 0)
     message(FATAL_ERROR "krc -c failed with ${compile_result}")
@@ -17,7 +23,7 @@ if(DEFINED LIBC AND NOT LIBC STREQUAL "")
     else()
         set(libc_object "${OUTPUT}.libc.kro")
         file(REMOVE "${libc_object}")
-        execute_process(COMMAND "${KRC}" -c "${LIBC}" -o "${libc_object}"
+        execute_process(COMMAND "${KRC}" -c ${level_args} "${LIBC}" -o "${libc_object}"
                         RESULT_VARIABLE libc_result)
         if(NOT libc_result EQUAL 0)
             message(FATAL_ERROR "krc -c runtime libc failed with ${libc_result}")
