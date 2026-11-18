@@ -5655,7 +5655,18 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/thread_local_local_linked.k32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
-    add_test(NAME krc_cxx_value_parameter_deduced
+    # A pointer element in a pack is still rejected: make_tuple(p, 1) infers int* as int and the
+# IR verifier refuses the store. Kept as a rejection test so that fixing it breaks this test
+# and the fixer is told to turn it into a passing one. It has to compile rather than run
+# -fsyntax-only, because the verifier is a later stage and syntax-only exits zero.
+add_test(NAME krc_cxx_make_tuple_pointer_rejected
+    COMMAND $<TARGET_FILE:krc> -c --target=kr32
+            "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/make_tuple_pointer.cpp"
+            -o ${KRC_TEST_OUTPUT_DIR}/make_tuple_pointer_rejected.kro)
+set_tests_properties(krc_cxx_make_tuple_pointer_rejected PROPERTIES
+    PASS_REGULAR_EXPRESSION "store type does not match its pointer")
+
+add_test(NAME krc_cxx_value_parameter_deduced
         COMMAND $<TARGET_FILE:krc> -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/value_parameter_deduced.cpp")
     # The regex is the assertion: WILL_FAIL would invert its result as well.
