@@ -515,7 +515,7 @@ configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unli
 time, with no warnings; the VM copies were resolved from `vm/`. Test times were 83.37 s (debug) and
 34.63 s (release) with the preset's `jobs: 4`. No disturbances.
 2026-11-17T17:37:47-08:00 — host gate (Windows)
-Revision: 46ee9a3
+Revision: c534c68
 
 ```
 windows-msvc-debug    PASS 805/805
