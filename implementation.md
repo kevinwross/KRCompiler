@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T22:35:18-08:00 — host gate (Windows)
+Revision: a138eda
+
+```
+windows-msvc-debug    PASS 813/813
+linux-gcc-debug       PASS 813/813
+linux-clang-debug     PASS 813/813
+linux-sanitize        PASS 813/813
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+The first gate run under the four-row routine, which is the policy this session adopted: the configurations that
+differ in compiler or instrumentation, with the two release builds reserved for a milestone close. All four report
+813 -- eight more than the last six-row gate, from the character-literal fixtures. `linux-sanitize` reports **zero**
+AddressSanitizer, LeakSanitizer and UBSan diagnostics, and leaks were checked explicitly in Phase 5 with a positive
+control proving the detector fires. This gate covers sixteen commits published on inner-loop evidence since
+`7789a7c`: the `sizeof` fix, the three empty-tuple constructor paths, the character-literal typing, the pack-order
+fix, the release-notes and checklist corrections, and the policy change itself. That is the trade the policy names,
+and this is the evidence that it held. Rows ran one at a time from deleted directories; no warnings beyond the
+demoted doctest one on the Clang row, no compiler crashes, no disturbances. The ARM64 host last gated `e774b72`.
 2026-11-17T22:10:57-08:00 — host gate (Linux ARM64)
 Revision: 261ee0a
 
