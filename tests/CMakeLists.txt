@@ -6676,6 +6676,51 @@ endif()
 # A value template parameter deduced from an argument. These have to run: the previous
 # behaviour was a compile error, so only an executed image proves the binding has the right
 # value rather than merely the right shape.
+# The four shapes the value-parameter deduction has to handle: by value, through a pointer,
+# across two parameters, and alongside a pack. Run, not merely compiled -- a wrong binding is
+# a wrong number, which only an executed image can see.
+add_test(NAME krc_link_nontype_deduction_shapes
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/nontype_deduction_shapes.cpp
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/nontype_deduction_shapes_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_run_nontype_deduction_shapes
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/nontype_deduction_shapes_linked.k32
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+    set_tests_properties(krc_run_nontype_deduction_shapes PROPERTIES
+        DEPENDS krc_link_nontype_deduction_shapes)
+endif()
+
+add_test(NAME krc_link_kr16_nontype_deduction_shapes
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+            -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+            -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+            -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/nontype_deduction_shapes.cpp
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_nontype_deduction_shapes.kex
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+    add_test(NAME krc_run_kr16_nontype_deduction_shapes
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR16_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_nontype_deduction_shapes.kex
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+    set_tests_properties(krc_run_kr16_nontype_deduction_shapes PROPERTIES
+        DEPENDS krc_link_kr16_nontype_deduction_shapes)
+endif()
+
 add_test(NAME krc_link_nontype_deduction
     COMMAND ${CMAKE_COMMAND}
             -DKRC=$<TARGET_FILE:krc>
