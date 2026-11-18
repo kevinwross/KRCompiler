@@ -23,5 +23,13 @@ int main() {
     if (std::tuple_size(mixed) != 2) { return 8; }
     if (std::tuple_head(mixed) != 41) { return 9; }
     if (std::tuple_head(std::tuple_tail(mixed)) != 'a') { return 10; }
+
+    // Three elements whose types differ from each other, so the instance name has to carry
+    // more than the head's type and the arity.
+    std::tuple<int, char, int> wide = std::make_tuple(11, 'b', 29);
+    if (std::tuple_size(wide) != 3) { return 11; }
+    if (std::tuple_head(wide) != 11) { return 12; }
+    if (std::tuple_head(std::tuple_tail(wide)) != 'b') { return 13; }
+    if (std::tuple_head(std::tuple_tail(std::tuple_tail(wide))) != 29) { return 14; }
     return 42;
 }

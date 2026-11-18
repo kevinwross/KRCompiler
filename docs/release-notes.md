@@ -72,11 +72,13 @@ absent. `AGENTS.local.md` records the environment assumptions, and
   selected by argument count, and recursive variadic class templates do work.
 - `get<I>`, and the parts of `<tuple>` that need it. `sysroot/include/tuple` does
   ship — `tuple_size`, `tuple_head`, `tuple_tail`, the members `.head` / `.tail`,
-  and in-place construction, with a link-and-run fixture on both targets. What it
-  does not have, each reason stated in the header: `get<I>` (a member template or a
-  partial specialisation over a non-type argument), an element constructor (a class
-  member's pack signature is expanded for one element only), a three-element or
-  mixed-element `make_tuple`, and `tuple<>` declared as a local.
+  in-place construction, and `make_tuple` — with link-and-run fixtures on both
+  targets. The element constructor takes one argument per element and works for three
+  as readily as for two, `make_tuple` returns two-element, three-element and
+  mixed-type tuples, and `tuple<>` can be declared as a local. `get<I>` is the one
+  absence, and the header states its measured reason: a member function template does
+  not parse here, and neither does a qualified use through a template-id with a
+  non-type argument.
 - A callable supplied as a *template parameter* is still rejected, so no generic
   algorithm can take `std::function`-style function objects.
 - Release tagging. The `v1.0` tag is an operator decision and is not created by
