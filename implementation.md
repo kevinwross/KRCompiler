@@ -507,6 +507,13 @@ Built `5671843` ("Record the combined gate and the ARM64 verification", which al
 `sysroot/include/memory` and `sysroot/include/tuple` corrections). Clean builds from a deleted
 `build/` at `-j2` with `ulimit -s unlimited`, one row at a time, no warnings; the VM copies were
 resolved from `vm/` and all tests ran. Debug 85.47 s, release 33.46 s with the preset's `jobs: 4`.
+### 2026-11-17T15:54:29-08:00 — host gate (Windows)
+
+windows-msvc-debug    PASS 797/797
+windows-msvc-release  PASS 797/797
+linux-gcc-debug       PASS 797/797
+linux-gcc-release     PASS 797/797
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine)
 
 ### 2026-11-17T15:36:56-08:00 — host gate (Windows)
 
@@ -4744,3 +4751,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-17T18:00:00-08:00** — Item 3 measured, and `get<I>` is confirmed blocked — with sharper reasons than the header carried. Four probes: a non-type template parameter in a **declaration** works (`Fixed<2> f;`); an **explicit non-type argument in a call** works (`at_index<0>(x)`); a **member function template** does not parse (`expected declarator`); and a qualified use through a template-id with a non-type argument does not parse (`Index<0>::pick`, `expected expression`). Deduction of a non-type parameter from an argument is also absent (`cannot deduce the value template parameter 'N'; write it explicitly`).
 - **2026-11-17T18:00:00-08:00** — So a **member** `get<I>` needs the parser gap closed, while a **free** `get<I>` that indexes needs either the qualified-use gap or recursion over the index, since `get<I - 1>` is an expression as a template argument. `sysroot/include/tuple` now states exactly that instead of "a member template or a partial specialisation over a non-type argument, and this front end has neither" -- which was right in conclusion but wrong in detail, since partial specialisation over a non-type argument is not the obstacle and non-type parameters themselves are supported.
 - **2026-11-17T18:00:00-08:00** — No stale copy of the ARM64 checklist remained to fix: the Raspberry Pi rewrote `Arm64-readme.md` for the `vm/` move as part of `cbcb467`, so it already documents `vm/` first with `build/vm/` as legacy.
+- **2026-11-17T18:10:00-08:00** — Host gate `2026-11-17T15:54:29-08:00`: **797/797** on all four configurations, from empty build directories and no warnings, first attempt. Publishes the register allocator's recorded status and the measured `get<I>` reasons.
