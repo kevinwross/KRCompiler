@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T07:33:05-08:00 — host gate (Windows)
+Revision: 7c4a452
+
+```
+windows-msvc-debug    PASS 828/828
+linux-gcc-debug       PASS 828/828
+linux-clang-debug     PASS 828/828
+linux-sanitize        PASS 828/828
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+Clean four-row gate from deleted directories, two tests more than the previous gate: the KR16 profile
+rejection tests derived from compiling every extracted source. It covers the parser change that consumes a
+template-id as a name prefix, the value-deduction fixtures, and `--dump-stats` -- the last of which touches a
+tool binary rather than the compiler core, which is why the second compiler was run for it as well as the
+gate. No warnings beyond the demoted doctest one on the Clang row; `linux-sanitize` reports zero
+AddressSanitizer, LeakSanitizer and UBSan diagnostics. Rows ran one at a time, the three Linux rows
+sequentially in one job so they never overlapped. The ARM64 host last gated `37d60e2`.
 2026-11-18T07:19:56-08:00 — host gate (Linux ARM64)
 Revision: 179f6fd
 
@@ -5613,3 +5631,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-18T09:15:00-08:00** — No implementation, per the goal's instruction. The ADR also records the dependency it inherits: `--dump-stats` and a working benchmark runner are preconditions, and **the tick runner is still the open gap** -- the size layer works, the tick layer does not, and four attempts have established that the failure is `execute_process` failing to start krc rather than krc reporting an error.
 - **2026-11-18T09:25:00-08:00** — **C2 done: `--dump-stats` exists**, which was the review's precondition for every later optimiser claim. It walks `Module::functions()`, and for each function counts `BasicBlock::instructions` and blocks, printing one `stats<TAB>function<TAB>instructions<TAB>blocks` line per function and a `stats<TAB>TOTAL` line, so a number is compiler output rather than a script's arithmetic. First measurement, on the benchmark workload: **262 IR instructions across 54 blocks in 7 functions** for KR32. Suite **828/828**, and `linux-clang-debug` builds with zero errors -- the second-compiler rule applied again because the change added no new standard-library call but did touch a tool binary.
 - **2026-11-18T09:25:00-08:00** — The flag has **no help line yet**, which is a real gap rather than an oversight I am glossing: `--dump-ir` is listed in `krc --help` and `--dump-stats` is not, so it is discoverable only from this record and the commit. Recorded as owed. The block is also deliberately not added to the early-exit condition, so `--dump-stats` must be combined with `-c`/`-S` to reach the module; that is a limitation of this first version, not a design choice.
+- **2026-11-18T09:35:00-08:00** — **ADR 0049 is approved and marked accepted**, after operator review, so wiring the register allocator is authorised to proceed behind `-O1` under the ADR's five constraints. The ADR's own precondition is not yet met -- `--dump-stats` now exists, but the **tick half of the benchmark still does not run**, so a before/after performance claim cannot yet be made. That is the one thing between this approval and implementation.
+- **2026-11-18T09:35:00-08:00** — Gate recorded at `7c4a452`: **828/828 on all four routine rows**, clean from deleted directories, zero sanitizer reports. It covers everything published since `2288552`, including the parser change, the six new fixtures and `--dump-stats`. The optimiser work now starts from a verified baseline rather than accumulating unverified commits underneath it.

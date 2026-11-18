@@ -1,6 +1,6 @@
 # 0049 — Wiring the register allocator
 
-**Status:** proposed. **Awaiting operator review before any implementation.**
+**Status:** accepted 2026-11-18, after operator review.
 **Date:** 2026-11-18.
 **Relates to:** `D-049` (optimisation contract), [ADR 0016](0016-kr16-scalar-abi.md),
 `src/backend/register_allocator.cpp`.
