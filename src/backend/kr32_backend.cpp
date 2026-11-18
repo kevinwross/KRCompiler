@@ -1178,10 +1178,16 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
             if (!size_error.empty()) {
                 continue;
             }
+            // A source variable is the alloca IRGen named `<variable>.addr`. A
+            // compiler temporary (`call.temp`, `operator.temp`, `subscript.this`)
+            // is not a variable a debugger should list, and a pass that promotes
+            // one would leave its record pointing at a dead slot — so the record
+            // is emitted for the named ones only (docs/optimize.md E4).
             auto name = instruction->name;
-            if (name.size() > 5 && name.compare(name.size() - 5, 5, ".addr") == 0) {
-                name.resize(name.size() - 5);
+            if (name.size() <= 5 || name.compare(name.size() - 5, 5, ".addr") != 0) {
+                continue;
             }
+            name.resize(name.size() - 5);
             if (parameter_names.contains(name)) {
                 continue;
             }

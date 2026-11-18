@@ -55,6 +55,12 @@ name is not unique, so anything that resolves keeps using the symbol. Records ar
 emitted deterministically: sources, lines, functions, symbols, variables, types,
 then build metadata.
 
+A `Variable` record exists for each **source variable**, which the IR names
+`<variable>.addr`; a compiler temporary — `call.temp`, `operator.temp`,
+`subscript.this` — is not recorded, so a pass may promote one without leaving a
+record pointing at a dead slot (`docs/optimize.md` E4). A promoted source variable
+would invalidate its record, which is why the pass refuses those.
+
 Source paths are copied from the `.debug_info` bridge. `krld
 --source-root=DIR` rewrites paths under `DIR` to `/`-separated paths relative to
 `DIR` before writing KDBG; paths outside `DIR` are left unchanged. Passing the
