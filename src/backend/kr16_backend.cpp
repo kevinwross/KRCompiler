@@ -245,8 +245,9 @@ bool dynamic_gep_scale(const ir::Instruction& instruction, std::uint32_t& offset
 }  // namespace
 
 Kr16Backend::Kr16Backend(const ir::Module& module,
-                         const target::TargetProfile& profile)
-    : module_(module), profile_(profile) {}
+                         const target::TargetProfile& profile,
+                         OptimizationLevel level)
+    : module_(module), profile_(profile), level_(level) {}
 
 Kr16Backend::FrameLayout Kr16Backend::layout_function(
     const ir::Function& function, std::string& error) const {
@@ -1038,6 +1039,11 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
             }
             out += "\n";
         }
+    }
+    // `-O1` runs the text pass; `-O0` returns the emitter's text untouched, which
+    // is what keeps the default level byte-identical to a build without the flag.
+    if (level_ == OptimizationLevel::O1) {
+        return remove_redundant_jumps(out);
     }
     return out;
 }

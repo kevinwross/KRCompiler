@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "backend/peephole.h"
 #include "ir/ir.h"
 #include "krc/target/target.h"
 
@@ -15,7 +16,10 @@ namespace krc::backend {
 
 class Kr32Backend {
 public:
-    Kr32Backend(const ir::Module& module, const target::TargetProfile& profile);
+    // The level defaults to `-O0`, which is the output a build without the flag
+    // produces: no caller has to pass it to mean "the default".
+    Kr32Backend(const ir::Module& module, const target::TargetProfile& profile,
+                OptimizationLevel level = OptimizationLevel::O0);
 
     [[nodiscard]] std::optional<std::string> emit(std::string& error) const;
     [[nodiscard]] const std::string& debug_info() const { return debug_info_; }
@@ -103,6 +107,7 @@ private:
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;
+    OptimizationLevel level_ = OptimizationLevel::O0;
     mutable std::uint32_t next_debug_source_ = 0;
     mutable std::unordered_map<std::string, std::uint32_t> debug_sources_;
     mutable std::unordered_set<std::string> debug_types_;

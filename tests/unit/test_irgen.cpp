@@ -377,6 +377,44 @@ int total(void) {
     CHECK(generated.verifier_error.empty());
 }
 
+TEST_CASE("-O1 removes a branch to the label that follows it") {
+    // The shape every function tail has: a jump to the epilogue label, which is
+    // the next thing emitted. The jump is dead and the label stays.
+    const std::string tail =
+        "        JMP .Lmain.ret\n"
+        ".Ldbg.main.7:\n"
+        ".Lmain.ret:\n"
+        "        RET\n";
+    const auto optimized = krc::backend::remove_redundant_jumps(tail);
+    CHECK(optimized.find("JMP") == std::string::npos);
+    CHECK(optimized.find(".Lmain.ret:") != std::string::npos);
+    CHECK(optimized.find("RET") != std::string::npos);
+
+    // A jump to a label that is not next is live, and so is a conditional one.
+    const std::string live =
+        "        JMP .Lmain.ret\n"
+        "        MOV R0, #1\n"
+        ".Lmain.ret:\n"
+        "        RET\n";
+    CHECK(krc::backend::remove_redundant_jumps(live).find("JMP .Lmain.ret") !=
+          std::string::npos);
+    const std::string conditional =
+        "        JNZ .Lcond\n"
+        ".Lcond:\n"
+        "        RET\n";
+    CHECK(krc::backend::remove_redundant_jumps(conditional).find("JNZ") !=
+          std::string::npos);
+
+    // KR16's unconditional branch is `BRA`, and its register form has no label.
+    const std::string kr16 =
+        "    BRA .Lkr16.ret\n"
+        ".Lkr16.ret:\n"
+        "    RET\n";
+    CHECK(krc::backend::remove_redundant_jumps(kr16).find("BRA") == std::string::npos);
+    CHECK(krc::backend::remove_redundant_jumps("    JMP R3\n").find("JMP R3") !=
+          std::string::npos);
+}
+
 TEST_CASE("C IRGen lowers mainentry arguments and a for loop") {
     const auto generated = generate(R"SRC(
 int printf(const char *format, ...);

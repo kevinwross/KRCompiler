@@ -49,6 +49,8 @@ void print_usage(std::ostream& out) {
         << "  --dump-ast             Print the parsed C AST\n"
         << "  --dump-ir              Lower to typed SSA IR and print it\n"
         << "  --dump-stats           Print IR instruction and block counts per function\n"
+        << "  -O0                    Straightforward lowering (the default)\n"
+        << "  -O1                    The optimiser passes plan.md 8.8 lists\n"
         << "  --dump-symbols FILE    Dump KDBG symbols from a .k32 image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
         << "  -S                     Emit KR32 assembly to stdout, or to -o FILE\n"
@@ -86,6 +88,7 @@ int main(int argc, char** argv) {
     bool dump_ast = false;
     bool dump_ir = false;
     bool dump_stats = false;
+    krc::backend::OptimizationLevel optimization = krc::backend::OptimizationLevel::O0;
     bool emit_assembly = false;
     bool emit_object = false;
     bool emit_object_container = false;
@@ -159,6 +162,18 @@ int main(int argc, char** argv) {
         }
         if (argument == "--dump-stats") {
             dump_stats = true;
+            continue;
+        }
+        // `-O0` is straightforward lowering; `-O1` adds the optimiser passes
+        // plan.md §8.8 lists. The level is not inferred from anywhere else, so
+        // a build without the flag is `-O0` and stays byte-identical to one that
+        // names it.
+        if (argument == "-O0") {
+            optimization = krc::backend::OptimizationLevel::O0;
+            continue;
+        }
+        if (argument == "-O1" || argument == "-O") {
+            optimization = krc::backend::OptimizationLevel::O1;
             continue;
         }
         if (argument == "--dump-symbols") {
@@ -393,7 +408,7 @@ int main(int argc, char** argv) {
                     }
                     if ((emit_assembly || emit_object) &&
                         profile.id == krc::target::TargetId::Kr16) {
-                        krc::backend::Kr16Backend backend(*module, profile);
+                        krc::backend::Kr16Backend backend(*module, profile, optimization);
                         std::string backend_error;
                         auto assembly = backend.emit(backend_error);
                         if (!assembly) {
@@ -532,7 +547,7 @@ int main(int argc, char** argv) {
                                                "' has no code generator yet");
                     } else if ((emit_assembly || emit_object) &&
                                profile.id == krc::target::TargetId::Kr32) {
-                        krc::backend::Kr32Backend backend(*module, profile);
+                        krc::backend::Kr32Backend backend(*module, profile, optimization);
                         std::string backend_error;
                         auto assembly = backend.emit(backend_error);
                         if (!assembly) {

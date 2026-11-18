@@ -8,6 +8,7 @@
 
 #include "ir/ir.h"
 #include "krc/target/target.h"
+#include "backend/peephole.h"
 
 namespace krc::backend {
 
@@ -15,7 +16,10 @@ namespace krc::backend {
 // point are rejected with a diagnostic until their ABI is defined.
 class Kr16Backend {
   public:
-    Kr16Backend(const ir::Module& module, const target::TargetProfile& profile);
+    // The level defaults to `-O0`, which is the output a build without the flag
+    // produces: no caller has to pass it to mean "the default".
+    Kr16Backend(const ir::Module& module, const target::TargetProfile& profile,
+                OptimizationLevel level = OptimizationLevel::O0);
 
     [[nodiscard]] std::optional<std::string> emit(std::string& error) const;
 
@@ -37,6 +41,7 @@ class Kr16Backend {
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;
+    OptimizationLevel level_ = OptimizationLevel::O0;
     // The comparisons of the function currently being emitted whose only use is
     // a conditional branch, so the branch carries the comparison and the boolean
     // is never materialised.

@@ -53,9 +53,9 @@ sibling project did, and §5 explains why its order was right for it and wrong h
 |---|---|
 | The pipeline in the plan has an optimiser between the verifier and target lowering. | `plan.md` §7.1 line 508: `-> optimiser (-O0/-O1)`. |
 | The CLI contract names `-O0`/`-O1`. | `plan.md` §15.1 line 1227: `-g -O0 -O1`. |
-| Neither flag is parsed, and `--help` does not list them. | `src/tools/krc/main.cpp` option table; verified by running `krc --help`. |
+| Both flags are parsed and listed, `-O0` is the default, and `-O0` output is byte-identical to a build with no flag. | `src/tools/krc/main.cpp` option table; `cmake/CheckLevelIdentity.cmake` and the `krc_optimization_levels` test assert the identity. |
 | The `-O1` pass list is specified in the plan. | `plan.md` §8.8 line 645: "mem2reg, constant folding, dead code elimination, common subexpression elimination, copy propagation, CFG simplification, branch folding, peepholes, graph-colouring register allocation. No inlining, LTO, loop-invariant code motion, or vectorisation in v1." |
-| None of those passes exists, and there is no pass-manager type to hang them on. | `src/ir/` holds `ir.h`/`ir.cpp` only: model, builder, verifier, printer. |
+| Of that list, one text pass exists: `-O1` removes an unconditional branch to the label that follows it. The IR passes and the pass manager do not exist. | `src/backend/peephole.cpp` (`remove_redundant_jumps`), called from both backends at `-O1` only. `src/ir/` still holds `ir.h`/`ir.cpp` only: model, builder, verifier, printer. |
 | Both backends emit **text** instruction by instruction, appending to a `std::string`. | `Kr32Backend::emit_function`/`emit_instruction` (`kr32_backend.cpp:958`, `:1155`); `kr16_backend.cpp` has the same shape. |
 | Every IR value with a type gets its own frame slot, unconditionally. | `kr32_backend.cpp:296-305`: `layout.slots.emplace(instruction.get(), offset)` for every non-void result. |
 | So every IR instruction costs a store, and every operand use costs a load. | §3 measurement: 3.74 machine instructions per IR instruction. |

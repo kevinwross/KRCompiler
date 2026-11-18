@@ -129,8 +129,9 @@ std::string condition_for(ir::ICmpPredicate predicate) {
 
 }  // namespace
 
-Kr32Backend::Kr32Backend(const ir::Module& module, const target::TargetProfile& profile)
-    : module_(module), profile_(profile) {}
+Kr32Backend::Kr32Backend(const ir::Module& module, const target::TargetProfile& profile,
+                         OptimizationLevel level)
+    : module_(module), profile_(profile), level_(level) {}
 
 std::uint64_t Kr32Backend::size_of(ir::TypePtr type, std::string& error) const {
     if (!type) {
@@ -973,7 +974,13 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
                            return global_type;
                        }() + " " + std::to_string(size) + std::string(1, '\0');
     }
-    return peephole(out);
+    // Identity removal is lowering, so it runs at every level; the `-O1` text
+    // pass runs on top of it.
+    auto text = peephole(out);
+    if (level_ == OptimizationLevel::O1) {
+        text = remove_redundant_jumps(text);
+    }
+    return text;
 }
 
 void Kr32Backend::emit_function(std::string& out, const ir::Function& function,

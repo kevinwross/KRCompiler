@@ -40,6 +40,13 @@ file(MAKE_DIRECTORY "${WORK_DIR}")
 
 file(WRITE "${OUT}" "workload\ttarget\tobject_bytes\tinstructions\tstatus\n")
 
+# Optional: LEVEL is the optimisation level the workload is compiled at, such as
+# `-O1`. Empty means the compiler's default, which is `-O0`.
+set(LEVEL_ARGS)
+if(DEFINED LEVEL AND NOT LEVEL STREQUAL "")
+    list(APPEND LEVEL_ARGS "${LEVEL}")
+endif()
+
 foreach(source IN LISTS WORKLOADS)
     get_filename_component(name "${source}" NAME)
     # The two runtime libraries are both called libc.c, so the row label and the work file
@@ -59,8 +66,8 @@ foreach(source IN LISTS WORKLOADS)
         set(assembly "${WORK_DIR}/${stem}.${target}.s")
 
         execute_process(
-            COMMAND "${KRC}" -c "--target=${target}" --emit-object "${source}"
-                    -o "${object}"
+            COMMAND "${KRC}" -c "--target=${target}" --emit-object ${LEVEL_ARGS}
+                    "${source}" -o "${object}"
             RESULT_VARIABLE compile_status
             OUTPUT_QUIET ERROR_QUIET)
 
@@ -68,7 +75,8 @@ foreach(source IN LISTS WORKLOADS)
             file(SIZE "${object}" object_bytes)
 
             execute_process(
-                COMMAND "${KRC}" -S "--target=${target}" "${source}" -o "${assembly}"
+                COMMAND "${KRC}" -S "--target=${target}" ${LEVEL_ARGS} "${source}"
+                        -o "${assembly}"
                 RESULT_VARIABLE assembly_status
                 OUTPUT_QUIET ERROR_QUIET)
 

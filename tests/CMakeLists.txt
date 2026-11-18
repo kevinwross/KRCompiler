@@ -6109,6 +6109,16 @@ add_test(NAME krc_cxx_value_parameter_deduced
             -P "${CMAKE_SOURCE_DIR}/cmake/CheckMissingFile.cmake"
     )
 
+    add_test(NAME krc_optimization_levels
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier0/functions.c
+                -DOUT_DEFAULT=${KRC_TEST_OUTPUT_DIR}/level_default.s
+                -DOUT_O0=${KRC_TEST_OUTPUT_DIR}/level_o0.s
+                -DOUT_O0_AGAIN=${KRC_TEST_OUTPUT_DIR}/level_o0b.s
+                -DOUT_O1=${KRC_TEST_OUTPUT_DIR}/level_o1.s
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckLevelIdentity.cmake)
+
     add_test(NAME krc_determinism_object
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
