@@ -15,13 +15,20 @@
 // (`pair.tail.head`).
 //
 // `get<I>` is absent, and the reason was measured rather than assumed. What works: a
-// non-type template parameter in a declaration (`Fixed<2> f;`) and an explicit non-type
-// argument in a call (`at_index<0>(x)`). What does not: a **member function template**
-// fails to parse (`expected declarator`), and a qualified use through a template-id with
-// a non-type argument fails to parse (`Index<0>::pick`, `expected expression`). Deduction
-// of a non-type parameter from an argument is also absent (`cannot deduce the value
-// template parameter`). A member `get<I>` needs the first, a free `get<I>` that indexes
-// needs the second or recursion over the index.
+// non-type template parameter in a declaration (`Fixed<2> f;`), an explicit non-type
+// argument in a call (`at_index<0>(x)`), **deduction** of a non-type parameter from an
+// argument (`int size(Fixed<N>&)` called with `Fixed<2>` binds N to 2), and recursion over
+// an index (`step<I - 1>(x)` compiles). What does not: a **member function template** fails
+// to parse (`expected declarator`), and a qualified use through a template-id with a
+// non-type argument fails to parse (`Index<0>::pick`, `expected expression`) -- the parser
+// never reaches lookup, and lookup would not resolve it either, since a qualified static
+// member works on a plain struct (`S::pick()`) but not through a template-id, even via a
+// typedef. A member `get<I>` needs the first. A free `get<I>` has recursion available and
+// still lacks a **terminator** for `I == 0`: partial specialisation of a function template
+// is not legal C++, a function template is not overloadable at all here (templates are
+// keyed by bare name, so two declarations differing only in arity collide), and a
+// class-template dispatcher needs the qualified use above. The terminator is the whole of
+// what is missing.
 //
 // An empty tuple works as a local and through `tuple_size`: `std::tuple<> empty;
 // std::tuple_size(empty);` links and returns zero. It used to emit a call to the partial
