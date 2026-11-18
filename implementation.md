@@ -497,6 +497,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T07:19:56-08:00 — host gate (Linux ARM64)
+Revision: 179f6fd
+
+```
+linux-gcc-debug    PASS 828/828
+linux-clang-debug  PASS 828/828
+linux-sanitize     PASS 828/828
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `179f6fd`, which asserts the KR16 profile rejections that actually exist by adding two
+link tests in `tests/CMakeLists.txt` — so the count rises to **828** from 826, with the executed count
+unchanged at 161 because both additions are compile-or-link only. All three rows agree. Test times were
+84.44 s (GCC debug), 81.39 s (Clang debug) and 381.85 s (ASan/UBSan). Rows were configured and built
+clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No
+disturbances.
+
 2026-11-18T07:12:25-08:00 — ARM64 poll
 Revision: 0c05e22
 
