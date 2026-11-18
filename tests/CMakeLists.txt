@@ -6593,6 +6593,51 @@ if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
         DEPENDS krc_link_kr16_copy_with_destructor)
 endif()
 
+# `make_tuple` returns a tuple by value from a function template whose signature carries
+# the class template's pack. It works because the parser no longer emits a space before
+# the ellipsis in an expression template-id, the pack's element types are bound, and a
+# constructor call records the type it resolved to for code generation.
+add_test(NAME krc_link_make_tuple
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/make_tuple.cpp
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/make_tuple_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_run_make_tuple
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/make_tuple_linked.k32
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+    set_tests_properties(krc_run_make_tuple PROPERTIES
+        DEPENDS krc_link_make_tuple)
+endif()
+
+add_test(NAME krc_link_kr16_make_tuple
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+            -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+            -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+            -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/make_tuple.cpp
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_make_tuple.kex
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+    add_test(NAME krc_run_kr16_make_tuple
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR16_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_make_tuple.kex
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+    set_tests_properties(krc_run_kr16_make_tuple PROPERTIES
+        DEPENDS krc_link_kr16_make_tuple)
+endif()
 # The target macro names the target being compiled for. It was once recorded here as
 # missing because a probe used the uppercase spelling; the descriptor defines "__kr32__"
 # and "__kr16__". This fixture fails to compile if neither is defined, so a descriptor

@@ -2364,6 +2364,10 @@ std::string Sema::instantiate_template_call(
             bindings.emplace(*template_parameter, element);
             const auto arity = arguments.size() - argument_index;
             pack_arities.emplace(*template_parameter, arity);
+            for (std::size_t position = 0; position < arity; ++position) {
+                bindings.emplace(*template_parameter + std::to_string(position),
+                                 arguments[argument_index + position]);
+            }
             if (parameter->children.size() > 1 && parameter->children[1]) {
                 const auto parameter_name = declarator_name(*parameter->children[1]);
                 if (!parameter_name.empty()) {
@@ -4002,8 +4006,10 @@ TypePtr Sema::analyze_expression(const AstNode& expression) {
                         }
                     }
                     if (is_template_id && !template_arguments.empty()) {
+                        template_arguments = expand_template_arguments(template_arguments);
                         if (const auto instance = instantiate_class_template(
                                 callee->text, template_arguments)) {
+                            expression_types_[&expression] = instance;
                             return instance;
                         }
                     }

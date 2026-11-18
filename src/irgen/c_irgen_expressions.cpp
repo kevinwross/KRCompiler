@@ -1607,7 +1607,10 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     if (expression.children[0]->kind == frontend::AstKind::Identifier &&
         !lookup_local(expression.children[0]->text) &&
         !functions_.contains(expression.children[0]->text)) {
-        const auto named = sema_.type_of_name(*expression.children[0]);
+        const auto cached = sema_.cached_expression_type(expression);
+        const auto named = cached && cached->kind == frontend::TypeKind::Record
+                               ? cached
+                               : sema_.type_of_name(*expression.children[0]);
         if (named && named->kind == frontend::TypeKind::Record) {
             const auto type = map_type(named);
             const auto record = ir_records_.find(type);

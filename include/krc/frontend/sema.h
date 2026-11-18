@@ -90,6 +90,10 @@ public:
         }
         return analyze_expression(expression);
     }
+    [[nodiscard]] TypePtr cached_expression_type(const AstNode& expression) const {
+        const auto found = expression_types_.find(&expression);
+        return found == expression_types_.end() ? nullptr : found->second;
+    }
     [[nodiscard]] TypePtr typeid_operand_type(const AstNode& expression) const {
         const auto found = typeid_operands_.find(&expression);
         return found == typeid_operands_.end() ? nullptr : found->second;

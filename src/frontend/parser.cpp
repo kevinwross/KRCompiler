@@ -2409,7 +2409,11 @@ std::unique_ptr<AstNode> Parser::parse_postfix_tail(std::unique_ptr<AstNode> exp
                     ++position_;
                     continue;
                 }
-                if (!current.empty()) {
+                // A pack expansion is written `R...`, and the ellipsis belongs to the name:
+                // the same rule the declaration path applies. Emitting `R ...` left the
+                // spelling unresolvable, so a template-id in an expression context -- a
+                // constructor call such as `Tup<Ts...>(v...)` -- never expanded.
+                if (!current.empty() && !(peek().is("...") && depth == 1)) {
                     current += " ";
                 }
                 current += peek().text;

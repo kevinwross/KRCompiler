@@ -23,23 +23,7 @@
 // template parameter`). A member `get<I>` needs the first, a free `get<I>` that indexes
 // needs the second or recursion over the index.
 //
-// Two limits are real, and each is measured rather than assumed:
-//
-//   * **No by-value factory.** `make_tuple` is blocked by two front-end gaps, both
-//     measured on 2026-11-17 and neither of them the aggregate return this note used
-//     to name -- KR16 aggregate returns now work (ADR 0048), and a hand-written
-//     `std::tuple<int, int> make_pair2()` compiles and runs on both targets.
-//
-//     A pack expanded in a function template's **return type and body** is not
-//     substituted at instantiation: `template <typename... Ts> Tup<Ts...>
-//     mk(Ts... values)` fails with `IR verifier: return type does not match the
-//     function`, and the same body reports `constructor-initialized class has no
-//     constructor`. A single-parameter template (`template <typename T> Box<T>
-//     make_box(T)`) works, so the gap is the pack, not dependence.
-//
-//     Function templates are also **not overloadable**: two `make_tuple` declarations
-//     that differ only in arity are a `redefinition of function` error, so the
-//     fixed-arity form cannot stand in for the variadic one.
+// One limit is real, and it is measured rather than assumed:
 //
 //   * **An empty tuple cannot be a local.** `tuple<> t;` emits a call to the
 //     pattern's constructor and fails to link with `undefined symbol
@@ -47,6 +31,18 @@
 //     `tuple_size(pair.tail.tail)` is zero -- so the empty type exists and only a
 //     local of it is affected. An empty tail built by the element constructor is
 //     fine for the same reason.
+//
+// `make_tuple` is provided. It was blocked by a pack that did not substitute in a
+// function template's return type and body; the parser recorded `Tup<Ts...>` in an
+// expression context as `Ts ...`, so the pack name carried a trailing space and never
+// matched its arity. Fixed on 2026-11-17, together with binding the pack's element types
+// (`Ts0`, `Ts1`, ...) and recording a constructor call's resolved type for code
+// generation. `make_tuple(1, 2)` and `make_tuple(1, 2, 3)` compile and run on both
+// targets.
+//
+// A mixed-element tuple through the factory still fails: `make_tuple(41, 'a')` reports
+// `IR verifier: function 'main': store type does not match its pointer`. Construct such a
+// tuple in place -- `tuple<int, char> p(41, 'a');` -- which works.
 
 namespace std {
 
@@ -82,6 +78,15 @@ T& tuple_head(tuple<T, Rest...>& value) {
 template <typename T, typename... Rest>
 tuple<Rest...>& tuple_tail(tuple<T, Rest...>& value) {
     return value.tail;
+}
+
+// The by-value factory. Its signature carries the pack in the return type and in the
+// parameter list, which is the case a function template's pack substitutes: the instance
+// is named from the arguments and its body builds that instance rather than the pattern.
+// `make_tuple(1, 'x')` returns `tuple<int, char>`.
+template <typename... Ts>
+tuple<Ts...> make_tuple(Ts... values) {
+    return tuple<Ts...>(values...);
 }
 
 }  // namespace std
