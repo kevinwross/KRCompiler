@@ -6659,6 +6659,51 @@ endif()
 # that made `make_tuple(41, 'a')` deduce `tuple<int, char>` is otherwise exercised only
 # indirectly by the tier2 fixture. The C case asserts against sizeof(int) rather than a
 # literal: int is two bytes on KR16 and four on KR32.
+# Per-element parameter widths. Every expanded parameter of a pack function template used
+# to take the head element's type, so a value wider than the head was narrowed silently.
+# These cases have to run: a compile-only test cannot see a narrowed value.
+add_test(NAME krc_link_make_tuple_widths
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/make_tuple_widths.cpp
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/make_tuple_widths_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_run_make_tuple_widths
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/make_tuple_widths_linked.k32
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+    set_tests_properties(krc_run_make_tuple_widths PROPERTIES
+        DEPENDS krc_link_make_tuple_widths)
+endif()
+
+add_test(NAME krc_link_kr16_make_tuple_widths
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+            -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+            -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+            -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/make_tuple_widths.cpp
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_make_tuple_widths.kex
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+    add_test(NAME krc_run_kr16_make_tuple_widths
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR16_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_make_tuple_widths.kex
+                -DEXPECT_EXIT=42
+                -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+    set_tests_properties(krc_run_kr16_make_tuple_widths PROPERTIES
+        DEPENDS krc_link_kr16_make_tuple_widths)
+endif()
+
 add_test(NAME krc_link_char_literal_type
     COMMAND ${CMAKE_COMMAND}
             -DKRC=$<TARGET_FILE:krc>
