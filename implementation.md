@@ -497,6 +497,33 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T13:05:30-08:00 — ARM64 poll
+Revision: 56e866e
+
+```
+no build: documentation only at 56e866ebf42a5b9576839f5e00185f0a5041167c
+```
+
+2026-11-18T12:50:26-08:00 — host gate (Linux ARM64)
+Revision: 90f5b5c
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate. The previous record covered `a701b2a`; the push lost a race and the single rebase
+absorbed `4455eb5` — phi lowered in both backends, writing its value on the incoming edges
+(`src/backend/kr32_backend.cpp`, `kr32_backend.h`, `kr16_backend.cpp`, `tests/unit/test_irgen.cpp`) —
+plus `f5f8d70`'s regenerated size baseline, neither of which had been classified. This is the first
+gate to cover phi lowering on a second architecture, and the backend files are where a width or
+register-assumption defect would surface. The count is unchanged at 843 with 168 executed tests. Test
+times were 75.32 s (GCC debug), 75.12 s (Clang debug) and 306.62 s (ASan/UBSan). Rows were configured
+and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no
+warnings. No disturbances.
+
 2026-11-18T12:35:22-08:00 — host gate (Linux ARM64)
 Revision: a701b2a
 
