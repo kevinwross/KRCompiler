@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T23:55:07-08:00 — host gate (Windows)
+Revision: 76f58d9
+
+```
+windows-msvc-debug    PASS 813/813
+linux-gcc-debug       PASS 813/813
+linux-clang-debug     PASS 813/813
+linux-sanitize        PASS 813/813
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+The gate that closes item 12, and the one that mattered most: it covers the two defects that had been hiding
+each other. The KR16 backend pushed an aggregate return's hidden destination pointer before loading the register
+arguments, whose staged values are addressed relative to SP, so any argument that came from a stack slot read the
+destination instead of the value; and the front end gave every expanded pack parameter the head element's type,
+so `make_tuple('a', 1000)` narrowed to a char. Either alone left the other's test failing, which is why six rounds
+of fixing one at a time made no progress. With both in place all four rows report 813, `make_tuple('a', 1000)`
+returns 42 on KR16, and the `krc_run_kr16_make_tuple` test that had been red since item 12 was opened now passes.
+`linux-sanitize` reports zero AddressSanitizer, LeakSanitizer and UBSan diagnostics. Rows ran one at a time from
+deleted directories; no warnings beyond the demoted doctest one on the Clang row, no disturbances. The ARM64 host
+last gated `261ee0a` and has not seen either fix.
 2026-11-17T23:43:42-08:00 — host gate (Linux ARM64)
 Revision: 6607c8a
 
