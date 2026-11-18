@@ -43,9 +43,10 @@ foreach(program IN LISTS PROGRAMS)
 
     # KR32: the image links against the staged runtime through the same script the tests use.
     set(image32 "${WORK_DIR}/${name}.k32")
+    file(TO_NATIVE_PATH "${image32}" image32_native)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
-                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image32}"
+                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image32_native}"
                 "-DLIBC=${KR32_LIBC}" "-DRUNTIME=${KR32_CRT0}"
                 -P "${ROOT}/cmake/LinkRuntime.cmake"
         RESULT_VARIABLE link32 OUTPUT_QUIET ERROR_VARIABLE err32)
@@ -69,9 +70,10 @@ foreach(program IN LISTS PROGRAMS)
 
     # KR16: host-linked .kex through its own script, as the tests do.
     set(image16 "${WORK_DIR}/${name}.kex")
+    file(TO_NATIVE_PATH "${image16}" image16_native)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
-                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image16}"
+                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image16_native}"
                 "-DCRT0=${KR16_CRT0}" "-DHOST=${KR16_HOST}" "-DFILEIO=${KR16_FILEIO}" "-DLIBCRT=${KR16_LIBCRT}"
                 -P "${ROOT}/cmake/LinkKr16Host.cmake"
         RESULT_VARIABLE link16 OUTPUT_QUIET ERROR_VARIABLE err16)
