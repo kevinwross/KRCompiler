@@ -396,6 +396,11 @@ int main(int argc, char** argv) {
                         const auto shared = krc::ir::copy_propagation(*module);
                         change.instructions_removed += shared.instructions_removed;
                         change.instructions_folded += shared.instructions_folded;
+                        // Last, because it removes blocks: the value passes above
+                        // are written against the CFG they were given, and this is
+                        // the only one whose result nothing else consumes.
+                        const auto simplified = krc::ir::empty_block_elimination(*module);
+                        change.instructions_removed += simplified.instructions_removed;
                         if (change.changed()) {
                             std::string optimized_error;
                             if (!verifier.verify(*module, optimized_error)) {

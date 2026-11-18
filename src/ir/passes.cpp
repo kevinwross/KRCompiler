@@ -455,4 +455,95 @@ PassChange alloca_promotion(Module& module) {
     return change;
 }
 
+PassChange empty_block_elimination(Module& module) {
+    PassChange change;
+    for (const auto& function : module.functions()) {
+        if (!function || function->declaration || function->blocks.empty()) {
+            continue;
+        }
+        // A chain of empty blocks may collapse to one destination, so the sweep
+        // repeats until a pass finds nothing.
+        bool removed_any = true;
+        while (removed_any) {
+            removed_any = false;
+            for (std::size_t index = 1; index < function->blocks.size(); ++index) {
+                const auto& candidate = function->blocks[index];
+                if (!candidate || candidate->instructions.size() != 1) {
+                    continue;
+                }
+                const auto* branch = candidate->instructions.front().get();
+                if (!branch || branch->opcode != Opcode::Br ||
+                    branch->successors.size() != 1 || !branch->successors.front() ||
+                    branch->successors.front() == candidate.get()) {
+                    continue;
+                }
+                auto* destination = branch->successors.front();
+                // A phi that names this block as its predecessor is a value tied
+                // to the edge; leave the edge alone.
+                bool named_by_phi = false;
+                for (const auto& block : function->blocks) {
+                    if (!block) {
+                        continue;
+                    }
+                    for (const auto& instruction : block->instructions) {
+                        if (!instruction || instruction->opcode != Opcode::Phi) {
+                            continue;
+                        }
+                        for (const auto& incoming : instruction->incoming) {
+                            if (incoming.second == candidate.get()) {
+                                named_by_phi = true;
+                            }
+                        }
+                    }
+                }
+                if (named_by_phi) {
+                    continue;
+                }
+                // An `invoke` successor is the normal or the unwind path; moving
+                // either would relocate an exception edge.
+                bool invoked = false;
+                for (const auto& block : function->blocks) {
+                    if (!block) {
+                        continue;
+                    }
+                    for (const auto& instruction : block->instructions) {
+                        if (!instruction || instruction->opcode != Opcode::Invoke) {
+                            continue;
+                        }
+                        for (auto* target : instruction->successors) {
+                            if (target == candidate.get()) {
+                                invoked = true;
+                            }
+                        }
+                    }
+                }
+                if (invoked) {
+                    continue;
+                }
+                for (const auto& block : function->blocks) {
+                    if (!block) {
+                        continue;
+                    }
+                    for (const auto& instruction : block->instructions) {
+                        if (!instruction) {
+                            continue;
+                        }
+                        for (auto*& target : instruction->successors) {
+                            if (target == candidate.get()) {
+                                target = destination;
+                            }
+                        }
+                    }
+                }
+                function->blocks.erase(function->blocks.begin() +
+                                       static_cast<std::ptrdiff_t>(index));
+                ++change.instructions_removed;
+                removed_any = true;
+                break;
+            }
+        }
+    }
+    return change;
+}
+
 }  // namespace krc::ir

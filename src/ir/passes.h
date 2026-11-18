@@ -69,4 +69,20 @@ struct PassChange {
 //  * a `volatile` load or store, which §8.4 keeps in order and count.
 [[nodiscard]] PassChange alloca_promotion(Module& module);
 
+// E5: empty-block elimination. A block whose only instruction is an unconditional
+// branch is a jump to a jump: every predecessor can branch to its destination
+// directly and the block disappears. IRGen leaves one behind after most `if`
+// statements (`if.end`) and one for an empty arm (`if.else`), so this removes a
+// branch per block.
+//
+// What it refuses, and why:
+//  * the entry block, which has no predecessor to redirect;
+//  * a block holding anything but that branch — a landing pad, a `resume` or an
+//    `invoke` is never a jump to a jump;
+//  * an edge whose source terminator is an `invoke`, whose successor pair is the
+//    normal and the unwind path: redirecting either would move an exception edge;
+//  * a block a `phi` names as its predecessor, so a later promotion cannot have
+//    its incoming edge renamed out from under it.
+[[nodiscard]] PassChange empty_block_elimination(Module& module);
+
 }  // namespace krc::ir

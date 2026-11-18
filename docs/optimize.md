@@ -350,6 +350,13 @@ Ordered as the work should land. "Metric" is what the corpus table (§11) must s
 | E4 | Single-block alloca promotion | IR | alloca + load/store round trips | one block, address does not escape, **no `V` record** | promote a named variable (debugger would lie) | instruction count, frame bytes |
 | E5 | CFG simplification | IR | unreachable/empty blocks, jumps to jumps | no EH edge crosses the block | break a landing-pad region | branch count |
 | E6 | mem2reg with `phi` | IR | alloca round trips across blocks | **backends lower `phi`**; critical edges split | promote an escaping or `V`-recorded alloca at `-O1` | instruction count, frame bytes |
+
+E5 has landed and is the largest single-pass win since S3: an empty block is a branch per `if`
+statement, and IRGen leaves one behind after most of them. `kr32/libc.c` falls from 10,476 to 10,131
+IR instructions and the corpus at `-O1` by 280 (KR32) and 88 (KR16). E6's precondition is larger than
+it looks — `Opcode::Phi` exists in the IR but **neither backend lowers it** and IRGen never creates
+one, so `phi` lowering in both backends, edge splitting and the promotion pass belong to a single
+change.
 | E7 | Global CSE | IR | repeated pure expressions | dominance order fixed and deterministic | cross a call for a value derived from memory | instruction count |
 | R1 | Machine IR + allocation | backend | frame traffic for temporaries | machine IR exists; liveness correct at EH edges | allocate across a call without a save; ignore ABI-fixed registers | instruction count, frame bytes |
 | P1 | Slot forwarding (label-aware) | text | `STORE`/`LOAD` of one slot | nothing branches to the intervening label | fold across a branch target | instruction count |

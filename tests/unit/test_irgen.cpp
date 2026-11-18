@@ -416,6 +416,106 @@ TEST_CASE("-O1 removes a branch to the label that follows it") {
           std::string::npos);
 }
 
+TEST_CASE("Empty-block elimination removes an empty arm and keeps an EH block") {
+    const auto generated = generate(R"SRC(
+int choose(int a, int b) {
+    int result = 0;
+    if (a > b) { result = 1; }
+    return result;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto blocks_before = [&] {
+        std::size_t total = 0;
+        for (const auto& function : generated.module->functions()) {
+            if (function) {
+                total += function->blocks.size();
+            }
+        }
+        return total;
+    }();
+    const auto change = krc::ir::empty_block_elimination(*generated.module);
+    const auto blocks_after = [&] {
+        std::size_t total = 0;
+        for (const auto& function : generated.module->functions()) {
+            if (function) {
+                total += function->blocks.size();
+            }
+        }
+        return total;
+    }();
+    // The empty else arm is a block whose only instruction is the branch.
+    CHECK(blocks_after < blocks_before);
+    CHECK(change.instructions_removed == blocks_before - blocks_after);
+
+    krc::ir::Verifier verifier;
+    std::string verify_error;
+    CHECK(verifier.verify(*generated.module, verify_error));
+
+    // A landing pad is never a jump to a jump. The count is unchanged by the
+    // pass, and the module still verifies.
+    const auto guarded = generate_cxx(R"SRC(
+struct Error {
+    int code;
+};
+int guarded(int value) {
+    try {
+        if (value < 0) {
+            Error raised;
+            raised.code = value;
+            throw raised;
+        }
+        return value;
+    } catch (Error& caught) {
+        return caught.code;
+    }
+}
+)SRC");
+    CHECK_FALSE(guarded.had_errors);
+    REQUIRE(guarded.module);
+    const auto count_pads = [&] {
+        std::size_t total = 0;
+        for (const auto& function : guarded.module->functions()) {
+            if (!function) {
+                continue;
+            }
+            for (const auto& block : function->blocks) {
+                if (!block) {
+                    continue;
+                }
+                for (const auto& instruction : block->instructions) {
+                    if (instruction && instruction->opcode == krc::ir::Opcode::LandingPad) {
+                        ++total;
+                    }
+                }
+            }
+        }
+        return total;
+    }();
+    static_cast<void>(krc::ir::empty_block_elimination(*guarded.module));
+    std::size_t pads_after = 0;
+    for (const auto& function : guarded.module->functions()) {
+        if (!function) {
+            continue;
+        }
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            for (const auto& instruction : block->instructions) {
+                if (instruction && instruction->opcode == krc::ir::Opcode::LandingPad) {
+                    ++pads_after;
+                }
+            }
+        }
+    }
+    CHECK(pads_after == count_pads);
+    CHECK(verifier.verify(*guarded.module, verify_error));
+}
+
 TEST_CASE("Alloca promotion refuses a named variable and an escaping temporary") {
     // `named` is a source variable: its alloca is `<name>.addr` and carries a V
     // record, so promoting it would leave the debugger pointing at a dead slot.
