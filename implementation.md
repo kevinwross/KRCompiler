@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T10:30:57-08:00 — host gate (Linux ARM64)
+Revision: 4430f64
+
+```
+linux-gcc-debug    PASS 841/841
+linux-clang-debug  PASS 841/841
+linux-sanitize     PASS 841/841
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The first gate to cover an optimiser pass: `369b461` adds constant folding as the first `-O1` IR pass
+in new files `src/ir/passes.cpp`/`.h`, wires it through `CMakeLists.txt` and `src/tools/krc/main.cpp`,
+and touches `tests/unit/test_irgen.cpp`; `63dc258` adds `sys_random` to the KR16 runtime
+(`targets/kr16/runtime/libc.c`). `CMakeLists.txt` is a boundary file and `src/ir/` is an IR change, so
+this is the highest-consequence tree the ARM64 row has gated. The count is **841** with 167 executed
+tests, up from 828/161, matching the Windows/WSL routine record for the same tree. All three rows
+agree. Test times were 88.18 s (GCC debug), 83.96 s (Clang debug) and 312.13 s (ASan/UBSan). Rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time,
+with no warnings. No disturbances.
+
 2026-11-18T10:09:59-08:00 — ARM64 poll
 Revision: dbb4b78
 
