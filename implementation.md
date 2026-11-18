@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T06:17:34-08:00 — host gate (Linux ARM64)
+Revision: ae2f9d9
+
+```
+linux-gcc-debug    PASS 821/821
+linux-clang-debug  PASS 821/821
+linux-sanitize     PASS 821/821
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `0284fa1`, which corrects three claims in `sysroot/include/tuple` that value-parameter
+deduction does not work — it does, since `706109b` — and adjusts the `value_parameter_deduced.cpp`
+fixture to the behaviour that actually landed. `73b9a1a`'s second-compiler rule and `ae2f9d9`'s record
+of this host's last gate are documentation. The count is unchanged at 821 with 159 executed tests,
+which is right for a header-prose correction plus a fixture adjustment. Test times were 103.69 s (GCC
+debug), 89.93 s (Clang debug) and 381.21 s (ASan/UBSan). Rows were configured and built clean from a
+deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T05:53:20-08:00 — host gate (Linux ARM64)
 Revision: 37d60e2
 
