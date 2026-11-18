@@ -507,6 +507,22 @@ Built `5671843` ("Record the combined gate and the ARM64 verification", which al
 `sysroot/include/memory` and `sysroot/include/tuple` corrections). Clean builds from a deleted
 `build/` at `-j2` with `ulimit -s unlimited`, one row at a time, no warnings; the VM copies were
 resolved from `vm/` and all tests ran. Debug 85.47 s, release 33.46 s with the preset's `jobs: 4`.
+
+### 2026-11-17T16:09:42-08:00 — host gate (Linux ARM64)
+
+```
+linux-gcc-debug    PASS 797/797
+linux-gcc-release  PASS 797/797
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+```
+
+Built `d6241c2` ("Record the gate that publishes items 3 and 4"), which carries the
+`src/backend/register_allocator.h` note and the corrected `sysroot/include/tuple` claim on this
+ARM64 host. Both rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from
+`vm/`, so all 147 executed tests ran. Test times were 87.71 s (debug) and 38.94 s (release) with
+the preset's `jobs: 4`. No disturbances.
+
 ### 2026-11-17T15:54:29-08:00 — host gate (Windows)
 
 windows-msvc-debug    PASS 797/797
