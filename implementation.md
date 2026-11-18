@@ -498,7 +498,7 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 2026-11-17T20:50:00-08:00 — host gate (Windows)
-Revision: de9436c
+Revision: 772b65a
 
 ```
 windows-msvc-debug    PASS 805/805
