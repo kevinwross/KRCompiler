@@ -58,15 +58,14 @@
 // was measured: it produces the correct widths and a correct instance name. It is still not
 // in the tree, because it exposes the second defect below rather than removing it.
 //
-// **Known defect, and it is not specific to `tuple`: KR16 loses a nested struct member when
-// a record is returned by value.** This is the cause of the KR16 half of the paragraph
+// **Known defect, and it is not specific to `tuple`: KR16 loses a struct's trailing
+// sub-word member when the struct is returned by value.** This is the cause of the KR16 half of the paragraph
 // above, and it reproduces without any of this header:
 //
-//     struct Inner { char c; };
-//     struct Outer { int a; Inner in; };
-//     Outer mk(int a, char c) { Outer o; o.a = a; o.in.c = c; return o; }
+//     struct Flat { int a; char c; };
+//     Flat mk(int a, char c) { Flat o; o.a = a; o.c = c; return o; }
 //
-// `o.a` survives the return and `o.in.c` reads back 0. `tuple<int, char>` contains a nested
+// `o.a` survives the return and `o.c` reads back 0 -- three meaningful bytes padded to four. `tuple<int, char>` contains a nested
 // `tuple<char>`, so it hits the same path; in-place construction works because nothing is
 // returned. A function returning such a record built from *literals* can appear to work
 // because the record is constant-folded -- do not read that as evidence, it measures
