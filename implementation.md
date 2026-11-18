@@ -514,6 +514,25 @@ tests, because the fixture was extended and no test was added. Both rows were co
 clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one row at a time, with no
 warnings; the VM copies were resolved from `vm/`. Test times were 82.16 s (debug) and 39.29 s
 (release) with the preset's `jobs: 4`. No disturbances.
+2026-11-17T19:07:28-08:00 — host gate (Windows)
+Revision: 698228f
+
+```
+windows-msvc-debug    PASS 805/805
+windows-msvc-release  PASS 805/805
+linux-gcc-debug       PASS 805/805
+linux-gcc-release     PASS 805/805
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine), Linux ARM64
+```
+
+All four rows report 805. This gate publishes a language-semantics change -- a character literal is now typed
+`char` in C++ and `int` in C -- so the flat count carries more information than usual: it means the C-mode suites are
+unaffected, which is the `cxx_mode_` guard doing its job, and that the one fixture which did depend on the old typing
+(`tier2_templates`) now passes with its assertion corrected rather than deleted. That correction was necessary work,
+not an accommodation: `twice('a') != 194` was only true while `'a` was `int`, and under C++ typing the template
+instantiates `twice<char>` and the sum truncates. Rows ran one at a time from deleted directories; no warnings, no
+compiler crashes, no disturbances. The ARM64 host last gated `730653f` and has not seen this change or the three
+fixes before it.
 
 2026-11-17T18:40:05-08:00 — host gate (Linux ARM64)
 Revision: 730653f
