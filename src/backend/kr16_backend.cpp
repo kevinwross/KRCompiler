@@ -344,6 +344,31 @@ void Kr16Backend::emit_function(std::string& out,
         out += "    ST [SP+" + std::to_string(slot(&instruction)) + "], " +
                std::string(reg) + "\n";
     };
+    // The frame slot a pointer names directly, when the value is an alloca in
+    // this function. Used to fold a load or store into an addressing mode
+    // instead of a LEA followed by an indirect access.
+    //
+    // `byte_access` restricts the fold to the small M displacement (-32..31):
+    // the assembler's wide byte forms map onto the word indexed ops
+    // (`LoadByteAbsolute`/`StoreByteAbsolute` become `LoadIndexed`/`StoreIndexed`),
+    // which is unverified and produced wrong values the first time it was
+    // reachable, so a byte access outside that range keeps the register path.
+    const auto frame_object = [&](const ir::Value* value,
+                                  bool byte_access) -> std::optional<std::uint32_t> {
+        const auto* pointer = dynamic_cast<const ir::Instruction*>(value);
+        if (!pointer || pointer->opcode != ir::Opcode::Alloca) {
+            return std::nullopt;
+        }
+        const auto found = layout.slots.find(pointer);
+        if (found == layout.slots.end()) {
+            return std::nullopt;
+        }
+        const bool wide = found->second > 31;
+        if (byte_access && wide) {
+            return std::nullopt;
+        }
+        return found->second;
+    };
 
     if (function.linkage == ir::Linkage::External) {
         out += ".global " + function.name + "\n";
@@ -464,6 +489,17 @@ void Kr16Backend::emit_function(std::string& out,
                     }
                     break;
                 }
+                if (const auto object = frame_object(
+                        instruction->operands[0],
+                        instruction->type && instruction->type->bits == 8);
+                    object) {
+                    const auto load_mnemonic =
+                        instruction->type && instruction->type->bits == 8 ? "LDB" : "LD";
+                    out += "    " + std::string(load_mnemonic) + " R1, [SP+" +
+                           std::to_string(*object) + "]\n";
+                    store(*instruction, "R1");
+                    break;
+                }
                 load(instruction->operands[0], "R0");
                 out += instruction->type && instruction->type->bits == 8
                            ? "    LDB R1, [R0]\n"
@@ -483,6 +519,21 @@ void Kr16Backend::emit_function(std::string& out,
                         out += "    LD R2, [SP+" + std::to_string(source + offset) + "]\n";
                         out += "    ST [R1+" + std::to_string(offset) + "], R2\n";
                     }
+                    break;
+                }
+                if (const auto object = frame_object(
+                        instruction->operands[1],
+                        instruction->operands[0] && instruction->operands[0]->type &&
+                            instruction->operands[0]->type->bits == 8);
+                    object) {
+                    load(instruction->operands[0], "R0");
+                    const auto store_mnemonic =
+                        instruction->operands[0] && instruction->operands[0]->type &&
+                                instruction->operands[0]->type->bits == 8
+                            ? "STB"
+                            : "ST";
+                    out += "    " + std::string(store_mnemonic) + " [SP+" +
+                           std::to_string(*object) + "], R0\n";
                     break;
                 }
                 load(instruction->operands[0], "R0");
