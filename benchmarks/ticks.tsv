@@ -1,3 +1,0 @@
-program	target	ticks	exit	status
-bench	kr32	-	-	link-failed
-bench	kr16	-	-	link-failed
