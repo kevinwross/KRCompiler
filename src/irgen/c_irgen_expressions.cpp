@@ -1628,6 +1628,16 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 const auto& argument_nodes = expression.children[1]->children;
                 auto* constructor = select_constructor(
                     record->second->tag, argument_nodes.size(), 0);
+                // A constructor that exists only as a class template pattern's declaration
+                // has no body to call (ADR 0032). A record with no members has nothing to
+                // construct, so it falls through to the zero-initialising path below.
+                // Emitting the call left `std::tuple<> t = std::tuple<>();` bound to an
+                // undefined `tuple_ctor_0_value`; the local, the placement-new and this
+                // temporary path each reach that constructor by a different route.
+                if (constructor && constructor->declaration &&
+                    record->second->members.empty()) {
+                    constructor = nullptr;
+                }
                 auto* storage =
                     builder_.create_alloca(type, 0, "temporary.record");
                 if (!constructor) {
