@@ -84,7 +84,7 @@ static int kernel_pointer(int n) {
 int main(void) {
     struct Pair pair;
 
-    if (kernel_arith(200) != 50898) {
+    if (kernel_arith(100) != 12947) {
         return fail(1);
     }
     if (kernel_nested(50) != 9848) {

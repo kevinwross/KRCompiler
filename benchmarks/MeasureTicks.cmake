@@ -31,6 +31,7 @@ file(TO_NATIVE_PATH "${STAGE}/kr16/lib/libkrcrt.kro" KR16_LIBCRT)
 # them, so the nested invocations get the slash form.
 string(REPLACE "\\" "/" KRC_FOR_CMAKE "${KRC}")
 string(REPLACE "\\" "/" KRLD_FOR_CMAKE "${KRLD}")
+message(STATUS "KRC=[${KRC}] KRC_FOR_CMAKE=[${KRC_FOR_CMAKE}]")
 
 set(PROGRAM_DIR "${ROOT}/benchmarks/programs")
 set(WORK_DIR "${ROOT}/build/benchmarks")
