@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T12:35:22-08:00 — host gate (Linux ARM64)
+Revision: a701b2a
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `1bdbf5f`, which drops a block whose only instruction is a branch — the fourth `-O1`
+IR pass, in `src/ir/passes.cpp`/`.h` with `src/tools/krc/main.cpp` wiring and 100 new lines in
+`tests/unit/test_irgen.cpp`; `docs/optimize.md` changed alongside it. The count is unchanged at 843
+with 168 executed tests, so the new unit coverage is inside the existing binary rather than new test
+cases. Test times were 81.00 s (GCC debug), 77.87 s (Clang debug) and 308.51 s (ASan/UBSan). Rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time,
+with no warnings. No disturbances.
+
 2026-11-18T12:03:51-08:00 — host gate (Linux ARM64)
 Revision: 5a3cc17
 
