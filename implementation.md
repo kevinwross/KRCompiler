@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T06:45:59-08:00 — host gate (Windows)
+Revision: 2288552
+
+```
+windows-msvc-debug    PASS 826/826
+linux-gcc-debug       PASS 826/826
+linux-clang-debug     PASS 826/826
+linux-sanitize        PASS 826/826
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+The gate owed for the morning's work: 826 tests, twenty-two more than the gate at `37d60e2`, covering the
+per-element width fixture, the four value-deduction shapes, the pointer-pack rejection test, and the parser
+change that consumes a template-id as a name prefix. That parser change was the one worth gating: it alters
+how `<` is read in expressions, and a mistake there would break ordinary comparisons across the corpus --
+which is what these 826 tests check. Clean from deleted directories on all four rows, no warnings beyond the
+demoted doctest one on the Clang row, zero AddressSanitizer, LeakSanitizer and UBSan diagnostics, and
+`linux-clang-debug` builds the new parser with no errors -- the second-compiler rule added this morning,
+applied to the first change that needed it. Rows ran one at a time; the three Linux rows ran sequentially in
+one job so they still never overlapped. The ARM64 host last gated `37d60e2`.
 2026-11-18T06:41:29-08:00 — host gate (Linux ARM64)
 Revision: 3b76a1a
 
