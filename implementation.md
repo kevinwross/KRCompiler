@@ -513,6 +513,25 @@ The count rose to **805** from 801 because that fixture adds four tests, and the
 to 151 from 149. Both rows were configured and built clean from a deleted `build/` at `-j2` with
 `ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`.
 Test times were 81.94 s (debug) and 37.00 s (release) with the preset's `jobs: 4`. No disturbances.
+2026-11-17T18:20:02-08:00 — host gate (Windows)
+Revision: d44266e
+
+```
+windows-msvc-debug    PASS 805/805
+windows-msvc-release  PASS 805/805
+linux-gcc-debug       PASS 805/805
+linux-gcc-release     PASS 805/805
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine), Linux ARM64
+```
+
+All four rows report 805, unchanged from the previous gate, and the count is the point: this gate publishes two fixes
+that change behaviour without adding tests. A three-element `make_tuple` used to read its second element wrong on KR16
+because the signature expansion inserted every duplicated parameter at the same position; the fixture that covers it
+already existed and already asserted the right values, so the count could not move. `tuple_size` on an empty tuple used
+to fall through to an implicit declaration; the item-2 fixture now asserts it where it previously had to avoid the call,
+so that assertion is newly exercised inside an existing test. Rows ran one at a time from deleted directories; no
+warnings, no compiler crashes, no disturbances. The ARM64 host last gated `79d9003` and has not seen the pack fix,
+`make_tuple`, the empty-tuple fix or these two.
 
 2026-11-17T17:29:39-08:00 — host gate (Linux ARM64)
 Revision: e58e1b0
