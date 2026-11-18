@@ -2028,10 +2028,29 @@ bool Sema::deduce_class_template_arguments(
         return false;
     }
     const auto supplied = class_instance_arguments_.find(type->record->tag);
-    if (supplied == class_instance_arguments_.end()) {
+    // The argument's record can be the class template's own pattern, which `tuple<>` is
+    // and which the instance table does not hold because a pattern is not an instance.
+    // The parameter's specifier names the template among its labels -- not in its text,
+    // which is empty -- so matching a label against the record's tag identifies it. Every
+    // spelling is already known to name a parameter of this template, and each is a pack,
+    // so the pattern stands for the instance with no arguments.
+    const bool pattern_as_empty_instance =
+        supplied == class_instance_arguments_.end() &&
+        class_instances_.find(type->record->tag) == class_instances_.end() &&
+        std::any_of(specifier.labels.begin(), specifier.labels.end(),
+                    [&](const std::string& label) {
+                        return label == type->record->tag;
+                    }) &&
+        std::all_of(spelled.begin(), spelled.end(), [](const std::string& spelling) {
+            return spelling.size() > 3 &&
+                   spelling.compare(spelling.size() - 3, 3, "...") == 0;
+        });
+    if (supplied == class_instance_arguments_.end() && !pattern_as_empty_instance) {
         return false;
     }
-    const auto& arguments = supplied->second;
+    static const std::vector<TypePtr> no_arguments;
+    const auto& arguments =
+        pattern_as_empty_instance ? no_arguments : supplied->second;
     std::size_t position = 0;
     for (const auto& spelling : spelled) {
         const auto pack = spelling.size() > 3 &&

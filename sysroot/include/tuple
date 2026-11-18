@@ -23,18 +23,13 @@
 // template parameter`). A member `get<I>` needs the first, a free `get<I>` that indexes
 // needs the second or recursion over the index.
 //
-// One limit is real, and it is measured rather than assumed:
-//
-//   * **`tuple_size` does not link for the empty tuple.** `std::tuple<> empty;
-//     std::tuple_size(empty);` compiles and then fails to link with `undefined symbol
-//     'tuple_size'`: the function template is not instantiated for an empty pack. An
-//     empty tuple reached as a member is fine -- `tuple_size(pair.tail.tail)` is zero --
-//     because that instantiation has a non-empty pack in its signature.
-//
-// An empty tuple **can** be a local: `std::tuple<> empty;` links and runs. It used to
-// emit a call to the partial specialisation's pattern constructor, which is only ever
-// declared (ADR 0032), so the image failed with `undefined symbol 'tuple_ctor_0_value'`.
-// The call is now skipped for a record with no members and no defined constructor.
+// An empty tuple works as a local and through `tuple_size`: `std::tuple<> empty;
+// std::tuple_size(empty);` links and returns zero. It used to emit a call to the partial
+// specialisation's pattern constructor, which is only ever declared (ADR 0032), so the
+// image failed with `undefined symbol 'tuple_ctor_0_value'`; the call is now skipped for a
+// record with no members and no defined constructor. `tuple_size` on an empty pack used to
+// fall through to an implicit declaration because deduction could not see the pattern's
+// record as an instance; it is now deduced with no arguments.
 //
 // `make_tuple` is provided. It was blocked by a pack that did not substitute in a
 // function template's return type and body; the parser recorded `Tup<Ts...>` in an
