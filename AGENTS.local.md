@@ -94,7 +94,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 |---|---|---|---|
 | Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release on the local dev machine. CI workflow committed; whether it runs is unverified. |
 | Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS. GCC 15.2 and Clang 21.1.8, Debug/Release and ASan/UBSan: all four Linux presets are built and tested here. Clang's ASan/UBSan runtimes come from `libclang-rt-21-dev`, a separate package from `clang`. |
-| Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0 and Clang 19.1.7, Debug/Release and ASan/UBSan. The ARM64 gate runs **all four** presets: `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize`. Latest gate 2026-11-17T19:51:05 at `e774b72`: 805/805 on both GCC rows, 151 executed tests; the Clang and sanitizer rows were verified separately at 805/805 each on the same tree before being added to the gate. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
+| Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0 and Clang 19.1.7, Debug/Release and ASan/UBSan. The routine ARM64 row is `linux-gcc-debug`, `linux-clang-debug`, `linux-sanitize`; a milestone-closing gate adds `linux-gcc-release`. Latest gate 2026-11-17T22:10:57 at `261ee0a`: 813/813 on all four presets, 155 executed tests. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
 
 Target-specific notes:
 
