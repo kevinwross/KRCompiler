@@ -514,7 +514,7 @@ to 151 from 149. Both rows were configured and built clean from a deleted `build
 `ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`.
 Test times were 81.94 s (debug) and 37.00 s (release) with the preset's `jobs: 4`. No disturbances.
 2026-11-17T18:20:02-08:00 — host gate (Windows)
-Revision: d44266e
+Revision: 39c72be
 
 ```
 windows-msvc-debug    PASS 805/805
