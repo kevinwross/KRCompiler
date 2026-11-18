@@ -497,6 +497,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T17:57:55-08:00 — host gate (Linux ARM64)
+Revision: 6a06757
+
+```
+linux-gcc-debug    PASS 805/805
+linux-gcc-release  PASS 805/805
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+```
+
+The gate covers `c534c68` and `03d0729`: the empty-tuple local no longer emits a constructor call
+for a pattern constructor that is declared without a body. It touches `src/irgen/c_irgen.cpp`,
+`sysroot/include/tuple`, `tests/CMakeLists.txt`, and the new `tests/fixtures/c/empty_tuple_local.cpp`.
+The count rose to **805** from 801 because that fixture adds four tests, and the executed count rose
+to 151 from 149. Both rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one row at a time, with no warnings; the VM copies were resolved from `vm/`.
+Test times were 81.94 s (debug) and 37.00 s (release) with the preset's `jobs: 4`. No disturbances.
+
 2026-11-17T17:29:39-08:00 — host gate (Linux ARM64)
 Revision: e58e1b0
 
