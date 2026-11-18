@@ -25,6 +25,13 @@ file(TO_NATIVE_PATH "${STAGE}/kr16/lib/libkrcrt_host.kro" KR16_HOST)
 file(TO_NATIVE_PATH "${STAGE}/kr16/lib/libkrcrt_fileio.kro" KR16_FILEIO)
 file(TO_NATIVE_PATH "${STAGE}/kr16/lib/libkrcrt.kro" KR16_LIBCRT)
 
+# A Windows path handed to a nested cmake through -D can arrive with its backslashes eaten as
+# escapes, and then execute_process fails to start the compiler at all -- it reports a status
+# string rather than a compiler diagnostic. Forward slashes survive the trip and krc accepts
+# them, so the nested invocations get the slash form.
+string(REPLACE "\\" "/" KRC_FOR_CMAKE "${KRC}")
+string(REPLACE "\\" "/" KRLD_FOR_CMAKE "${KRLD}")
+
 set(PROGRAM_DIR "${ROOT}/benchmarks/programs")
 set(WORK_DIR "${ROOT}/build/benchmarks")
 file(MAKE_DIRECTORY "${WORK_DIR}")
@@ -46,7 +53,7 @@ foreach(program IN LISTS PROGRAMS)
     file(TO_NATIVE_PATH "${image32}" image32_native)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
-                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image32_native}"
+                "-DKRC=${KRC_FOR_CMAKE}" "-DKRLD=${KRLD_FOR_CMAKE}" "-DSOURCE=${source_native}" "-DOUTPUT=${image32_native}"
                 "-DLIBC=${KR32_LIBC}" "-DRUNTIME=${KR32_CRT0}"
                 -P "${ROOT}/cmake/LinkRuntime.cmake"
         RESULT_VARIABLE link32 OUTPUT_QUIET ERROR_VARIABLE err32)
@@ -73,7 +80,7 @@ foreach(program IN LISTS PROGRAMS)
     file(TO_NATIVE_PATH "${image16}" image16_native)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
-                "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${source_native}" "-DOUTPUT=${image16_native}"
+                "-DKRC=${KRC_FOR_CMAKE}" "-DKRLD=${KRLD_FOR_CMAKE}" "-DSOURCE=${source_native}" "-DOUTPUT=${image16_native}"
                 "-DCRT0=${KR16_CRT0}" "-DHOST=${KR16_HOST}" "-DFILEIO=${KR16_FILEIO}" "-DLIBCRT=${KR16_LIBCRT}"
                 -P "${ROOT}/cmake/LinkKr16Host.cmake"
         RESULT_VARIABLE link16 OUTPUT_QUIET ERROR_VARIABLE err16)
