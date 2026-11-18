@@ -497,6 +497,42 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T11:35:02-08:00 — host gate (Linux ARM64)
+Revision: cf80fd4
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate. The previous record covered `03f4532`; the push lost a race and the single rebase
+absorbed `2a2070e` — a backend fix that records a variable only for a source variable, not for a
+temporary, in `src/backend/kr32_backend.cpp`, with `docs/symbols.md` — which was never classified. The
+count is unchanged at 843 with 168 executed tests, correct for a debug-info correction with no new
+fixture. Test times were 80.11 s (GCC debug), 75.97 s (Clang debug) and 304.09 s (ASan/UBSan). Rows
+were configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a
+time, with no warnings. No disturbances.
+
+2026-11-18T11:19:57-08:00 — host gate (Linux ARM64)
+Revision: 03f4532
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `67e3b5f`, local common-subexpression elimination as the second `-O1` IR pass, in
+`src/ir/passes.cpp`/`.h` with `src/tools/krc/main.cpp` wiring and `tests/unit/test_irgen.cpp`
+coverage; it also records that the pass barely fires, which is a measurement rather than a defect.
+`docs/optimize.md` changed alongside it. The count is unchanged at 843 with 168 executed tests, which
+is right for a pass exercised through existing fixtures. Test times were 84.14 s (GCC debug), 86.22 s
+(Clang debug) and 309.69 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/`
+at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T10:46:07-08:00 — host gate (Linux ARM64)
 Revision: 8fa5dbf
 
