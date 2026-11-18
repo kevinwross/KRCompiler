@@ -497,6 +497,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T23:17:49-08:00 — host gate (Windows)
+Revision: 193ea5b
+
+```
+windows-msvc-debug    PASS 813/813
+linux-gcc-debug       PASS 813/813
+linux-clang-debug     PASS 813/813
+linux-sanitize        PASS 813/813
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+Clean four-row gate from deleted directories, no warnings beyond the demoted doctest one on the Clang row, no
+disturbances. It covers the pack-name fix -- which stopped appending a pack's first element twice to an instance
+name, the defect that had blocked the per-element parameter typing -- and the header's new statement of the
+`make_tuple` truncation. `linux-sanitize` reports zero AddressSanitizer, LeakSanitizer and UBSan diagnostics.
+The `make_tuple` mixed-width defect is **documented and still present**: the gate is green because the fixtures
+are, and it does not exercise that path, which the header now says plainly. The ARM64 host last gated `261ee0a`.
 2026-11-17T23:13:14-08:00 — host gate (Linux ARM64)
 Revision: 80daf27
 
