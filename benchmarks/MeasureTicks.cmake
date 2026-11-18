@@ -93,8 +93,20 @@ foreach(program IN LISTS PROGRAMS)
         if(link16 EQUAL 0 AND EXISTS "${image16}")
             execute_process(
                 COMMAND "${KR16VM}" vm "${image16}" --stats
-                RESULT_VARIABLE run16 OUTPUT_VARIABLE out16 ERROR_QUIET)
+                RESULT_VARIABLE run16 OUTPUT_VARIABLE out16 ERROR_VARIABLE out16_err)
+            # The two VMs agree on neither the label nor the stream: KR32 prints "ticks=N"
+            # on stdout, KR16 prints "cycles=N instructions=M" on stderr. Searching both
+            # keeps the runner honest about a machine difference instead of quietly
+            # recording nothing.
+            set(out16 "${out16}\n${out16_err}")
             string(REGEX MATCH "\nticks=([0-9]+)" _ "${out16}")
+            # The KR16 VM labels the same quantity differently: it prints
+            # "cycles=N instructions=M" where KR32 prints "ticks=N". Either is a
+            # deterministic count; instructions is the closer match to ticks, so it is
+            # used when the ticks line is absent.
+            if("${CMAKE_MATCH_1}" STREQUAL "")
+                string(REGEX MATCH "instructions=([0-9]+)" _ "${out16}")
+            endif()
             file(APPEND "${OUT}" "${name}\tkr16\t${CMAKE_MATCH_1}\t${run16}\tok\n")
         else()
             file(APPEND "${OUT}" "${name}\tkr16\t-\t-\tlink-failed\n")
