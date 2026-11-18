@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "backend/peephole.h"
+#include "backend/register_allocator.h"
 
 namespace krc::backend {
 
@@ -392,6 +393,18 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
             }
         }
     }
+    // An allocated value lives in a register for the whole of its block, so
+    // reading it is a move rather than a frame access (ADR 0049).
+    if (value->kind == ir::ValueKind::Instruction) {
+        const auto allocated = allocated_registers_.find(value);
+        if (allocated != allocated_registers_.end()) {
+            const auto home = register_name(allocated->second);
+            if (home != reg) {
+                out += "        MOV " + std::string(reg) + ", " + home + "\n";
+            }
+            return;
+        }
+    }
     std::string error;
     const auto slot = value_slot(function, layout, value, error);
     if (!slot) {
@@ -405,6 +418,16 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
 void Kr32Backend::store_value(std::string& out, const ir::Function& function,
                               const FrameLayout& layout, const ir::Instruction& instruction,
                               std::string_view reg) const {
+    // An allocated value is kept in its register, so writing it is a move at
+    // most, and nothing at all when the value is already there.
+    const auto allocated = allocated_registers_.find(&instruction);
+    if (allocated != allocated_registers_.end()) {
+        const auto home = register_name(allocated->second);
+        if (home != reg) {
+            out += "        MOV " + home + ", " + std::string(reg) + "\n";
+        }
+        return;
+    }
     if (is_wide(instruction.type)) {
         if (reg != "R0") {
             out += "        HALT ; 64-bit result required in the R0/R1 pair\n";
@@ -985,6 +1008,7 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
 
 void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                                 const FrameLayout& layout) const {
+    compute_allocation(function);
     if (function.linkage == ir::Linkage::External) {
         out += "        .global " + function.name + "\n";
     } else if (function.linkage == ir::Linkage::Weak) {
@@ -1236,6 +1260,110 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     out += "        .text\n";
 }
 
+void Kr32Backend::compute_allocation(const ir::Function& function) const {
+    allocated_registers_.clear();
+    if (level_ != OptimizationLevel::O1) {
+        return;
+    }
+    // R0-R2 carry expression results and arguments, R4/R5 aggregates and
+    // returns, R7 is the frame pointer. R8-R15 are untouched by the emitter, so
+    // allocating one cannot collide with a sequence the backend writes by hand.
+    std::vector<std::uint32_t> allowed;
+    for (std::uint32_t index = 8; index <= 15; ++index) {
+        allowed.push_back(index);
+    }
+    RegisterAllocation allocation;
+    std::string error;
+    if (!allocate_registers(function, allowed, allocation, error)) {
+        return;
+    }
+    for (const auto& block : function.blocks) {
+        if (!block) {
+            continue;
+        }
+        for (std::size_t index = 0; index < block->instructions.size(); ++index) {
+            const auto& instruction = block->instructions[index];
+            if (!instruction) {
+                continue;
+            }
+            const auto found = allocation.registers.find(instruction.get());
+            if (found == allocation.registers.end()) {
+                continue;
+            }
+            // Only a plain 32-bit integer is a candidate: a wide value travels as
+            // a pair and an aggregate is copied word by word.
+            if (!instruction->type || instruction->type->kind != ir::TypeKind::Integer ||
+                instruction->type->bits > 32) {
+                continue;
+            }
+            if (instruction->opcode == ir::Opcode::Phi ||
+                instruction->opcode == ir::Opcode::Alloca) {
+                continue;
+            }
+            // Every use must be in this block and no call may sit between the
+            // definition and its last use: the allocator liveness is per block and
+            // does not model a call clobbering a register.
+            std::size_t last_use = index;
+            bool local = true;
+            for (const auto& other : function.blocks) {
+                if (!other) {
+                    continue;
+                }
+                for (const auto& user : other->instructions) {
+                    if (!user) {
+                        continue;
+                    }
+                    for (const auto* operand : user->operands) {
+                        if (operand != instruction.get()) {
+                            continue;
+                        }
+                        if (other.get() != block.get()) {
+                            local = false;
+                        } else {
+                            static_cast<void>(0);
+                        }
+                    }
+                }
+            }
+            if (!local) {
+                continue;
+            }
+            for (std::size_t user_index = 0; user_index < block->instructions.size();
+                 ++user_index) {
+                const auto& user = block->instructions[user_index];
+                if (!user) {
+                    continue;
+                }
+                for (const auto* operand : user->operands) {
+                    if (operand == instruction.get() && user_index > last_use) {
+                        last_use = user_index;
+                    }
+                }
+            }
+            bool crosses_call = false;
+            for (std::size_t between = index; between < last_use; ++between) {
+                const auto& user = block->instructions[between];
+                if (user && (user->opcode == ir::Opcode::Call ||
+                             user->opcode == ir::Opcode::Invoke)) {
+                    crosses_call = true;
+                }
+            }
+            if (crosses_call) {
+                continue;
+            }
+            allocated_registers_.emplace(instruction.get(), found->second);
+        }
+    }
+}
+
+std::string Kr32Backend::result_register(const ir::Instruction& instruction) const {
+    const auto found = allocated_registers_.find(&instruction);
+    if (found == allocated_registers_.end()) {
+        return "R0";
+    }
+    return register_name(found->second);
+}
+
 void Kr32Backend::emit_phi_copies(std::string& out, const ir::Function& function,
                                   const FrameLayout& layout, const ir::BasicBlock& block,
                                   const ir::Instruction& terminator) const {
@@ -1320,15 +1448,18 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                                             : left_literal ? instruction.operands[1]
                                                            : instruction.operands[0];
         const auto* literal = right_literal ? right_literal : left_literal;
+        // Writing the allocated register directly is what saves a move; going
+        // through R0 and copying afterwards leaves the count unchanged.
+        const auto destination = result_register(instruction);
         load_value(out, function, layout, register_operand, "R0");
         if (literal) {
-            out += "        " + std::string(mnemonic) + " R0, R0, #" +
+            out += "        " + std::string(mnemonic) + " " + destination + ", R0, #" +
                     std::to_string(literal->value) + "\n";
         } else {
             load_value(out, function, layout, instruction.operands[1], "R1");
-            out += "        " + std::string(mnemonic) + " R0, R0, R1\n";
+            out += "        " + std::string(mnemonic) + " " + destination + ", R0, R1\n";
         }
-        store_value(out, function, layout, instruction, "R0");
+        store_value(out, function, layout, instruction, destination);
     };
 
     switch (instruction.opcode) {

@@ -113,6 +113,22 @@ private:
     // is never materialised.
     mutable std::unordered_set<const ir::Instruction*> folded_conditions_;
 
+    // `-O1` only: the values that live in a register instead of a frame slot.
+    // Empty at `-O0`, which is what keeps that level's output byte-identical
+    // (ADR 0049). Filled per function by `compute_allocation`.
+    mutable std::unordered_map<const ir::Value*, std::uint32_t> allocated_registers_;
+    // Runs the register allocator over one function and keeps only the values it
+    // is safe to honour: an allocator that mis-handles liveness produces wrong
+    // values rather than slow ones, so this stage accepts a value only when its
+    // definition and every use are in one block with no call between them — the
+    // case where no cross-block or call-clobber reasoning is needed at all.
+    void compute_allocation(const ir::Function& function) const;
+    // The register an instruction's result belongs in: its allocated register at
+    // `-O1`, `R0` otherwise. An operation that writes it directly saves the move
+    // that would otherwise carry the result out of `R0`, which is the whole
+    // reason allocation is worth wiring.
+    [[nodiscard]] std::string result_register(const ir::Instruction& instruction) const;
+
     const ir::Module& module_;
     const target::TargetProfile& profile_;
     OptimizationLevel level_ = OptimizationLevel::O0;
