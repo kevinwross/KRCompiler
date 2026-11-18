@@ -497,6 +497,28 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T22:10:57-08:00 — host gate (Linux ARM64)
+Revision: 261ee0a
+
+```
+linux-gcc-debug    PASS 813/813
+linux-gcc-release  PASS 813/813
+linux-clang-debug  PASS 813/813
+linux-sanitize     PASS 813/813
+not verified: Windows x64, native Linux x64
+```
+
+The gate covers `fd84662` and `261ee0a`: character-literal typing is pinned by two new fixtures
+(`char_literal_type.cpp` and `char_literal_type_c.c`) and the temporary path is guarded so all three
+empty-tuple forms are covered. It touches `src/irgen/c_irgen_expressions.cpp`,
+`tests/CMakeLists.txt`, and four fixtures, plus `5092f04`'s three-element mixed tuple coverage and
+release-note corrections. The count rises to **813** from 805 because the two new fixtures add
+eight tests, and the executed count rises from 151 to 155. All four rows report the same 813, which
+is the expected shape with `vm/` present. Test times were 89.77 s (GCC debug), 41.98 s (GCC
+release), 89.76 s (Clang debug) and 374.62 s (ASan/UBSan). Rows were configured and built clean
+from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No
+disturbances.
+
 2026-11-17T21:38:02-08:00 — host gate (Windows)
 Revision: 7789a7c
 
