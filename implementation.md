@@ -504,6 +504,28 @@ Revision: dbaddad
 no build: documentation only at dbaddadace35057d051eefc2a16962ad9a50e19b
 ```
 
+2026-11-17T16:51:19-08:00 — host gate (Windows)
+Revision: 7346df6
+
+```
+windows-msvc-debug    PASS 801/801
+windows-msvc-release  PASS 801/801
+linux-gcc-debug       PASS 801/801
+linux-gcc-release     PASS 801/801
+not verified: native Linux x64 (WSL used), WSL Clang and sanitizer configurations (clang is not installed on this machine), Linux ARM64
+```
+
+All four rows report 801, four more than the previous gate: two link tests and two executed tests for
+`make_tuple`, one pair per target. Every row registers all four because both VMs are configured here,
+so the count is also the check that the new run tests registered rather than being skipped. This gate
+covers a front-end change -- the parser no longer emits a space before the ellipsis in an expression
+template-id, `expand_template_arguments` is applied to a constructor call's labels, a function
+template's pack element types are bound as `Ts0`/`Ts1`, a constructor call records its resolved type,
+and IR generation reads that record through a const accessor instead of re-analysing -- plus the
+`make_tuple` factory in `sysroot/include/tuple` that the change unblocks. Rows ran one at a time from
+deleted directories; no warnings, no compiler crashes, no disturbances. The ARM64 host last gated
+`cbcb467` and has not seen this change.
+
 ### 2026-11-17T16:09:42-08:00 — host gate (Linux ARM64)
 
 ```
