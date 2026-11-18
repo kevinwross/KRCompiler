@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-17T19:01:27-08:00 — host gate (Linux ARM64)
+Revision: d5f60dc
+
+```
+linux-gcc-debug    PASS 805/805
+linux-gcc-release  PASS 805/805
+not verified: Windows x64, native Linux x64, and this host's Clang and sanitizer configurations
+```
+
+The gate covers `7e878f4`: the placement-new constructor call is guarded the same way the plain
+constructor call is, so a declaration-only pattern constructor is not invoked through `new` either.
+It touches `src/irgen/c_irgen_expressions.cpp` and `tests/fixtures/c/empty_tuple_local.cpp`; `d302956`
+records gap 4 as not contained and defers it. The count is unchanged at **805** with 151 executed
+tests, because the fixture was extended and no test was added. Both rows were configured and built
+clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one row at a time, with no
+warnings; the VM copies were resolved from `vm/`. Test times were 82.16 s (debug) and 39.29 s
+(release) with the preset's `jobs: 4`. No disturbances.
+
 2026-11-17T18:40:05-08:00 — host gate (Linux ARM64)
 Revision: 730653f
 
