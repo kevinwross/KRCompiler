@@ -1600,9 +1600,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             !(instruction.type && instruction.type->kind == ir::TypeKind::Struct);
         if (const auto object = frame_object(instruction.operands[0]);
             object && scalar_result) {
-            out += "        " + load_opcode(instruction.type) + " R0, [R7 + " +
-                   std::to_string(*object) + "]\n";
-            store_value(out, function, layout, instruction, "R0");
+            const auto destination = result_register(instruction);
+            out += "        " + load_opcode(instruction.type) + " " + destination +
+                   ", [R7 + " + std::to_string(*object) + "]\n";
+            store_value(out, function, layout, instruction, destination);
             break;
         }
         load_value(out, function, layout, instruction.operands[0], "R0");
@@ -1631,8 +1632,13 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                        std::to_string(slot->second + offset) + "]\n";
             }
         } else {
-            out += "        " + load_opcode(instruction.type) + " R0, [R0]\n";
-            store_value(out, function, layout, instruction, "R0");
+            // The address is in R0 and the result may go straight to its own
+            // register, which is one instruction either way to compute and one
+            // fewer to place.
+            const auto destination = result_register(instruction);
+            out += "        " + load_opcode(instruction.type) + " " + destination +
+                   ", [R0]\n";
+            store_value(out, function, layout, instruction, destination);
         }
         break;
     }
