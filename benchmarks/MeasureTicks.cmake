@@ -11,9 +11,19 @@
 # Each program returns 42 only when its kernels compute the values recorded in the source,
 # so a wrong result is a failed measurement rather than a fast one.
 
-if(NOT KRC OR NOT KRLD OR NOT ROOT OR NOT OUT)
-    message(FATAL_ERROR "KRC, KRLD, ROOT and OUT are required")
+if(NOT KRC OR NOT KRLD OR NOT ROOT OR NOT OUT OR NOT STAGE)
+    message(FATAL_ERROR "KRC, KRLD, ROOT, STAGE and OUT are required")
 endif()
+
+# The staged runtime, laid out by the build. Passing these is what the test registrations do;
+# omitting them made both link scripts fail with a message about the output file rather than
+# about the missing inputs.
+set(KR32_LIBC "${STAGE}/kr32/lib/libkrcrt.kro")
+set(KR32_CRT0 "${STAGE}/kr32/lib/crt0.s")
+set(KR16_CRT0 "${STAGE}/kr16/lib/crt0.s")
+set(KR16_HOST "${STAGE}/kr16/lib/libkrcrt_host.kro")
+set(KR16_FILEIO "${STAGE}/kr16/lib/libkrcrt_fileio.kro")
+set(KR16_LIBCRT "${STAGE}/kr16/lib/libkrcrt.kro")
 
 set(PROGRAM_DIR "${ROOT}/benchmarks/programs")
 set(WORK_DIR "${ROOT}/build/benchmarks")
@@ -35,6 +45,7 @@ foreach(program IN LISTS PROGRAMS)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
                 "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${program}" "-DOUTPUT=${image32}"
+                "-DLIBC=${KR32_LIBC}" "-DRUNTIME=${KR32_CRT0}"
                 -P "${ROOT}/cmake/LinkRuntime.cmake"
         RESULT_VARIABLE link32 OUTPUT_QUIET ERROR_QUIET)
 
@@ -57,6 +68,7 @@ foreach(program IN LISTS PROGRAMS)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
                 "-DKRC=${KRC}" "-DKRLD=${KRLD}" "-DSOURCE=${program}" "-DOUTPUT=${image16}"
+                "-DCRT0=${KR16_CRT0}" "-DHOST=${KR16_HOST}" "-DFILEIO=${KR16_FILEIO}" "-DLIBCRT=${KR16_LIBCRT}"
                 -P "${ROOT}/cmake/LinkKr16Host.cmake"
         RESULT_VARIABLE link16 OUTPUT_QUIET ERROR_QUIET)
 
