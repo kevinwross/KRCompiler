@@ -3996,6 +3996,22 @@ CIRGen::Expression CIRGen::emit_sizeof(const frontend::AstNode& expression) {
                          ? ir_size_of(value.type)
                          : 1;
         }
+    } else if (operand->kind == frontend::AstKind::CharLiteral) {
+        // A character literal is emitted as an i32 constant and truncated only where it is
+        // stored, so measuring the emitted value made `sizeof('a')` four while the same
+        // expression folded to one in Sema -- a compile-time `static_assert` passed and the
+        // run-time check failed in the same build. Re-analysis is safe for a literal: its
+        // type depends on the token and the language mode, not on template bindings.
+        const auto literal_type = sema_.expression_type(*operand);
+        result = expression.kind == frontend::AstKind::SizeofExpression
+                     ? sema_.size_of_type(literal_type)
+                     : sema_.align_of_type(literal_type);
+    } else if (const auto analysed = sema_.cached_expression_type(*operand);
+               analysed && analysed->kind != frontend::TypeKind::Function) {
+        // The same authority for anything whose type analysis was recorded.
+        result = expression.kind == frontend::AstKind::SizeofExpression
+                     ? sema_.size_of_type(analysed)
+                     : sema_.align_of_type(analysed);
     } else {
         const auto value = emit_expression(*operand);
         result = expression.kind == frontend::AstKind::SizeofExpression
