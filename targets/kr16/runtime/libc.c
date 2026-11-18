@@ -413,6 +413,13 @@ int rand(void) {
     return (int)(random_state & 0x7FFF);
 }
 
+/* Declared by sysroot/include/stdlib.h for both targets, which is why a program that calls it
+   links on KR32 and not here. On this target the entropy source is the generator rand() uses,
+   matching KR32, where rand() is a wrapper around this function rather than a separate state. */
+int sys_random(void) {
+    return rand();
+}
+
 static char *token_cursor;
 
 static int is_delimiter(char character, const char *delimiters) {
