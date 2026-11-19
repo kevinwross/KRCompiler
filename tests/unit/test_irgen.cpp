@@ -175,9 +175,12 @@ int main(void) {
     REQUIRE(assembly);
     CHECK(assembly_error.empty());
     // `node.next` sits at byte offset 4, so the member offset is carried by the
-    // ADD itself rather than materialised into R1 and scaled by the stride.
+    // ADD itself. The semantic property is that a constant offset needs no stride
+    // arithmetic at all, which is what the absence of a multiply asserts; the old
+    // check looked for `MOV R1, #4`, an incidental register assignment that any
+    // unrelated change could move (docs/optimize.md §9 tier 2).
     CHECK(assembly->find("ADD R0, R0, #4") != std::string::npos);
-    CHECK(assembly->find("MOV R1, #4") == std::string::npos);
+    CHECK(assembly->find("MUL") == std::string::npos);
     CHECK(assembly->find("HALT ; unsupported") == std::string::npos);
 
     krc::asmkr32::AssemblyResult assembled;
@@ -687,6 +690,41 @@ int unused_then_used(int value) {
     krc::ir::Verifier verifier;
     std::string verify_error;
     CHECK(verifier.verify(*generated.module, verify_error));
+}
+
+TEST_CASE("Dead code elimination keeps a volatile access") {
+    // The negative test docs/optimize.md §9 tier 1 names: a `volatile` access is
+    // an observable effect, so DCE must not remove it even when nothing reads the
+    // result. It is built by hand because **IRGen never sets the flag** — it
+    // parses `volatile` and drops it, so no source string produces one. That is
+    // recorded in implementation.md; this test covers the rule itself.
+    krc::ir::Module module(krc::target::TargetId::Kr32);
+    const auto i32 = module.types().int_type(32);
+    const auto pointer = module.types().pointer_type(i32);
+    const auto type = module.types().function_type(i32, std::vector<krc::ir::TypePtr>{pointer});
+    auto* function = module.add_function("touched", type, krc::ir::Linkage::External);
+    auto* counter = function->add_parameter(pointer, "counter");
+    auto* entry = function->add_block("entry");
+
+    krc::ir::IRBuilder builder(module.types());
+    builder.set_insert_point(entry);
+    auto* loaded = builder.create_load(i32, counter, true, 0, "observed");
+    auto* incremented = builder.create_add(loaded, module.constant_int(i32, 1), "incremented");
+    builder.create_store(incremented, counter, true);
+    builder.create_ret(module.constant_int(i32, 0));
+
+    krc::ir::Verifier verifier;
+    std::string verify_error;
+    REQUIRE(verifier.verify(module, verify_error));
+
+    const auto change = krc::ir::dead_code_elimination(module);
+    // Nothing to remove: both accesses are volatile and the add feeds a store.
+    CHECK(change.instructions_removed == 0);
+    CHECK(verifier.verify(module, verify_error));
+
+    std::ostringstream printed;
+    krc::ir::print_module(module, printed);
+    CHECK(printed.str().find("volatile") != std::string::npos);
 }
 
 TEST_CASE("Constant folding replaces a folded operation with its value") {

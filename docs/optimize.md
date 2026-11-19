@@ -444,6 +444,14 @@ the pass's contract *is* the IR shape. One behaviour per test, plus a negative t
 rule (a `volatile` load survives DCE; an escaping alloca is not promoted; a `catch` region
 survives CFG simplification).
 
+All three exist, in `tests/unit/test_irgen.cpp` and `tests/unit/test_mem2reg.cpp` rather than in a
+`test_passes.cpp`, because the pass tests were written where the fixtures already were. The
+`volatile` one **builds its IR by hand**: `IRGen` passes `false` for the volatile argument at every
+`create_load`/`create_store`, and the front end parses `volatile` and discards it, so no source
+string produces a volatile access. That is a gap in the compiler rather than in the test, recorded
+as FIX-BEFORE in `implementation.md` (`2026-11-18T23:10:46`); the test covers the pass's rule and
+will keep covering it once the qualifier is forwarded.
+
 **Tier 2 — shape assertions on emitted assembly.** Structural predicates, not golden bytes:
 "no `STORE Rn, [R7+k]` is followed by a `LOAD Rm, [R7+k]` in this function", "this `condbr`
 emits exactly one conditional branch", "frame size for this function is ≤ N bytes". Golden
