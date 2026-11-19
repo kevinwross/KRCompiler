@@ -204,8 +204,10 @@ today, so nothing miscompiles — but the documented contract is not yet the imp
 
 - `docs/optimize.md` §7's R1 row and §3.5 carry the corrected payoff figures; keep them in step if
   anything changes.
-- `examples/` holds untracked generated files (`KRlibcpp.S`, `KRlibcpp.O1.S`, `balanced-tree.k32`);
-  decide whether they belong in the tree.
+- **`examples/` artefacts are deliberately untracked** — `KRlibcpp.S`, `KRlibcpp.O1.S`,
+  `balanced-tree.k32`, and `libc.S` at the root. They are build products, not sources; do not commit
+  them. **One hazard**: `.gitignore` covers `*.k32`, so `balanced-tree.k32` is ignored, but the
+  `.S` files are **not** — a `git add -A` would sweep them in. Add paths explicitly.
 - `build-loop.md` at the repo root is untracked and not from this work.
 
 ---
