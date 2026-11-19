@@ -432,11 +432,12 @@ almost never holds. `kr32/libc.c` sits at 10,476 IR instructions at `-O1` with a
 is what turns repeated loads into repeated uses of one value, and the passes above it start paying
 only after it. The ordering in the table is otherwise unchanged.
 
-**S4 was attempted and reverted, and the reason is the clearest argument for R1 in this document.**
-The rule looked provably safe: a value whose every use is in its defining block is dead once its
-last use there has executed, so two such values with disjoint ranges can share a slot. It measured
-**41,840 → 29,864 frame bytes at `-O0` (−28.6%)** on `kr32/libc.c` and broke **54 executed tests**.
-Narrowing candidates to plain 4-byte scalars changed 54 failures to 52.
+**S4 was attempted twice and reverted twice, and the reason is the clearest argument for R1 in this
+document.** The rule looked provably safe: a value whose every use is in its defining block is dead
+once its last use there has executed, so two such values with disjoint ranges can share a slot. It
+measured **41,840 → 29,864 frame bytes at `-O0` (−28.6%)** on `kr32/libc.c` and broke **54 executed
+tests**. Narrowing candidates to plain 4-byte scalars changed 54 failures to 52; excluding `phi`
+results — whose slots `emit_phi_copies` writes from predecessor blocks — failed identically.
 
 The hole is that the emitter addresses slots the IR never names as an operand. An audit of
 `kr32_backend.cpp` finds about twenty sites reading `layout.slots` directly, several of which take a
@@ -450,6 +451,15 @@ scalars did not help.
 A correct rule therefore needs to know, for every slot, every point at which the emitter writes or
 addresses it — which is exactly the information a machine IR carries and the reason the same
 conclusion has now been reached from three directions (see §3.5 and the R1 row).
+
+A second constraint came out of diffing the emitted assembly of a good and a reusing backend, and it
+is the one that is easy to miss: **the frame size is part of the ABI-visible addressing of incoming
+stack arguments**. The generated prologue for `sum5` in `tier0/functions.c` is `ADJSP #-104` and then
+reads its spilled argument at `[R7 + 112]` — above the frame. Any layout that shrinks the frame has
+to keep the argument addressing consistent with it; a pass that reuses slots while that addressing is
+still derived from a provisional frame size breaks every function with a spilled argument. This is
+the coupling a machine IR would make explicit, because the frame size and the argument layout would
+be one decision rather than two.
 
 ---
 
