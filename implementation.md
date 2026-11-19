@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T08:32:19-08:00 — host gate (Linux ARM64)
+Revision: 4975324
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `df3a7b8`, an ERRATA correcting R1's payoff at `-O1` from 35.8% to 9%, and `2b602f5`,
+which excludes call-crossing values from the allocation plan (`src/backend/machine_liveness.cpp`/`.h`,
+`tests/unit/test_machine_liveness.cpp`). The correction matters more than its size: the allocation plan
+on the machine form was justified by a payoff figure that was four times too high, and the plan survives
+the correction as a smaller win. Excluding call-crossing values is the correctness half of the same
+work — a value live across a call cannot stay in a caller-saved register, and ARM64's caller-saved set
+differs from x86_64's, which is exactly the kind of assumption a shared plan must not hardcode. The
+count is unchanged at 889 with 191 executed tests. Row times were 231.14 s (GCC debug), 221.93 s (Clang
+debug) and 824.99 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2`
+with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T08:22:17-08:00 — host gate (Windows + WSL), milestone: R1's foundation
 Revision: 2b602f5
 
@@ -521,6 +542,28 @@ assertion this gate makes is that the "changes nothing" claim held across all of
 lines** at `-O1` and **42,350** at `-O0`, which is the evidence that the conversion is a refactor
 rather than a rewrite. (Stated precisely because an earlier draft of this paragraph quoted the
 corpus *assembly* total, 36,135, against a `--dump-stats` figure that counts *IR* instructions.)
+
+2026-11-19T08:03:34-08:00 — host gate (Linux ARM64)
+Revision: 8b61da4
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `769e03b`, which measures register pressure from the recorded data flow (new
+`src/backend/machine_liveness.cpp`/`.h`, `tests/unit/test_machine_liveness.cpp`, `CMakeLists.txt`,
+`tests/CMakeLists.txt`), and `b51e443`, which plans the allocation on the machine form and verifies it
+over the corpus. This is the first machine-IR step whose failure mode is allocation quality rather than
+correctness — register pressure and liveness computed over the recorded form, then an allocation planned
+on it. ARM64 has 31 general registers against x86_64's 16, so a pressure measurement taken on this host
+is not the number the other hosts will see; the gate confirms the analysis is correct, not that its
+conclusions transfer. The count is unchanged at 889 with 191 executed tests because the new unit tests
+share the doctest binary. Row times were 230.68 s (GCC debug), 222.75 s (Clang debug) and 822.17 s
+(ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
 
 2026-11-19T07:35:18-08:00 — host gate (Linux ARM64)
 Revision: 2128dd5
