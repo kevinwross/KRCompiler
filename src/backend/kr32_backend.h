@@ -173,6 +173,10 @@ private:
     // `FLOAD` of it. `single` selects `FLOAD.W` over `FLOAD.D`.
     void emit_zero_float(std::string& out, const FrameLayout& layout, std::string_view reg,
                          bool single) const;
+    // A two-operand float conversion, whose result register differs from its source.
+    void emit_convert(std::string& out, machine::Opcode opcode,
+                      const machine::Operand& destination,
+                      const machine::Operand& source) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its

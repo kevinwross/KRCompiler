@@ -77,7 +77,8 @@ enum class Opcode {
     ConvertSingleToDouble, // FCVT.D.S
     ConvertWordToDouble,   // FCVT.D.W
     ConvertDoubleToWord,   // FCVT.W.D
-    ConvertWordToSingle,   // FCVT.W.S
+    ConvertFloatToWordSingle, // FCVT.W.S (single to word)
+    ConvertWordToFloatSingle, // FCVT.S.W (word to single)
     Jump,         // JMP
     JumpIfZero,   // JZ
     JumpIfNotZero, // JNZ

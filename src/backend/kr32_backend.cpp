@@ -1153,6 +1153,15 @@ void Kr32Backend::emit_call(std::string& out, const std::string& symbol) const {
     emit_machine(out, call);
 }
 
+void Kr32Backend::emit_convert(std::string& out, machine::Opcode opcode,
+                               const machine::Operand& destination,
+                               const machine::Operand& source) const {
+    machine::Instruction convert;
+    convert.opcode = opcode;
+    convert.operands = {destination, source};
+    emit_machine(out, convert);
+}
+
 void Kr32Backend::emit_zero_float(std::string& out, const FrameLayout& layout,
                                   std::string_view reg, bool single) const {
     emit_move(out, machine::Operand::physical(0), machine::Operand::immediate(0));
@@ -2323,38 +2332,54 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         break;
     case ir::Opcode::FPTrunc:
         load_fp(out, function, layout, instruction.operands[0], "F0");
-        out += "        FCVT.S.D F0, F0\n";
+        emit_convert(out, machine::Opcode::ConvertDoubleToSingle,
+                     machine::Operand::float_register(0),
+                     machine::Operand::float_register(0));
         store_fp(out, function, layout, instruction, "F0");
         break;
     case ir::Opcode::FPExt:
         load_fp(out, function, layout, instruction.operands[0], "F0");
-        out += "        FCVT.D.S F0, F0\n";
+        emit_convert(out, machine::Opcode::ConvertSingleToDouble,
+                     machine::Operand::float_register(0),
+                     machine::Operand::float_register(0));
         store_fp(out, function, layout, instruction, "F0");
         break;
     case ir::Opcode::FPToSI:
-    case ir::Opcode::FPToUI:
+    case ir::Opcode::FPToUI: {
         load_fp(out, function, layout, instruction.operands[0], "F0");
-        out += "        FCVT.W." +
-               std::string(instruction.operands[0]->type->bits == 32 ? "S" : "D") +
-               " R0, F0\n";
+        const auto single_source = instruction.operands[0]->type->bits == 32;
+        emit_convert(out,
+                     single_source ? machine::Opcode::ConvertFloatToWordSingle
+                                   : machine::Opcode::ConvertDoubleToWord,
+                     machine::Operand::physical(0),
+                     machine::Operand::float_register(0));
         if (is_wide(instruction.type)) {
             // The ISA converts to a 32-bit word. A wider destination extends
             // that word, so values outside the 32-bit range still convert
             // wrongly, but the high word is defined rather than stale.
             if (instruction.opcode == ir::Opcode::FPToSI) {
-                out += "        MOV R1, R0\n";
-                out += "        SAR R1, R1, #31\n";
+                emit_move(out, machine::Operand::physical(1),
+                          machine::Operand::physical(0));
+                emit_binary(out, machine::Opcode::Sar, machine::Operand::physical(1),
+                            machine::Operand::physical(1),
+                            machine::Operand::immediate(31));
             } else {
-                out += "        MOV R1, #0\n";
+                emit_move(out, machine::Operand::physical(1),
+                          machine::Operand::immediate(0));
             }
         }
         store_value(out, function, layout, instruction, "R0");
         break;
+    }
     case ir::Opcode::SIToFP:
     case ir::Opcode::UIToFP:
         load_value(out, function, layout, instruction.operands[0], "R0");
-        out += "        FCVT." +
-               std::string(instruction.type->bits == 32 ? "S" : "D") + ".W F0, R0\n";
+        emit_convert(out,
+                     instruction.type->bits == 32
+                         ? machine::Opcode::ConvertWordToFloatSingle
+                         : machine::Opcode::ConvertWordToDouble,
+                     machine::Operand::float_register(0),
+                     machine::Operand::physical(0));
         store_fp(out, function, layout, instruction, "F0");
         break;
     case ir::Opcode::Trunc:
@@ -2366,14 +2391,21 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         const auto dest_bits =
             instruction.type && instruction.type->bits != 0 ? instruction.type->bits : 32;
         const bool sign_extend = instruction.opcode == ir::Opcode::SExt;
+        const auto shift = [&](machine::Opcode opcode, unsigned amount) {
+            emit_binary(out, opcode, machine::Operand::physical(0),
+                        machine::Operand::physical(0),
+                        machine::Operand::immediate(static_cast<std::int64_t>(amount)));
+        };
         const auto extend_from = [&](unsigned from_bits) {
             if (sign_extend && from_bits < 32) {
-                out += "        SHL R0, R0, #" + std::to_string(32 - from_bits) + "\n";
-                out += "        SAR R0, R0, #" + std::to_string(32 - from_bits) + "\n";
+                shift(machine::Opcode::Shl, 32 - from_bits);
+                shift(machine::Opcode::Sar, 32 - from_bits);
             } else if (!sign_extend && instruction.opcode == ir::Opcode::ZExt &&
                        from_bits < 32) {
-                out += "        AND R0, R0, #" +
-                       std::to_string((1ull << from_bits) - 1) + "\n";
+                emit_binary(out, machine::Opcode::And, machine::Operand::physical(0),
+                            machine::Operand::physical(0),
+                            machine::Operand::immediate(
+                                static_cast<std::int64_t>((1ull << from_bits) - 1)));
             }
         };
         if (is_wide(instruction.type)) {
@@ -2385,10 +2417,14 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 // The high word is all sign bits or zero, so the 32-bit width
                 // is the word width either way.
                 if (sign_extend) {
-                    out += "        MOV R1, R0\n";
-                    out += "        SAR R1, R1, #31\n";
+                    emit_move(out, machine::Operand::physical(1),
+                              machine::Operand::physical(0));
+                    emit_binary(out, machine::Opcode::Sar, machine::Operand::physical(1),
+                                machine::Operand::physical(1),
+                                machine::Operand::immediate(31));
                 } else {
-                    out += "        MOV R1, #0\n";
+                    emit_move(out, machine::Operand::physical(1),
+                              machine::Operand::immediate(0));
                 }
             }
             store_value(out, function, layout, instruction, "R0");
@@ -2402,7 +2438,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             extend_from(source_bits);
         }
         if (dest_bits < 32) {
-            out += "        AND R0, R0, #" + std::to_string((1ull << dest_bits) - 1) + "\n";
+            emit_binary(out, machine::Opcode::And, machine::Operand::physical(0),
+                        machine::Operand::physical(0),
+                        machine::Operand::immediate(
+                            static_cast<std::int64_t>((1ull << dest_bits) - 1)));
         }
         store_value(out, function, layout, instruction, "R0");
         break;

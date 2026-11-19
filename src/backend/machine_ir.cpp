@@ -149,8 +149,10 @@ std::string mnemonic(Opcode opcode) {
         return "FCVT.D.W";
     case Opcode::ConvertDoubleToWord:
         return "FCVT.W.D";
-    case Opcode::ConvertWordToSingle:
+    case Opcode::ConvertFloatToWordSingle:
         return "FCVT.W.S";
+    case Opcode::ConvertWordToFloatSingle:
+        return "FCVT.S.W";
     case Opcode::Jump:
         return "JMP";
     case Opcode::JumpIfZero:
@@ -281,7 +283,8 @@ std::optional<Opcode> opcode_of(std::string_view name) {
         {"FCVT.D.S", Opcode::ConvertSingleToDouble},
         {"FCVT.D.W", Opcode::ConvertWordToDouble},
         {"FCVT.W.D", Opcode::ConvertDoubleToWord},
-        {"FCVT.W.S", Opcode::ConvertWordToSingle},
+        {"FCVT.W.S", Opcode::ConvertFloatToWordSingle},
+        {"FCVT.S.W", Opcode::ConvertWordToFloatSingle},
         {"JMP", Opcode::Jump},          {"JZ", Opcode::JumpIfZero},
         {"JNZ", Opcode::JumpIfNotZero}, {"JLT", Opcode::JumpIfLess},
         {"JGT", Opcode::JumpIfGreater}, {"JLE", Opcode::JumpIfLessOrEqual},
