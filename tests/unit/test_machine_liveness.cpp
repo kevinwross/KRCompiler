@@ -93,6 +93,72 @@ int arithmetic(int left, int right) {
     CHECK(liveness.peak_pressure <= 8);
 }
 
+TEST_CASE("The allocation plan gives no register to two values live at once") {
+    // The property that makes a plan correct, checked as a pure function of the plan and
+    // the ranges: no two overlapping live ranges may share a register. Nothing emits
+    // from this yet, which is why the property can be asserted over the whole corpus
+    // while the backend still emits exactly what it emitted before.
+    namespace fs = std::filesystem;
+    const auto corpus = fs::path(KRC_SOURCE_DIR) / "tests" / "corpus" / "extracted";
+    std::vector<fs::path> files;
+    for (const auto* directory : {"tier1", "tier2"}) {
+        for (const auto& entry : fs::directory_iterator(corpus / directory)) {
+            const auto extension = entry.path().extension().string();
+            if (extension == ".c" || extension == ".cpp") {
+                files.push_back(entry.path());
+            }
+        }
+    }
+    REQUIRE(files.size() >= 20);
+
+    const std::vector<int> registers = {8, 9, 10, 11, 12, 13, 14, 15};
+    std::size_t functions = 0;
+    std::size_t values = 0;
+    std::size_t unallocated = 0;
+    std::size_t violations = 0;
+    std::size_t worst = 0;
+    for (const auto& path : files) {
+        std::ifstream input(path);
+        REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        const auto module = generate(buffer.str(), path.extension() == ".cpp");
+        if (!module) {
+            continue;
+        }
+        krc::backend::Kr32Backend backend(*module,
+                                          krc::target::get_target(krc::target::TargetId::Kr32));
+        std::string error;
+        const auto assembly = backend.emit(error);
+        REQUIRE(assembly.has_value());
+        for (const auto& function : module->functions()) {
+            if (!function || function->declaration) {
+                continue;
+            }
+            const auto* recorded = backend.machine_function(function->name);
+            if (recorded == nullptr) {
+                continue;
+            }
+            const auto liveness = compute_liveness(*recorded);
+            if (liveness.instructions == 0) {
+                continue;
+            }
+            const auto allocation = plan_linear_scan(liveness, registers);
+            ++functions;
+            values += liveness.ranges.size();
+            unallocated += allocation.unallocated;
+            worst = std::max(worst, liveness.peak_pressure);
+            if (!interference_is_respected(liveness, allocation)) {
+                ++violations;
+            }
+        }
+    }
+    REQUIRE(functions > 50);
+    std::cerr << "[allocation] functions " << functions << ", values " << values
+              << ", unallocated " << unallocated << ", violations " << violations
+              << ", worst pressure " << worst << "\n";
+    CHECK(violations == 0);
+}
 TEST_CASE("Peak register pressure over the corpus fits the register file") {
     // The measurement ADR 0051 turns on. KR32 has eight general registers R8–R15 that
     // the current allocator may use; if real functions peak below that, an allocator

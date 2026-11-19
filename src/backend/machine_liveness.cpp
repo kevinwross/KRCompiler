@@ -80,4 +80,81 @@ Liveness compute_liveness(const Function& function) {
     return result;
 }
 
+Allocation plan_linear_scan(const Liveness& liveness,
+                            const std::vector<int>& available_registers) {
+    Allocation allocation;
+    allocation.registers.assign(liveness.ranges.size(), -1);
+    if (available_registers.empty()) {
+        allocation.unallocated = liveness.ranges.size();
+        return allocation;
+    }
+
+    // Values in order of where they start, which is what a linear scan needs. A range
+    // with `last < first` is not a range at all and is left unallocated.
+    std::vector<std::size_t> order;
+    order.reserve(liveness.ranges.size());
+    for (std::size_t number = 0; number < liveness.ranges.size(); ++number) {
+        const auto& range = liveness.ranges[number];
+        if (range.last >= range.first) {
+            order.push_back(number);
+        } else {
+            ++allocation.unallocated;
+        }
+    }
+    std::sort(order.begin(), order.end(), [&](std::size_t left, std::size_t right) {
+        return liveness.ranges[left].first < liveness.ranges[right].first;
+    });
+
+    // `expiry[register_index]` is the position at which the value holding that register
+    // dies, so a register is free again at that position.
+    std::vector<std::size_t> expiry(available_registers.size(), 0);
+    std::vector<bool> in_use(available_registers.size(), false);
+    for (const auto number : order) {
+        const auto& range = liveness.ranges[number];
+        for (std::size_t slot = 0; slot < expiry.size(); ++slot) {
+            if (in_use[slot] && expiry[slot] < range.first) {
+                in_use[slot] = false;
+            }
+        }
+        bool placed = false;
+        for (std::size_t slot = 0; slot < expiry.size(); ++slot) {
+            if (in_use[slot]) {
+                continue;
+            }
+            allocation.registers[number] = available_registers[slot];
+            expiry[slot] = range.last;
+            in_use[slot] = true;
+            placed = true;
+            break;
+        }
+        if (!placed) {
+            ++allocation.unallocated;
+        }
+    }
+    return allocation;
+}
+
+bool interference_is_respected(const Liveness& liveness, const Allocation& allocation) {
+    const auto register_of = [&](std::size_t number) {
+        return number < allocation.registers.size() ? allocation.registers[number] : -1;
+    };
+    for (std::size_t left = 0; left < liveness.ranges.size(); ++left) {
+        if (register_of(left) < 0) {
+            continue;
+        }
+        const auto& first = liveness.ranges[left];
+        for (std::size_t right = left + 1; right < liveness.ranges.size(); ++right) {
+            if (register_of(right) < 0 || register_of(right) != register_of(left)) {
+                continue;
+            }
+            const auto& second = liveness.ranges[right];
+            // Closed intervals: sharing an instruction is interference.
+            if (first.first <= second.last && second.first <= first.last) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 }  // namespace krc::backend::machine

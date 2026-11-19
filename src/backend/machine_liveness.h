@@ -45,4 +45,27 @@ struct Liveness {
 // The live ranges of `function`, over its instructions in block order.
 [[nodiscard]] Liveness compute_liveness(const Function& function);
 
+// A register assignment for every virtual register, from a linear scan over the live
+// ranges. `-1` means the value was not given a register: either it has no range or the
+// scan ran out of them.
+//
+// The scan is the one ADR 0051 recommends, and this function exists so the assignment
+// can be *checked* before anything emits from it: `interference_is_respected` is the
+// property that makes a plan correct, and it is a pure function of the plan and the
+// ranges, so it can be asserted over the corpus while the backend still emits what it
+// emitted before.
+struct Allocation {
+    std::vector<int> registers;   // indexed by virtual register number
+    std::size_t unallocated = 0;
+};
+
+[[nodiscard]] Allocation plan_linear_scan(const Liveness& liveness,
+                                          const std::vector<int>& available_registers);
+
+// Whether every pair of overlapping ranges was given a different register. A range is
+// skipped when the plan gave it `-1`: an unallocated value keeps its frame slot, which
+// is the state the backend is in today for every value.
+[[nodiscard]] bool interference_is_respected(const Liveness& liveness,
+                                             const Allocation& allocation);
+
 }  // namespace krc::backend::machine
