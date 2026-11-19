@@ -5,7 +5,11 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <map>
+#include <string_view>
 #include <unordered_set>
+
+#include "backend/machine_ir.h"
 #include <vector>
 
 #include "backend/peephole.h"
@@ -27,6 +31,13 @@ public:
     // The frame this function needs, in bytes. Public so `--dump-stats` can report
     // the metric S4 is measured by (docs/optimize.md §7) without emitting anything.
     [[nodiscard]] std::uint32_t frame_bytes(const ir::Function& function) const;
+
+    // The machine-level form of the last emission, per function symbol. R1's plan is
+    // to move emission onto this representation in place rather than to write a second
+    // selection pass beside the emitter, so the recording grows as more emit sites are
+    // converted; a function absent from the map has not been converted at all. Exposed
+    // for the tests that hold the conversion to byte-identical output.
+    [[nodiscard]] const machine::Function* machine_function(std::string_view symbol) const;
 
 private:
     struct FrameLayout {
@@ -121,6 +132,16 @@ private:
     // Empty at `-O0`, which is what keeps that level's output byte-identical
     // (ADR 0049). Filled per function by `compute_allocation`.
     mutable std::unordered_map<const ir::Value*, std::uint32_t> allocated_registers_;
+    // Machine instructions recorded while emitting, per function symbol. See
+    // `machine_function`.
+    mutable std::map<std::string, machine::Function> machine_functions_;
+    // The function being emitted, so a converted site can record without being told
+    // which function it is in.
+    mutable machine::Function* recording_ = nullptr;
+
+    // Prints `instruction` and records it against the function being emitted, so that
+    // the text and the machine form cannot disagree: one call site produces both.
+    void emit_machine(std::string& out, const machine::Instruction& instruction) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its

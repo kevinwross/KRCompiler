@@ -1028,6 +1028,21 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     return text;
 }
 
+const machine::Function* Kr32Backend::machine_function(std::string_view symbol) const {
+    const auto found = machine_functions_.find(std::string(symbol));
+    return found == machine_functions_.end() ? nullptr : &found->second;
+}
+
+void Kr32Backend::emit_machine(std::string& out,
+                               const machine::Instruction& instruction) const {
+    out += machine::print_instruction(instruction);
+    if (recording_ != nullptr) {
+        if (recording_->blocks.empty()) {
+            recording_->blocks.emplace_back();
+        }
+        recording_->blocks.back().instructions.push_back(instruction);
+    }
+}
 void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                                 const FrameLayout& layout) const {
     compute_allocation(function);
@@ -1037,9 +1052,35 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
         out += "        .weak " + function.name + "\n";
     }
     out += function.name + ":\n";
-    out += "        PUSH R7\n";
-    out += "        ADJSP #-" + std::to_string(layout.frame_size) + "\n";
-    out += "        LEA R7, [SP]\n";
+    // The first converted emit site. The machine instructions are built and printed by
+    // one call each, so the text and the recorded form cannot drift; the prologue is
+    // converted first because every function has one and it is short enough to check
+    // by eye as well as by diff.
+    auto& recording = machine_functions_[function.name];
+    recording.symbol = function.name;
+    recording.blocks.clear();
+    recording.blocks.emplace_back();
+    recording_ = &recording;
+
+    machine::Instruction push;
+    push.opcode = machine::Opcode::Push;
+    push.operands = {machine::Operand::physical(7)};
+    emit_machine(out, push);
+
+    machine::Instruction adjust;
+    adjust.opcode = machine::Opcode::AdjustStack;
+    adjust.operands = {machine::Operand::immediate(-static_cast<std::int64_t>(layout.frame_size))};
+    emit_machine(out, adjust);
+
+    machine::Instruction frame_base;
+    frame_base.opcode = machine::Opcode::Lea;
+    // `[SP]` with no displacement: the emitter writes the frame base that way, and
+    // `[SP + 0]` is different text, which this record makes explicit rather than
+    // discovering it in a diff.
+    auto stack_address = machine::Operand::address("SP", 0);
+    stack_address.displacement = false;
+    frame_base.operands = {machine::Operand::physical(7), stack_address};
+    emit_machine(out, frame_base);
     if (layout.has_return_pointer) {
         out += "        STORE R4, [R7 + " + std::to_string(layout.return_pointer) + "]\n";
     }

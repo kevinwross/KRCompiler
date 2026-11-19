@@ -229,6 +229,55 @@ int classify(char *bytes, int count) {
     INFO("first unmatched: " << first_unmatched);
     CHECK(unmatched == 0);
 }
+namespace {
+
+std::string printed_mnemonic(const Instruction& instruction) {
+    const auto text = print_instruction(instruction);
+    const auto start = text.find_first_not_of(" ");
+    const auto end = text.find(" ", start);
+    return text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+}
+
+}  // namespace
+
+TEST_CASE("The prologue conversion records the same instructions it prints") {
+    // The first converted emit site. The recording exists so the text and the machine
+    // form cannot disagree: one call site produces both, and this holds the first one
+    // to that.
+    krc::ir::Module module{krc::target::TargetId::Kr32};
+    const auto i32 = module.types().int_type(32);
+    const auto type = module.types().function_type(i32, std::vector<krc::ir::TypePtr>{i32});
+    auto* function = module.add_function("answer", type, krc::ir::Linkage::External);
+    auto* argument = function->add_parameter(i32, "argument");
+    auto* entry = function->add_block("entry");
+
+    krc::ir::IRBuilder builder(module.types());
+    builder.set_insert_point(entry);
+    builder.create_ret(argument);
+
+    krc::backend::Kr32Backend backend(module,
+                                      krc::target::get_target(krc::target::TargetId::Kr32));
+    std::string error;
+    const auto assembly = backend.emit(error);
+    REQUIRE(assembly.has_value());
+
+    const auto* recorded = backend.machine_function("answer");
+    REQUIRE(recorded != nullptr);
+    REQUIRE_FALSE(recorded->blocks.empty());
+    const auto& instructions = recorded->blocks.front().instructions;
+    REQUIRE(instructions.size() >= 3);
+
+    CHECK(printed_mnemonic(instructions[0]) == "PUSH");
+    CHECK(printed_mnemonic(instructions[1]) == "ADJSP");
+    CHECK(printed_mnemonic(instructions[2]) == "LEA");
+
+    // The recorded text is a prefix of what was emitted.
+    std::string recorded_text;
+    for (const auto& instruction : instructions) {
+        recorded_text += print_instruction(instruction);
+    }
+    CHECK(assembly->find(recorded_text) != std::string::npos);
+}
 TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips") {
     // The corpus-wide claim, not a sample: if any file emits an instruction the
     // representation cannot express, this fails and names the line.
