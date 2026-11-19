@@ -497,6 +497,31 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T23:47:22-08:00 — host gate (Windows + WSL), milestone: the optimisation pass, run serially
+Revision: b87ff1d
+
+```
+windows-msvc-debug    PASS 889/889
+windows-msvc-release  PASS 889/889   (three consecutive runs)
+linux-gcc-debug       PASS 889/889
+linux-gcc-release     PASS 889/889
+linux-clang-debug     PASS 889/889
+linux-sanitize        PASS 889/889
+not verified: native Linux x64, Linux ARM64
+```
+
+Every build directory was deleted first, so this is six clean builds. It supersedes the
+`c8b70b2` gate of the same shape: that one ran with the presets' `jobs: 4`, and parallel
+execution was afterwards shown to fail executed-image tests nondeterministically — two
+parallel runs of this very row failed a different test each time, and three serial runs
+of the same build passed every one. The counts above are from serial runs, and
+`windows-msvc-release` was repeated three times to show the number is now stable rather
+than lucky. Nothing about the compiler changed between the two gates; the difference is
+that this one can be trusted.
+
+The suite is 889 tests, of which 58 execute at `-O1` across all three tiers, and no row
+reported a warning.
+
 2026-11-18T23:26:39-08:00 — host gate (Linux ARM64)
 Revision: 47202d4
 
@@ -6296,3 +6321,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-18T23:46:32-08:00** — **The measurement was wrong first, and in a way worth recording.** `--dump-stats` reports frame bytes through `frame_bytes`, which called `layout_function` directly — so it reported the layout *without* the allocation, i.e. a frame the compiler does not emit, and showed no change at all. The metric now computes the allocation first, in the same order `emit` uses. A metric that does not measure the emitted artefact is worse than no metric: it read 40,680 for both the old and the new layout, which is exactly the kind of false negative that would have had me revert a −45% improvement.
 - **2026-11-18T23:46:32-08:00** — This is S4's measurable half without S4's risk: slot *reuse* by liveness would need loop-aware interference, but "do not reserve a slot you will never read" needs nothing beyond the allocator's own decision. It closes most of OG4's frame-bytes gap but not all — 28.9% against the 50% the gate asks for — and the remainder is the parameters, allocas and `.addr` variables that must keep their slots because the debugger names them.
 - **2026-11-18T23:46:32-08:00** — Suite **889/889** on `windows-msvc-debug`, `linux-clang-debug` and `linux-sanitize`.
+- **2026-11-19T00:45:40-08:00** — **The intermittent failures are the parallel test run, and the presets were the cause: `"execution": { "jobs": 4 }` ran four tests at once and executed-image tests failed nondeterministically under it.** Two parallel runs of `windows-msvc-release` failed **different** tests each time — `krc_run_tier1_varargs_o1`, then `krc_run_thread_local_storage` — and three serial runs of the same build passed 889/889 each. Together with the earlier clang pair that is **four failures across five parallel runs, every one a different test, and none in any serial run**. A test that fails only when three others are running, names no reproducible test, and leaves no diagnostic is a harness defect rather than a compiler defect, and a suite whose failures depend on scheduling is worse than a slow one: it teaches everyone to re-run.
+- **2026-11-19T00:45:40-08:00** — **All six presets now run tests serially** (`jobs: 1`); build parallelism is untouched, because the `buildPresets` carry their own job count. The trade is about a hundred seconds per row and is deliberate: every count this session took with `jobs: 4` was subject to this, including the clean gate at `c8b70b2`, so a *passing* parallel run was luck and a *failing* one was probably spurious. The cause underneath — why four concurrent `cmake -P` image runs misbehave — is not identified; serialising removes the symptom and the reason is recorded as unknown rather than guessed at. This is the one place so far where the fix is "do not do that" rather than "the code was wrong".
+- **2026-11-19T00:45:40-08:00** — A clean gate was re-run **serially** at `b87ff1d`, all six directories deleted first: `windows-msvc-debug`, `windows-msvc-release`, `linux-gcc-debug`, `linux-gcc-release`, `linux-clang-debug` and `linux-sanitize`, each **889/889**, with `windows-msvc-release` run three times to show the count is now stable. The gate block is under `## Gate verification`.

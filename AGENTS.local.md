@@ -140,6 +140,7 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 
 ## Known traps
 
+- **Run the suite serially, and keep `jobs: 1` in the test presets.** With `"execution": { "jobs": 4 }` the suite fails executed-image tests nondeterministically: four failures across five parallel runs, a different test each time, no diagnostic, and no failure in any serial run of the same build. Serialising removes the symptom; the mechanism is not identified, so do not raise the job count on the grounds that the VM "should" be independent. Build parallelism is a separate setting and is unaffected. Recorded in `implementation.md`, `2026-11-19T00:45:40`.
 - **`AGENTS.local.md` is an instruction file, not a log.** Update it when a rule it states becomes false; never record progress, status, or milestone state here — that belongs in `implementation.md`. This file was rewritten with milestone state in 117 of 135 commits, so the rules governing the work changed almost every commit and nothing reviewed those changes.
 - **The plan is approved (2026-11-09).** Implement under §18.2; `implementation.md` is the live tracker. A `D-xxx` change needs an Appendix A entry; ABI, object, symbol, target, or IR changes also need an ADR under `docs/decisions/`.
 - **"Target" is two words here.** Host platforms (Windows, Linux) versus VM targets (KR32, KR16). Confusing them produces wrong CI matrices, wrong ABI assumptions, and target-descriptor code checked into the front end.

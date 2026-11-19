@@ -114,7 +114,7 @@
       "output": {
         "outputOnFailure": true
       },
-      "execution": { "jobs": 4 }
+      "execution": { "jobs": 1 }
     },
     {
       "name": "windows-msvc-release",
@@ -123,7 +123,7 @@
       "output": {
         "outputOnFailure": true
       },
-      "execution": { "jobs": 4 }
+      "execution": { "jobs": 1 }
     },
     {
       "name": "linux-gcc-debug",
@@ -131,7 +131,7 @@
       "output": {
         "outputOnFailure": true
       },
-      "execution": { "jobs": 4 }
+      "execution": { "jobs": 1 }
     },
     {
       "name": "linux-gcc-release",
@@ -139,7 +139,7 @@
       "output": {
         "outputOnFailure": true
       },
-      "execution": { "jobs": 4 }
+      "execution": { "jobs": 1 }
     },
     {
       "name": "linux-clang-debug",
@@ -147,7 +147,7 @@
       "output": {
         "outputOnFailure": true
       },
-      "execution": { "jobs": 4 }
+      "execution": { "jobs": 1 }
     },
     {
       "name": "linux-sanitize",
@@ -155,7 +155,7 @@
       "output": {
         "outputOnFailure": true
       },
-      "execution": { "jobs": 4 }
+      "execution": { "jobs": 1 }
     }
   ]
 }
