@@ -32,6 +32,7 @@ machine::Operand register_operand(std::string_view name) {
     return machine::Operand::named(std::string(name));
 }
 
+
 std::uint64_t round_up(std::uint64_t value, std::uint64_t alignment) {
     if (alignment <= 1) {
         return value;
@@ -379,29 +380,33 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
         return;
     }
     if (!value) {
-        out += "        MOV " + std::string(reg) + ", #0\n";
+        emit_move(out, register_operand(reg), machine::Operand::immediate(0));
         return;
     }
     switch (value->kind) {
     case ir::ValueKind::ConstantInt:
-        out += "        MOV " + std::string(reg) + ", #" +
-               std::to_string(static_cast<const ir::ConstantInt*>(value)->value) + "\n";
+        emit_move(out, register_operand(reg),
+                  machine::Operand::immediate(
+                      static_cast<const ir::ConstantInt*>(value)->value));
         return;
     case ir::ValueKind::ConstantNull:
     case ir::ValueKind::ConstantUndef:
-        out += "        MOV " + std::string(reg) + ", #0\n";
+        emit_move(out, register_operand(reg), machine::Operand::immediate(0));
         return;
     case ir::ValueKind::Function:
-        out += "        LEA " + std::string(reg) + ", [" + value->name + "]\n";
-        return;
     case ir::ValueKind::Global:
-        out += "        LEA " + std::string(reg) + ", [" + value->name + "]\n";
+        emit_symbol_address(out, register_operand(reg), value->name);
         return;
     case ir::ValueKind::ConstantFloat:
     case ir::ValueKind::ConstantDataArray:
-    case ir::ValueKind::ConstantAddressArray:
-        out += "        MOV " + std::string(reg) + ", #0 ; unsupported constant\n";
+    case ir::ValueKind::ConstantAddressArray: {
+        machine::Instruction move;
+        move.opcode = machine::Opcode::Mov;
+        move.operands = {register_operand(reg), machine::Operand::immediate(0)};
+        move.comment = "unsupported constant";
+        emit_machine(out, move);
         return;
+    }
     case ir::ValueKind::Parameter:
     case ir::ValueKind::Instruction:
         break;
@@ -411,8 +416,11 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
         if (instruction->opcode == ir::Opcode::Alloca) {
             const auto object = layout.alloca_offsets.find(instruction);
             if (object != layout.alloca_offsets.end()) {
-                out += "        LEA " + std::string(reg) + ", [R7 + " +
-                       std::to_string(object->second) + "]\n";
+                machine::Instruction lea;
+                lea.opcode = machine::Opcode::Lea;
+                lea.operands = {register_operand(reg),
+                                machine::Operand::frame_offset(object->second)};
+                emit_machine(out, lea);
                 return;
             }
         }
@@ -424,7 +432,7 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
         if (allocated != allocated_registers_.end()) {
             const auto home = register_name(allocated->second);
             if (home != reg) {
-                out += "        MOV " + std::string(reg) + ", " + home + "\n";
+                emit_move(out, register_operand(reg), register_operand(home));
             }
             return;
         }
@@ -1054,6 +1062,27 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
 const machine::Function* Kr32Backend::machine_function(std::string_view symbol) const {
     const auto found = machine_functions_.find(std::string(symbol));
     return found == machine_functions_.end() ? nullptr : &found->second;
+}
+
+void Kr32Backend::emit_move(std::string& out, const machine::Operand& destination,
+                            const machine::Operand& source) const {
+    machine::Instruction move;
+    move.opcode = machine::Opcode::Mov;
+    move.operands = {destination, source};
+    emit_machine(out, move);
+}
+
+void Kr32Backend::emit_symbol_address(std::string& out,
+                                      const machine::Operand& destination,
+                                      const std::string& symbol) const {
+    // `LEA R0, [memcpy]`: the address of a symbol, which the printer writes as a
+    // bracketed name with no displacement.
+    auto address = machine::Operand::address(symbol, 0);
+    address.displacement = false;
+    machine::Instruction lea;
+    lea.opcode = machine::Opcode::Lea;
+    lea.operands = {destination, address};
+    emit_machine(out, lea);
 }
 
 void Kr32Backend::emit_machine(std::string& out,

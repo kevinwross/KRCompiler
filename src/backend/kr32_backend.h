@@ -142,6 +142,14 @@ private:
     // Prints `instruction` and records it against the function being emitted, so that
     // the text and the machine form cannot disagree: one call site produces both.
     void emit_machine(std::string& out, const machine::Instruction& instruction) const;
+
+    // `MOV <destination>, <source>`, and `LEA <destination>, [<symbol>]`. Both are
+    // frequent enough in `load_value` to be worth naming rather than spelling out at
+    // each site.
+    void emit_move(std::string& out, const machine::Operand& destination,
+                   const machine::Operand& source) const;
+    void emit_symbol_address(std::string& out, const machine::Operand& destination,
+                             const std::string& symbol) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its
