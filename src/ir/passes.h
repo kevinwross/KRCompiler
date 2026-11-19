@@ -110,4 +110,10 @@ struct PassChange {
 //  * terminators, which have no result to be unused.
 [[nodiscard]] PassChange dead_code_elimination(Module& module);
 
+// Lowering, not optimisation (D-049): a `bitcast` whose operand already has the
+// target type computes nothing. Types are canonicalised (ADR 0050), so this is a
+// pointer comparison and it removes the cast instead of reintroducing one. Runs at
+// -O0 as well as -O1, because it is selection quality rather than a level.
+[[nodiscard]] PassChange fold_identity_casts(Module& module);
+
 }  // namespace krc::ir

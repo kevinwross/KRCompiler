@@ -373,6 +373,12 @@ int main(int argc, char** argv) {
                 krc::irgen::CIRGen irgen(sema, *ast, profile, diagnostics);
                 auto module = irgen.generate();
                 if (module) {
+                    // Lowering, not optimisation: an identity cast computes nothing,
+                    // and D-049 makes selection quality a property of the lowering
+                    // rather than of an optimisation level, so this runs at -O0 too.
+                    static_cast<void>(krc::ir::fold_identity_casts(*module));
+                }
+                if (module) {
                     std::string verify_error;
                     krc::ir::Verifier verifier;
                     if (!verifier.verify(*module, verify_error)) {

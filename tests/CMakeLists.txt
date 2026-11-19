@@ -2850,7 +2850,10 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> --dump-ir
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/local_derived_dtor.cpp")
     set_tests_properties(krc_local_derived_dtor_ir PROPERTIES
-        PASS_REGULAR_EXPRESSION "own.dtor")
+        # The destructor call is the behaviour under test. It used to assert on the
+        # name of the value that fed it, `own.dtor`, which was an identity bitcast's
+        # result and is folded at the lowering now (ADR 0050).
+        PASS_REGULAR_EXPRESSION "@Derived_dtor")
 
     add_test(NAME krc_link_delete_derived_dtor
         COMMAND ${CMAKE_COMMAND}

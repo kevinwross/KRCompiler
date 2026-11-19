@@ -649,4 +649,68 @@ PassChange dead_code_elimination(Module& module) {
     return change;
 }
 
+PassChange fold_identity_casts(Module& module) {
+    PassChange change;
+    for (const auto& function : module.functions()) {
+        if (!function || function->declaration) {
+            continue;
+        }
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            // Types are canonicalised (ADR 0050), so an identity cast is one whose
+            // operand's type *is* the result type — a pointer comparison, not a
+            // structural walk.
+            std::vector<const Instruction*> identity;
+            for (const auto& instruction : block->instructions) {
+                if (instruction && instruction->opcode == Opcode::BitCast &&
+                    instruction->operands.size() == 1 && instruction->operands[0] &&
+                    instruction->operands[0]->type == instruction->type) {
+                    identity.push_back(instruction.get());
+                }
+            }
+            if (identity.empty()) {
+                continue;
+            }
+            // Every use is replaced before anything is removed, so no operand is
+            // ever left pointing at a dead instruction.
+            for (const auto& any_block : function->blocks) {
+                if (!any_block) {
+                    continue;
+                }
+                for (const auto& instruction : any_block->instructions) {
+                    if (!instruction) {
+                        continue;
+                    }
+                    for (auto*& operand : instruction->operands) {
+                        const auto found = std::find(identity.begin(), identity.end(), operand);
+                        if (found != identity.end()) {
+                            operand = const_cast<Value*>((*found)->operands[0]);
+                        }
+                    }
+                    for (auto& incoming : instruction->incoming) {
+                        const auto found =
+                            std::find(identity.begin(), identity.end(), incoming.first);
+                        if (found != identity.end()) {
+                            incoming.first = const_cast<Value*>((*found)->operands[0]);
+                        }
+                    }
+                }
+            }
+            const auto removed = std::remove_if(
+                block->instructions.begin(), block->instructions.end(),
+                [&](const std::unique_ptr<Instruction>& instruction) {
+                    return instruction &&
+                           std::find(identity.begin(), identity.end(), instruction.get()) !=
+                               identity.end();
+                });
+            change.instructions_removed +=
+                static_cast<std::size_t>(std::distance(removed, block->instructions.end()));
+            block->instructions.erase(removed, block->instructions.end());
+        }
+    }
+    return change;
+}
+
 }  // namespace krc::ir

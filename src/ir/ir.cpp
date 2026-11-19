@@ -212,18 +212,34 @@ TypePtr TypeContext::float_type(unsigned bits) {
 }
 
 TypePtr TypeContext::pointer_type(TypePtr element) {
+    // Cached so two `ptr<i32>` are the same address: the verifier compares type
+    // pointers, so equality of shape must imply equality of pointer or IRGen has
+    // to cast between values that already have the right type (ADR 0050).
+    const auto found = pointers_.find(element);
+    if (found != pointers_.end()) {
+        return found->second;
+    }
     Type type;
     type.kind = TypeKind::Pointer;
     type.element = element;
-    return make(std::move(type));
+    const auto built = make(std::move(type));
+    pointers_.emplace(element, built);
+    return built;
 }
 
 TypePtr TypeContext::array_type(TypePtr element, std::uint64_t count) {
+    const auto key = std::make_pair(element, count);
+    const auto found = arrays_.find(key);
+    if (found != arrays_.end()) {
+        return found->second;
+    }
     Type type;
     type.kind = TypeKind::Array;
     type.element = element;
     type.count = count;
-    return make(std::move(type));
+    const auto built = make(std::move(type));
+    arrays_.emplace(key, built);
+    return built;
 }
 
 TypePtr TypeContext::struct_type(std::string name, std::vector<TypePtr> fields,
@@ -304,12 +320,19 @@ TypePtr TypeContext::union_type(std::string name, std::vector<TypePtr> fields,
 
 TypePtr TypeContext::function_type(TypePtr return_type, std::vector<TypePtr> parameters,
                                    bool variadic) {
+    const auto key = std::make_tuple(return_type, parameters, variadic);
+    const auto found = functions_.find(key);
+    if (found != functions_.end()) {
+        return found->second;
+    }
     Type type;
     type.kind = TypeKind::Function;
     type.return_type = return_type;
     type.parameters = std::move(parameters);
     type.variadic = variadic;
-    return make(std::move(type));
+    const auto built = make(std::move(type));
+    functions_.emplace(key, built);
+    return built;
 }
 
 bool same_type(TypePtr left, TypePtr right) {

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -85,6 +87,14 @@ private:
     TypePtr i64_ = nullptr;
     TypePtr f32_ = nullptr;
     TypePtr f64_ = nullptr;
+    // Constructed types are cached by shape so structural equality and pointer
+    // equality agree (ADR 0050). Without this, `pointer_type(i32)` called twice
+    // returns two addresses, the verifier — which compares pointers — sees a
+    // mismatch, and IRGen inserts a `bitcast` between values that already have
+    // the right type.
+    std::map<TypePtr, TypePtr> pointers_;
+    std::map<std::pair<TypePtr, std::uint64_t>, TypePtr> arrays_;
+    std::map<std::tuple<TypePtr, std::vector<TypePtr>, bool>, TypePtr> functions_;
 };
 
 [[nodiscard]] bool same_type(TypePtr left, TypePtr right);
