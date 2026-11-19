@@ -6563,6 +6563,69 @@ foreach(tier1_source IN ITEMS structs pointers arrays control preprocessor varar
     endif()
 endforeach()
 
+# Tier 1 executed at -O1 as well. ADR 0049 requires the suite at both levels, and
+# the twelve tier-0 twins proved their worth by catching a wrong-value allocator
+# bug that no other test could see; eight more feature areas — structs, pointers,
+# arrays, control flow, the preprocessor, varargs, printf and the string routines
+# — are the ones a code-generation change is most likely to break silently. The
+# runtime is the staged -O0 object in both halves, so the only difference from the
+# tests above is the level the program itself is compiled at.
+foreach(tier1_source IN ITEMS structs pointers arrays control preprocessor varargs printf strings)
+    set(tier1_expect_output "")
+    if(tier1_source STREQUAL "printf")
+        set(tier1_expect_output "signed 42.*negative -17.*mixed 1 b c 4")
+    endif()
+    if(tier1_source STREQUAL "strings")
+        set(tier1_expect_output "memmove: ababcd")
+    endif()
+
+    add_test(NAME krc_link_tier1_${tier1_source}_o1
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DLEVEL=-O1
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier1/${tier1_source}.c
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/tier1_${tier1_source}_o1_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        add_test(NAME krc_run_tier1_${tier1_source}_o1
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/tier1_${tier1_source}_o1_linked.k32
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_OUTPUT=${tier1_expect_output}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_tier1_${tier1_source}_o1 PROPERTIES
+            DEPENDS krc_link_tier1_${tier1_source}_o1)
+    endif()
+
+    add_test(NAME krc_link_kr16_tier1_${tier1_source}_o1
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DLEVEL=-O1
+                -DCRT0=${KRC_STAGE_RUNTIME_KR16}/crt0.s
+                -DHOST=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_host.kro
+                -DFILEIO=${KRC_STAGE_RUNTIME_KR16}/libkrcrt_fileio.kro
+                -DLIBCRT=${KRC_STAGE_RUNTIME_KR16}/libkrcrt.kro
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier1/${tier1_source}.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_tier1_${tier1_source}_o1.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16Host.cmake)
+    if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+        add_test(NAME krc_run_kr16_tier1_${tier1_source}_o1
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_tier1_${tier1_source}_o1.kex
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_OUTPUT=${tier1_expect_output}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_tier1_${tier1_source}_o1 PROPERTIES
+            DEPENDS krc_link_kr16_tier1_${tier1_source}_o1)
+    endif()
+endforeach()
+
 # Tier 2 -- the C++ core: classes, single inheritance, virtual dispatch. KR32-only,
 # because the plan's tier table gives Tier 2 to KR32 for v1.0 and these fixtures need
 # the C++ ABI that KR16 defers.
