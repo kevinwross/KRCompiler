@@ -369,7 +369,11 @@ int main(int argc, char** argv) {
         if (ast && !parser.had_error()) {
             krc::frontend::Sema sema(diagnostics, profile, cxx_mode);
             sema.analyze(*ast);
-            if ((dump_ir || emit_assembly || emit_object) && !diagnostics.has_errors()) {
+            // `--dump-stats` builds IR on its own: D-049 makes it the metric a pass
+            // is judged by, and asking for the numbers should not require also
+            // asking for a dump or an output.
+            if ((dump_ir || dump_stats || emit_assembly || emit_object) &&
+                !diagnostics.has_errors()) {
                 krc::irgen::CIRGen irgen(sema, *ast, profile, diagnostics);
                 auto module = irgen.generate();
                 if (module) {
@@ -439,6 +443,7 @@ int main(int argc, char** argv) {
                         // reshapes control flow is visible too.
                         std::size_t total_instructions = 0;
                         std::size_t total_blocks = 0;
+                        std::uint64_t total_frame_bytes = 0;
                         for (const auto& function : module->functions()) {
                             if (!function) {
                                 continue;
@@ -451,11 +456,24 @@ int main(int argc, char** argv) {
                             }
                             total_instructions += instructions;
                             total_blocks += function->blocks.size();
+                            // Frame bytes are S4's metric (docs/optimize.md §7), and
+                            // D-049 requires the number before the pass. The layout
+                            // is the backend's, queried rather than emitted.
+                            std::uint32_t frame = 0;
+                            if (profile.id == krc::target::TargetId::Kr16) {
+                                frame = krc::backend::Kr16Backend(*module, profile, optimization)
+                                            .frame_bytes(*function);
+                            } else {
+                                frame = krc::backend::Kr32Backend(*module, profile, optimization)
+                                            .frame_bytes(*function);
+                            }
+                            total_frame_bytes += frame;
                             std::cout << "stats\t" << function->name << "\t" << instructions
-                                      << "\t" << function->blocks.size() << "\n";
+                                      << "\t" << function->blocks.size() << "\t" << frame
+                                      << "\n";
                         }
                         std::cout << "stats\tTOTAL\t" << total_instructions << "\t"
-                                  << total_blocks << "\n";
+                                  << total_blocks << "\t" << total_frame_bytes << "\n";
                     }
                     if ((emit_assembly || emit_object) &&
                         profile.id == krc::target::TargetId::Kr16) {

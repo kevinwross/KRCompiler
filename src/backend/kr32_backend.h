@@ -24,6 +24,10 @@ public:
     [[nodiscard]] std::optional<std::string> emit(std::string& error) const;
     [[nodiscard]] const std::string& debug_info() const { return debug_info_; }
 
+    // The frame this function needs, in bytes. Public so `--dump-stats` can report
+    // the metric S4 is measured by (docs/optimize.md §7) without emitting anything.
+    [[nodiscard]] std::uint32_t frame_bytes(const ir::Function& function) const;
+
 private:
     struct FrameLayout {
         std::unordered_map<const ir::Value*, std::uint32_t> slots;

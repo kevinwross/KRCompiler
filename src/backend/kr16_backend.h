@@ -22,6 +22,9 @@ class Kr16Backend {
                 OptimizationLevel level = OptimizationLevel::O0);
 
     [[nodiscard]] std::optional<std::string> emit(std::string& error) const;
+    // The frame this function needs, in bytes, for `--dump-stats` (S4's metric).
+    [[nodiscard]] std::uint32_t frame_bytes(const ir::Function& function) const;
+
 
   private:
     struct FrameLayout {
