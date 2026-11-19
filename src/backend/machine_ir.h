@@ -20,6 +20,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,6 +50,24 @@ enum class Opcode {
     Shr,          // logical
     Sar,
     Cmp,
+    // Floating point: `.D` double, `.S` single, `FCVT` converts between them and to
+    // and from integer, `FLT.D`/`FLE.D` compare. Taken from the mnemonics the corpus
+    // emits; a representation that cannot express them cannot replace the emitter.
+    FLoadWord,           // FLOAD.W
+    FStoreWord,          // FSTORE.W
+    FAddDouble,
+    FAddSingle,
+    FSubDouble,
+    FMulDouble,
+    FMulSingle,
+    FDivDouble,
+    FCompareLess,        // FLT.D
+    FCompareLessOrEqual, // FLE.D
+    ConvertDoubleToSingle, // FCVT.S.D
+    ConvertSingleToDouble, // FCVT.D.S
+    ConvertWordToDouble,   // FCVT.D.W
+    ConvertDoubleToWord,   // FCVT.W.D
+    ConvertWordToSingle,   // FCVT.W.S
     Jump,         // JMP
     JumpIfZero,   // JZ
     JumpIfNotZero, // JNZ
@@ -69,16 +88,27 @@ enum class Opcode {
 // and stays physical through allocation; `Virtual()` is what allocation assigns.
 // `FrameOffset` is an address off the frame pointer, `Symbol` an external name.
 struct Operand {
-    enum class Kind { PhysicalRegister, VirtualRegister, Immediate, FrameOffset, Symbol };
+    enum class Kind {
+        PhysicalRegister,
+        FloatRegister,
+        VirtualRegister,
+        Immediate,
+        FrameOffset,
+        Symbol
+    };
 
     Kind kind = Kind::Immediate;
     std::int64_t value = 0;   // register number, immediate value, or frame offset
     std::string symbol;       // when kind is Symbol
 
     [[nodiscard]] static Operand physical(int number);
+    [[nodiscard]] static Operand float_register(int number);
     [[nodiscard]] static Operand virtual_register(int number);
     [[nodiscard]] static Operand immediate(std::int64_t value);
     [[nodiscard]] static Operand frame_offset(std::int64_t offset);
+    // A register-relative address: `[R7 + 12]`, and `[SP]` with an offset of zero for
+    // the frame base itself, which cannot be expressed as a frame offset.
+    [[nodiscard]] static Operand address(std::string base, std::int64_t offset);
     [[nodiscard]] static Operand named(std::string symbol);
 };
 
@@ -108,5 +138,14 @@ struct Function {
 [[nodiscard]] std::string mnemonic(Opcode opcode);
 [[nodiscard]] std::string print_instruction(const Instruction& instruction);
 [[nodiscard]] std::string print_function(const Function& function);
+
+// Parses one emitted instruction line back into the representation, or returns
+// nullopt when the line is not an instruction (a label, a directive, a comment, or
+// blank). This exists so the printer can be *checked* rather than asserted: a
+// round-trip test over real emitted assembly fails on any line shape the
+// representation cannot express, which is the only way to know that a lowering
+// written against it is not silently lossy.
+[[nodiscard]] std::optional<Instruction> parse_instruction(std::string_view line);
+
 
 }  // namespace krc::backend::machine

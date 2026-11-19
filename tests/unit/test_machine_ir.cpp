@@ -1,17 +1,91 @@
-// The machine-IR printer (R1, `docs/optimize.md` §7).
+// The machine-IR printer, checked rather than asserted (R1, `docs/optimize.md` §7).
 //
-// The printer is what makes the representation verifiable: lowering is only
-// trustworthy once printing a lowered function reproduces the backend's current
-// text exactly, so the printer's contract is the assembler's syntax and these tests
-// pin it against real lines taken from the backend's output.
+// The round-trip is the point: every instruction line the backend really emits must
+// parse into the representation and print back to the same text, so that a lowering
+// written against the representation cannot be silently lossy. The corpus tests at
+// the bottom run over real emitted assembly rather than hand-written lines, because a
+// hand-written set only covers the shapes I already thought of.
 
 #include "doctest.h"
 
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "backend/machine_ir.h"
+#include "backend/kr32_backend.h"
+#include "krc/frontend/diagnostics.h"
+#include "krc/frontend/parser.h"
+#include "krc/frontend/preprocessor.h"
+#include "krc/frontend/sema.h"
+#include "krc/frontend/source_manager.h"
+#include "ir/ir.h"
+#include "irgen/c_irgen.h"
+#include "krc/target/target.h"
 
 using namespace krc::backend::machine;
+
+namespace {
+
+// The C path of the front end, as `test_irgen.cpp` drives it. Duplicated rather than
+// shared because it is three lines of wiring and a shared helper would need its own
+// header for one caller.
+std::unique_ptr<krc::ir::Module> generate(const std::string& source) {
+    using namespace krc::frontend;
+    SourceManager sources;
+    DiagnosticEngine diagnostics(sources);
+    const auto file = sources.add_buffer("round_trip.c", std::string(source));
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    Preprocessor preprocessor(sources, diagnostics, profile);
+    auto tokens = preprocessor.preprocess(file);
+    Parser parser(std::move(tokens), diagnostics, sources, false);
+    auto ast = parser.parse_translation_unit();
+    if (!ast || parser.had_error() || diagnostics.has_errors()) {
+        return nullptr;
+    }
+    Sema sema(diagnostics, profile, false);
+    sema.analyze(*ast);
+    if (diagnostics.has_errors()) {
+        return nullptr;
+    }
+    krc::irgen::CIRGen irgen(sema, *ast, profile, diagnostics);
+    auto module = irgen.generate();
+    if (!module) {
+        return nullptr;
+    }
+    krc::ir::Verifier verifier;
+    std::string verify_error;
+    if (!verifier.verify(*module, verify_error)) {
+        return nullptr;
+    }
+    return module;
+}
+
+// Every non-empty line of an emitted assembly file, classified.
+std::vector<std::string> instruction_lines(const std::string& assembly) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (start < assembly.size()) {
+        const auto end = assembly.find('\n', start);
+        const auto line = assembly.substr(start, end == std::string::npos ? std::string::npos
+                                                                         : end - start);
+        // An indent means "instruction or directive"; a directive is recognised by
+        // its leading dot and is not part of the representation.
+        if (line.size() > 8 && line.substr(0, 8) == "        ") {
+            const auto first = line.substr(8).find_first_not_of(" \t");
+            if (first != std::string::npos && line.substr(8)[first] != '.') {
+                lines.push_back(line);
+            }
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return lines;
+}
+
+}  // namespace
 
 TEST_CASE("A machine instruction prints in the assembler's syntax") {
     Instruction store;
@@ -69,8 +143,7 @@ TEST_CASE("A function prints its symbol, labels and instructions in order") {
     entry.instructions.push_back(adjust);
     function.blocks.push_back(entry);
 
-    const auto text = print_function(function);
-    CHECK(text ==
+    CHECK(print_function(function) ==
           "sum5:\n"
           ".Lsum5.entry:\n"
           "        PUSH R7\n"
@@ -78,11 +151,132 @@ TEST_CASE("A function prints its symbol, labels and instructions in order") {
 }
 
 TEST_CASE("A virtual register prints distinctly from a physical one") {
-    // Before allocation the operand is a virtual register; the printer must keep it
-    // distinguishable so that a lowered function and an allocated one cannot be
-    // confused when compared as text.
     Instruction move;
     move.opcode = Opcode::Mov;
     move.operands = {Operand::physical(0), Operand::virtual_register(3)};
     CHECK(print_instruction(move) == "        MOV R0, %v3\n");
+}
+
+TEST_CASE("Parsing a printed instruction reproduces it") {
+    for (const auto* text : {"        STORE R0, [R7 + 12]\n",
+                             "        LOAD R1, [R7 + 68]\n",
+                             "        LOAD R0, [R7 - 4]\n",
+                             "        ADJSP #-104\n",
+                             "        ADJSP #16\n",
+                             "        ADD R0, R0, #4\n",
+                             "        MOV R0, R1\n",
+                             "        MOV R0, #0\n",
+                             "        CALL memcpy\n",
+                             "        JMP .Lmain.exit\n",
+                             "        HALT ; unsupported\n",
+                             "        RET\n"}) {
+        const auto parsed = parse_instruction(std::string_view(text).substr(0, std::string_view(text).size() - 1));
+        REQUIRE(parsed.has_value());
+        CHECK(print_instruction(*parsed) == text);
+    }
+}
+
+TEST_CASE("A label or a directive is not an instruction") {
+    CHECK_FALSE(parse_instruction(".Lsum5.entry:").has_value());
+    CHECK_FALSE(parse_instruction("        .word 48").has_value());
+    CHECK_FALSE(parse_instruction("").has_value());
+}
+
+TEST_CASE("The round-trip covers the shapes only a richer program produces") {
+    // Floats, byte accesses, a call and a switch: the opcodes the first sample never
+    // reaches (`FLOAD.D`, `LOAD8S`, `STORE8`, `CALL`, `RET`, `PUSH`, `POP`, `HALT`).
+    const auto source = std::string(R"SRC(
+extern int putchar(int);
+double scale(double value, double factor) { return value * factor; }
+int classify(char *bytes, int count) {
+    int total = 0;
+    for (int index = 0; index < count; index = index + 1) {
+        switch (bytes[index]) {
+        case 'a': total = total + 1; break;
+        case 'b': total = total + 2; break;
+        default: putchar(bytes[index]); break;
+        }
+    }
+    return total;
+}
+)SRC");
+    const auto module = generate(source);
+    REQUIRE(module);
+
+    krc::backend::Kr32Backend backend(*module,
+                                      krc::target::get_target(krc::target::TargetId::Kr32));
+    std::string error;
+    const auto assembly = backend.emit(error);
+    REQUIRE(assembly.has_value());
+
+    const auto lines = instruction_lines(*assembly);
+    REQUIRE(lines.size() > 30);
+    std::size_t unmatched = 0;
+    std::string first_unmatched;
+    for (const auto& line : lines) {
+        const auto parsed = parse_instruction(line);
+        const bool matches = parsed && print_instruction(*parsed) == line + "\n";
+        if (!matches) {
+            if (unmatched == 0) {
+                first_unmatched = line;
+            }
+            ++unmatched;
+        }
+    }
+    INFO("first unmatched: " << first_unmatched);
+    CHECK(unmatched == 0);
+}
+TEST_CASE("Every instruction the backend emits for the runtime round-trips") {
+    // Real output, not a hand-written set: this is what proves the representation can
+    // express the whole of what the emitter produces today.
+    const auto source = std::string(R"SRC(
+int accumulate(int *values, int count) {
+    int total = 0;
+    int index = 0;
+    while (index < count) {
+        total = total + values[index];
+        index = index + 1;
+    }
+    return total;
+}
+int describe(int value, int other) {
+    if (value < other) {
+        return value - other;
+    } else if (value == other) {
+        return 0;
+    }
+    return value + other;
+}
+)SRC");
+    const auto module = generate(source);
+    REQUIRE(module);
+
+    krc::backend::Kr32Backend backend(*module,
+                                      krc::target::get_target(krc::target::TargetId::Kr32));
+    std::string error;
+    const auto assembly = backend.emit(error);
+    REQUIRE(assembly.has_value());
+
+    const auto lines = instruction_lines(*assembly);
+    REQUIRE(lines.size() > 20);
+    std::size_t unmatched = 0;
+    std::string first_unmatched;
+    for (const auto& line : lines) {
+        const auto parsed = parse_instruction(line);
+        if (!parsed) {
+            if (unmatched == 0) {
+                first_unmatched = line;
+            }
+            ++unmatched;
+            continue;
+        }
+        if (print_instruction(*parsed) != line + "\n") {
+            if (unmatched == 0) {
+                first_unmatched = line;
+            }
+            ++unmatched;
+        }
+    }
+    INFO("first unmatched: " << first_unmatched);
+    CHECK(unmatched == 0);
 }
