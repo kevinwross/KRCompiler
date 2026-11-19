@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T03:34:28-08:00 — host gate (Linux ARM64)
+Revision: dc436dd
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `535dcbb`, which proves the machine representation can express everything the corpus
+emits, and `8d17123`, which converts the prologue to build machine instructions and records them
+(`src/backend/machine_ir.cpp`/`.h`, `kr32_backend.cpp`/`.h`, `tests/unit/test_machine_ir.cpp`). The
+prologue is where frame layout, stack alignment and callee-saved registers are decided, so this is the
+part of the machine IR most likely to encode an x86_64 shape; ARM64's stack discipline differs, and the
+suite passing means the existing corpus still round-trips. The count is unchanged at 889 with 191
+executed tests. Row times were 223.77 s (GCC debug), 221.44 s (Clang debug) and 815.78 s (ASan/UBSan).
+Rows were configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at
+a time, with no warnings. No disturbances.
+
 2026-11-19T03:06:24-08:00 — host gate (Linux ARM64)
 Revision: c00e3bd
 
