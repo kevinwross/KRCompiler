@@ -2008,10 +2008,13 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
     case ir::Opcode::CondBr:
         if (is_wide(instruction.operands[0]->type)) {
             load_wide(out, function, layout, instruction.operands[0]);
-            out += "        OR R0, R0, R1\n";
-            out += "        CMP R0, #0\n";
-            out += "        JNZ " + block_label(function, *instruction.successors[0]) + "\n";
-            out += "        JMP " + block_label(function, *instruction.successors[1]) + "\n";
+            emit_binary(out, machine::Opcode::Or, machine::Operand::physical(0),
+                        machine::Operand::physical(0), machine::Operand::physical(1));
+            emit_compare(out, machine::Operand::physical(0), machine::Operand::immediate(0));
+            emit_jump(out, machine::Opcode::JumpIfNotZero,
+                      block_label(function, *instruction.successors[0]));
+            emit_jump(out, machine::Opcode::Jump,
+                      block_label(function, *instruction.successors[1]));
             break;
         }
         if (const auto* condition =
@@ -2287,8 +2290,8 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         }
         if (instruction.opcode == ir::Opcode::Invoke &&
             !instruction.successors.empty() && instruction.successors[0]) {
-            out += "        JMP " +
-                   block_label(function, *instruction.successors[0]) + "\n";
+            emit_jump(out, machine::Opcode::Jump,
+                      block_label(function, *instruction.successors[0]));
         }
         break;
     }
