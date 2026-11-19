@@ -447,14 +447,17 @@ survives CFG simplification).
 All three exist, in `tests/unit/test_irgen.cpp` and `tests/unit/test_mem2reg.cpp` rather than in a
 `test_passes.cpp`, because the pass tests were written where the fixtures already were. The
 `volatile` one **builds its IR by hand**, for a narrower reason than first recorded here. `IRGen`
-does set the flag for a declared volatile object, a volatile global, and a member reached through a
-volatile-qualified struct pointer — `krc_volatile_store_ir` and `krc_volatile_member_ir` assert
-exactly that, and they pass. What it does **not** do is mark a plain dereference through a
-volatile-qualified pointer: `volatile int *p; *p` emits an ordinary load, because the rvalue
-dereference in `emit_unary` passes `false` and the lvalue one returns the address without the
-qualifier. That is the gap, recorded in `implementation.md` (`2026-11-19T00:55`) with the reason it
-is not a one-line fix: reading the pointee qualifier from `Sema` during IR generation breaks Sema's
-state, so it has to be carried from analysis instead.
+does set the flag for a declared volatile object, a volatile global, a member reached through a
+volatile-qualified struct pointer, and — since `2026-11-19T01:08:56` — a plain dereference through a
+volatile-qualified pointer. `krc_volatile_store_ir`, `krc_volatile_member_ir` and the
+pointer-dereference test assert all four, the last with a plain-pointer negative control so that
+marking every access cannot make it pass.
+
+Two cases remain outside the qualifier: an access whose operand is not an identifier, such as
+`*(p + 1)` through a volatile-qualified pointer, because the qualifier would have to be recovered
+from an arbitrary expression's type. No pass removes or reorders a load or store today, so nothing
+miscompiles; closing it properly means putting the qualifier on the IR type or the AST. Recorded in
+`implementation.md` (`2026-11-19T01:08:56`).
 
 **Tier 2 — shape assertions on emitted assembly.** Structural predicates, not golden bytes:
 "no `STORE Rn, [R7+k]` is followed by a `LOAD Rm, [R7+k]` in this function", "this `condbr`

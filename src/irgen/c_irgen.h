@@ -69,6 +69,9 @@ private:
     void push_scope();
     void pop_scope();
     [[nodiscard]] LocalBinding* lookup_local(std::string_view name);
+    // Whether `*operand` is a volatile access. The qualifier is on the declared
+    // pointee type and the IR type carries none, so it is read from the binding.
+    [[nodiscard]] bool dereference_is_volatile(const frontend::AstNode& operand);
     [[nodiscard]] ir::Function* lookup_function(std::string_view name) const;
     [[nodiscard]] ir::GlobalVariable* lookup_global(std::string_view name) const;
     void declare_local(std::string name, LocalBinding binding);

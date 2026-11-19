@@ -692,6 +692,41 @@ int unused_then_used(int value) {
     CHECK(verifier.verify(*generated.module, verify_error));
 }
 
+TEST_CASE("A dereference through a volatile pointer is a volatile access") {
+    // The qualifier is on the declared pointee type, and the IR type carries none,
+    // so IRGen has to read it from the binding. The negative control in the same
+    // test is what makes the assertion mean something: an ordinary pointer's
+    // dereference must stay ordinary.
+    const auto volatile_case = generate(R"SRC(
+int through_volatile(volatile int *counter) {
+    int observed = *counter;
+    *counter = observed + 1;
+    return observed;
+}
+)SRC");
+    CHECK_FALSE(volatile_case.had_errors);
+    REQUIRE(volatile_case.module);
+    CHECK(volatile_case.verifier_error.empty());
+    std::ostringstream volatile_ir;
+    krc::ir::print_module(*volatile_case.module, volatile_ir);
+    const auto text = volatile_ir.str();
+    CHECK(text.find(", volatile") != std::string::npos);
+
+    const auto plain_case = generate(R"SRC(
+int through_plain(int *counter) {
+    int observed = *counter;
+    *counter = observed + 1;
+    return observed;
+}
+)SRC");
+    CHECK_FALSE(plain_case.had_errors);
+    REQUIRE(plain_case.module);
+    CHECK(plain_case.verifier_error.empty());
+    std::ostringstream plain_ir;
+    krc::ir::print_module(*plain_case.module, plain_ir);
+    CHECK(plain_ir.str().find(", volatile") == std::string::npos);
+}
+
 TEST_CASE("Dead code elimination keeps a volatile access") {
     // The negative test docs/optimize.md §9 tier 1 names: a `volatile` access is
     // an observable effect, so DCE must not remove it even when nothing reads the

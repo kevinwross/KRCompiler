@@ -2,6 +2,32 @@
 
 namespace krc::irgen {
 
+namespace {
+
+// The pointee qualifier of a declared pointer type, if it has one.
+bool pointer_to_volatile(const frontend::TypePtr& type) {
+    return type && type->kind == frontend::TypeKind::Pointer && type->element &&
+           type->element->is_volatile;
+}
+
+}  // namespace
+
+bool CIRGen::dereference_is_volatile(const frontend::AstNode& operand) {
+    if (operand.kind != frontend::AstKind::Identifier) {
+        return false;
+    }
+    if (auto* local = lookup_local(operand.text)) {
+        return pointer_to_volatile(local->frontend_type);
+    }
+    const auto global = globals_.find(operand.text);
+    if (global == globals_.end()) {
+        return false;
+    }
+    const auto frontend = global_frontend_types_.find(global->second);
+    return frontend != global_frontend_types_.end() &&
+           pointer_to_volatile(frontend->second);
+}
+
 CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
     if (expression.children.empty() || !expression.children.front()) {
         return {};
@@ -26,7 +52,12 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
             return {};
         }
         const auto type = pointer.type->element;
-        return {builder_.create_load(type, pointer.value, false, 0, "deref"), type};
+        // A dereference through a volatile-qualified pointer is a volatile access.
+        return {builder_.create_load(
+                    type, pointer.value,
+                    dereference_is_volatile(*expression.children.front()), 0,
+                    "deref"),
+                type};
     }
     if (expression.text == "placement_new") {
         if (expression.children.size() < 2 || !expression.children[0] ||
@@ -1101,7 +1132,13 @@ CIRGen::Expression CIRGen::emit_lvalue(const frontend::AstNode& expression) {
             error(expression.location, "dereference of a non-pointer lvalue");
             return {};
         }
-        return {pointer.value, pointer.type->element};
+        Expression reference;
+        reference.value = pointer.value;
+        reference.type = pointer.type->element;
+        // `*p = value` through a volatile-qualified pointer is a volatile store.
+        reference.is_volatile =
+            dereference_is_volatile(*expression.children.front());
+        return reference;
     }
     if (expression.kind == frontend::AstKind::SubscriptExpression) {
         if (expression.children.size() < 2) {
