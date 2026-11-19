@@ -497,6 +497,28 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T07:35:18-08:00 — host gate (Linux ARM64)
+Revision: 2128dd5
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `9b9b316`, which converts the aggregate copy loops, the landing pad and `VaStart`,
+`14cc396`, which proposes ADR `0051-allocate-on-machine-form.md`, and `2ed4101`, which records data flow
+beside the printed operands (`src/backend/kr32_backend.cpp`/`.h`, `machine_ir.h`,
+`tests/unit/test_machine_ir.cpp`). `VaStart` and the landing pad are the two most ABI-shaped sites in
+the migration — varargs layouts and exception-landing state are defined per target, and ARM64's varargs
+convention differs from x86_64's in the register/stack split — so a pass here is the clearest evidence
+yet that the machine form is not carrying one host's convention. ADR 0051 is present, which the
+allocation decision requires. The count is unchanged at 889 with 191 executed tests. Row times were
+223.46 s (GCC debug), 220.57 s (Clang debug) and 819.47 s (ASan/UBSan). Rows were configured and built
+clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No
+disturbances.
+
 2026-11-19T07:07:03-08:00 — host gate (Linux ARM64)
 Revision: b7a5373
 
