@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T17:23:45-08:00 — host gate (Linux ARM64)
+Revision: 3ff016f
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `dbb5faa`, which moves the allocation candidate filter out of the KR32 backend and into
+the allocator itself: `src/backend/register_allocator.cpp` +80, `register_allocator.h` +17,
+`kr32_backend.cpp` −81. It is a refactor rather than new behaviour, but it moves a target-specific
+decision into shared code, which is the direction the architecture boundary forbids — worth noting for
+review even though nothing here can test the boundary. The count is unchanged at 843 with 168 executed
+tests, as expected for a move with no new fixture. Test times were 85.62 s (GCC debug), 79.39 s (Clang
+debug) and 337.73 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at
+`-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T15:51:12-08:00 — host gate (Linux ARM64)
 Revision: 8abcb4f
 
