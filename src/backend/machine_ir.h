@@ -35,6 +35,7 @@ enum class Opcode {
     Mov,
     Load,
     Load8S,
+    Load8U,   // LOAD8U: unsigned byte load
     Store,
     Store8,
     LoadFloat,    // FLOAD.D
@@ -117,6 +118,9 @@ struct Operand {
     // A register-relative address: `[R7 + 12]`, and `[SP]` with an offset of zero for
     // the frame base itself, which cannot be expressed as a frame offset.
     [[nodiscard]] static Operand address(std::string base, std::int64_t offset);
+    // `[<base>]` with no displacement. Distinct from `address(base, 0)`, which prints
+    // `[<base> + 0]`: the emitter writes both forms and they are different text.
+    [[nodiscard]] static Operand bare_address(std::string base);
     [[nodiscard]] static Operand named(std::string symbol);
 };
 
@@ -159,6 +163,11 @@ struct Function {
 // string today. Returns nullopt for a mnemonic the representation does not know,
 // which lets a caller fall back rather than guess.
 [[nodiscard]] std::optional<Opcode> mnemonic_to_opcode(std::string_view name);
+
+// One operand in the assembler's syntax. Public so a caller that must emit a
+// mnemonic the representation does not know can still produce the right text rather
+// than substituting a different instruction.
+[[nodiscard]] std::string print_operand(const Operand& operand);
 
 
 }  // namespace krc::backend::machine

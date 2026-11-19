@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <filesystem>
+#include <iostream>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -348,15 +349,51 @@ int describe(int value, int other) {
             function_recorded += block.instructions.size();
         }
         recorded += function_recorded;
-        INFO("  " << function->name << ": recorded " << function_recorded);
+        // Temporary diagnostic: which mnemonics of this function are unrecorded.
+        const auto marker = "\n" + function->name + ":\n";
+        const auto start = assembly->find(marker);
+        if (start != std::string::npos) {
+            auto end = assembly->find("\n        .text\n", start);
+            if (end == std::string::npos) {
+                end = assembly->size();
+            }
+            const auto span = assembly->substr(start, end - start);
+            const auto lines = instruction_lines(span);
+            std::size_t position = 0;
+            std::string missing;
+            for (const auto& line : lines) {
+                bool found = false;
+                for (const auto& block : machine_function->blocks) {
+                    for (const auto& instruction : block.instructions) {
+                        if (print_instruction(instruction) == line + "\n") {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break;
+                    }
+                }
+                if (!found) {
+                    missing += " " + line.substr(8, line.find(' ', 8) - 8);
+                }
+            }
+            // Printed only when something is missing: the diagnostic is the list of
+            // sites still emitting raw text, which is the remaining conversion work.
+            if (!missing.empty()) {
+                std::cerr << "[" << function->name << "] recorded " << function_recorded
+                          << " of " << lines.size() << "; unrecorded:" << missing << "\n";
+            }
+            static_cast<void>(position);
+        }
     }
     const auto emitted = instruction_lines(*assembly).size();
     INFO("recorded " << recorded << " of " << emitted << " instructions");
     REQUIRE(emitted > 40);
-    // A floor rather than a target: 86 of 130 at the time of writing, so the ratio is
-    // a regression guard and it is raised as the conversion completes. The gap is
-    // named in implementation.md rather than left implicit.
-    CHECK(recorded * 5 >= emitted * 3);
+    // Complete for this program: every instruction of both functions is recorded, so
+    // the machine form is the output rather than a description of it. A regression
+    // here means a converted site was reverted.
+    CHECK(recorded == emitted);
 }
 TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips") {
     // The corpus-wide claim, not a sample: if any file emits an instruction the

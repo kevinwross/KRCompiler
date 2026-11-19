@@ -42,6 +42,12 @@ Operand Operand::frame_offset(std::int64_t offset) {
     return operand;
 }
 
+Operand Operand::bare_address(std::string base) {
+    auto operand = Operand::address(std::move(base), 0);
+    operand.displacement = false;
+    return operand;
+}
+
 Operand Operand::address(std::string base, std::int64_t offset) {
     Operand operand;
     operand.kind = Kind::FrameOffset;
@@ -65,6 +71,8 @@ std::string mnemonic(Opcode opcode) {
         return "LOAD";
     case Opcode::Load8S:
         return "LOAD8S";
+    case Opcode::Load8U:
+        return "LOAD8U";
     case Opcode::Store:
         return "STORE";
     case Opcode::Store8:
@@ -199,12 +207,14 @@ std::string format_operand(const Operand& operand) {
 
 }  // namespace
 
+std::string print_operand(const Operand& operand) { return format_operand(operand); }
+
 std::string print_instruction(const Instruction& instruction) {
     std::string text = "        ";
     text += mnemonic(instruction.opcode);
     for (std::size_t index = 0; index < instruction.operands.size(); ++index) {
         text += index == 0 ? " " : ", ";
-        text += format_operand(instruction.operands[index]);
+        text += print_operand(instruction.operands[index]);
     }
     if (!instruction.comment.empty()) {
         text += " ; ";
@@ -238,7 +248,7 @@ namespace {
 std::optional<Opcode> opcode_of(std::string_view name) {
     static const std::pair<std::string_view, Opcode> table[] = {
         {"MOV", Opcode::Mov},           {"LOAD", Opcode::Load},
-        {"LOAD8S", Opcode::Load8S},     {"STORE", Opcode::Store},
+        {"LOAD8S", Opcode::Load8S}, {"LOAD8U", Opcode::Load8U},     {"STORE", Opcode::Store},
         {"STORE8", Opcode::Store8},     {"FLOAD.D", Opcode::LoadFloat},
         {"FSTORE.D", Opcode::StoreFloat}, {"LEA", Opcode::Lea},
         {"ADD", Opcode::Add},           {"SUB", Opcode::Sub},

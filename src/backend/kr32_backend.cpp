@@ -1119,6 +1119,40 @@ void Kr32Backend::emit_store(std::string& out, const machine::Operand& source,
     emit_machine(out, store);
 }
 
+void Kr32Backend::emit_store_opcode(std::string& out, std::string_view mnemonic,
+                                    const machine::Operand& source,
+                                    const machine::Operand& address) const {
+    const auto opcode = machine::mnemonic_to_opcode(mnemonic);
+    if (!opcode) {
+        // An unknown mnemonic must produce the right text, not a substitute: printing
+        // `STORE` where the emitter chose `STORE8` would be a silent miscompile, and
+        // the coverage test catches the resulting gap.
+        out += "        " + std::string(mnemonic) + " " + machine::print_operand(source) +
+               ", " + machine::print_operand(address) + "\n";
+        return;
+    }
+    machine::Instruction store;
+    store.opcode = *opcode;
+    store.operands = {source, address};
+    emit_machine(out, store);
+}
+
+void Kr32Backend::emit_load_opcode(std::string& out, std::string_view mnemonic,
+                                   const machine::Operand& destination,
+                                   const machine::Operand& address) const {
+    const auto opcode = machine::mnemonic_to_opcode(mnemonic);
+    if (!opcode) {
+        out += "        " + std::string(mnemonic) + " " +
+               machine::print_operand(destination) + ", " + machine::print_operand(address) +
+               "\n";
+        return;
+    }
+    machine::Instruction load;
+    load.opcode = *opcode;
+    load.operands = {destination, address};
+    emit_machine(out, load);
+}
+
 void Kr32Backend::emit_call(std::string& out, const std::string& symbol) const {
     machine::Instruction call;
     call.opcode = machine::Opcode::Call;
@@ -1699,7 +1733,13 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             out += "        HALT ; missing alloca layout\n";
             return;
         }
-        out += "        LEA R0, [R7 + " + std::to_string(object->second) + "]\n";
+        {
+            machine::Instruction lea;
+            lea.opcode = machine::Opcode::Lea;
+            lea.operands = {machine::Operand::physical(0),
+                            machine::Operand::frame_offset(object->second)};
+            emit_machine(out, lea);
+        }
         store_value(out, function, layout, instruction, "R0");
         break;
     }
@@ -1717,8 +1757,9 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         if (const auto object = frame_object(instruction.operands[0]);
             object && scalar_result) {
             const auto destination = result_register(instruction);
-            out += "        " + load_opcode(instruction.type) + " " + destination +
-                   ", [R7 + " + std::to_string(*object) + "]\n";
+            emit_load_opcode(out, load_opcode(instruction.type),
+                             register_from_name(destination),
+                             machine::Operand::frame_offset(*object));
             store_value(out, function, layout, instruction, destination);
             break;
         }
@@ -1752,8 +1793,9 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             // register, which is one instruction either way to compute and one
             // fewer to place.
             const auto destination = result_register(instruction);
-            out += "        " + load_opcode(instruction.type) + " " + destination +
-                   ", [R0]\n";
+            emit_load_opcode(out, load_opcode(instruction.type),
+                             register_from_name(destination),
+                             machine::Operand::bare_address("R0"));
             store_value(out, function, layout, instruction, destination);
         }
         break;
@@ -1785,17 +1827,22 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         } else if (is_wide(instruction.operands[0]->type)) {
             load_wide(out, function, layout, instruction.operands[0]);
             load_value(out, function, layout, instruction.operands[1], "R2");
-            out += "        STORE R0, [R2]\n";
-            out += "        STORE R1, [R2 + 4]\n";
+            emit_store(out, machine::Operand::physical(0),
+                       machine::Operand::bare_address("R2"));
+            emit_store(out, machine::Operand::physical(1),
+                       machine::Operand::address("R2", 4));
         } else if (const auto object = frame_object(instruction.operands[1]); object) {
             // Storing through a frame slot is an addressing mode too.
             load_value(out, function, layout, instruction.operands[0], "R0");
-            out += "        " + store_opcode(instruction.operands[0]->type) +
-                   " R0, [R7 + " + std::to_string(*object) + "]\n";
+            emit_store_opcode(out, store_opcode(instruction.operands[0]->type),
+                              machine::Operand::physical(0),
+                              machine::Operand::frame_offset(*object));
         } else {
             load_value(out, function, layout, instruction.operands[0], "R0");
             load_value(out, function, layout, instruction.operands[1], "R1");
-            out += "        " + store_opcode(instruction.operands[0]->type) + " R0, [R1]\n";
+            emit_store_opcode(out, store_opcode(instruction.operands[0]->type),
+                              machine::Operand::physical(0),
+                              machine::Operand::bare_address("R1"));
         }
         break;
     case ir::Opcode::GetElementPtr: {
@@ -1945,9 +1992,15 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 load_value(out, function, layout, condition->operands[1], "R1");
                 emit_compare(out, machine::Operand::physical(0), machine::Operand::physical(1));
             }
-            out += "        " + condition_for(condition->icmp_predicate) + " " +
-                   block_label(function, *instruction.successors[0]) + "\n";
-            out += "        JMP " + block_label(function, *instruction.successors[1]) + "\n";
+            if (const auto opcode = machine::mnemonic_to_opcode(
+                    condition_for(condition->icmp_predicate))) {
+                emit_jump(out, *opcode, block_label(function, *instruction.successors[0]));
+            } else {
+                out += "        " + condition_for(condition->icmp_predicate) + " " +
+                       block_label(function, *instruction.successors[0]) + "\n";
+            }
+            emit_jump(out, machine::Opcode::Jump,
+                      block_label(function, *instruction.successors[1]));
             break;
         }
         load_value(out, function, layout, instruction.operands[0], "R0");

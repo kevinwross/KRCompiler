@@ -161,6 +161,14 @@ private:
     void emit_call(std::string& out, const std::string& symbol) const;
     void emit_store(std::string& out, const machine::Operand& source,
                     const machine::Operand& address) const;
+    // A store whose mnemonic is chosen by the stored type (`STORE` or `STORE8`).
+    void emit_store_opcode(std::string& out, std::string_view mnemonic,
+                           const machine::Operand& source,
+                           const machine::Operand& address) const;
+    // A load whose mnemonic is chosen by the loaded type (`LOAD`, `LOAD8S`, ...).
+    void emit_load_opcode(std::string& out, std::string_view mnemonic,
+                          const machine::Operand& destination,
+                          const machine::Operand& address) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its
