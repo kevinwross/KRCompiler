@@ -710,7 +710,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if (syntax_only || preprocess_only || dump_ast || dump_ir || emit_assembly || emit_object) {
+    // `--dump-stats` counts as a request: D-049 makes it the metric every pass is
+    // judged by, so asking for the numbers is a complete invocation rather than a
+    // missing output.
+    if (syntax_only || preprocess_only || dump_ast || dump_ir || dump_stats ||
+        emit_assembly || emit_object) {
         return 0;
     }
 
