@@ -497,6 +497,32 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T09:15:25-08:00 — host gate (Linux ARM64), milestone: R1's foundation
+Revision: ef60110
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-gcc-release  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, Windows x64, native Linux x64
+```
+
+The ARM64 row for the "R1's foundation" milestone the Windows/WSL record above closes at `2b602f5` —
+that record names Linux ARM64 as unverified, and this block answers it with the release row included,
+as a milestone gate requires. `ef60110` is the milestone revision plus documentation only.
+
+The milestone's own claim is that fifteen backend commits "change nothing", asserted by an unchanged
+count and unchanged `--dump-stats` figures. This host can test that claim from the other side: it is a
+second architecture running the same 889 tests over the same refactor, with a second front end and a
+sanitizer. I re-ran the measurement rather than trusting the record: `krc --target=kr32 -O1
+--dump-stats targets/kr32/runtime/libc.c` on this host prints `TOTAL 9896 1690 22320` — **identical to
+the figures above**, which is the evidence that the conversion is target-neutral rather than
+x86-shaped. The release row is the new information: a warning-free optimised ARM64 build of the
+machine-form work, all 889 passing in 88.25 s. Debug times were 227.13 s (GCC), 221.87 s (Clang) and
+825.96 s (ASan/UBSan). All four rows were configured and built clean from a deleted `build/` at `-j2`
+with `ulimit -s unlimited`, one at a time, no warnings, no disturbances.
+
 2026-11-19T08:32:19-08:00 — host gate (Linux ARM64)
 Revision: 4975324
 
