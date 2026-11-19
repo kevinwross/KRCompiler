@@ -302,6 +302,59 @@ TEST_CASE("The prologue conversion records the same instructions it prints") {
     INFO("recorded " << recorded_count << " of " << emitted_count << " instructions");
     CHECK(recorded_count * 10 >= emitted_count * 8);
 }
+TEST_CASE("The recording covers most of a realistic function") {
+    // The conversion's progress meter. A simple function records completely; the
+    // interesting number is what a realistic one records, because that is how much of
+    // the emitter a machine-level allocation would actually be able to see.
+    const auto source = std::string(R"SRC(
+extern int putchar(int);
+int accumulate(int *values, int count) {
+    int total = 0;
+    for (int index = 0; index < count; index = index + 1) {
+        total = total + values[index];
+    }
+    return total;
+}
+int describe(int value, int other) {
+    if (value < other) {
+        return value - other;
+    } else if (value == other) {
+        putchar(value);
+        return 0;
+    }
+    return value + other;
+}
+)SRC");
+    const auto module = generate(source);
+    REQUIRE(module);
+
+    krc::backend::Kr32Backend backend(*module,
+                                      krc::target::get_target(krc::target::TargetId::Kr32));
+    std::string error;
+    const auto assembly = backend.emit(error);
+    REQUIRE(assembly.has_value());
+
+    std::size_t recorded = 0;
+    for (const auto& function : module->functions()) {
+        if (!function || function->declaration) {
+            continue;
+        }
+        const auto* machine_function = backend.machine_function(function->name);
+        if (machine_function == nullptr) {
+            continue;
+        }
+        for (const auto& block : machine_function->blocks) {
+            recorded += block.instructions.size();
+        }
+    }
+    const auto emitted = instruction_lines(*assembly).size();
+    INFO("recorded " << recorded << " of " << emitted << " instructions");
+    REQUIRE(emitted > 40);
+    // A floor rather than a target: 86 of 130 at the time of writing, so the ratio is
+    // a regression guard and it is raised as the conversion completes. The gap is
+    // named in implementation.md rather than left implicit.
+    CHECK(recorded * 5 >= emitted * 3);
+}
 TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips") {
     // The corpus-wide claim, not a sample: if any file emits an instruction the
     // representation cannot express, this fails and names the line.

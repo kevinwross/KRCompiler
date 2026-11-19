@@ -1219,14 +1219,27 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                 integer_parameter++;
             }
         } else if (integer_parameter < 4) {
-            out += "        STORE " + register_name(integer_parameter) + ", [R7 + " +
-                   std::to_string(slot->second) + "]\n";
+            // A register parameter arrives in its ABI register and is stored to its
+            // slot: the last site in the prologue, and the one that takes a simple
+            // function's coverage to the whole of its text.
+            machine::Instruction store;
+            store.opcode = machine::Opcode::Store;
+            store.operands = {register_from_name(register_name(integer_parameter)),
+                              machine::Operand::frame_offset(slot->second)};
+            emit_machine(out, store);
             integer_parameter++;
         } else {
-            out += "        LOAD R0, [R7 + " + std::to_string(layout.frame_size + 8 +
-                                                               (integer_parameter - 4) * 4) +
-                   "]\n";
-            out += "        STORE R0, [R7 + " + std::to_string(slot->second) + "]\n";
+            machine::Instruction load;
+            load.opcode = machine::Opcode::Load;
+            load.operands = {machine::Operand::physical(0),
+                             machine::Operand::frame_offset(
+                                 layout.frame_size + 8 + (integer_parameter - 4) * 4)};
+            emit_machine(out, load);
+            machine::Instruction store;
+            store.opcode = machine::Opcode::Store;
+            store.operands = {machine::Operand::physical(0),
+                              machine::Operand::frame_offset(slot->second)};
+            emit_machine(out, store);
             integer_parameter++;
         }
     }
