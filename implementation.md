@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T03:06:24-08:00 — host gate (Linux ARM64)
+Revision: c00e3bd
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `633aa89`, which adds the machine-level representation R1 needs
+(`src/backend/machine_ir.cpp`, `machine_ir.h`, `CMakeLists.txt`), and `ab7d38a`, which checks that
+representation against real emitter output (`tests/unit/test_machine_ir.cpp`). `CMakeLists.txt` and
+`src/backend/` are boundary files, and a machine IR is the largest structural change this host has
+built since the optimiser arrived — it sits between IR and the emitter, so a width or register
+assumption written into it is exactly what a second architecture exposes. The count is unchanged at 889
+with 191 executed tests, because the new unit tests run inside the existing doctest binary. Row times
+were 226.14 s (GCC debug), 220.34 s (Clang debug) and 814.29 s (ASan/UBSan), against the serial
+baseline. Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T02:34:08-08:00 — host gate (Linux ARM64), milestone: the optimisation pass, serial
 Revision: f9ce06e
 
