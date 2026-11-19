@@ -1,8 +1,7 @@
-# Handoff — 2026-11-29
+# Handoff — 2026-11-19
 
 Written 2026-11-19 at revision `085a8f5` by the session that completed the optimisation
-programme. Named for the 29th as requested; the file dates from the 19th, and every number in
-it was true at that revision. **Re-run §9 before trusting it.**
+programme. Every number in it was true at that revision. **Re-run §9 before trusting it.**
 
 ---
 
