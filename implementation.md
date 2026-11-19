@@ -497,6 +497,28 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T08:03:34-08:00 — host gate (Linux ARM64)
+Revision: 8b61da4
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `769e03b`, which measures register pressure from the recorded data flow (new
+`src/backend/machine_liveness.cpp`/`.h`, `tests/unit/test_machine_liveness.cpp`, `CMakeLists.txt`,
+`tests/CMakeLists.txt`), and `b51e443`, which plans the allocation on the machine form and verifies it
+over the corpus. This is the first machine-IR step whose failure mode is allocation quality rather than
+correctness — register pressure and liveness computed over the recorded form, then an allocation planned
+on it. ARM64 has 31 general registers against x86_64's 16, so a pressure measurement taken on this host
+is not the number the other hosts will see; the gate confirms the analysis is correct, not that its
+conclusions transfer. The count is unchanged at 889 with 191 executed tests because the new unit tests
+share the doctest binary. Row times were 230.68 s (GCC debug), 222.75 s (Clang debug) and 822.17 s
+(ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T07:35:18-08:00 — host gate (Linux ARM64)
 Revision: 2128dd5
 
