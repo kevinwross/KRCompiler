@@ -319,6 +319,15 @@ Kr32Backend::FrameLayout Kr32Backend::layout_function(const ir::Function& functi
             if (!instruction->type || ir::is_void(instruction->type)) {
                 continue;
             }
+            // A value the allocator keeps in a register never touches its slot:
+            // `load_value` and `store_value` both take the register path for it.
+            // Not reserving one is the cheapest frame-byte saving available, and
+            // it needs no liveness argument of its own — the allocator already
+            // made that decision.
+            if (allocated_registers_.find(instruction.get()) !=
+                allocated_registers_.end()) {
+                continue;
+            }
             const auto alignment = static_cast<std::uint32_t>(align_of(instruction->type));
             offset = static_cast<std::uint32_t>(round_up(offset, alignment));
             layout.slots.emplace(instruction.get(), offset);
@@ -900,6 +909,10 @@ void Kr32Backend::emit_intrinsic(std::string& out, const ir::Function& function,
 }
 
 std::uint32_t Kr32Backend::frame_bytes(const ir::Function& function) const {
+    // The same order `emit` uses: the allocation decides which values need a slot,
+    // so reporting the layout without it would report a frame the compiler does not
+    // emit.
+    compute_allocation(function);
     return layout_function(function).frame_size;
 }
 
@@ -978,6 +991,11 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
         if (function->declaration) {
             continue;
         }
+        // The allocation comes first: a value that lives in a register needs no
+        // frame slot, and assigning one anyway is the cheapest frame bytes there
+        // are to give back. `emit_function` computes it again, which is harmless
+        // because the pass is deterministic and clears its map first.
+        compute_allocation(*function);
         const auto layout = layout_function(*function);
         emit_function(out, *function, layout);
     }
