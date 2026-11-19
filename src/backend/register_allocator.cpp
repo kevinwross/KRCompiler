@@ -225,4 +225,84 @@ bool allocate_registers(const ir::Function& function,
     return true;
 }
 
+void keep_local_allocations(const ir::Function& function,
+                            const RegisterAllocation& allocation,
+                            std::unordered_map<const ir::Value*, std::uint32_t>& kept) {
+    kept.clear();
+    for (const auto& block : function.blocks) {
+        if (!block) {
+            continue;
+        }
+        for (std::size_t index = 0; index < block->instructions.size(); ++index) {
+            const auto& instruction = block->instructions[index];
+            if (!instruction) {
+                continue;
+            }
+            const auto found = allocation.registers.find(instruction.get());
+            if (found == allocation.registers.end()) {
+                continue;
+            }
+            // A word-sized scalar: an integer or a pointer. A wide value travels
+            // as a register pair and an aggregate is copied word by word.
+            if (!instruction->type ||
+                (instruction->type->kind != ir::TypeKind::Integer &&
+                 instruction->type->kind != ir::TypeKind::Pointer) ||
+                instruction->type->bits > 32) {
+                continue;
+            }
+            if (instruction->opcode == ir::Opcode::Phi ||
+                instruction->opcode == ir::Opcode::Alloca) {
+                continue;
+            }
+            // Every use must be in the defining block...
+            bool local = true;
+            for (const auto& other : function.blocks) {
+                if (!other) {
+                    continue;
+                }
+                for (const auto& user : other->instructions) {
+                    if (!user) {
+                        continue;
+                    }
+                    for (const auto* operand : user->operands) {
+                        if (operand == instruction.get() && other.get() != block.get()) {
+                            local = false;
+                        }
+                    }
+                }
+            }
+            if (!local) {
+                continue;
+            }
+            // ...and no call may sit between the definition and its last use,
+            // because nothing saves a register across a call on either target.
+            std::size_t last_use = index;
+            for (std::size_t user_index = 0; user_index < block->instructions.size();
+                 ++user_index) {
+                const auto& user = block->instructions[user_index];
+                if (!user) {
+                    continue;
+                }
+                for (const auto* operand : user->operands) {
+                    if (operand == instruction.get() && user_index > last_use) {
+                        last_use = user_index;
+                    }
+                }
+            }
+            bool crosses_call = false;
+            for (std::size_t between = index; between < last_use; ++between) {
+                const auto& user = block->instructions[between];
+                if (user && (user->opcode == ir::Opcode::Call ||
+                             user->opcode == ir::Opcode::Invoke)) {
+                    crosses_call = true;
+                }
+            }
+            if (crosses_call) {
+                continue;
+            }
+            kept.emplace(instruction.get(), found->second);
+        }
+    }
+}
+
 }  // namespace krc::backend

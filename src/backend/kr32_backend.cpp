@@ -1277,87 +1277,9 @@ void Kr32Backend::compute_allocation(const ir::Function& function) const {
     if (!allocate_registers(function, allowed, allocation, error)) {
         return;
     }
-    for (const auto& block : function.blocks) {
-        if (!block) {
-            continue;
-        }
-        for (std::size_t index = 0; index < block->instructions.size(); ++index) {
-            const auto& instruction = block->instructions[index];
-            if (!instruction) {
-                continue;
-            }
-            const auto found = allocation.registers.find(instruction.get());
-            if (found == allocation.registers.end()) {
-                continue;
-            }
-            // A word-sized scalar is a candidate: an integer or a pointer, which
-            // is one word on this target. A wide value travels as the R0/R1 pair
-            // and an aggregate is copied word by word, so neither is.
-            if (!instruction->type ||
-                (instruction->type->kind != ir::TypeKind::Integer &&
-                 instruction->type->kind != ir::TypeKind::Pointer) ||
-                instruction->type->bits > 32) {
-                continue;
-            }
-            if (instruction->opcode == ir::Opcode::Phi ||
-                instruction->opcode == ir::Opcode::Alloca) {
-                continue;
-            }
-            // Every use must be in this block and no call may sit between the
-            // definition and its last use: the allocator liveness is per block and
-            // does not model a call clobbering a register.
-            std::size_t last_use = index;
-            bool local = true;
-            for (const auto& other : function.blocks) {
-                if (!other) {
-                    continue;
-                }
-                for (const auto& user : other->instructions) {
-                    if (!user) {
-                        continue;
-                    }
-                    for (const auto* operand : user->operands) {
-                        if (operand != instruction.get()) {
-                            continue;
-                        }
-                        if (other.get() != block.get()) {
-                            local = false;
-                        } else {
-                            static_cast<void>(0);
-                        }
-                    }
-                }
-            }
-            if (!local) {
-                continue;
-            }
-            for (std::size_t user_index = 0; user_index < block->instructions.size();
-                 ++user_index) {
-                const auto& user = block->instructions[user_index];
-                if (!user) {
-                    continue;
-                }
-                for (const auto* operand : user->operands) {
-                    if (operand == instruction.get() && user_index > last_use) {
-                        last_use = user_index;
-                    }
-                }
-            }
-            bool crosses_call = false;
-            for (std::size_t between = index; between < last_use; ++between) {
-                const auto& user = block->instructions[between];
-                if (user && (user->opcode == ir::Opcode::Call ||
-                             user->opcode == ir::Opcode::Invoke)) {
-                    crosses_call = true;
-                }
-            }
-            if (crosses_call) {
-                continue;
-            }
-            allocated_registers_.emplace(instruction.get(), found->second);
-        }
-    }
+    keep_local_allocations(function, allocation, allocated_registers_);
 }
+
 
 std::string Kr32Backend::result_register(const ir::Instruction& instruction) const {
     const auto found = allocated_registers_.find(&instruction);
