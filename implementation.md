@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T15:51:12-08:00 — host gate (Linux ARM64)
+Revision: 8abcb4f
+
+```
+linux-gcc-debug    PASS 843/843
+linux-clang-debug  PASS 843/843
+linux-sanitize     PASS 843/843
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `53c346c`, which allocates pointer-typed values and computes addresses in place
+(`src/backend/kr32_backend.cpp`, 20 changed lines). It is the third allocator-wiring step and the
+first that puts pointers in registers, so an address computed for the wrong width or clobbered while
+another operand is loaded would surface here; the sanitizer row passed, which rules out the
+out-of-bounds class on the fixtures that exercise it. The count is unchanged at 843 with 168 executed
+tests. Test times were 86.10 s (GCC debug), 78.49 s (Clang debug) and 335.40 s (ASan/UBSan); the
+sanitizer row's spread across this session is 286–335 s with no change in test count. Rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time,
+with no warnings. No disturbances.
+
 2026-11-18T13:46:57-08:00 — host gate (Linux ARM64)
 Revision: 57e9062
 
