@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T23:26:39-08:00 — host gate (Linux ARM64)
+Revision: 47202d4
+
+```
+linux-gcc-debug    PASS 875/875
+linux-clang-debug  PASS 875/875
+linux-sanitize     PASS 875/875
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate. The previous record covered `1028002`; the push lost a race and the single rebase
+absorbed `c591a93`, which adds coverage for the volatile safety rule and records that **volatile is
+dropped** (`tests/unit/test_irgen.cpp`, `docs/optimize.md`). The 875 count is unchanged because the new
+cases live in the existing doctest binary. The pass means the suite agrees with the code as it stands,
+not that the volatile defect is fixed — the commit itself records the dropping as a finding, and it
+remains open. Test times were 82.59 s (GCC debug), 84.89 s (Clang debug) and 343.70 s (ASan/UBSan). Rows
+were configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a
+time, with no warnings. No disturbances.
+
 2026-11-18T23:10:47-08:00 — host gate (Linux ARM64)
 Revision: 1028002
 
