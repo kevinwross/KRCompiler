@@ -125,6 +125,18 @@ std::string mnemonic(Opcode opcode) {
         return "FMUL.S";
     case Opcode::FDivDouble:
         return "FDIV.D";
+    case Opcode::FCompareEqual:
+        return "FEQ.D";
+    case Opcode::FCompareEqualSingle:
+        return "FEQ.S";
+    case Opcode::FCompareLessSingle:
+        return "FLT.S";
+    case Opcode::FCompareLessOrEqualSingle:
+        return "FLE.S";
+    case Opcode::FSubSingle:
+        return "FSUB.S";
+    case Opcode::FDivSingle:
+        return "FDIV.S";
     case Opcode::FCompareLess:
         return "FLT.D";
     case Opcode::FCompareLessOrEqual:
@@ -261,7 +273,9 @@ std::optional<Opcode> opcode_of(std::string_view name) {
         {"FSTORE.W", Opcode::FStoreWord}, {"FADD.D", Opcode::FAddDouble},
         {"FADD.S", Opcode::FAddSingle},   {"FSUB.D", Opcode::FSubDouble},
         {"FMUL.D", Opcode::FMulDouble},   {"FMUL.S", Opcode::FMulSingle},
-        {"FDIV.D", Opcode::FDivDouble},   {"FLT.D", Opcode::FCompareLess},
+        {"FDIV.D", Opcode::FDivDouble},   {"FEQ.D", Opcode::FCompareEqual}, {"FLT.D", Opcode::FCompareLess}, {"FEQ.S", Opcode::FCompareEqualSingle},
+        {"FLT.S", Opcode::FCompareLessSingle}, {"FLE.S", Opcode::FCompareLessOrEqualSingle},
+        {"FSUB.S", Opcode::FSubSingle},   {"FDIV.S", Opcode::FDivSingle},
         {"FLE.D", Opcode::FCompareLessOrEqual},
         {"FCVT.S.D", Opcode::ConvertDoubleToSingle},
         {"FCVT.D.S", Opcode::ConvertSingleToDouble},

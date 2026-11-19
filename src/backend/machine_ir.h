@@ -62,11 +62,17 @@ enum class Opcode {
     FAddDouble,
     FAddSingle,
     FSubDouble,
+    FSubSingle,
     FMulDouble,
     FMulSingle,
     FDivDouble,
+    FDivSingle,
+    FCompareEqual,       // FEQ.D
+    FCompareEqualSingle, // FEQ.S
     FCompareLess,        // FLT.D
+    FCompareLessSingle,  // FLT.S
     FCompareLessOrEqual, // FLE.D
+    FCompareLessOrEqualSingle, // FLE.S
     ConvertDoubleToSingle, // FCVT.S.D
     ConvertSingleToDouble, // FCVT.D.S
     ConvertWordToDouble,   // FCVT.D.W

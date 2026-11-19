@@ -1615,78 +1615,109 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
     };
 
     switch (instruction.opcode) {
-    case ir::Opcode::FAdd:
+    case ir::Opcode::FAdd: {
         load_fp(out, function, layout, instruction.operands[0], "F0");
         load_fp(out, function, layout, instruction.operands[1], "F1");
-        out += "        FADD." +
-               std::string(instruction.operands[0]->type->bits == 32 ? "S" : "D") +
-               " F0, F0, F1\n";
+        const auto single = instruction.operands[0]->type->bits == 32;
+        emit_binary(out,
+                    single ? machine::Opcode::FAddSingle : machine::Opcode::FAddDouble,
+                    machine::Operand::float_register(0), machine::Operand::float_register(0),
+                    machine::Operand::float_register(1));
         store_fp(out, function, layout, instruction, "F0");
         break;
-    case ir::Opcode::FSub:
+    }
+    case ir::Opcode::FSub: {
         load_fp(out, function, layout, instruction.operands[0], "F0");
         load_fp(out, function, layout, instruction.operands[1], "F1");
-        out += "        FSUB." +
-               std::string(instruction.operands[0]->type->bits == 32 ? "S" : "D") +
-               " F0, F0, F1\n";
+        const auto single = instruction.operands[0]->type->bits == 32;
+        emit_binary(out,
+                    single ? machine::Opcode::FSubSingle : machine::Opcode::FSubDouble,
+                    machine::Operand::float_register(0), machine::Operand::float_register(0),
+                    machine::Operand::float_register(1));
         store_fp(out, function, layout, instruction, "F0");
         break;
-    case ir::Opcode::FMul:
+    }
+    case ir::Opcode::FMul: {
         load_fp(out, function, layout, instruction.operands[0], "F0");
         load_fp(out, function, layout, instruction.operands[1], "F1");
-        out += "        FMUL." +
-               std::string(instruction.operands[0]->type->bits == 32 ? "S" : "D") +
-               " F0, F0, F1\n";
+        const auto single = instruction.operands[0]->type->bits == 32;
+        emit_binary(out,
+                    single ? machine::Opcode::FMulSingle : machine::Opcode::FMulDouble,
+                    machine::Operand::float_register(0), machine::Operand::float_register(0),
+                    machine::Operand::float_register(1));
         store_fp(out, function, layout, instruction, "F0");
         break;
-    case ir::Opcode::FDiv:
+    }
+    case ir::Opcode::FDiv: {
         load_fp(out, function, layout, instruction.operands[0], "F0");
         load_fp(out, function, layout, instruction.operands[1], "F1");
-        out += "        FDIV." +
-               std::string(instruction.operands[0]->type->bits == 32 ? "S" : "D") +
-               " F0, F0, F1\n";
+        const auto single = instruction.operands[0]->type->bits == 32;
+        emit_binary(out,
+                    single ? machine::Opcode::FDivSingle : machine::Opcode::FDivDouble,
+                    machine::Operand::float_register(0), machine::Operand::float_register(0),
+                    machine::Operand::float_register(1));
         store_fp(out, function, layout, instruction, "F0");
         break;
+    }
     case ir::Opcode::FCmp:
         load_fp(out, function, layout, instruction.operands[0], "F0");
         load_fp(out, function, layout, instruction.operands[1], "F1");
         {
         const auto suffix =
             std::string(instruction.operands[0]->type->bits == 32 ? "S" : "D");
+        const auto single = instruction.operands[0]->type->bits == 32;
+        const auto compare = [&](machine::Opcode double_form, machine::Opcode single_form,
+                                 int left, int right) {
+            emit_binary(out, single ? single_form : double_form,
+                        machine::Operand::physical(0),
+                        machine::Operand::float_register(left),
+                        machine::Operand::float_register(right));
+        };
+        const auto invert = [&]() {
+            emit_binary(out, machine::Opcode::Xor, machine::Operand::physical(0),
+                        machine::Operand::physical(0), machine::Operand::immediate(1));
+        };
         switch (instruction.fcmp_predicate) {
         case ir::FCmpPredicate::Oeq:
-            out += "        FEQ." + suffix + " R0, F0, F1\n";
+            compare(machine::Opcode::FCompareEqual, machine::Opcode::FCompareEqualSingle, 0,
+                    1);
             break;
         case ir::FCmpPredicate::One:
-            out += "        FEQ." + suffix + " R0, F0, F1\n";
-            out += "        XOR R0, R0, #1\n";
+            compare(machine::Opcode::FCompareEqual, machine::Opcode::FCompareEqualSingle, 0,
+                    1);
+            invert();
             break;
         case ir::FCmpPredicate::Olt:
-            out += "        FLT." + suffix + " R0, F0, F1\n";
+            compare(machine::Opcode::FCompareLess, machine::Opcode::FCompareLessSingle, 0, 1);
             break;
         case ir::FCmpPredicate::Ole:
-            out += "        FLE." + suffix + " R0, F0, F1\n";
+            compare(machine::Opcode::FCompareLessOrEqual,
+                    machine::Opcode::FCompareLessOrEqualSingle, 0, 1);
             break;
         case ir::FCmpPredicate::Ogt:
-            out += "        FLT." + suffix + " R0, F1, F0\n";
+            compare(machine::Opcode::FCompareLess, machine::Opcode::FCompareLessSingle, 1, 0);
             break;
         case ir::FCmpPredicate::Oge:
-            out += "        FLE." + suffix + " R0, F1, F0\n";
+            compare(machine::Opcode::FCompareLessOrEqual,
+                    machine::Opcode::FCompareLessOrEqualSingle, 1, 0);
             break;
         case ir::FCmpPredicate::Ord:
-            out += "        FEQ." + suffix + " R0, F0, F0\n";
+            compare(machine::Opcode::FCompareEqual, machine::Opcode::FCompareEqualSingle, 0,
+                    0);
             break;
         case ir::FCmpPredicate::Uno:
-            out += "        FEQ." + suffix + " R0, F0, F0\n";
-            out += "        XOR R0, R0, #1\n";
+            compare(machine::Opcode::FCompareEqual, machine::Opcode::FCompareEqualSingle, 0,
+                    0);
+            invert();
             break;
         case ir::FCmpPredicate::False:
-            out += "        MOV R0, #0\n";
+            emit_move(out, machine::Operand::physical(0), machine::Operand::immediate(0));
             break;
         case ir::FCmpPredicate::True:
-            out += "        MOV R0, #1\n";
+            emit_move(out, machine::Operand::physical(0), machine::Operand::immediate(1));
             break;
         }
+        static_cast<void>(suffix);
         }
         store_value(out, function, layout, instruction, "R0");
         break;
