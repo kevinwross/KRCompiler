@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T17:46:29-08:00 — host gate (Linux ARM64)
+Revision: e156995
+
+```
+linux-gcc-debug    PASS 875/875
+linux-clang-debug  PASS 875/875
+linux-sanitize     PASS 875/875
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `6765d85`, which runs the tier-1 corpus at `-O1` as well as `-O0`
+(`tests/CMakeLists.txt` +63). The count rises from **843 to 875** and executed tests from 168 to **184**,
+which is the point of the change: until now the optimiser and the register allocator were exercised only
+by the unit fixtures, and the corpus compiled at `-O0` only. This is the coverage gap the previous four
+allocator gates could not close, and all three rows pass it, including the sanitizer row at 356.25 s —
+its longest run this session, consistent with twice the corpus work rather than with a slowdown. Other
+row times were 95.54 s (GCC debug) and 86.50 s (Clang debug). Rows were configured and built clean from
+a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No
+disturbances.
+
 2026-11-18T17:23:45-08:00 — host gate (Linux ARM64)
 Revision: 3ff016f
 
