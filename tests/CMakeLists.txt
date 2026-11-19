@@ -8,6 +8,7 @@ add_executable(krc_tests
     unit/test_diagnostics.cpp
     unit/test_ir.cpp
     unit/test_irgen.cpp
+    unit/test_mem2reg.cpp
     unit/test_kr32_encoder.cpp
     unit/test_kr16_encoder.cpp
     unit/test_kr16_assembler.cpp

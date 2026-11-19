@@ -386,6 +386,14 @@ int main(int argc, char** argv) {
                     if (optimization == krc::backend::OptimizationLevel::O1 &&
                         !diagnostics.has_errors()) {
                         auto change = krc::ir::constant_folding(*module);
+                        // E6 before every other promotion pass: it creates the
+                        // phis, so the edges they write on are split first and
+                        // the passes below then see SSA values where a slot round
+                        // trip used to be.
+                        const auto edges = krc::ir::split_critical_edges(*module);
+                        change.edges_split += edges.edges_split;
+                        const auto across = krc::ir::promote_cross_block_allocas(*module);
+                        change.instructions_removed += across.instructions_removed;
                         // Promotion runs before CSE deliberately: E2 shares only
                         // expressions whose operands are identical SSA values, and
                         // until the alloca round trips are gone every variable

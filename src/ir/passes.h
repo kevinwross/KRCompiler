@@ -15,9 +15,12 @@ namespace krc::ir {
 struct PassChange {
     std::size_t instructions_removed = 0;
     std::size_t instructions_folded = 0;
+    // Control-flow edges replaced by a block of their own.
+    std::size_t edges_split = 0;
 
     [[nodiscard]] bool changed() const {
-        return instructions_removed != 0 || instructions_folded != 0;
+        return instructions_removed != 0 || instructions_folded != 0 ||
+               edges_split != 0;
     }
 };
 
@@ -84,5 +87,15 @@ struct PassChange {
 //  * a block a `phi` names as its predecessor, so a later promotion cannot have
 //    its incoming edge renamed out from under it.
 [[nodiscard]] PassChange empty_block_elimination(Module& module);
+
+// E6 (src/ir/mem2reg.cpp): promote an alloca whose loads and stores span blocks,
+// inserting a phi at every join the slot is live into. Refuses a recorded
+// <variable>.addr, an escaping address, a volatile access, and a load that no
+// store reaches on some path -- all decided before anything is rewritten.
+[[nodiscard]] PassChange promote_cross_block_allocas(Module& module);
+
+// Splits every edge whose source has more than one successor and whose destination
+// has more than one predecessor, so a phi has a block of its own to write on.
+[[nodiscard]] PassChange split_critical_edges(Module& module);
 
 }  // namespace krc::ir
