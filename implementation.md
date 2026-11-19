@@ -497,6 +497,28 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T00:48:50-08:00 — host gate (Linux ARM64)
+Revision: bc788b7
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `00cd423`, "Serialise test execution: parallel runs fail image tests nondeterministically",
+which sets `"execution": { "jobs": 1 }` on all six test presets in `CMakePresets.json` — a preset
+boundary change, hence a gate rather than a poll. It is the resolution of the flake `f432167` recorded:
+executed-image tests were failing nondeterministically under `jobs: 4`, a different test each run, with
+no diagnostic. **The row times show the cost directly**: GCC debug rose from 84.21 s to 224.56 s, Clang
+debug from 80.54 s to 222.36 s, and ASan/UBSan from 349.68 s to 816.46 s on the same 889 tests, so a
+routine gate is now about 21 minutes of testing rather than about 8. The count is unchanged at 889 with
+191 executed tests, and all three rows are green under serial execution — the first gate where that is
+the configured behaviour rather than an accident of how the rows were launched. Rows were configured and
+built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no
+warnings. No disturbances.
+
 2026-11-18T23:57:56-08:00 — host gate (Linux ARM64)
 Revision: f505307
 
