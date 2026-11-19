@@ -212,9 +212,15 @@ than a load or store.
 | `kr32/libc.c` at `-O1` | 21,724 | **35.8%** | **40.5%** |
 | `kr16/libc.c` at `-O1` | 6,485 | 66.6% | **63.6%** |
 
-The allocation that landed takes KR32 from 60.3% to 35.8% memory, and the remaining 35.8% is the
-ceiling for R1 on that file: a machine IR with liveness across blocks and call handling can reach
-the values this allocator has to leave in slots. KR16 is the starker case — it allocates nothing
+The allocation that landed takes KR32 from 60.3% to 35.8% memory. **The remaining 35.8% is not
+R1's ceiling, and this figure was misread once — the measurement that corrected it is in
+`implementation.md`, `2026-11-19T08:05`.** Of `kr32/libc.c`'s 8,170 load/store instructions at
+`-O1`, **7,171 address a frame slot and 999 are pointer-indirect**: the slot traffic is dominated by
+named variables and address-taken objects, which register allocation cannot remove because their
+address is what the program uses. Planning an allocation over the recorded data flow finds that it
+would remove **415 of 4,489 recorded instructions (9%)** at `-O1` — real, but an order of magnitude
+below what the 35.8% suggested. At `-O0` the same plan would remove **2,027 of 5,474 (37%)**, and
+that is not available: `-O0` keeps every variable in a slot for the debugger by contract (ADR 0049). KR16 is the starker case — it allocates nothing
 (ADR 0049), so two thirds of its instructions touch the frame, and any allocation that survives its
 two-operand ALU would be a larger relative win there than on KR32.
 
@@ -410,7 +416,7 @@ Ordered as the work should land. "Metric" is what the corpus table (§11) must s
 | E5 | CFG simplification | IR | unreachable/empty blocks, jumps to jumps | no EH edge crosses the block | break a landing-pad region | branch count |
 | E6 | mem2reg with `phi` | IR | alloca round trips across blocks | **backends lower `phi`**; critical edges split | promote an escaping or `V`-recorded alloca at `-O1` | instruction count, frame bytes |
 | E7 | Global CSE | IR | repeated pure expressions | dominance order fixed and deterministic | cross a call for a value derived from memory | instruction count |
-| R1 | Machine IR + allocation ([ADR 0051](decisions/0051-allocate-on-machine-form.md), proposed) | backend | frame traffic for temporaries | machine IR exists; liveness correct at EH edges | allocate across a call without a save; ignore ABI-fixed registers | instruction count, frame bytes. **Measured ceiling: `kr32/libc.c` still spends 35.8% of its instructions on memory at `-O1` and 40.5% reference a frame slot; `kr16/libc.c` is 63.6% frame-addressed because it allocates nothing (§3.5)** |
+| R1 | Machine IR + allocation ([ADR 0051](decisions/0051-allocate-on-machine-form.md), proposed) | backend | frame traffic for temporaries | machine IR exists; liveness correct at EH edges | allocate across a call without a save; ignore ABI-fixed registers | instruction count, frame bytes. **Measured payoff, planned over the recorded data flow: 415 of 4,489 instructions at `-O1` (9%) and 2,027 of 5,474 at `-O0` (37%, not available — ADR 0049 keeps `-O0` slots). The 35.8% memory share in §3.5 is mostly address-taken objects, not allocatable temporaries** |
 | P1 | Slot forwarding (label-aware) | text | `STORE`/`LOAD` of one slot | nothing branches to the intervening label | fold across a branch target | instruction count |
 | P2 | Redundant jump | text | `JMP` to the next label | target is the following instruction | remove a jump that a descriptor names | instruction count |
 
