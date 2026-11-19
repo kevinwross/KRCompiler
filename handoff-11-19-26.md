@@ -171,13 +171,16 @@ Accepting ADR 0051 changes **every `-O1` output** and gives up the byte-identica
 356 was a ceiling that ignores the filter's type restrictions and the colouring's spills. So this
 is the enabling step for 6.2, not an optimisation worth taking for itself.
 
-### 6.4 KR16 record-return defect (owned by the other session; still open)
+### 6.4 KR16 record-return defect — **verified fixed**; the log entry is history
 
-A record returned by value whose arguments arrive as parameters loses the trailing sub-word
-member on KR16: `std::tuple<int,char> mk(int a, char b) { std::tuple<int,char> tmp(a, b); return
-tmp; }` reproduces it in a **non-template** function. Four diagnoses were wrong (the width fix,
-the record copy, the template, and one more); the pack and the template are exonerated. The header
-`sysroot/include/tuple` is where the limitation is supposed to be documented.
+The tracker describes a record returned by value losing its trailing sub-word member on KR16,
+reproducible in a non-template function. **A probe run for this handoff says it no longer
+reproduces**: `std::tuple<int,char> mk(int a, char b)` built with the project's KR16 recipe exits
+**0**, as does `mk2(char a, int b)` with `1000` as the second element. The fix landed in
+`76f58d9`/`8e73859` and the header wording was audited in `5934a2c`.
+
+Nothing to do. **Do not reopen it on the strength of the log entry** — that is what the appendix
+below records, and it is the mistake this handoff's first draft made.
 
 ### 6.5 Tuple pack pointer deduction (pinned as rejected)
 
@@ -259,15 +262,36 @@ If those disagree, the tree has moved: read `implementation.md`'s newest entries
 3. Then W2 (diagnose the 40 lost lines) — a bounded investigation with a measurable answer.
 4. Do **not** start with S4 or with ADR 0051: both need W4 (scope ranges) or an emission path
    first, and both have already failed on IR-level reasoning.
-5. If the priority is instead "the compiler is wrong on KR16", pick §6.4, which has a minimal
-   reproducer and a narrowed cause.
+5. If the priority is instead "what is still wrong in the compiler", read §6.5–§6.7: the pointer
+   pack is pinned as rejected, the `volatile` gap is live but harmless today, and §6.4 is a defect
+   that has since been verified **fixed**.
 
 ---
 
-## Appendix: the one discrepancy found while writing this
+## Appendix: the discrepancy that was not one
 
-`implementation.md` records at `2026-11-19T23:20` that `sysroot/include/tuple` was corrected to
-document the KR16 `make_tuple` defect ("known defect, construct in place instead"). As of
-`085a8f5`, lines 52–59 of that header still assert that `make_tuple(41, 'a')` returns
-`tuple<int, char>` with no KR16 caveat. **Check whether that correction was lost in a merge** — it
-is exactly the kind of silent loss the tracker's own entries record twice.
+This document first carried an appendix claiming that `sysroot/include/tuple` had lost a
+correction — the tracker records at `2026-11-19T23:20` that the header was changed to document the
+KR16 `make_tuple` defect, while lines 52–59 still assert `make_tuple(41, 'a')` returns
+`tuple<int, char>`. **That claim was mine and it was wrong. The header is right; the tracker entry
+is history.**
+
+Evidence, gathered after the first draft:
+
+- A probe compiled for **both** targets and run under both VMs exits **0**, so every assertion
+  holds: `make_tuple(41, 'a')` gives a `tuple<int, char>` whose tail reads back `'a'`, and
+  `make_tuple('a', 1000)` keeps the `1000`.
+- The tracker's "still open" minimal reproducer — a **non-template** function
+  `std::tuple<int, char> mk(int a, char b)` returning a local by value — also exits **0** on KR16
+  when built with the project's own KR16 recipe.
+- Commit **`5934a2c`** ("Audit the docs for the stale `make_tuple` defect wording") already did
+  this audit and states the conclusion: *"finds no surviving claim: the only live mention is
+  `sysroot/include/tuple:50`, corrected when the fix landed"*, and the remaining matches in
+  `implementation.md` are dated log entries, historically accurate.
+
+**So: do not change `sysroot/include/tuple`, and do not reopen the tuple defect on the strength of
+that log entry.** The lesson is the one this project keeps teaching: a dated entry in
+`implementation.md` is a statement about its own revision, not a claim about today — read it as
+history and verify against the tree. The session that produced this handoff made exactly that
+mistake while writing the appendix to warn about it.
+
