@@ -55,7 +55,7 @@ sibling project did, and §5 explains why its order was right for it and wrong h
 | The CLI contract names `-O0`/`-O1`. | `plan.md` §15.1 line 1227: `-g -O0 -O1`. |
 | Both flags are parsed and listed, `-O0` is the default, and `-O0` output is byte-identical to a build with no flag. | `src/tools/krc/main.cpp` option table; `cmake/CheckLevelIdentity.cmake` and the `krc_optimization_levels` test assert the identity. |
 | The `-O1` pass list is specified in the plan. | `plan.md` §8.8 line 645: "mem2reg, constant folding, dead code elimination, common subexpression elimination, copy propagation, CFG simplification, branch folding, peepholes, graph-colouring register allocation. No inlining, LTO, loop-invariant code motion, or vectorisation in v1." |
-| Of that list, two passes exist: `-O1` removes an unconditional branch to the label that follows it, and constant-folds a pure 32- or 64-bit integer operation whose operands are all constants. There is no pass manager and no other IR pass. | `src/backend/peephole.cpp` (`remove_redundant_jumps`), called from both backends at `-O1` only; `src/ir/passes.cpp` (`constant_folding`), run by the driver before the backends and re-verified afterwards. `src/ir/` otherwise still holds the model, builder, verifier and printer. |
+| Of that list, most of it now exists. At `-O1`: constant folding, local CSE (E2), dead code elimination (E3), single-block alloca promotion (E4), empty-block elimination (E5), cross-block promotion with `phi` (E6), a register allocator over values whose live range is one block, and the branch-to-next-label peephole (P2). There is still no pass manager — the driver calls each pass in order — and no machine IR. | `src/ir/passes.cpp` (`constant_folding`, `copy_propagation`, `alloca_promotion`, `empty_block_elimination`, `dead_code_elimination`, `fold_identity_casts`), `src/ir/mem2reg.cpp` (`promote_cross_block_allocas`, `split_critical_edges`), `src/backend/register_allocator.cpp` (`keep_local_allocations`), `src/backend/peephole.cpp` (`remove_redundant_jumps`). The driver runs them and re-verifies the module afterwards. |
 | Both backends emit **text** instruction by instruction, appending to a `std::string`. | `Kr32Backend::emit_function`/`emit_instruction` (`kr32_backend.cpp:958`, `:1155`); `kr16_backend.cpp` has the same shape. |
 | Every IR value with a type gets its own frame slot, unconditionally. | `kr32_backend.cpp:296-305`: `layout.slots.emplace(instruction.get(), offset)` for every non-void result. |
 | So every IR instruction costs a store, and every operand use costs a load. | §3 measurement: 3.74 machine instructions per IR instruction. |
@@ -91,6 +91,10 @@ strategy is accepted (§12, Q1).
 ---
 
 ## 3. Where the instructions actually go
+
+**The tables in §3.1–§3.3 are the pre-optimiser baseline**, measured on 2026-11-17 before any
+pass existed. They are kept because the gates in §11 are defined against them; §3.4 gives the
+same measurements today.
 
 ### 3.1 The mix
 
@@ -163,6 +167,37 @@ Definitions matter and are stated so the numbers can be re-derived: an "instruct
 whose first non-space character is an uppercase letter (so directives, comments and labels are
 excluded); a "label" is a line starting with `.L`. Directives such as `.word` and `.byte` are
 neither, which is why data-emission lines do not distort the percentages.
+
+### 3.4 The same measurements after the optimiser
+
+Measured with the same definition of "instruction", over the 22 executed corpus files
+(`tier1/*.c`, `tier2/*.c`, `tier2/*.cpp`) for KR32, plus the two runtime sources:
+
+| | IR instructions | assembly instructions | expansion |
+|---|---:|---:|---:|
+| corpus at `-O0` | 4,222 | 11,081 | **2.62×** |
+| corpus at `-O1` | 4,032 | 8,728 | **2.16×** |
+| `kr32/libc.c` at `-O1` | 9,896 | 21,724 | **2.20×** |
+| `kr16/libc.c` at `-O1` | 2,801 | 6,485 | **2.32×** |
+
+Against the 3.74× of §3.2, expansion is down by roughly 40%. The excess was described there as
+"the frame round trip per value", and that is what moved it: register allocation keeps a value in
+a register instead of a slot, E6 promotes a cross-block slot into SSA, and selection folds the
+literal and the address into the instruction. It is still far above the 1.2–1.5× a machine IR with
+real allocation would reach, and that gap is §7's R1.
+
+The two whole-corpus totals the baselines were taken on, before and now:
+
+| | KR32 `-O0` | KR32 `-O1` | KR16 `-O0` | KR16 `-O1` |
+|---|---:|---:|---:|---:|
+| instructions, before | 62,012 | — | 23,191 | — |
+| instructions, now | **45,295** | **36,135** | **17,595** | **16,770** |
+| `bench` ticks, before | 272,602 | — | 267,620 | — |
+| `bench` ticks, now | **193,340** | **154,533** | **192,758** | **185,386** |
+
+`-O0` improved too (−27.0% and −24.1%), which the contract requires rather than merely permits:
+D-049 makes selection quality a property of the lowering, so an identity cast or a literal operand
+is fixed once for every build and not only under a flag.
 
 ---
 
@@ -466,13 +501,16 @@ record type is a minor bump.
 
 IDs are provisional and deliberately not `G*` (those are plan §5.7's acceptance gates).
 
-| Gate | Closes | Measured pass condition |
-|---|---|---|
-| **OG1** | Layer 1 (selection) | corpus instruction count down ≥25% against the §3.1 baseline on both targets; every executed fixture still green; the `-O` flag exists, both levels build byte-identically twice, and the incidental `MOV R1, #4` assertion is replaced by a semantic check |
-| **OG2** | Layer 2 without `phi` (E1–E5) | further ≥15% on the corpus; verifier runs clean after every pass on every fixture; the negative tests (§9 tier 1) exist and fail when the safety rule is removed |
-| **OG3** | `phi` lowering + mem2reg (E6, F1) | further ≥10%; a fixture whose loop-carried value survives promotion; IR dump shows `phi` and both backends compile it |
-| **OG4** | Layer 3 (machine IR + allocation) | frame bytes down ≥50% on the corpus and instruction count down ≥15%; `-O1` still line-accurate under the debugger; KR16 measured separately and reported, not assumed |
-| **OG5** | Layer 4 + `-O1` as a product | the bounded peephole landed, `-O1` documented in `docs/release-notes.md`, the metric table checked in and current, and the suite green at both levels on six configurations |
+The **Status** column is filled from the measurements in §3.4 and `benchmarks/`; a gate with a
+shortfall names the number rather than being marked "in progress".
+
+| Gate | Closes | Measured pass condition | Status |
+|---|---|---|---|
+| **OG1** | Layer 1 (selection) | corpus instruction count down ≥25% against the §3.1 baseline on both targets; every executed fixture still green; the `-O` flag exists, both levels build byte-identically twice, and the incidental `MOV R1, #4` assertion is replaced by a semantic check | **met at `-O1`, short by 0.9 points at `-O0` on KR16** — KR32 −27.0% / −41.7%, KR16 −24.1% / −27.7%. The flag exists, the suite is green, and `krc_optimization_levels` asserts no-flag ≡ `-O0` and `-O0` determinism |
+| **OG2** | Layer 2 without `phi` (E1–E5) | further ≥15% on the corpus; verifier runs clean after every pass on every fixture; the negative tests (§9 tier 1) exist and fail when the safety rule is removed | **met on the instruction count** (45,295 → 36,135 is −20.2%, and that figure includes allocation, whose own share is −15.5%); the verifier runs after the pipeline and the refusal cases are unit-tested per pass, but the §9 tier-1 negative tests were never written as a separate set |
+| **OG3** | `phi` lowering + mem2reg (E6, F1) | further ≥10%; a fixture whose loop-carried value survives promotion; IR dump shows `phi` and both backends compile it | **not met, and the premise was wrong**: `phi` lowering and E6 both landed, but E6 measured **−120 instructions (−0.3%)** because a phi copy costs one store where the load it replaces cost one load. `benchmarks/` shows no further 10% to have |
+| **OG4** | Layer 3 (machine IR + allocation) | frame bytes down ≥50% on the corpus and instruction count down ≥15%; `-O1` still line-accurate under the debugger; KR16 measured separately and reported, not assumed | **half met**: instruction count −15.5% and KR16 measured and reported (ADR 0049), but **frame bytes are down only 2.8%** (41,840 → 40,680) because slot reuse (S4) was assessed and declined, and the machine IR does not exist |
+| **OG5** | Layer 4 + `-O1` as a product | the bounded peephole landed, `-O1` documented in `docs/release-notes.md`, the metric table checked in and current, and the suite green at both levels on six configurations | **met**: the branch-to-next-label peephole landed (P2), `docs/release-notes.md` now documents both levels and their measured effect, `benchmarks/size.tsv` and `ticks.tsv` are regenerated at this revision, and the six-configuration clean gate at `c8b70b2` passed 875/875 with 44 executed `-O1` tests |
 
 Each gate is recorded in `implementation.md` under `## Gate verification` in the existing shape,
 with the corpus table as its evidence.

@@ -55,6 +55,40 @@ absent. `AGENTS.local.md` records the environment assumptions, and
   silent miscompile: `long long` and floating point are rejected on KR16, an
   aggregate return on KR16 is rejected, and `_Atomic` is rejected everywhere.
 
+## Optimisation levels
+
+`krc` has two levels. **`-O0` is the default** and is what a build with no flag
+produces: every value lives in a frame slot, and full debug information names
+each source variable.
+
+**`-O1` is opt-in** and runs the pass list in [`docs/optimize.md`](optimize.md)
+§7: constant folding, local common-subexpression elimination, dead code
+elimination, single-block and cross-block (`phi`) alloca promotion, empty-block
+elimination, and a register allocator that keeps a value in a register rather
+than a frame slot. The emitted code is ABI-compatible with `-O0`; only the
+instructions differ.
+
+Measured against the pre-optimiser compiler, on the corpus the benchmarks record
+in `benchmarks/size.tsv` and `benchmarks/ticks.tsv`:
+
+| | `-O0` | `-O1` |
+|---|---|---|
+| KR32 corpus instructions | −27.0% | −41.7% |
+| KR16 corpus instructions | −24.1% | −27.7% |
+| `bench` ticks, KR32 | −29.1% | −43.3% |
+| `bench` ticks, KR16 | −28.0% | −30.7% |
+
+`-O0` improves on its own because selection quality — a literal operand folded
+into the instruction, an address computed in the register it is needed in, an
+identity cast removed — is a property of the lowering rather than of a level
+(`D-049`). A build without a flag and a build with `-O0` are byte-identical,
+which `krc_optimization_levels` asserts.
+
+KR16 gains less under `-O1`: it has five registers with two reserved for the
+frame and stack pointers, and its two-operand ALU makes an allocated value cost
+the same as a frame access, so it allocates nothing. That asymmetry is measured
+rather than assumed — see [ADR 0049](decisions/0049-register-allocation-wiring.md).
+
 ## What is not in this release
 
 - KR64 code generation, and the kernel profile the plan reserves for it.
