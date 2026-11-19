@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T08:32:19-08:00 — host gate (Linux ARM64)
+Revision: 4975324
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `df3a7b8`, an ERRATA correcting R1's payoff at `-O1` from 35.8% to 9%, and `2b602f5`,
+which excludes call-crossing values from the allocation plan (`src/backend/machine_liveness.cpp`/`.h`,
+`tests/unit/test_machine_liveness.cpp`). The correction matters more than its size: the allocation plan
+on the machine form was justified by a payoff figure that was four times too high, and the plan survives
+the correction as a smaller win. Excluding call-crossing values is the correctness half of the same
+work — a value live across a call cannot stay in a caller-saved register, and ARM64's caller-saved set
+differs from x86_64's, which is exactly the kind of assumption a shared plan must not hardcode. The
+count is unchanged at 889 with 191 executed tests. Row times were 231.14 s (GCC debug), 221.93 s (Clang
+debug) and 824.99 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2`
+with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T08:03:34-08:00 — host gate (Linux ARM64)
 Revision: 8b61da4
 
