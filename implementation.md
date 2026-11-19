@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T04:38:20-08:00 — host gate (Linux ARM64)
+Revision: ca5cc3a
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `4e3ea89`, which converts the compare and branch sites to the machine representation
+(`src/backend/kr32_backend.cpp`/`.h`). It is the fourth chunk of the machine-IR migration and the one
+that touches condition code and branch-offset encoding, both of which are target-specific in a way the
+prologue and slot accesses are not — ARM64 has a flag-setting model unlike x86's `cmp`/`jcc` pairing, so
+a representation that carries x86 semantics implicitly would surface here. The count is unchanged at 889
+with 191 executed tests, which is expected for a conversion that must preserve behaviour. Row times were
+223.23 s (GCC debug), 222.87 s (Clang debug) and 815.77 s (ASan/UBSan). Rows were configured and built
+clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No
+disturbances.
+
 2026-11-19T04:02:40-08:00 — host gate (Linux ARM64)
 Revision: 55991ab
 
