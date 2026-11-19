@@ -1085,6 +1085,39 @@ void Kr32Backend::emit_symbol_address(std::string& out,
     emit_machine(out, lea);
 }
 
+void Kr32Backend::emit_compare(std::string& out, const machine::Operand& left,
+                               const machine::Operand& right) const {
+    machine::Instruction compare;
+    compare.opcode = machine::Opcode::Cmp;
+    compare.operands = {left, right};
+    emit_machine(out, compare);
+}
+
+void Kr32Backend::emit_jump(std::string& out, machine::Opcode opcode,
+                            const std::string& label) const {
+    machine::Instruction jump;
+    jump.opcode = opcode;
+    jump.operands = {machine::Operand::named(label)};
+    emit_machine(out, jump);
+}
+
+void Kr32Backend::emit_binary(std::string& out, machine::Opcode opcode,
+                              const machine::Operand& destination,
+                              const machine::Operand& left,
+                              const machine::Operand& right) const {
+    machine::Instruction binary;
+    binary.opcode = opcode;
+    binary.operands = {destination, left, right};
+    emit_machine(out, binary);
+}
+
+void Kr32Backend::emit_call(std::string& out, const std::string& symbol) const {
+    machine::Instruction call;
+    call.opcode = machine::Opcode::Call;
+    call.operands = {machine::Operand::named(symbol)};
+    emit_machine(out, call);
+}
+
 void Kr32Backend::emit_machine(std::string& out,
                                const machine::Instruction& instruction) const {
     out += machine::print_instruction(instruction);
@@ -1815,10 +1848,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         }
         load_value(out, function, layout, instruction.operands[0], "R0");
         if (const auto* literal = inline_literal(instruction.operands[1])) {
-            out += "        CMP R0, #" + std::to_string(literal->value) + "\n";
+            emit_compare(out, machine::Operand::physical(0),
+                         machine::Operand::immediate(literal->value));
         } else {
             load_value(out, function, layout, instruction.operands[1], "R1");
-            out += "        CMP R0, R1\n";
+            emit_compare(out, machine::Operand::physical(0), machine::Operand::physical(1));
         }
         out += "        MOV R2, #0\n";
         const auto serial = compare_label_counter_++;
@@ -1852,10 +1886,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             condition && folded_conditions_.count(condition) != 0) {
             load_value(out, function, layout, condition->operands[0], "R0");
             if (const auto* literal = inline_literal(condition->operands[1])) {
-                out += "        CMP R0, #" + std::to_string(literal->value) + "\n";
+                emit_compare(out, machine::Operand::physical(0),
+                         machine::Operand::immediate(literal->value));
             } else {
                 load_value(out, function, layout, condition->operands[1], "R1");
-                out += "        CMP R0, R1\n";
+                emit_compare(out, machine::Operand::physical(0), machine::Operand::physical(1));
             }
             out += "        " + condition_for(condition->icmp_predicate) + " " +
                    block_label(function, *instruction.successors[0]) + "\n";
@@ -1863,9 +1898,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             break;
         }
         load_value(out, function, layout, instruction.operands[0], "R0");
-        out += "        CMP R0, #0\n";
-        out += "        JNZ " + block_label(function, *instruction.successors[0]) + "\n";
-        out += "        JMP " + block_label(function, *instruction.successors[1]) + "\n";
+        emit_compare(out, machine::Operand::physical(0), machine::Operand::immediate(0));
+        emit_jump(out, machine::Opcode::JumpIfNotZero,
+                  block_label(function, *instruction.successors[0]));
+        emit_jump(out, machine::Opcode::Jump,
+                  block_label(function, *instruction.successors[1]));
         break;
     case ir::Opcode::Ret:
         if (!instruction.operands.empty()) {
@@ -1910,7 +1947,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 load_value(out, function, layout, instruction.operands[0], "R0");
             }
         }
-        out += "        JMP .L" + function.name + ".ret\n";
+        emit_jump(out, machine::Opcode::Jump, ".L" + function.name + ".ret");
         break;
     case ir::Opcode::Call:
     case ir::Opcode::Invoke: {
@@ -2064,7 +2101,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 out += "        LEA R4, [R7 + " + std::to_string(return_destination) +
                        "]\n";
             }
-            out += "        CALL " + instruction.operands[0]->name + "\n";
+            emit_call(out, instruction.operands[0]->name);
         } else {
             load_value(out, function, layout, instruction.operands[0], "R5");
             if (memory_return) {
@@ -2126,7 +2163,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         break;
     case ir::Opcode::Resume:
         load_value(out, function, layout, instruction.operands[0], "R0");
-        out += "        CALL _Unwind_Resume\n";
+        emit_call(out, "_Unwind_Resume");
         out += "        HALT ; _Unwind_Resume returned\n";
         break;
     case ir::Opcode::Intrinsic:

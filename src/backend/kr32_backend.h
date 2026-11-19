@@ -150,6 +150,15 @@ private:
                    const machine::Operand& source) const;
     void emit_symbol_address(std::string& out, const machine::Operand& destination,
                              const std::string& symbol) const;
+    // The shapes the control-flow and arithmetic sites emit: a compare, a branch to a
+    // label, a two-operand ALU instruction, and a call through a symbol.
+    void emit_compare(std::string& out, const machine::Operand& left,
+                      const machine::Operand& right) const;
+    void emit_jump(std::string& out, machine::Opcode opcode, const std::string& label) const;
+    void emit_binary(std::string& out, machine::Opcode opcode,
+                     const machine::Operand& destination, const machine::Operand& left,
+                     const machine::Operand& right) const;
+    void emit_call(std::string& out, const std::string& symbol) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its
