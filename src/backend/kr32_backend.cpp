@@ -1153,6 +1153,14 @@ void Kr32Backend::emit_call(std::string& out, const std::string& symbol) const {
     emit_machine(out, call);
 }
 
+void Kr32Backend::emit_lea(std::string& out, const machine::Operand& destination,
+                           const machine::Operand& address) const {
+    machine::Instruction lea;
+    lea.opcode = machine::Opcode::Lea;
+    lea.operands = {destination, address};
+    emit_machine(out, lea);
+}
+
 void Kr32Backend::emit_convert(std::string& out, machine::Opcode opcode,
                                const machine::Operand& destination,
                                const machine::Operand& source) const {
@@ -1790,8 +1798,8 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         break;
     }
     case ir::Opcode::VaStart:
-        out += "        LEA R0, [R7 + " +
-               std::to_string(layout.frame_size + 8) + "]\n";
+        emit_lea(out, machine::Operand::physical(0),
+                 machine::Operand::frame_offset(layout.frame_size + 8));
         store_value(out, function, layout, instruction, "R0");
         break;
     case ir::Opcode::Load: {
@@ -1829,11 +1837,13 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 out += "        ; aggregate load unavailable\n";
                 break;
             }
-            out += "        MOV R1, R0\n";
+            emit_move(out, machine::Operand::physical(1), machine::Operand::physical(0));
             for (std::uint64_t offset = 0; offset < size; offset += 4) {
-                out += "        LOAD R0, [R1 + " + std::to_string(offset) + "]\n";
-                out += "        STORE R0, [R7 + " +
-                       std::to_string(slot->second + offset) + "]\n";
+                emit_load_opcode(out, "LOAD", machine::Operand::physical(0),
+                                 machine::Operand::address(
+                                     "R1", static_cast<std::int64_t>(offset)));
+                emit_store(out, machine::Operand::physical(0),
+                           machine::Operand::frame_offset(slot->second + offset));
             }
         } else {
             // The address is in R0 and the result may go straight to its own
@@ -1867,9 +1877,11 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             }
             load_value(out, function, layout, instruction.operands[1], "R1");
             for (std::uint64_t offset = 0; offset < size; offset += 4) {
-                out += "        LOAD R0, [R7 + " +
-                       std::to_string(slot->second + offset) + "]\n";
-                out += "        STORE R0, [R1 + " + std::to_string(offset) + "]\n";
+                emit_load_opcode(out, "LOAD", machine::Operand::physical(0),
+                                 machine::Operand::frame_offset(slot->second + offset));
+                emit_store(out, machine::Operand::physical(0),
+                           machine::Operand::address("R1",
+                                                     static_cast<std::int64_t>(offset)));
             }
         } else if (is_wide(instruction.operands[0]->type)) {
             load_wide(out, function, layout, instruction.operands[0]);
@@ -2316,10 +2328,12 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         }
         // The unwinder enters here with the exception object pointer in R0 and
         // its typeinfo in R1 (ADR 0026).
-        out += "        STORE R0, [R7 + " + std::to_string(layout.eh_scratch) + "]\n";
-        out += "        STORE R1, [R7 + " +
-               std::to_string(layout.eh_scratch + 4) + "]\n";
-        out += "        LEA R0, [R7 + " + std::to_string(layout.eh_scratch) + "]\n";
+        emit_store(out, machine::Operand::physical(0),
+                   machine::Operand::frame_offset(layout.eh_scratch));
+        emit_store(out, machine::Operand::physical(1),
+                   machine::Operand::frame_offset(layout.eh_scratch + 4));
+        emit_lea(out, machine::Operand::physical(0),
+                 machine::Operand::frame_offset(layout.eh_scratch));
         store_value(out, function, layout, instruction, "R0");
         break;
     case ir::Opcode::Resume:

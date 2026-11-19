@@ -177,6 +177,9 @@ private:
     void emit_convert(std::string& out, machine::Opcode opcode,
                       const machine::Operand& destination,
                       const machine::Operand& source) const;
+    // `LEA <destination>, <address>`: a frame slot or a symbol.
+    void emit_lea(std::string& out, const machine::Operand& destination,
+                  const machine::Operand& address) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its
