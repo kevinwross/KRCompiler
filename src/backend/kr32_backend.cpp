@@ -1813,9 +1813,10 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             if (pending == 0) {
                 return;
             }
-            out += "        ADD " + destination + ", " + destination + ", #" +
-                   std::to_string(static_cast<std::int32_t>(
-                       static_cast<std::uint32_t>(pending))) + "\n";
+            emit_binary(out, machine::Opcode::Add, register_from_name(destination),
+                        register_from_name(destination),
+                        machine::Operand::immediate(static_cast<std::int32_t>(
+                            static_cast<std::uint32_t>(pending))));
             pending = 0;
         };
         for (std::size_t index = 1; index < instruction.operands.size(); ++index) {
@@ -1876,9 +1877,12 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             flush_pending();
             load_low_word(out, function, layout, instruction.operands[index], "R1");
             if (stride != 1) {
-                out += "        MUL R1, R1, #" + std::to_string(stride) + "\n";
+                emit_binary(out, machine::Opcode::Mul, machine::Operand::physical(1),
+                            machine::Operand::physical(1),
+                            machine::Operand::immediate(static_cast<std::int64_t>(stride)));
             }
-            out += "        ADD " + destination + ", " + destination + ", R1\n";
+            emit_binary(out, machine::Opcode::Add, register_from_name(destination),
+                        register_from_name(destination), machine::Operand::physical(1));
         }
         flush_pending();
         store_value(out, function, layout, instruction, destination);

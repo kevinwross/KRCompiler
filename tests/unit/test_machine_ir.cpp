@@ -343,9 +343,12 @@ int describe(int value, int other) {
         if (machine_function == nullptr) {
             continue;
         }
+        std::size_t function_recorded = 0;
         for (const auto& block : machine_function->blocks) {
-            recorded += block.instructions.size();
+            function_recorded += block.instructions.size();
         }
+        recorded += function_recorded;
+        INFO("  " << function->name << ": recorded " << function_recorded);
     }
     const auto emitted = instruction_lines(*assembly).size();
     INFO("recorded " << recorded << " of " << emitted << " instructions");
