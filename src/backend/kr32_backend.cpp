@@ -1111,6 +1111,14 @@ void Kr32Backend::emit_binary(std::string& out, machine::Opcode opcode,
     emit_machine(out, binary);
 }
 
+void Kr32Backend::emit_store(std::string& out, const machine::Operand& source,
+                             const machine::Operand& address) const {
+    machine::Instruction store;
+    store.opcode = machine::Opcode::Store;
+    store.operands = {source, address};
+    emit_machine(out, store);
+}
+
 void Kr32Backend::emit_call(std::string& out, const std::string& symbol) const {
     machine::Instruction call;
     call.opcode = machine::Opcode::Call;
@@ -1889,23 +1897,29 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             load_value(out, function, layout, instruction.operands[1], "R1");
             emit_compare(out, machine::Operand::physical(0), machine::Operand::physical(1));
         }
-        out += "        MOV R2, #0\n";
+        emit_move(out, machine::Operand::physical(2), machine::Operand::immediate(0));
         const auto serial = compare_label_counter_++;
         const auto true_label = ".L" + function.name + ".icmp." +
                                 std::to_string(serial) + ".true";
         const auto done_label = ".L" + function.name + ".icmp." +
                                 std::to_string(serial) + ".done";
-        out += "        " + condition_for(instruction.icmp_predicate) + " " + true_label + "\n";
-        out += "        JMP " + done_label + "\n";
+        if (const auto opcode = machine::mnemonic_to_opcode(
+                condition_for(instruction.icmp_predicate))) {
+            emit_jump(out, *opcode, true_label);
+        } else {
+            out += "        " + condition_for(instruction.icmp_predicate) + " " + true_label +
+                   "\n";
+        }
+        emit_jump(out, machine::Opcode::Jump, done_label);
         out += true_label + ":\n";
-        out += "        MOV R2, #1\n";
+        emit_move(out, machine::Operand::physical(2), machine::Operand::immediate(1));
         out += done_label + ":\n";
         store_value(out, function, layout, instruction, "R2");
         break;
     }
     case ir::Opcode::Br:
-        out += "        JMP " +
-               block_label(function, *instruction.successors.front()) + "\n";
+        emit_jump(out, machine::Opcode::Jump,
+                  block_label(function, *instruction.successors.front()));
         break;
     case ir::Opcode::CondBr:
         if (is_wide(instruction.operands[0]->type)) {
@@ -2022,13 +2036,18 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                 out += "        FSTORE.D F0, [R7 + " + std::to_string(offset) + "]\n";
             } else if (argument->type && is_wide(argument->type)) {
                 load_wide(out, function, layout, argument);
-                out += "        STORE R0, [R7 + " + std::to_string(offset) + "]\n";
-                out += "        STORE R1, [R7 + " + std::to_string(offset + 4) + "]\n";
+                emit_store(out, machine::Operand::physical(0),
+                           machine::Operand::frame_offset(offset));
+                emit_store(out, machine::Operand::physical(1),
+                           machine::Operand::frame_offset(offset + 4));
             } else {
                 load_value(out, function, layout, argument, "R0");
-                out += "        STORE R0, [R7 + " + std::to_string(offset) + "]\n";
-                out += "        MOV R0, #0\n";
-                out += "        STORE R0, [R7 + " + std::to_string(offset + 4) + "]\n";
+                emit_store(out, machine::Operand::physical(0),
+                           machine::Operand::frame_offset(offset));
+                emit_move(out, machine::Operand::physical(0),
+                          machine::Operand::immediate(0));
+                emit_store(out, machine::Operand::physical(0),
+                           machine::Operand::frame_offset(offset + 4));
             }
         }
         std::size_t integer_index = 0;

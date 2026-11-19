@@ -159,6 +159,8 @@ private:
                      const machine::Operand& destination, const machine::Operand& left,
                      const machine::Operand& right) const;
     void emit_call(std::string& out, const std::string& symbol) const;
+    void emit_store(std::string& out, const machine::Operand& source,
+                    const machine::Operand& address) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its
