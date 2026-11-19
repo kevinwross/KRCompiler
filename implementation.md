@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T07:07:03-08:00 — host gate (Linux ARM64)
+Revision: b7a5373
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `e4d4758`, which converts the last three float sites and records the two-row rule,
+and `a422303`, which converts the integer conversions and the FCVT paths (`src/backend/kr32_backend.cpp`,
+`machine_ir.cpp`/`.h`). With the float sites done, the machine-IR migration covers the whole fixture
+corpus for float and integer conversion, which is the last place where a host's truncation or rounding
+convention could leak into the representation. The two-row rule recorded alongside is about test
+concurrency, not this work: it is the observation that two rows' suites overlapping share the same VM
+binaries and can fail one executed test, so this host runs rows strictly one at a time — which is what
+these gates do. The count is unchanged at 889 with 191 executed tests. Row times were 224.09 s (GCC
+debug), 220.79 s (Clang debug) and 818.85 s (ASan/UBSan). Rows were configured and built clean from a
+deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T06:38:41-08:00 — host gate (Linux ARM64)
 Revision: 8ff1d7a
 
