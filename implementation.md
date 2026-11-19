@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T22:25:30-08:00 — host gate (Linux ARM64)
+Revision: b204a6a
+
+```
+linux-gcc-debug    PASS 875/875
+linux-clang-debug  PASS 875/875
+linux-sanitize     PASS 875/875
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `aa79340`, which canonicalises constructed types and folds identity casts
+(`src/ir/ir.cpp`, `ir.h`, `passes.cpp`, `passes.h`, `src/tools/krc/main.cpp`,
+`tests/CMakeLists.txt`), and follows `cc0dd77`, the E7 measurement that identified the bitcasts as a
+type-identity defect. ADR `0050-type-canonicalisation.md` is present, which the IR boundary requires.
+Type identity is where a pointer-width assumption can hide — two spellings of the same type that differ
+only in how the backend renders them — so this is a change the ARM64 row is worth having. The count is
+unchanged at 875 with 184 executed tests. Row times were 84.56 s (GCC debug), 79.39 s (Clang debug) and
+343.81 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T21:56:03-08:00 — host gate (Linux ARM64)
 Revision: c8faa88
 
