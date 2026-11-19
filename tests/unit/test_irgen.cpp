@@ -695,9 +695,12 @@ int unused_then_used(int value) {
 TEST_CASE("Dead code elimination keeps a volatile access") {
     // The negative test docs/optimize.md §9 tier 1 names: a `volatile` access is
     // an observable effect, so DCE must not remove it even when nothing reads the
-    // result. It is built by hand because **IRGen never sets the flag** — it
-    // parses `volatile` and drops it, so no source string produces one. That is
-    // recorded in implementation.md; this test covers the rule itself.
+    // result. It is built by hand rather than from a source string: IRGen does set
+    // the flag for a declared volatile object, a volatile global and a member
+    // reached through a volatile-qualified struct pointer, but **not** for a plain
+    // `*p` through a volatile-qualified pointer, which is the case a source
+    // string would most naturally exercise. That gap is recorded in
+    // implementation.md (2026-11-19T00:55); this test covers the pass's rule.
     krc::ir::Module module(krc::target::TargetId::Kr32);
     const auto i32 = module.types().int_type(32);
     const auto pointer = module.types().pointer_type(i32);

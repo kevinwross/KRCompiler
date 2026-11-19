@@ -446,11 +446,15 @@ survives CFG simplification).
 
 All three exist, in `tests/unit/test_irgen.cpp` and `tests/unit/test_mem2reg.cpp` rather than in a
 `test_passes.cpp`, because the pass tests were written where the fixtures already were. The
-`volatile` one **builds its IR by hand**: `IRGen` passes `false` for the volatile argument at every
-`create_load`/`create_store`, and the front end parses `volatile` and discards it, so no source
-string produces a volatile access. That is a gap in the compiler rather than in the test, recorded
-as FIX-BEFORE in `implementation.md` (`2026-11-18T23:10:46`); the test covers the pass's rule and
-will keep covering it once the qualifier is forwarded.
+`volatile` one **builds its IR by hand**, for a narrower reason than first recorded here. `IRGen`
+does set the flag for a declared volatile object, a volatile global, and a member reached through a
+volatile-qualified struct pointer — `krc_volatile_store_ir` and `krc_volatile_member_ir` assert
+exactly that, and they pass. What it does **not** do is mark a plain dereference through a
+volatile-qualified pointer: `volatile int *p; *p` emits an ordinary load, because the rvalue
+dereference in `emit_unary` passes `false` and the lvalue one returns the address without the
+qualifier. That is the gap, recorded in `implementation.md` (`2026-11-19T00:55`) with the reason it
+is not a one-line fix: reading the pointee qualifier from `Sema` during IR generation breaks Sema's
+state, so it has to be carried from analysis instead.
 
 **Tier 2 — shape assertions on emitted assembly.** Structural predicates, not golden bytes:
 "no `STORE Rn, [R7+k]` is followed by a `LOAD Rm, [R7+k]` in this function", "this `condbr`
