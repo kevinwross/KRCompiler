@@ -497,6 +497,13 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T14:50:14-08:00 — ARM64 poll
+Revision: 085a8f5
+
+```
+no build: documentation only at 085a8f5fd65f4bbd165c399b7d8ca6ae8fc79d74
+```
+
 2026-11-19T09:15:25-08:00 — host gate (Linux ARM64), milestone: R1's foundation
 Revision: ef60110
 
