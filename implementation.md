@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T05:34:47-08:00 — host gate (Linux ARM64)
+Revision: 0ab4592
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `6367275`, which converts the GEP address arithmetic to the machine representation
+(`src/backend/kr32_backend.cpp`, `tests/unit/test_machine_ir.cpp`). GEP arithmetic is the most
+width-sensitive part of the migration so far: KR32 addresses are 32-bit and the host is 64-bit, so an
+index scaled at the wrong width produces a wrong address that is still in range on many fixtures — the
+executed tests are what turn that into a visible failure rather than a silently valid pointer. The count
+is unchanged at 889 with 191 executed tests. Row times were 226.85 s (GCC debug), 220.66 s (Clang debug)
+and 818.03 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T05:06:31-08:00 — host gate (Linux ARM64)
 Revision: a825df9
 
