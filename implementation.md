@@ -497,6 +497,31 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T08:22:17-08:00 — host gate (Windows + WSL), milestone: R1's foundation
+Revision: 2b602f5
+
+```
+windows-msvc-debug    PASS 889/889
+windows-msvc-release  PASS 889/889
+linux-gcc-debug       PASS 889/889
+linux-gcc-release     PASS 889/889
+linux-clang-debug     PASS 889/889
+linux-sanitize        PASS 889/889
+not verified: native Linux x64, Linux ARM64
+```
+
+Every build directory was deleted first: six clean builds, serial, no warning on any row. The
+revision covers **fifteen backend commits** — the machine representation, the eleven emit-site
+conversions, the data-flow annotations, liveness, the allocation plan and its call-awareness
+correction — none of which change output, so every row's count is the same 889 and the first
+assertion this gate makes is that the "changes nothing" claim held across all of them.
+
+`--dump-stats` reports the same figures it did before the conversions — `kr32/libc.c` at `-O1` is
+**9,896 IR instructions, 1,690 blocks and 22,320 frame bytes** — and it assembles to **35,929
+lines** at `-O1` and **42,350** at `-O0`, which is the evidence that the conversion is a refactor
+rather than a rewrite. (Stated precisely because an earlier draft of this paragraph quoted the
+corpus *assembly* total, 36,135, against a `--dump-stats` figure that counts *IR* instructions.)
+
 2026-11-19T07:35:18-08:00 — host gate (Linux ARM64)
 Revision: 2128dd5
 
@@ -6755,3 +6780,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-19T08:21:31-08:00** — The refinement is small and the numbers move accordingly: **27 of 1,137 values cross a call** (the current allocator's single-block rule already kept ranges short), and the payoff becomes **356 of 4,489 at `-O1` (7%)** and **1,968 of 5,474 at `-O0` (35%)** against 415/2,027 before. Interference violations remain **0** and peak pressure **4**.
 - **2026-11-19T08:21:31-08:00** — So the corrected figure for R1 at `-O1` is **7%**, not the 9% of the previous entry and not the 35.8% before that. Each revision came from a measurement the previous one lacked, and the third is the first that is call-aware — which is the property that matters, because a plan that ignores calls is a plan that miscompiles.
 - **2026-11-19T08:21:31-08:00** — Suite **889/889** on `windows-msvc-debug` and `linux-clang-debug`; output unchanged.
+- **2026-11-19T09:09:38-08:00** — **Clean six-configuration gate at `2b602f5`, every row 889/889, all serial.** Build directories deleted first, no warning on any row. The revision spans **fifteen backend commits** — the machine representation, eleven emit-site conversions, the data-flow annotations, liveness, the allocation plan and its call-awareness correction — and **not one of them changed output**, which is what this gate verifies: the counts are the same 889 on every row, `kr32/libc.c` still assembles to 35,929 lines at `-O1` and 42,350 at `-O0`, and `--dump-stats` still reports 9,896 IR instructions, 1,690 blocks and 22,320 frame bytes.
+- **2026-11-19T09:09:38-08:00** — One error in the gate record was caught before it was committed: the first draft quoted "`--dump-stats` still reports 36,135 instructions" for `libc.c`, which is the **corpus assembly total**, against a command that counts **IR** instructions. Two different units, one sentence. The record now states each separately and says why, because a gate's numbers are what a later reader trusts when something regresses.
+- **2026-11-19T09:09:38-08:00** — The round deliberately took evidence instead of risk. The one remaining optimisation within reach is widening the allocator's filter using the call-aware plan, worth **7% at `-O1`** — and the last two attempts to widen that filter miscompiled. Seven points is not worth a third miscompile without the emission-from-recording step, so the allocator stays as it is and the reasoning is recorded rather than the temptation.
