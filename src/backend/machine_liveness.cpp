@@ -11,11 +11,15 @@ Liveness compute_liveness(const Function& function) {
     // the block's start plus the instruction's index, which is what the recorder
     // produces and what the printer emits in the same order.
     std::map<int, LiveRange> ranges;
+    std::vector<std::size_t> call_positions;
     std::vector<int> defined_at;
     std::size_t position = 0;
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block.instructions) {
             ++result.instructions;
+            if (instruction.opcode == Opcode::Call) {
+                call_positions.push_back(position);
+            }
             if (instruction.virtual_destination >= 0) {
                 ++result.definitions;
                 const auto number = instruction.virtual_destination;
@@ -69,12 +73,19 @@ Liveness compute_liveness(const Function& function) {
     }
 
     result.ranges.assign(ranges.size(), LiveRange{});
+    result.crosses_call.assign(ranges.size(), false);
     for (const auto& [number, range] : ranges) {
         if (number >= 0) {
             if (static_cast<std::size_t>(number) >= result.ranges.size()) {
                 result.ranges.resize(static_cast<std::size_t>(number) + 1);
+                result.crosses_call.resize(static_cast<std::size_t>(number) + 1, false);
             }
             result.ranges[static_cast<std::size_t>(number)] = range;
+            result.crosses_call[static_cast<std::size_t>(number)] =
+                std::any_of(call_positions.begin(), call_positions.end(),
+                            [&](std::size_t at) {
+                                return range.first < at && at < range.last;
+                            });
         }
     }
     return result;
@@ -95,7 +106,9 @@ Allocation plan_linear_scan(const Liveness& liveness,
     order.reserve(liveness.ranges.size());
     for (std::size_t number = 0; number < liveness.ranges.size(); ++number) {
         const auto& range = liveness.ranges[number];
-        if (range.last >= range.first) {
+        const bool crosses_call =
+            number < liveness.crosses_call.size() && liveness.crosses_call[number];
+        if (range.last >= range.first && !crosses_call) {
             order.push_back(number);
         } else {
             ++allocation.unallocated;

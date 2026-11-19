@@ -33,6 +33,11 @@ struct LiveRange {
 
 struct Liveness {
     std::vector<LiveRange> ranges;        // indexed by virtual register number
+    // Whether a call lies strictly inside the range. A register is caller-saved here —
+    // the ABI gives a call four argument registers and nothing preserved — so a value
+    // live across one cannot hold a register unless it is saved and restored, which is a
+    // decision this plan does not make. These values stay in their slots.
+    std::vector<bool> crosses_call;
     std::size_t peak_pressure = 0;        // most values live at one instruction
     std::size_t pressure_position = 0;    // where that peak occurs
     std::size_t definitions = 0;
