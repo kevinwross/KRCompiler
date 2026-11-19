@@ -199,6 +199,30 @@ The two whole-corpus totals the baselines were taken on, before and now:
 D-049 makes selection quality a property of the lowering, so an identity cast or a literal operand
 is fixed once for every build and not only under a flag.
 
+### 3.5 What is left for a machine IR to take
+
+The same classification, over the two runtime sources at `-O1`, is the case for R1 (§7). "Frame
+addressed" counts any instruction whose operand list contains a displacement off a register —
+`[R7 + 12]` on KR32, `[FP + 6]` on KR16 — including arithmetic that uses a frame address rather
+than a load or store.
+
+| | instructions | memory | frame addressed |
+|---|---:|---:|---:|
+| `kr32/libc.c` at `-O0` | 27,085 | 60.3% | 64.5% |
+| `kr32/libc.c` at `-O1` | 21,724 | **35.8%** | **40.5%** |
+| `kr16/libc.c` at `-O1` | 6,485 | 66.6% | **63.6%** |
+
+The allocation that landed takes KR32 from 60.3% to 35.8% memory, and the remaining 35.8% is the
+ceiling for R1 on that file: a machine IR with liveness across blocks and call handling can reach
+the values this allocator has to leave in slots. KR16 is the starker case — it allocates nothing
+(ADR 0049), so two thirds of its instructions touch the frame, and any allocation that survives its
+two-operand ALU would be a larger relative win there than on KR32.
+
+The cost that arrives with it is visible in the same measurement: `MOV` rises from 1,345 at `-O0` to
+**5,727** at `-O1`, a quarter of all instructions, which is the shuffling a machine IR with
+coalescing would also attack. So R1 is not only "more values in registers"; it is the representation
+in which both the traffic and the moves are decided together.
+
 ---
 
 ## 4. What the plan already fixes, and what it leaves open
@@ -386,7 +410,7 @@ Ordered as the work should land. "Metric" is what the corpus table (§11) must s
 | E5 | CFG simplification | IR | unreachable/empty blocks, jumps to jumps | no EH edge crosses the block | break a landing-pad region | branch count |
 | E6 | mem2reg with `phi` | IR | alloca round trips across blocks | **backends lower `phi`**; critical edges split | promote an escaping or `V`-recorded alloca at `-O1` | instruction count, frame bytes |
 | E7 | Global CSE | IR | repeated pure expressions | dominance order fixed and deterministic | cross a call for a value derived from memory | instruction count |
-| R1 | Machine IR + allocation | backend | frame traffic for temporaries | machine IR exists; liveness correct at EH edges | allocate across a call without a save; ignore ABI-fixed registers | instruction count, frame bytes |
+| R1 | Machine IR + allocation | backend | frame traffic for temporaries | machine IR exists; liveness correct at EH edges | allocate across a call without a save; ignore ABI-fixed registers | instruction count, frame bytes. **Measured ceiling: `kr32/libc.c` still spends 35.8% of its instructions on memory at `-O1` and 40.5% reference a frame slot; `kr16/libc.c` is 63.6% frame-addressed because it allocates nothing (§3.5)** |
 | P1 | Slot forwarding (label-aware) | text | `STORE`/`LOAD` of one slot | nothing branches to the intervening label | fold across a branch target | instruction count |
 | P2 | Redundant jump | text | `JMP` to the next label | target is the following instruction | remove a jump that a descriptor names | instruction count |
 
