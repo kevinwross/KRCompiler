@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <unordered_map>
 #include <map>
 #include <optional>
 #include <utility>
@@ -537,6 +538,108 @@ PassChange empty_block_elimination(Module& module) {
                 }
                 function->blocks.erase(function->blocks.begin() +
                                        static_cast<std::ptrdiff_t>(index));
+                ++change.instructions_removed;
+                removed_any = true;
+                break;
+            }
+        }
+    }
+    return change;
+}
+
+namespace {
+
+// A pure value computation: no memory effect, no trap, no ordering.
+bool is_pure_value(const Instruction& instruction) {
+    if (instruction.is_volatile) {
+        return false;
+    }
+    switch (instruction.opcode) {
+    case Opcode::Add:
+    case Opcode::Sub:
+    case Opcode::Mul:
+    case Opcode::And:
+    case Opcode::Or:
+    case Opcode::Xor:
+    case Opcode::Shl:
+    case Opcode::LShr:
+    case Opcode::AShr:
+    case Opcode::ICmp:
+    case Opcode::FCmp:
+    case Opcode::GetElementPtr:
+    case Opcode::BitCast:
+    case Opcode::PtrToInt:
+    case Opcode::IntToPtr:
+    case Opcode::ZExt:
+    case Opcode::SExt:
+    case Opcode::Trunc:
+        return true;
+    default:
+        return false;
+    }
+}
+
+}  // namespace
+
+PassChange dead_code_elimination(Module& module) {
+    PassChange change;
+    for (const auto& function : module.functions()) {
+        if (!function || function->declaration) {
+            continue;
+        }
+        // Use counts include phi incoming values, which are operands of a kind.
+        std::unordered_map<const Value*, std::size_t> uses;
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            for (const auto& instruction : block->instructions) {
+                if (!instruction) {
+                    continue;
+                }
+                for (const auto* operand : instruction->operands) {
+                    if (operand) {
+                        ++uses[operand];
+                    }
+                }
+                for (const auto& incoming : instruction->incoming) {
+                    if (incoming.first) {
+                        ++uses[incoming.first];
+                    }
+                }
+            }
+        }
+        // Removing one instruction can orphan the ones that fed it, so the sweep
+        // repeats until it finds nothing.
+        bool removed_any = true;
+        while (removed_any) {
+            removed_any = false;
+            for (const auto& block : function->blocks) {
+                if (!block) {
+                    continue;
+                }
+                const auto dead = std::find_if(
+                    block->instructions.begin(), block->instructions.end(),
+                    [&](const std::unique_ptr<Instruction>& instruction) {
+                        if (!instruction || !is_pure_value(*instruction)) {
+                            return false;
+                        }
+                        const auto found = uses.find(instruction.get());
+                        return found == uses.end() || found->second == 0;
+                    });
+                if (dead == block->instructions.end()) {
+                    continue;
+                }
+                for (const auto* operand : (*dead)->operands) {
+                    if (!operand) {
+                        continue;
+                    }
+                    const auto found = uses.find(operand);
+                    if (found != uses.end() && found->second > 0) {
+                        --found->second;
+                    }
+                }
+                block->instructions.erase(dead);
                 ++change.instructions_removed;
                 removed_any = true;
                 break;

@@ -98,4 +98,16 @@ struct PassChange {
 // has more than one predecessor, so a phi has a block of its own to write on.
 [[nodiscard]] PassChange split_critical_edges(Module& module);
 
+// E3: remove a pure instruction whose result nothing uses, and repeat, because
+// removing one may orphan the operands that fed it. The whitelist is the safety
+// argument: a candidate computes a value and has no other effect.
+//
+// What it refuses, and why:
+//  * anything with a memory effect — `load`, `store`, `alloca`, `call`, `invoke`
+//    — and anything `volatile`, which §8.4 keeps in order and count;
+//  * division and remainder, which trap: an unused one still has to execute, and
+//    an unused trap is observable;
+//  * terminators, which have no result to be unused.
+[[nodiscard]] PassChange dead_code_elimination(Module& module);
+
 }  // namespace krc::ir

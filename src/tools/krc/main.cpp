@@ -404,6 +404,11 @@ int main(int argc, char** argv) {
                         const auto shared = krc::ir::copy_propagation(*module);
                         change.instructions_removed += shared.instructions_removed;
                         change.instructions_folded += shared.instructions_folded;
+                        // Dead code goes before the block pass: removing an
+                        // instruction can empty a block, and the block pass then
+                        // has one more to collapse.
+                        const auto unused = krc::ir::dead_code_elimination(*module);
+                        change.instructions_removed += unused.instructions_removed;
                         // Last, because it removes blocks: the value passes above
                         // are written against the CFG they were given, and this is
                         // the only one whose result nothing else consumes.

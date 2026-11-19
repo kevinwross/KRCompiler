@@ -648,6 +648,47 @@ int twice(int *pointer) { return *pointer + *pointer; }
     CHECK(verifier.verify(*generated.module, verify_error));
 }
 
+TEST_CASE("Dead code elimination removes an unused pure value and keeps effects") {
+    const auto generated = generate(R"SRC(
+int unused_then_used(int value) {
+    value + 1;
+    value * 2;
+    return value;
+}
+)SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto before = [&] {
+        std::size_t total = 0;
+        for (const auto& function : generated.module->functions()) {
+            for (const auto& block : function->blocks) {
+                total += block->instructions.size();
+            }
+        }
+        return total;
+    }();
+    const auto change = krc::ir::dead_code_elimination(*generated.module);
+    // Two discarded expressions, and whatever fed them.
+    CHECK(change.instructions_removed >= 2);
+    std::size_t after = 0;
+    for (const auto& function : generated.module->functions()) {
+        for (const auto& block : function->blocks) {
+            after += block->instructions.size();
+        }
+    }
+    CHECK(after == before - change.instructions_removed);
+    // The store of the parameter and the return are effects, not dead values.
+    std::ostringstream printed;
+    krc::ir::print_module(*generated.module, printed);
+    CHECK(printed.str().find("ret i32") != std::string::npos);
+
+    krc::ir::Verifier verifier;
+    std::string verify_error;
+    CHECK(verifier.verify(*generated.module, verify_error));
+}
+
 TEST_CASE("Constant folding replaces a folded operation with its value") {
     const auto generated = generate(R"SRC(
 int folded(int *values) { return (2 + 3) * 4 + values[-1]; }
