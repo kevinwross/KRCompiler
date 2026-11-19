@@ -293,6 +293,14 @@ TEST_CASE("The prologue conversion records the same instructions it prints") {
         }
     }
     CHECK(missing == 0);
+
+    // How much of the function the recording covers. This number is the remaining
+    // work in the conversion, so it is asserted rather than admired: a site that was
+    // converted raises it, and one that regresses lowers it.
+    const auto recorded_count = instructions.size();
+    const auto emitted_count = emitted.size();
+    INFO("recorded " << recorded_count << " of " << emitted_count << " instructions");
+    CHECK(recorded_count * 10 >= emitted_count * 8);
 }
 TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips") {
     // The corpus-wide claim, not a sample: if any file emits an instruction the

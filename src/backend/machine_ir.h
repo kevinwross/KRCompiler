@@ -155,5 +155,10 @@ struct Function {
 // written against it is not silently lossy.
 [[nodiscard]] std::optional<Instruction> parse_instruction(std::string_view line);
 
+// The opcode a mnemonic names, for the emit sites that carry the mnemonic as a
+// string today. Returns nullopt for a mnemonic the representation does not know,
+// which lets a caller fall back rather than guess.
+[[nodiscard]] std::optional<Opcode> mnemonic_to_opcode(std::string_view name);
+
 
 }  // namespace krc::backend::machine

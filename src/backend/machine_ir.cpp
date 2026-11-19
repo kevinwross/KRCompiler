@@ -367,6 +367,10 @@ std::optional<Operand> parse_operand(std::string_view text) {
 
 }  // namespace
 
+std::optional<Opcode> mnemonic_to_opcode(std::string_view name) {
+    return opcode_of(name);
+}
+
 std::optional<Instruction> parse_instruction(std::string_view line) {
     const auto indented = line.size() > 8 && line.substr(0, 8) == "        ";
     if (!indented) {

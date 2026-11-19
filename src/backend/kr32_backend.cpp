@@ -18,7 +18,7 @@ namespace krc::backend {
 namespace {
 
 // A register named the way the emitter names it, as a machine operand.
-machine::Operand register_operand(std::string_view name) {
+machine::Operand register_from_name(std::string_view name) {
     if (name.size() > 1 && name.front() == 'R') {
         int number = 0;
         for (const auto character : name.substr(1)) {
@@ -380,29 +380,29 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
         return;
     }
     if (!value) {
-        emit_move(out, register_operand(reg), machine::Operand::immediate(0));
+        emit_move(out, register_from_name(reg), machine::Operand::immediate(0));
         return;
     }
     switch (value->kind) {
     case ir::ValueKind::ConstantInt:
-        emit_move(out, register_operand(reg),
+        emit_move(out, register_from_name(reg),
                   machine::Operand::immediate(
                       static_cast<const ir::ConstantInt*>(value)->value));
         return;
     case ir::ValueKind::ConstantNull:
     case ir::ValueKind::ConstantUndef:
-        emit_move(out, register_operand(reg), machine::Operand::immediate(0));
+        emit_move(out, register_from_name(reg), machine::Operand::immediate(0));
         return;
     case ir::ValueKind::Function:
     case ir::ValueKind::Global:
-        emit_symbol_address(out, register_operand(reg), value->name);
+        emit_symbol_address(out, register_from_name(reg), value->name);
         return;
     case ir::ValueKind::ConstantFloat:
     case ir::ValueKind::ConstantDataArray:
     case ir::ValueKind::ConstantAddressArray: {
         machine::Instruction move;
         move.opcode = machine::Opcode::Mov;
-        move.operands = {register_operand(reg), machine::Operand::immediate(0)};
+        move.operands = {register_from_name(reg), machine::Operand::immediate(0)};
         move.comment = "unsupported constant";
         emit_machine(out, move);
         return;
@@ -418,7 +418,7 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
             if (object != layout.alloca_offsets.end()) {
                 machine::Instruction lea;
                 lea.opcode = machine::Opcode::Lea;
-                lea.operands = {register_operand(reg),
+                lea.operands = {register_from_name(reg),
                                 machine::Operand::frame_offset(object->second)};
                 emit_machine(out, lea);
                 return;
@@ -432,7 +432,7 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
         if (allocated != allocated_registers_.end()) {
             const auto home = register_name(allocated->second);
             if (home != reg) {
-                emit_move(out, register_operand(reg), register_operand(home));
+                emit_move(out, register_from_name(reg), register_from_name(home));
             }
             return;
         }
@@ -448,7 +448,7 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
     // exists to remove.
     machine::Instruction load;
     load.opcode = machine::Opcode::Load;
-    load.operands = {register_operand(reg), machine::Operand::frame_offset(*slot)};
+    load.operands = {register_from_name(reg), machine::Operand::frame_offset(*slot)};
     emit_machine(out, load);
 }
 
@@ -481,7 +481,7 @@ void Kr32Backend::store_value(std::string& out, const ir::Function& function,
     }
     machine::Instruction store;
     store.opcode = machine::Opcode::Store;
-    store.operands = {register_operand(reg), machine::Operand::frame_offset(*slot)};
+    store.operands = {register_from_name(reg), machine::Operand::frame_offset(*slot)};
     emit_machine(out, store);
 }
 
@@ -1385,9 +1385,18 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     }
 
     out += ".L" + function.name + ".ret:\n";
-    out += "        ADJSP #" + std::to_string(layout.frame_size) + "\n";
-    out += "        POP R7\n";
-    out += "        RET\n";
+    machine::Instruction release;
+    release.opcode = machine::Opcode::AdjustStack;
+    release.operands = {
+        machine::Operand::immediate(static_cast<std::int64_t>(layout.frame_size))};
+    emit_machine(out, release);
+    machine::Instruction restore_frame;
+    restore_frame.opcode = machine::Opcode::Pop;
+    restore_frame.operands = {machine::Operand::physical(7)};
+    emit_machine(out, restore_frame);
+    machine::Instruction ret;
+    ret.opcode = machine::Opcode::Return;
+    emit_machine(out, ret);
     out += ".L" + function.name + ".end:\n";
 
     // The exception descriptor (ADR 0026). Every function gets one, even
@@ -1525,12 +1534,25 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         // through R0 and copying afterwards leaves the count unchanged.
         const auto destination = result_register(instruction);
         load_value(out, function, layout, register_operand, "R0");
+        const auto opcode = machine::mnemonic_to_opcode(mnemonic);
         if (literal) {
-            out += "        " + std::string(mnemonic) + " " + destination + ", R0, #" +
-                    std::to_string(literal->value) + "\n";
+            if (opcode) {
+                emit_binary(out, *opcode, register_from_name(destination),
+                            machine::Operand::physical(0),
+                            machine::Operand::immediate(literal->value));
+            } else {
+                out += "        " + std::string(mnemonic) + " " + destination + ", R0, #" +
+                        std::to_string(literal->value) + "\n";
+            }
         } else {
             load_value(out, function, layout, instruction.operands[1], "R1");
-            out += "        " + std::string(mnemonic) + " " + destination + ", R0, R1\n";
+            if (opcode) {
+                emit_binary(out, *opcode, register_from_name(destination),
+                            machine::Operand::physical(0),
+                            machine::Operand::physical(1));
+            } else {
+                out += "        " + std::string(mnemonic) + " " + destination + ", R0, R1\n";
+            }
         }
         store_value(out, function, layout, instruction, destination);
     };
