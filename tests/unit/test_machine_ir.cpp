@@ -10,6 +10,9 @@
 
 #include <string>
 #include <string_view>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <vector>
 
 #include "backend/machine_ir.h"
@@ -30,20 +33,20 @@ namespace {
 // The C path of the front end, as `test_irgen.cpp` drives it. Duplicated rather than
 // shared because it is three lines of wiring and a shared helper would need its own
 // header for one caller.
-std::unique_ptr<krc::ir::Module> generate(const std::string& source) {
+std::unique_ptr<krc::ir::Module> generate(const std::string& source, bool cxx = false) {
     using namespace krc::frontend;
     SourceManager sources;
     DiagnosticEngine diagnostics(sources);
-    const auto file = sources.add_buffer("round_trip.c", std::string(source));
+    const auto file = sources.add_buffer(cxx ? "round_trip.cpp" : "round_trip.c", std::string(source));
     const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
     Preprocessor preprocessor(sources, diagnostics, profile);
     auto tokens = preprocessor.preprocess(file);
-    Parser parser(std::move(tokens), diagnostics, sources, false);
+    Parser parser(std::move(tokens), diagnostics, sources, cxx);
     auto ast = parser.parse_translation_unit();
     if (!ast || parser.had_error() || diagnostics.has_errors()) {
         return nullptr;
     }
-    Sema sema(diagnostics, profile, false);
+    Sema sema(diagnostics, profile, cxx);
     sema.analyze(*ast);
     if (diagnostics.has_errors()) {
         return nullptr;
@@ -224,6 +227,60 @@ int classify(char *bytes, int count) {
         }
     }
     INFO("first unmatched: " << first_unmatched);
+    CHECK(unmatched == 0);
+}
+TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips") {
+    // The corpus-wide claim, not a sample: if any file emits an instruction the
+    // representation cannot express, this fails and names the line.
+    namespace fs = std::filesystem;
+    const auto corpus = fs::path(KRC_SOURCE_DIR) / "tests" / "corpus" / "extracted";
+    std::vector<fs::path> files;
+    for (const auto* directory : {"tier1", "tier2"}) {
+        for (const auto& entry : fs::directory_iterator(corpus / directory)) {
+            const auto extension = entry.path().extension().string();
+            if (extension == ".c" || extension == ".cpp") {
+                files.push_back(entry.path());
+            }
+        }
+    }
+    REQUIRE(files.size() >= 20);
+
+    std::size_t checked_lines = 0;
+    std::string first_unmatched;
+    std::size_t unmatched = 0;
+    for (const auto& path : files) {
+        std::ifstream input(path);
+        REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        const auto module = generate(buffer.str(), path.extension() == ".cpp");
+        if (!module) {
+            continue;  // a corpus file the front end rejects is another test's business
+        }
+        // Both levels: `-O1` emits different code (a register instead of a slot, so a
+        // `MOV` where `-O0` had a `LOAD`/`STORE`), and a shape it alone produces would
+        // otherwise escape the check.
+        for (const auto level : {krc::backend::OptimizationLevel::O0,
+                                 krc::backend::OptimizationLevel::O1}) {
+            krc::backend::Kr32Backend backend(
+                *module, krc::target::get_target(krc::target::TargetId::Kr32), level);
+            std::string error;
+            const auto assembly = backend.emit(error);
+            REQUIRE(assembly.has_value());
+            for (const auto& line : instruction_lines(*assembly)) {
+                ++checked_lines;
+                const auto parsed = parse_instruction(line);
+                if (!parsed || print_instruction(*parsed) != line + "\n") {
+                    if (unmatched == 0) {
+                        first_unmatched = path.filename().string() + ": " + line;
+                    }
+                    ++unmatched;
+                }
+            }
+        }
+    }
+    INFO("first unmatched: " << first_unmatched);
+    CHECK(checked_lines > 10000);
     CHECK(unmatched == 0);
 }
 TEST_CASE("Every instruction the backend emits for the runtime round-trips") {

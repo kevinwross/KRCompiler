@@ -81,6 +81,12 @@ std::string mnemonic(Opcode opcode) {
         return "SUB";
     case Opcode::Mul:
         return "MUL";
+    case Opcode::MulHighUnsigned:
+        return "MULHU";
+    case Opcode::DivideSigned:
+        return "DIVS";
+    case Opcode::ModuloSigned:
+        return "MODS";
     case Opcode::And:
         return "AND";
     case Opcode::Or:
@@ -131,6 +137,8 @@ std::string mnemonic(Opcode opcode) {
         return "JZ";
     case Opcode::JumpIfNotZero:
         return "JNZ";
+    case Opcode::JumpIfCarry:
+        return "JCC";
     case Opcode::JumpIfLess:
         return "JLT";
     case Opcode::JumpIfGreater:
@@ -177,7 +185,7 @@ std::string format_operand(const Operand& operand) {
         // operand because the frame base is loaded off `SP`, which is not a frame
         // offset and cannot be printed as one.
         const auto base = operand.symbol.empty() ? std::string("R7") : operand.symbol;
-        if (operand.value == 0) {
+        if (!operand.displacement) {
             return "[" + base + "]";
         }
         return "[" + base + (operand.value < 0 ? " - " : " + ") +
@@ -234,7 +242,9 @@ std::optional<Opcode> opcode_of(std::string_view name) {
         {"STORE8", Opcode::Store8},     {"FLOAD.D", Opcode::LoadFloat},
         {"FSTORE.D", Opcode::StoreFloat}, {"LEA", Opcode::Lea},
         {"ADD", Opcode::Add},           {"SUB", Opcode::Sub},
-        {"MUL", Opcode::Mul},           {"AND", Opcode::And},
+        {"MUL", Opcode::Mul},           {"MULHU", Opcode::MulHighUnsigned},
+        {"DIVS", Opcode::DivideSigned},   {"MODS", Opcode::ModuloSigned},
+        {"JCC", Opcode::JumpIfCarry},           {"AND", Opcode::And},
         {"OR", Opcode::Or},             {"XOR", Opcode::Xor},
         {"SHL", Opcode::Shl},           {"SHR", Opcode::Shr},
         {"SAR", Opcode::Sar},           {"CMP", Opcode::Cmp},           {"FLOAD.W", Opcode::FLoadWord},
@@ -290,7 +300,9 @@ std::optional<Operand> parse_operand(std::string_view text) {
         auto inside = trim(text.substr(1, close - 1));
         const auto split = inside.find_first_of("+-");
         if (split == std::string_view::npos) {
-            return Operand::address(std::string(inside), 0);
+            auto operand = Operand::address(std::string(inside), 0);
+            operand.displacement = false;
+            return operand;
         }
         const auto base = trim(inside.substr(0, split));
         const auto sign = inside[split];

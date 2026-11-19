@@ -43,6 +43,9 @@ enum class Opcode {
     Add,
     Sub,
     Mul,
+    MulHighUnsigned,  // MULHU: the high word of an unsigned product
+    DivideSigned,     // DIVS
+    ModuloSigned,     // MODS
     And,
     Or,
     Xor,
@@ -71,6 +74,7 @@ enum class Opcode {
     Jump,         // JMP
     JumpIfZero,   // JZ
     JumpIfNotZero, // JNZ
+    JumpIfCarry,   // JCC: a conditional branch on a flag the previous compare set
     JumpIfLess,   // JLT
     JumpIfGreater,
     JumpIfLessOrEqual,
@@ -98,8 +102,12 @@ struct Operand {
     };
 
     Kind kind = Kind::Immediate;
-    std::int64_t value = 0;   // register number, immediate value, or frame offset
-    std::string symbol;       // when kind is Symbol
+    std::int64_t value = 0;   // register number, immediate value, or address offset
+    std::string symbol;       // a Symbol's name, or an address's base register
+    // An address may be written with or without a displacement: the backend emits
+    // `[R7 + 0]` for a zero offset and `[SP]` for the frame base. Both are text, and
+    // the difference has to survive the round trip.
+    bool displacement = true;
 
     [[nodiscard]] static Operand physical(int number);
     [[nodiscard]] static Operand float_register(int number);
