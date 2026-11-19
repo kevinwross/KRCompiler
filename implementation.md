@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T23:10:47-08:00 — host gate (Linux ARM64)
+Revision: 1028002
+
+```
+linux-gcc-debug    PASS 875/875
+linux-clang-debug  PASS 875/875
+linux-sanitize     PASS 875/875
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `1028002`, "Make the documentation match the compiler it describes", which also
+regenerates `benchmarks/size.tsv` (42 lines) and `benchmarks/ticks.tsv`. A `.tsv` under `benchmarks/` is
+not documentation under the classification rule, so this took a full gate rather than a poll block even
+though no compiler source changed — the build confirms the tree still compiles and the suite still
+passes at the revision whose documented numbers changed. The count is unchanged at 875 with 184
+executed tests. Row times were 79.94 s (GCC debug), 82.61 s (Clang debug) and 344.72 s (ASan/UBSan).
+Rows were configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at
+a time, with no warnings. No disturbances. Independently checked: the merge `73094ab` that reordered the
+gate records kept every ARM64 block — 38 gate blocks and 10 poll blocks are present after it.
+
 2026-11-18T22:41:09-08:00 — host gate (Linux ARM64)
 Revision: fe88352
 
