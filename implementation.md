@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T23:42:10-08:00 — host gate (Linux ARM64)
+Revision: 88c7a06
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate covering what the rebase absorbed: `2f3e506` runs the C++ fixtures at `-O1` as well as
+`-O0` (`tests/CMakeLists.txt`), rising the count from **875 to 889** and executed tests from 184 to
+**191**, and `f432167` records a flake investigation — five runs, one failure, unreproduced. That flake
+is worth naming: it is unreproduced on the host that saw it, and this gate is one more observation
+without it, not a refutation. Extending `-O1` to the C++ fixtures matters here because the C++
+front end plus the optimiser is a different path from the C corpus. Row times were 84.21 s (GCC debug),
+80.54 s (Clang debug) and 349.68 s (ASan/UBSan), the sanitizer row rising with the added work. Rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time,
+with no warnings. No disturbances.
+
 2026-11-18T23:26:39-08:00 — host gate (Linux ARM64)
 Revision: 47202d4
 
