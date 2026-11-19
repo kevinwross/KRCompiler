@@ -450,6 +450,7 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
     load.opcode = machine::Opcode::Load;
     load.operands = {register_from_name(reg), machine::Operand::frame_offset(*slot)};
     emit_machine(out, load);
+    annotate_source(value);
 }
 
 void Kr32Backend::store_value(std::string& out, const ir::Function& function,
@@ -483,6 +484,7 @@ void Kr32Backend::store_value(std::string& out, const ir::Function& function,
     store.opcode = machine::Opcode::Store;
     store.operands = {register_from_name(reg), machine::Operand::frame_offset(*slot)};
     emit_machine(out, store);
+    annotate_destination(&instruction);
 }
 
 void Kr32Backend::load_wide(std::string& out, const ir::Function& function,
@@ -1182,6 +1184,41 @@ void Kr32Backend::emit_zero_float(std::string& out, const FrameLayout& layout,
                      machine::Operand::frame_offset(layout.float_temp));
 }
 
+int Kr32Backend::vreg_for(const ir::Value* value) const {
+    if (value == nullptr) {
+        return -1;
+    }
+    const auto found = virtual_registers_.find(value);
+    if (found != virtual_registers_.end()) {
+        return found->second;
+    }
+    const auto number = next_virtual_register_++;
+    virtual_registers_.emplace(value, number);
+    return number;
+}
+
+void Kr32Backend::annotate_destination(const ir::Value* value) const {
+    if (recording_ == nullptr || recording_->blocks.empty() ||
+        recording_->blocks.back().instructions.empty()) {
+        return;
+    }
+    const auto number = vreg_for(value);
+    if (number >= 0) {
+        recording_->blocks.back().instructions.back().virtual_destination = number;
+    }
+}
+
+void Kr32Backend::annotate_source(const ir::Value* value) const {
+    if (recording_ == nullptr || recording_->blocks.empty() ||
+        recording_->blocks.back().instructions.empty()) {
+        return;
+    }
+    const auto number = vreg_for(value);
+    if (number >= 0) {
+        recording_->blocks.back().instructions.back().virtual_sources.push_back(number);
+    }
+}
+
 void Kr32Backend::emit_machine(std::string& out,
                                const machine::Instruction& instruction) const {
     out += machine::print_instruction(instruction);
@@ -1210,6 +1247,8 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     recording.blocks.clear();
     recording.blocks.emplace_back();
     recording_ = &recording;
+    virtual_registers_.clear();
+    next_virtual_register_ = 0;
 
     machine::Instruction push;
     push.opcode = machine::Opcode::Push;

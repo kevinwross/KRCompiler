@@ -139,6 +139,15 @@ struct Instruction {
     Opcode opcode = Opcode::Nop;
     std::vector<Operand> operands;
     std::string comment;
+
+    // Data flow, recorded beside the printed operands rather than instead of them
+    // (ADR 0051). `virtual_destination` is the value this instruction defines, and
+    // `virtual_sources` the values it reads, both as virtual register numbers; `-1`
+    // means "not a value" — a frame address, a call symbol, an ABI register. Printing
+    // ignores both, so the recorded text stays the emitted text and the equality tests
+    // keep working while allocation is built on the annotations.
+    int virtual_destination = -1;
+    std::vector<int> virtual_sources;
 };
 
 struct Block {

@@ -93,6 +93,21 @@ std::vector<std::string> instruction_lines(const std::string& assembly) {
 
 }  // namespace
 
+namespace {
+
+bool printed_after_annotations(const krc::backend::machine::Function& function,
+                               const std::string& assembly) {
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block.instructions) {
+            if (assembly.find(print_instruction(instruction)) == std::string::npos) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+}  // namespace
 TEST_CASE("A machine instruction prints in the assembler's syntax") {
     Instruction store;
     store.opcode = Opcode::Store;
@@ -396,6 +411,66 @@ int describe(int value, int other) {
     // the machine form is the output rather than a description of it. A regression
     // here means a converted site was reverted.
     CHECK(recorded == emitted);
+}
+TEST_CASE("The recording carries the data flow allocation needs") {
+    // ADR 0051's first step: the printed operands are still physical registers, so the
+    // recorded text equals the emitted text; beside them the recording now names the
+    // value each instruction defines and reads. Nothing consumes it yet.
+    const auto source = std::string(R"SRC(
+int arithmetic(int left, int right) {
+    int sum = left + right;
+    int product = sum * right;
+    return product - sum;
+}
+)SRC");
+    const auto module = generate(source);
+    REQUIRE(module);
+
+    krc::backend::Kr32Backend backend(*module,
+                                      krc::target::get_target(krc::target::TargetId::Kr32));
+    std::string error;
+    const auto assembly = backend.emit(error);
+    REQUIRE(assembly.has_value());
+
+    const auto* recorded = backend.machine_function("arithmetic");
+    REQUIRE(recorded != nullptr);
+
+    std::size_t definitions = 0;
+    std::size_t uses = 0;
+    std::set<int> defined;
+    for (const auto& block : recorded->blocks) {
+        for (const auto& instruction : block.instructions) {
+            if (instruction.virtual_destination >= 0) {
+                ++definitions;
+                defined.insert(instruction.virtual_destination);
+            }
+            uses += instruction.virtual_sources.size();
+        }
+    }
+    CHECK(definitions >= 2);
+    CHECK(uses >= 2);
+
+    // A value defined in the function is also read through the same virtual register,
+    // which is what makes the annotation data flow rather than decoration.
+    std::set<int> used;
+    for (const auto& block : recorded->blocks) {
+        for (const auto& instruction : block.instructions) {
+            for (const auto source_value : instruction.virtual_sources) {
+                used.insert(source_value);
+            }
+        }
+    }
+    std::size_t both = 0;
+    for (const auto number : defined) {
+        if (used.count(number) != 0) {
+            ++both;
+        }
+    }
+    INFO("defined " << defined.size() << ", used " << used.size() << ", both " << both);
+    CHECK(both >= 1);
+
+    // And the text is still exactly what the emitter printed.
+    CHECK(printed_after_annotations(*recorded, *assembly));
 }
 TEST_CASE("The recording covers the corpus, and says where it does not") {
     // The corpus-wide version of the coverage measurement. Every function is emitted,

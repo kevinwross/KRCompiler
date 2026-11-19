@@ -138,6 +138,10 @@ private:
     // The function being emitted, so a converted site can record without being told
     // which function it is in.
     mutable machine::Function* recording_ = nullptr;
+    // `ADR 0051`: the virtual register each IR value lives in, and the next one to
+    // hand out. Cleared per function so numbering is stable within a function.
+    mutable std::unordered_map<const ir::Value*, int> virtual_registers_;
+    mutable int next_virtual_register_ = 0;
 
     // Prints `instruction` and records it against the function being emitted, so that
     // the text and the machine form cannot disagree: one call site produces both.
@@ -180,6 +184,14 @@ private:
     // `LEA <destination>, <address>`: a frame slot or a symbol.
     void emit_lea(std::string& out, const machine::Operand& destination,
                   const machine::Operand& address) const;
+
+    // The virtual register for an IR value, assigned on first sight (ADR 0051).
+    int vreg_for(const ir::Value* value) const;
+    // Annotate the instruction just recorded with the value it defines or reads.
+    // Separate from `emit_machine` so that a call site says what it means: these
+    // modify the recording only, never the text.
+    void annotate_destination(const ir::Value* value) const;
+    void annotate_source(const ir::Value* value) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its
