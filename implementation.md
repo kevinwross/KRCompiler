@@ -497,6 +497,29 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T02:34:08-08:00 — host gate (Linux ARM64), milestone: the optimisation pass, serial
+Revision: f9ce06e
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-gcc-release  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, Windows x64, native Linux x64
+```
+
+The ARM64 row for the milestone the Windows/WSL record above closes at `0f75913` — that record names
+Linux ARM64 as unverified, and this block answers it. `f9ce06e` is the milestone revision plus
+documentation only, so the code under test is the milestone's. The release row is included because this
+gate closes a milestone, and it is the row the other six configurations cannot supply for this
+architecture: a warning-free optimised compile on GCC 14.2.0/ARM64, all 889 tests passing in 84.78 s —
+the optimised images run the suite about 2.7 times faster than the debug ones. It is also the first
+release build on this host since the allocator, mem2reg and type-canonicalisation work, so it is the
+first optimised evidence for all three. Debug times were 227.30 s (GCC), 221.51 s (Clang) and 814.18 s
+(ASan/UBSan); all four rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, no warnings, no disturbances. The count is 889 with 191 executed
+tests on every row.
+
 2026-11-19T01:45:05-08:00 — host gate (Windows + WSL), milestone: the optimisation pass, serial
 Revision: 0f75913
 
