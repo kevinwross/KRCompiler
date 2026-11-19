@@ -520,6 +520,26 @@ The two S4 attempts in this span changed code and were reverted before committin
 gate measured contains neither; the −28.6% frame measurement they produced is recorded in
 `docs/optimize.md` §7's S4 row rather than in the compiler.
 
+2026-11-19T01:16:48-08:00 — host gate (Linux ARM64)
+Revision: d25bf55
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for three absorbed commits: `423f5de` corrects the volatile record — the gap is pointer
+dereference, not qualifiers — and `6383779` marks a dereference through a volatile-qualified pointer as
+volatile (`src/irgen/c_irgen.h`, `c_irgen_expressions.cpp`, `tests/unit/test_irgen.cpp`), while
+`b68ecde` measures what a machine IR would take and puts the number on the R1 row. So the volatile
+defect recorded earlier is now addressed rather than merely documented, and the fix is in the C++
+front end, which the `-O1` fixtures exercise. The count is unchanged at 889 with 191 executed tests.
+Row times were 227.39 s (GCC debug), 219.03 s (Clang debug) and 813.93 s (ASan/UBSan) — the serial
+baseline the previous gate established. Rows were configured and built clean from a deleted `build/` at
+`-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T00:48:50-08:00 — host gate (Linux ARM64)
 Revision: bc788b7
 
@@ -6426,5 +6446,3 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-19T01:43:57-08:00** — **The diff harness finally ran, and it says where the problem is not.** Compiling `tier0/functions.c` with a stashed good backend and with the reusing one, the first divergence is in the **prologue of `sum5`**: `ADJSP #-104` became `ADJSP #-80`, and immediately after the parameter stores the good code emits `LOAD R0, [R7 + 112]` where the reuse build emits `LOAD R0, [R7 + 88]`. The load is *above* the frame — 112 against a 104-byte frame — so **incoming stack arguments are addressed as `frame_size + k`**, which makes the frame size part of the ABI-visible addressing of a call's arguments rather than an internal detail of the callee. Any change that shrinks the frame must keep that relationship consistent, and a layout pass that reuses slots while leaving the argument addressing derived from a provisional frame size breaks every function with a spilled argument.
 - **2026-11-19T01:43:57-08:00** — Reverted again in full; suite **889/889**. Two things are now worth stating plainly rather than repeating: the harness that would have found this in one round (compile twice, diff the assembly, read the first divergence) is cheap and should have been the *first* step, not the fifth; and S4 cannot be attempted again on IR-level reasoning — it needs the emitter's slot and argument addressing in one place, which is R1's job and not a pass's.
 - **2026-11-19T01:43:57-08:00** — S4 is recorded as **blocked on R1** rather than merely declined: the measured −28.6% is real, the safety precondition is now known to include argument addressing, and the number is kept in the S4 row for whoever builds the representation that can take it.
-- **2026-11-19T02:28:02-08:00** — **Clean six-configuration gate at `0f75913`, every row 889/889, all serial.** Build directories deleted first. This covers the two codegen changes since the `b87ff1d` gate — the volatile pointer-dereference fix and the frame-slot omission — and it is the first gate taken entirely at `jobs: 1`. Nothing was disturbed and no row needed a re-run, which is itself evidence about the parallel-run defect: the flake class is gone with the parallelism, and the two S4 attempts left no code in the tree because both were reverted before committing.
-- **2026-11-19T02:28:02-08:00** — KR16's remaining traffic was measured while looking for a pass-level win there instead of R1: over `kr16/libc.c` at `-O1` the mnemonic mix is **`LD` 2,214 and `ST` 1,975 of 6,485 instructions — 64.6% load/store**, and only 164 `ADD`. There is no pass to write against that: it is allocation (measured neutral under ADR 0049's two-operand constraint) or a machine IR. So the pass level is exhausted on both targets for the same reason, and the recorded numbers now say so from three directions rather than one.
