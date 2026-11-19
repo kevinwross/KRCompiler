@@ -497,6 +497,37 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T22:40:41-08:00 — host gate (Windows + WSL), milestone: the optimisation pass
+Revision: c8b70b2
+
+```
+windows-msvc-debug    PASS 875/875
+windows-msvc-release  PASS 875/875
+linux-gcc-debug       PASS 875/875
+linux-gcc-release     PASS 875/875
+linux-clang-debug     PASS 875/875
+linux-sanitize        PASS 875/875
+not verified: native Linux x64, Linux ARM64
+```
+
+Every build directory was deleted first, so this is six clean builds rather than
+six incremental ones — the first such gate since the optimiser work began, and the
+reason to run one now is that everything since `d044fcf` had been verified
+incrementally. All 875 tests pass on every row, including the 44 that execute at
+`-O1` and the determinism comparisons. No row reported a warning (`/W4 /WX` on
+MSVC, `-Wall -Wextra -Wpedantic -Werror` on GCC and Clang). The two release rows
+are included because the milestone *is* the optimiser: their distinct value here is
+a warning-free optimised compile of the code that generates code, which is where a
+pass that leaks or over-reads would show up under the sanitizer row.
+
+Two things worth noting for the next gate. The `templates.cpp` determinism defect
+that has appeared intermittently all session did not reproduce in any row of this
+run, so it remains a 2-byte `.debug_info` flip rather than a systematic
+difference — recorded here because a later gate that does show it should not be
+read as a regression from this one. And the ARM64 host gates its own pushes
+independently; its record for this revision will appear separately, so "not
+verified: Linux ARM64" here means "not this host", not "not verified at all".
+
 2026-11-18T21:56:03-08:00 — host gate (Linux ARM64)
 Revision: c8faa88
 
