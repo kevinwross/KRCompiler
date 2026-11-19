@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T06:38:41-08:00 — host gate (Linux ARM64)
+Revision: 8ff1d7a
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `8fa1c40`, which converts the float arithmetic and compares, and `a83bdbc`, which
+converts the wide conditional branch and the invoke continuation (`src/backend/kr32_backend.cpp`,
+`machine_ir.cpp`/`.h`). Float compares are the least portable thing in the migration: NaN handling,
+unordered predicates and the flag model differ between x86 and ARM64, so a representation that folded an
+x86 predicate into a target-neutral one could be wrong only for unordered inputs. The suite passing says
+the existing float fixtures still agree; it does not prove the NaN cases are covered, which is worth
+saying because a comparable-before-unordered mistake is exactly the kind that survives a corpus. The
+count is unchanged at 889 with 191 executed tests. Row times were 225.48 s (GCC debug), 221.41 s (Clang
+debug) and 820.97 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2`
+with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T06:03:04-08:00 — host gate (Linux ARM64)
 Revision: 2d6abea
 
