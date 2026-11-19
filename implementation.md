@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T23:57:56-08:00 — host gate (Linux ARM64)
+Revision: f505307
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `0665fde`, "Do not reserve a frame slot for a value that lives in a register"
+(`src/backend/kr32_backend.cpp`, `docs/optimize.md`), which the rebase absorbed behind the push race.
+This is the frame-accounting counterpart to the earlier allocator work: a value that lives in a register
+must not still own a stack slot, and getting it wrong silently costs frame bytes rather than failing.
+The count is unchanged at 889 with 191 executed tests, so the `--dump-stats` frame number is the artefact
+to compare across hosts for this one, not a test. Row times were 88.03 s (GCC debug), 83.10 s (Clang
+debug) and 352.85 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2`
+with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T23:42:10-08:00 — host gate (Linux ARM64)
 Revision: 88c7a06
 
