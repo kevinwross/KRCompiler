@@ -497,6 +497,23 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T21:56:03-08:00 — host gate (Linux ARM64)
+Revision: c8faa88
+
+```
+linux-gcc-debug    PASS 875/875
+linux-clang-debug  PASS 875/875
+linux-sanitize     PASS 875/875
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate. The previous record covered `af97b31`; the push lost a race and the single rebase
+absorbed `65d83d8`, which removes a pure instruction whose result nothing uses
+(`src/ir/passes.cpp`, `passes.h`, `src/tools/krc/main.cpp`, `tests/unit/test_irgen.cpp`), and it had not
+been classified. The count is unchanged at 875 with 184 executed tests. Row times were 80.15 s (GCC
+debug), 82.50 s (Clang debug) and 344.05 s (ASan/UBSan). Rows were configured and built clean from a
+deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T21:40:33-08:00 — host gate (Linux ARM64)
 Revision: af97b31
 
