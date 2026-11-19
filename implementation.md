@@ -497,6 +497,25 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T22:41:09-08:00 — host gate (Linux ARM64)
+Revision: fe88352
+
+```
+linux-gcc-debug    PASS 875/875
+linux-clang-debug  PASS 875/875
+linux-sanitize     PASS 875/875
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate covering three commits the rebase absorbed behind the push race: `0837ddf` reports
+frame bytes in `--dump-stats` and lets it build IR on its own, `6b7045f` measures four open rows and
+records why each is not worth landing, and `c8b70b2` lets `--dump-stats` complete on its own — touching
+`src/backend/kr16_backend.cpp`/`.h`, `kr32_backend.cpp`/`.h` and `src/tools/krc/main.cpp`. Frame-byte
+accounting is width-sensitive, so this is the class of change where ARM64 can disagree with x86_64. The
+count is unchanged at 875 with 184 executed tests. Row times were 84.66 s (GCC debug), 78.82 s (Clang
+debug) and 343.55 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2`
+with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-18T22:25:30-08:00 — host gate (Linux ARM64)
 Revision: b204a6a
 
