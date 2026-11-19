@@ -497,6 +497,29 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-18T21:40:33-08:00 — host gate (Linux ARM64)
+Revision: af97b31
+
+```
+linux-gcc-debug    PASS 875/875
+linux-clang-debug  PASS 875/875
+linux-sanitize     PASS 875/875
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+The gate covers `f2591eb`, which promotes cross-block allocas into SSA with phi, built test-first: new
+`src/ir/mem2reg.cpp` and `tests/unit/test_mem2reg.cpp`, with `src/ir/passes.h`,
+`src/tools/krc/main.cpp`, `CMakeLists.txt` and `tests/CMakeLists.txt` wiring. `CMakeLists.txt` and
+`src/ir/` are both boundary files. This is the E6 attempt whose documentation records a compiler crash
+once it was built as a unit; **on ARM64 it does not reproduce** — GCC, Clang and the ASan/UBSan build
+all compiled the tree and all 875 tests passed, including the new unit tests. That is evidence the
+landed version is well-formed here, not that the earlier crash was diagnosed, so the other hosts should
+still confirm on their toolchains. The count is unchanged at 875 with **184** executed tests because
+unit tests run as a single doctest binary, so a new unit test file does not add a ctest entry. Row times
+were 81.46 s (GCC debug), 82.15 s (Clang debug) and 345.14 s (ASan/UBSan). Rows were configured and
+built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no
+warnings. No disturbances.
+
 2026-11-18T21:12:03-08:00 — ARM64 poll
 Revision: 6bb8888
 
