@@ -11,6 +11,8 @@
 #include <string>
 #include <string_view>
 #include <filesystem>
+#include <map>
+#include <set>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -394,6 +396,89 @@ int describe(int value, int other) {
     // the machine form is the output rather than a description of it. A regression
     // here means a converted site was reverted.
     CHECK(recorded == emitted);
+}
+TEST_CASE("The recording covers the corpus, and says where it does not") {
+    // The corpus-wide version of the coverage measurement. Every function is emitted,
+    // its recorded instruction count compared with its emitted one, and the unrecorded
+    // mnemonics are named: that list is the remaining conversion work, and it is the
+    // instrument that worked on the sample.
+    namespace fs = std::filesystem;
+    const auto corpus = fs::path(KRC_SOURCE_DIR) / "tests" / "corpus" / "extracted";
+    std::vector<fs::path> files;
+    for (const auto* directory : {"tier1", "tier2"}) {
+        for (const auto& entry : fs::directory_iterator(corpus / directory)) {
+            const auto extension = entry.path().extension().string();
+            if (extension == ".c" || extension == ".cpp") {
+                files.push_back(entry.path());
+            }
+        }
+    }
+    REQUIRE(files.size() >= 20);
+
+    std::size_t recorded_total = 0;
+    std::size_t emitted_total = 0;
+    std::map<std::string, std::size_t> unrecorded;
+    for (const auto& path : files) {
+        std::ifstream input(path);
+        REQUIRE(input.good());
+        std::stringstream buffer;
+        buffer << input.rdbuf();
+        const auto module = generate(buffer.str(), path.extension() == ".cpp");
+        if (!module) {
+            continue;
+        }
+        krc::backend::Kr32Backend backend(*module,
+                                          krc::target::get_target(krc::target::TargetId::Kr32));
+        std::string error;
+        const auto assembly = backend.emit(error);
+        REQUIRE(assembly.has_value());
+        const auto lines = instruction_lines(*assembly);
+        emitted_total += lines.size();
+        for (const auto& function : module->functions()) {
+            if (!function || function->declaration) {
+                continue;
+            }
+            const auto* recorded = backend.machine_function(function->name);
+            if (recorded == nullptr) {
+                continue;
+            }
+            for (const auto& block : recorded->blocks) {
+                recorded_total += block.instructions.size();
+            }
+            // Which of this function's lines the recording does not contain.
+            std::set<std::string> have;
+            for (const auto& block : recorded->blocks) {
+                for (const auto& instruction : block.instructions) {
+                    have.insert(print_instruction(instruction));
+                }
+            }
+            const auto marker = "\n" + function->name + ":\n";
+            const auto start = assembly->find(marker);
+            if (start == std::string::npos) {
+                continue;
+            }
+            auto end = assembly->find("\n        .text\n", start);
+            if (end == std::string::npos) {
+                end = assembly->size();
+            }
+            for (const auto& line : instruction_lines(assembly->substr(start, end - start))) {
+                if (have.count(line + "\n") == 0) {
+                    const auto space = line.find(' ', 8);
+                    ++unrecorded[line.substr(8, space - 8)];
+                }
+            }
+        }
+    }
+    std::string summary;
+    for (const auto& [name, count] : unrecorded) {
+        summary += " " + name + "=" + std::to_string(count);
+    }
+    std::cerr << "[corpus] recorded " << recorded_total << " of " << emitted_total
+              << "; unrecorded:" << summary << "\n";
+    REQUIRE(emitted_total > 5000);
+    // A floor, raised as the conversion completes: the number in implementation.md is
+    // the authority, this only stops a regression.
+    CHECK(recorded_total * 4 >= emitted_total * 3);
 }
 TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips") {
     // The corpus-wide claim, not a sample: if any file emits an instruction the

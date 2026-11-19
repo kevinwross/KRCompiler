@@ -743,12 +743,7 @@ void Kr32Backend::load_fp(std::string& out, const ir::Function& function,
                           const FrameLayout& layout, const ir::Value* value,
                           std::string_view reg) const {
     if (!value) {
-        out += "        MOV R0, #0\n";
-        out += "        MOV R1, #0\n";
-        out += "        STORE R0, [R7 + " + std::to_string(layout.float_temp) + "]\n";
-        out += "        STORE R1, [R7 + " + std::to_string(layout.float_temp + 4) + "]\n";
-        out += "        FLOAD.D " + std::string(reg) + ", [R7 + " +
-               std::to_string(layout.float_temp) + "]\n";
+        emit_zero_float(out, layout, reg, false);
         return;
     }
     if (value->kind == ir::ValueKind::ConstantFloat) {
@@ -775,12 +770,7 @@ void Kr32Backend::load_fp(std::string& out, const ir::Function& function,
     }
     if (value->kind == ir::ValueKind::ConstantNull ||
         value->kind == ir::ValueKind::ConstantUndef) {
-        out += "        MOV R0, #0\n";
-        out += "        MOV R1, #0\n";
-        out += "        STORE R0, [R7 + " + std::to_string(layout.float_temp) + "]\n";
-        out += "        STORE R1, [R7 + " + std::to_string(layout.float_temp + 4) + "]\n";
-        out += "        FLOAD.D " + std::string(reg) + ", [R7 + " +
-               std::to_string(layout.float_temp) + "]\n";
+        emit_zero_float(out, layout, reg, false);
         return;
     }
     std::string error;
@@ -790,8 +780,8 @@ void Kr32Backend::load_fp(std::string& out, const ir::Function& function,
         return;
     }
     const auto width = value->type && value->type->bits == 32 ? "FLOAD.W" : "FLOAD.D";
-    out += "        " + std::string(width) + " " + std::string(reg) + ", [R7 + " +
-           std::to_string(*slot) + "]\n";
+    emit_load_opcode(out, width, register_from_name(reg),
+                     machine::Operand::frame_offset(*slot));
 }
 
 void Kr32Backend::add_debug_type(ir::TypePtr type) const {
@@ -856,8 +846,8 @@ void Kr32Backend::store_fp(std::string& out, const ir::Function& function,
         return;
     }
     const auto width = instruction.type && instruction.type->bits == 32 ? "FSTORE.W" : "FSTORE.D";
-    out += "        " + std::string(width) + " " + std::string(reg) + ", [R7 + " +
-           std::to_string(*slot) + "]\n";
+    emit_store_opcode(out, width, register_from_name(reg),
+                      machine::Operand::frame_offset(*slot));
 }
 
 void Kr32Backend::emit_intrinsic(std::string& out, const ir::Function& function,
@@ -1158,6 +1148,18 @@ void Kr32Backend::emit_call(std::string& out, const std::string& symbol) const {
     call.opcode = machine::Opcode::Call;
     call.operands = {machine::Operand::named(symbol)};
     emit_machine(out, call);
+}
+
+void Kr32Backend::emit_zero_float(std::string& out, const FrameLayout& layout,
+                                  std::string_view reg, bool single) const {
+    emit_move(out, machine::Operand::physical(0), machine::Operand::immediate(0));
+    emit_move(out, machine::Operand::physical(1), machine::Operand::immediate(0));
+    emit_store(out, machine::Operand::physical(0),
+               machine::Operand::frame_offset(layout.float_temp));
+    emit_store(out, machine::Operand::physical(1),
+               machine::Operand::frame_offset(layout.float_temp + 4));
+    emit_load_opcode(out, single ? "FLOAD.W" : "FLOAD.D", register_from_name(reg),
+                     machine::Operand::frame_offset(layout.float_temp));
 }
 
 void Kr32Backend::emit_machine(std::string& out,

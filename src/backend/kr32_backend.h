@@ -169,6 +169,10 @@ private:
     void emit_load_opcode(std::string& out, std::string_view mnemonic,
                           const machine::Operand& destination,
                           const machine::Operand& address) const;
+    // A zero double: two integer zeroes into the float scratch area, then an
+    // `FLOAD` of it. `single` selects `FLOAD.W` over `FLOAD.D`.
+    void emit_zero_float(std::string& out, const FrameLayout& layout, std::string_view reg,
+                         bool single) const;
     // Runs the register allocator over one function and keeps only the values it
     // is safe to honour: an allocator that mis-handles liveness produces wrong
     // values rather than slow ones, so this stage accepts a value only when its
