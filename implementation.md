@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T01:16:48-08:00 — host gate (Linux ARM64)
+Revision: d25bf55
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for three absorbed commits: `423f5de` corrects the volatile record — the gap is pointer
+dereference, not qualifiers — and `6383779` marks a dereference through a volatile-qualified pointer as
+volatile (`src/irgen/c_irgen.h`, `c_irgen_expressions.cpp`, `tests/unit/test_irgen.cpp`), while
+`b68ecde` measures what a machine IR would take and puts the number on the R1 row. So the volatile
+defect recorded earlier is now addressed rather than merely documented, and the fix is in the C++
+front end, which the `-O1` fixtures exercise. The count is unchanged at 889 with 191 executed tests.
+Row times were 227.39 s (GCC debug), 219.03 s (Clang debug) and 813.93 s (ASan/UBSan) — the serial
+baseline the previous gate established. Rows were configured and built clean from a deleted `build/` at
+`-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T00:48:50-08:00 — host gate (Linux ARM64)
 Revision: bc788b7
 
