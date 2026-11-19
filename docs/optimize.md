@@ -401,7 +401,7 @@ Ordered as the work should land. "Metric" is what the corpus table (§11) must s
 | S1 | Literal operands | selection | `MOV #imm` + register operand | operand is a constant fitting the 11-bit inline field | change a value that is later needed in a register | `MOV` count |
 | S2 | Direct conditional branch | selection | boolean materialisation, slot round trip, second jump | `condbr` with a comparison condition | reverse a condition whose operands are `i1` from `select` | branch count |
 | S3 | Addressing modes | selection | `LEA` + indirect load/store | address is `gep` with constant offsets | fold across a `volatile` or atomic access | `LEA` count |
-| S4 | Frame-slot reuse | selection | dead slots | value is dead at that point | reuse a slot named by a `V` record while it is live | frame bytes |
+| S4 | Frame-slot reuse | selection | dead slots | value is dead at that point, **including at every point the emitter writes its slot** | reuse a slot named by a `V` record while it is live; reuse a slot a `phi` copy writes onto | frame bytes. **Attempted and reverted: −28.6% frames at `-O0`, 54 executed tests broken (`implementation.md`, `2026-11-19T01:30:20`)** |
 | S5 | `BRA`/`JMP` selection (KR16) | selection | one word per in-range branch | displacement fits the B-type reach | emit `BRA` out of range | image bytes |
 | E1 | Constant folding | IR | un-folded constant expressions | operands constant, op total | fold a trapping op or a `volatile` operation | instruction count |
 | E2 | Copy propagation / local CSE | IR | duplicated pure computation | SSA value identity | merge loads or anything with memory effects | instruction count |
@@ -431,6 +431,25 @@ almost never holds. `kr32/libc.c` sits at 10,476 IR instructions at `-O1` with a
 **E4 (alloca promotion) is the enabler for E2, E3 and E7** rather than merely the next row: promotion
 is what turns repeated loads into repeated uses of one value, and the passes above it start paying
 only after it. The ordering in the table is otherwise unchanged.
+
+**S4 was attempted and reverted, and the reason is the clearest argument for R1 in this document.**
+The rule looked provably safe: a value whose every use is in its defining block is dead once its
+last use there has executed, so two such values with disjoint ranges can share a slot. It measured
+**41,840 → 29,864 frame bytes at `-O0` (−28.6%)** on `kr32/libc.c` and broke **54 executed tests**.
+Narrowing candidates to plain 4-byte scalars changed 54 failures to 52.
+
+The hole is that the emitter addresses slots the IR never names as an operand. An audit of
+`kr32_backend.cpp` finds about twenty sites reading `layout.slots` directly, several of which take a
+slot's **address** rather than its value: aggregate copies (`:1570`, `:1603`), aggregate arguments
+(`:1885`, `:1905`), bit-field read-modify-write (`:1785`), and aggregate returns (`:1955`, `:1996`).
+One of them is decisive and was confirmed by reading the code: `emit_phi_copies` (`:1314`) calls
+`store_value` on the **`phi`** while emitting the *predecessor* block, so a `phi`'s slot is written
+outside its own block — and a `phi` is a 4-byte scalar, which is why restricting the candidates to
+scalars did not help.
+
+A correct rule therefore needs to know, for every slot, every point at which the emitter writes or
+addresses it — which is exactly the information a machine IR carries and the reason the same
+conclusion has now been reached from three directions (see §3.5 and the R1 row).
 
 ---
 
