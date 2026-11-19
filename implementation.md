@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T04:02:40-08:00 — host gate (Linux ARM64)
+Revision: 55991ab
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `3c2c3a5`, which converts the slot load and store to the machine representation, and
+`1886f95`, which converts the rest of `load_value` (`src/backend/kr32_backend.cpp`/`.h`,
+`tests/unit/test_machine_ir.cpp`). Slot loads and stores are where addressing modes and displacement
+sizes live, so this is the machine-IR conversion most exposed to a host assumption. The count is
+unchanged at 889 with 191 executed tests. Row times were 228.14 s (GCC debug), 227.85 s (Clang debug)
+and 818.14 s (ASan/UBSan). Rows were configured and built clean from a deleted `build/` at `-j2` with
+`ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T03:34:28-08:00 — host gate (Linux ARM64)
 Revision: dc436dd
 
