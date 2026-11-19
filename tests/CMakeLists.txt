@@ -6655,6 +6655,34 @@ foreach(tier2_source IN ITEMS classes inheritance virtual new_delete templates l
     endif()
 endforeach()
 
+# The same tier-2 programs at -O1. ADR 0049 requires the suite at both levels, and
+# these were the last ones outside it: they exercise the vtable, the EH region table
+# and the C++ temporary paths, which is where a pass that moved a value across a
+# landing pad or a call would show. Running them is the measurement that decides
+# whether -O1 is trustworthy for C++; it is not an assumption.
+foreach(tier2_source IN ITEMS classes inheritance virtual new_delete templates lambdas constexpr2)
+    add_test(NAME krc_link_tier2_${tier2_source}_o1
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DLEVEL=-O1
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier2/${tier2_source}.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/tier2_${tier2_source}_o1_linked.k32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        add_test(NAME krc_run_tier2_${tier2_source}_o1
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/tier2_${tier2_source}_o1_linked.k32
+                    -DEXPECT_EXIT=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_tier2_${tier2_source}_o1 PROPERTIES
+            DEPENDS krc_link_tier2_${tier2_source}_o1)
+    endif()
+endforeach()
+
 # A member call on a temporary. This was a diagnostic fixture until the temporary path
 # stopped requiring a declared zero-argument constructor; it is a behaviour fixture now,
 # because the expectation it encoded *was* the defect.
