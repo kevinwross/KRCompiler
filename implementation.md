@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T05:06:31-08:00 — host gate (Linux ARM64)
+Revision: a825df9
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate covering three more machine-IR increments: `78b5c65` converts the ALU sites and the
+epilogue and measures coverage, `68a6c99` records a whole function and measures what a realistic one
+records, and `bd72eb5` converts the icmp materialisation, `br` and call-argument stores
+(`src/backend/kr32_backend.cpp`/`.h`, `machine_ir.cpp`/`.h`, `tests/unit/test_machine_ir.cpp`). The
+epilogue and call-argument stores are where the stack discipline and the calling convention live, and
+ARM64's conventions differ from x86_64's in both; a machine representation that assumed either would
+show up as a wrong argument or a misaligned stack, which the executed tests would catch as wrong output
+rather than a crash. The count is unchanged at 889 with 191 executed tests. Row times were 226.48 s (GCC
+debug), 221.07 s (Clang debug) and 816.83 s (ASan/UBSan). Rows were configured and built clean from a
+deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time, with no warnings. No disturbances.
+
 2026-11-19T04:38:20-08:00 — host gate (Linux ARM64)
 Revision: ca5cc3a
 
