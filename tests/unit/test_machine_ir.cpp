@@ -271,12 +271,28 @@ TEST_CASE("The prologue conversion records the same instructions it prints") {
     CHECK(printed_mnemonic(instructions[1]) == "ADJSP");
     CHECK(printed_mnemonic(instructions[2]) == "LEA");
 
-    // The recorded text is a prefix of what was emitted.
-    std::string recorded_text;
+    // The recorded sequence is a prefix of the instruction sequence that was
+    // emitted. Compared as sequences, not as a substring: labels and comments sit
+    // between instructions in the text, and the recording deliberately does not
+    // carry them.
+    // Every recorded instruction appears in the emitted text, in the same order. A
+    // subsequence rather than a prefix: sites converted later (the parameter stores,
+    // the epilogue) still emit raw text, so the recording skips them.
+    const auto emitted = instruction_lines(*assembly);
+    std::size_t position = 0;
+    std::size_t missing = 0;
     for (const auto& instruction : instructions) {
-        recorded_text += print_instruction(instruction);
+        const auto wanted = print_instruction(instruction);
+        while (position < emitted.size() && emitted[position] + "\n" != wanted) {
+            ++position;
+        }
+        if (position == emitted.size()) {
+            ++missing;
+        } else {
+            ++position;
+        }
     }
-    CHECK(assembly->find(recorded_text) != std::string::npos);
+    CHECK(missing == 0);
 }
 TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips") {
     // The corpus-wide claim, not a sample: if any file emits an instruction the

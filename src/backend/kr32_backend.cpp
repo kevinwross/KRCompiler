@@ -17,6 +17,21 @@ namespace krc::backend {
 
 namespace {
 
+// A register named the way the emitter names it, as a machine operand.
+machine::Operand register_operand(std::string_view name) {
+    if (name.size() > 1 && name.front() == 'R') {
+        int number = 0;
+        for (const auto character : name.substr(1)) {
+            if (character < '0' || character > '9') {
+                return machine::Operand::named(std::string(name));
+            }
+            number = number * 10 + (character - '0');
+        }
+        return machine::Operand::physical(number);
+    }
+    return machine::Operand::named(std::string(name));
+}
+
 std::uint64_t round_up(std::uint64_t value, std::uint64_t alignment) {
     if (alignment <= 1) {
         return value;
@@ -421,7 +436,12 @@ void Kr32Backend::load_value(std::string& out, const ir::Function& function,
         out += "        MOV " + std::string(reg) + ", #0\n";
         return;
     }
-    out += "        LOAD " + std::string(reg) + ", [R7 + " + std::to_string(*slot) + "]\n";
+    // The slot read: the densest emit site in the backend, and the one allocation
+    // exists to remove.
+    machine::Instruction load;
+    load.opcode = machine::Opcode::Load;
+    load.operands = {register_operand(reg), machine::Operand::frame_offset(*slot)};
+    emit_machine(out, load);
 }
 
 void Kr32Backend::store_value(std::string& out, const ir::Function& function,
@@ -451,7 +471,10 @@ void Kr32Backend::store_value(std::string& out, const ir::Function& function,
         out += "; " + error + "\n";
         return;
     }
-    out += "        STORE " + std::string(reg) + ", [R7 + " + std::to_string(*slot) + "]\n";
+    machine::Instruction store;
+    store.opcode = machine::Opcode::Store;
+    store.operands = {register_operand(reg), machine::Operand::frame_offset(*slot)};
+    emit_machine(out, store);
 }
 
 void Kr32Backend::load_wide(std::string& out, const ir::Function& function,
