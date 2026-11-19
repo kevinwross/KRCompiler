@@ -497,6 +497,28 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T06:03:04-08:00 — host gate (Linux ARM64)
+Revision: 2d6abea
+
+```
+linux-gcc-debug    PASS 889/889
+linux-clang-debug  PASS 889/889
+linux-sanitize     PASS 889/889
+not verified: windows-msvc-release, linux-gcc-release, Windows x64, native Linux x64
+```
+
+A catch-up gate for `14a73d7`, which completes the recording for a realistic function **and fixes a
+miscompile it found**, and `044ac1e`, which measures recording coverage across the corpus and converts
+the float slots (`src/backend/kr32_backend.cpp`/`.h`, `machine_ir.cpp`/`.h`,
+`tests/unit/test_machine_ir.cpp`). The miscompile is the interesting part: the whole point of recording
+a realistic function was to find cases where the representation and the emitter disagreed, and it did.
+This gate re-verifies the fix across all 889 tests on GCC, Clang and under ASan/UBSan, but it is worth
+noting that the corpus the suite runs is the same corpus the coverage measurement used, so a case the
+corpus does not contain would still be invisible. The count is unchanged at 889 with 191 executed tests.
+Row times were 226.86 s (GCC debug), 224.81 s (Clang debug) and 819.57 s (ASan/UBSan). Rows were
+configured and built clean from a deleted `build/` at `-j2` with `ulimit -s unlimited`, one at a time,
+with no warnings. No disturbances.
+
 2026-11-19T05:34:47-08:00 — host gate (Linux ARM64)
 Revision: 0ab4592
 
