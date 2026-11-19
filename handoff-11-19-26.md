@@ -41,8 +41,14 @@ The VM (`vm/krc_kr32.exe`, `krc_kr16.exe`) has a debugger interface: `vm debug <
 
 ## 2. State at handoff
 
-- **Revision `085a8f5`**, tree clean apart from three untracked artefacts in `examples/`
-  (`KRlibcpp.S`, `KRlibcpp.O1.S`) and `libc.S`, plus `build-loop.md` at the root (not ours).
+- **Code revision `085a8f5`.** Commits after it, up to `d05bd08` when this was last checked, are
+  **documentation only** — verified with
+  `git diff --stat 085a8f5..HEAD -- src include targets sysroot tests CMakeLists.txt CMakePresets.json benchmarks`,
+  which is empty. So `git log -1` showing a later sha is expected and does not mean the numbers
+  below have moved.
+- Tree clean apart from three untracked generated files — `examples/KRlibcpp.S`,
+  `examples/KRlibcpp.O1.S` and `libc.S` at the root — plus `build-loop.md` at the root (not ours).
+  See §6.8.
 - **Suite 889/889** on `windows-msvc-debug`, `windows-msvc-release`, `linux-gcc-debug`,
   `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize` — clean gate at `2b602f5`
   (`implementation.md` → `## Gate verification`). **58 tests execute at `-O1`** across tiers 0–2.
