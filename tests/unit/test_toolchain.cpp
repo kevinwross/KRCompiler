@@ -293,3 +293,51 @@ TEST_CASE("The facade compiles, assembles and links a debuggable KR16 image") {
     REQUIRE_MESSAGE(again.ok, again.error);
     CHECK(again.image == built.image);
 }
+
+// 4.15: a declaration is not a statement. The alloca for `int local;` used to
+// carry a line-2 label at the same address as the `local = 7;` store, so a
+// debugger stopping there reported line 2 for line 3.
+TEST_CASE("A KR16 declaration does not take the next statement's line") {
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr16;
+    const std::string_view text =
+        "int main(void) {\n"
+        "    int local;\n"
+        "    local = 7;\n"
+        "    return local;\n"
+        "}\n";
+    const auto built = krc::toolchain::build(
+        std::vector<krc::toolchain::Source>{source("line3.c", text)}, options);
+    REQUIRE_MESSAGE(built.ok, built.error);
+
+    krc::debug::KdbgImage image;
+    std::string error;
+    REQUIRE_MESSAGE(krc::debug::decode_kdbg_image(built.image, image, error), error);
+    bool saw_line_2 = false;
+    bool saw_line_3 = false;
+    for (const auto& line : image.lines) {
+        saw_line_2 = saw_line_2 || line.line == 2;
+        saw_line_3 = saw_line_3 || line.line == 3;
+    }
+    CHECK_FALSE(saw_line_2);
+    CHECK(saw_line_3);
+    // The first line-bearing instruction of `main` is the store, not the
+    // declaration: the function's start is the prologue.
+    std::uint64_t first_line_address = 0;
+    std::uint32_t first_line = 0;
+    for (const auto& function : image.functions) {
+        if (function.name != "main") {
+            continue;
+        }
+        for (const auto& line : image.lines) {
+            if (line.address < function.start) {
+                continue;
+            }
+            if (first_line_address == 0 || line.address < first_line_address) {
+                first_line_address = line.address;
+                first_line = line.line;
+            }
+        }
+    }
+    CHECK_EQ(first_line, 3);
+}

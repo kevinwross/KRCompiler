@@ -562,8 +562,12 @@ void Kr16Backend::emit_function(std::string& out,
             // The bridge records a source line per emitted instruction, the same
             // way Kr32Backend does: an `.Ldbg` label the linker resolves to an
             // address, and an L record naming its file, line and column. A line
-            // whose instructions a pass removed has no label and no record.
-            if (instruction->debug.valid()) {
+            // whose instructions a pass removed has no label and no record, and
+            // neither does a declaration: an Alloca emits nothing, so its label
+            // would share the next statement's address and a debugger stopping
+            // there would report the declaration's line for the statement. That
+            // is why `int local;` on line 2 used to shadow `local = 7;` on line 3.
+            if (instruction->opcode != ir::Opcode::Alloca && instruction->debug.valid()) {
                 auto source = debug_sources_.find(instruction->debug.file);
                 if (source == debug_sources_.end()) {
                     const auto id = next_debug_source_++;
