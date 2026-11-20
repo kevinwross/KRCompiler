@@ -498,7 +498,7 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 2026-11-20T03:56:51-08:00 — boundary matrix (Windows + WSL)
-Revision: d3367a8
+Revision: b2eae12
 
 ```
 windows-msvc-debug    PASS 910/910
@@ -512,7 +512,7 @@ not verified: native Linux x64, Linux ARM64
 
 Tier 2 for a change that crosses `CMakeLists.txt`, `include/krc/` and the object and symbol formats, run
 before the first push rather than as a milestone gate, so the rows were incremental rather than clean.
-The Windows debug row rebuilt the tree that became `d3367a8`; the release row configured and built from
+The Windows debug row rebuilt the tree that became `b2eae12`; the release row configured and built from
 its own directory; the four Linux rows were configured and built in WSL one at a time (GCC with
 `ulimit -s unlimited` and `--parallel 2`, Clang with `--parallel 4`), each row's test suite finishing
 before the next row's build started. The commit followed the run and no source changed between the run

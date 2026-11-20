@@ -149,3 +149,32 @@ keeps `-fsyntax-only`, `-std=c++17` and `krld --gc-sections/--layout`; `Target`
 also carries `Kr64` for front-end-only stages, because `--target=kr64
 -fsyntax-only` worked before and still does. `LinkResult`/`BuildResult` carry
 sections and symbols so `krld --map/--print-size` stays on the facade.
+
+## 2026-11-20T04:23:35-08:00
+
+**Changed:** published the first stage-A milestone and corrected a SHA the
+previous entry named.
+
+**Pushed:** `f936155` on `adopt-krc`. This is the SHA kr32 pins for items 4.5 and
+4.9; it carries the facade, both packages, the CLI rebuild and the listing rows.
+
+**Correction to the `2026-11-20T04:23:04-08:00` entry:** that entry named
+`d3367a8` as the facade commit. While it was being written the ARM64 tester
+pushed four commits to `adopt-krc` (`c4b6cfe` was the tip), so the required
+`git pull --rebase` rewrote the three unpublished commits. Their content is
+unchanged; their SHAs are:
+
+- `01b1ce3` — baseline log entry
+- `b2eae12` — `Add the krc::toolchain facade and publish it`
+- `f936155` — `Record the toolchain facade gate and log`
+
+`implementation.md`'s gate block now names `b2eae12`, the rebased revision whose
+tree the six rows built. The earlier entry is not rewritten.
+
+**Next step:** 4.6 — write `image_base` in `attach_kdbg`, carry `.kdbg` in
+`.kex`, and reject a base mismatch in the reader.
+
+**Blocker:** the 4.6 gap recorded in the baseline entry: no KR16 object carries
+`.debug_info`, so a KR16 `.kex` has nothing to convert. The container/base
+mechanism proceeds; a `.kex` that decodes with sources, lines and functions needs
+a decision on KR16 debug-info emission.
