@@ -61,3 +61,91 @@ producer and `asmkr16::make_object` writes only `.text` — so `attach_kdbg`
 finds nothing to convert for a KR16 link. The `.kex` extra-section and image-base
 mechanism can be implemented as planned; the missing KR16 debug-info source is a
 decision for the programme owner, not something this session will invent.
+
+## 2026-11-20T04:23:04-08:00
+
+**Changed (items 4.1, 4.2, 4.3, 4.4, 4.5, 4.9):** the toolchain is a library and
+the CLIs consume it.
+
+- `include/krc/toolchain.h` is the build facade: `compile`, `preprocess`,
+  `assemble`, `link`, `build`, `Options`, `ListingRow`, and diagnostics rendered
+  to data (`Diagnostic` carries file/line/column/line text, so a host can print
+  after the call). It includes no internal header; its only project includes are
+  `krc/frontend/diagnostics.h`, `krc/frontend/lexer.h` and nothing under `src/`.
+- `include/krc/debug/kdbg.h` is the KDBG reader/writer made public; the
+  implementation is still `src/debug/kdbg.cpp`, whose only dependency is the
+  standard library. The old `src/debug/kdbg.h` is gone, not forwarded.
+- `src/toolchain/toolchain.cpp` implements the facade over today's internals. It
+  owns the pipeline the CLI used to inline (parse, sema, IR, verify, the `-O1`
+  pass order, backend selection, object assembly, link and image writing). All
+  state is per call; an audit found no mutable static in the path, only
+  function-local `static const` tables.
+- CMake: `krc_impl` is an object library (not installed); `krc_toolchain` and
+  `krc_debug` are the two static installable targets, exported as
+  `krc::toolchain` and `krc::debug`; `krc-toolchain-config.cmake` and
+  `krc-debug-config.cmake` are installed under `lib/cmake/`. The exported
+  interface names only `${prefix}/include`, never `src/`.
+- `krc` and `krld` are rebuilt on the facade: `krld` still reads files and
+  archives and formats its map, but the link and image write are
+  `toolchain::link`; `krc` keeps its argument parsing and output formatting and
+  calls `compile`/`assemble`/`link`. `-E` uses `toolchain::preprocess`; the
+  AST/IR/stats dumps are returned as data and printed by the CLI.
+- Listing rows ship in both assemblers. A row carries section, address, encoded
+  bytes, the statement text, and the source line a preceding `.Ldbg` label
+  attributed it to. `assemble` returns section-relative addresses; `build`
+  translates them to final addresses using the linked text address of each input
+  object, which `link_objects` now records.
+- KDBG header: `KdbgImage::image_base` exists and `decode_kdbg` reads offset 56,
+  but `attach_kdbg` does not write it yet. That write is 4.6, deliberately not
+  landed here so 4.2's byte-identity claim stays measurable.
+
+**Commands and real results (Windows, `vcvarsall.bat x64`):**
+
+- `cmake --preset windows-msvc-debug` — configure succeeded.
+- `cmake --build --preset windows-msvc-debug --parallel` — build clean, no
+  warnings (`/W4 /WX`).
+- `ctest --preset windows-msvc-debug --output-on-failure` — **910/910 passed,
+  0 failed, 172.51 s** (the baseline was 910/910 in 166.09 s).
+- `krc_tests.exe` directly — **155 test cases, 155 passed, 1,444 assertions**.
+- Standalone header compile: `cl /std:c++20 /W4 /WX /permissive- /EHsc /utf-8
+  /I include /c header_check.cpp` where the TU includes only
+  `krc/toolchain.h` and `krc/debug/kdbg.h` — clean.
+- Baseline byte identity against the table in the `2026-11-20T03:47:13-08:00`
+  entry: **11 of 11 outputs identical**, including both `.k32` images and the
+  KR16 `.kex` from both the single-image and linked paths. `hello.s`,
+  `debug_names_O0.s` and `debug_names_O1.s` are byte-identical, so the CLI's
+  assembly text did not move.
+- Package consumer at `build/consumer` (outside the source tree), configured with
+  `-DCMAKE_PREFIX_PATH=build/install-krc` after `cmake --install ... --prefix
+  build/install-krc`:
+  `find_package(krc-toolchain CONFIG REQUIRED)` and
+  `find_package(krc-debug CONFIG REQUIRED)` both resolve; `build_image` prints
+  `kr32 image 1152 bytes entry 65536` and `kr16 image 163 bytes base 0x100 entry
+  0x100`; `decode_kdbg` links only `krc::debug` and prints `decoded 1 source(s),
+  1 function(s) from 333 bytes`.
+- Boundary matrix, recorded in `implementation.md` under `## Gate verification`:
+  `windows-msvc-debug` 910/910, `windows-msvc-release` 910/910,
+  `linux-gcc-debug` 717/717, `linux-gcc-release` 717/717,
+  `linux-clang-debug` 717/717, `linux-sanitize` 717/717.
+
+**Commit:** `d3367a8` (`Add the krc::toolchain facade and publish it`). The gate
+record and this entry follow in a documentation commit.
+
+**Next step:** push `adopt-krc` for kr32 to pin `d3367a8`; then 4.6 (`.kdbg` in
+`.kex`, image base at offset 56), which is the kr16 pin.
+
+**Blocker:** none for 4.1–4.5/4.9. The 4.6 gap recorded in the baseline entry
+still stands: no KR16 object carries `.debug_info`, so a KR16 `.kex` has nothing
+for `attach_kdbg` to convert. The container and base mechanism can land; a `.kex`
+that decodes with sources/lines/functions cannot until KR16 debug-info emission
+exists, which no stage-A item authorises.
+
+**Deviations from the plan's indicative shapes, recorded for the review:** the
+facade's `Diagnostic` is a resolved value type rather than
+`frontend::Diagnostic`, because a `SourceLocation` cannot be rendered after the
+`SourceManager` dies and the plan requires diagnostics to be data. `Options`
+carries `Stage`, `cxx`, `gc_sections` and `section_addresses` because the CLI
+keeps `-fsyntax-only`, `-std=c++17` and `krld --gc-sections/--layout`; `Target`
+also carries `Kr64` for front-end-only stages, because `--target=kr64
+-fsyntax-only` worked before and still does. `LinkResult`/`BuildResult` carry
+sections and symbols so `krld --map/--print-size` stays on the facade.

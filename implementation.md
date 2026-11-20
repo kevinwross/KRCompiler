@@ -497,6 +497,37 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T03:56:51-08:00 — boundary matrix (Windows + WSL)
+Revision: d3367a8
+
+```
+windows-msvc-debug    PASS 910/910
+windows-msvc-release  PASS 910/910
+linux-gcc-debug       PASS 717/717
+linux-gcc-release     PASS 717/717
+linux-clang-debug     PASS 717/717
+linux-sanitize        PASS 717/717
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for a change that crosses `CMakeLists.txt`, `include/krc/` and the object and symbol formats, run
+before the first push rather than as a milestone gate, so the rows were incremental rather than clean.
+The Windows debug row rebuilt the tree that became `d3367a8`; the release row configured and built from
+its own directory; the four Linux rows were configured and built in WSL one at a time (GCC with
+`ulimit -s unlimited` and `--parallel 2`, Clang with `--parallel 4`), each row's test suite finishing
+before the next row's build started. The commit followed the run and no source changed between the run
+and the commit, so all six rows cover one tree.
+
+The counts differ for the same reason as always: the Windows configure resolves `KRC_KR32_VM` and
+`KRC_KR16_VM` and registers 193 executed-image tests, while the Linux configure resolves neither. The
+only diagnostic in the run was the vendored doctest `<ciso646>` `#warning` on Clang, which
+`tests/CMakeLists.txt` demotes and still prints; no project source warned. GCC 15 did not hit its
+intermittent internal compiler error, no `krld` KRO CRC mismatch appeared, and no row was re-run. The
+sanitizer row is the time outlier at 451 s of tests.
+
+The timestamp is the modification time of the Windows debug row's rebuilt `krc.exe`, the first row's
+first build artifact: these rows were incremental, so no build start line exists to cite.
+
 2026-11-19T16:57:34-08:00 — host gate (Windows + WSL)
 Revision: 94c3295
 
