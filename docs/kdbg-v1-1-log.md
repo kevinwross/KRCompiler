@@ -198,3 +198,29 @@ this entry follow in a documentation commit.
 
 **Blocker:** none. The `P` producer remains the deferred item recorded in
 decision 6; it arrives with the ADR 0052 promotion change.
+
+## 2026-11-20T13:09:36-08:00
+
+**Changed:** none in code. This entry fixes the gate's commit reference and records
+the SHA krdbg vendors.
+
+The gate record in `implementation.md` is for revision `ddae511` (the commit that
+carries the v1.1 implementation and tests); the documentation commit that records
+the gate is `af46ae4`, which is the branch tip pushed as of this entry. The tree
+krdbg re-vendors `third_party/krc-debug` from is **`af46ae4`** — it contains the
+same `include/krc/debug/kdbg.h` and `src/debug/` as `ddae511`, plus the gate and
+log records only.
+
+The matrix completed before this entry: `windows-msvc-debug` 913/913,
+`windows-msvc-release` 913/913, `linux-gcc-debug` 719/719,
+`linux-gcc-release` 719/719, `linux-clang-debug` 719/719, `linux-sanitize`
+719/719. The three compatibility rows also completed: the v1-reader fixture, KR32's
+`debug` on a v1.1-built `.k32`, and both `krc --dump-symbols` forms; their real
+output is in the `2026-11-20T13:08:33-08:00` entry. Nothing in the gate is still
+running or outstanding.
+
+**Commit:** the commit that carries this entry (log only).
+
+**Next step:** 4.13 on `adopt-krc`.
+
+**Blocker:** none.
