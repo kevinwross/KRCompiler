@@ -91,3 +91,4 @@ What was rejected and why.
 The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
 - [0047-kr16-aggregate-returns.md](0047-kr16-aggregate-returns.md) — withdrawn; it chose `R6`, which is the KR16 status register.
 - [0048-kr16-aggregate-return-destination.md](0048-kr16-aggregate-return-destination.md) — accepted; an aggregate return on KR16 passes its destination as a hidden stack argument, because no general-purpose register is free.
+- [0052-kdbg-variable-scope-ranges.md](0052-kdbg-variable-scope-ranges.md) — proposed; a `Variable` record carries a half-open live range, so a debugger reports a reused slot as unavailable rather than reading whatever replaced it.
