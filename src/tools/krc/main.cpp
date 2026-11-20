@@ -265,11 +265,7 @@ int main(int argc, char** argv) {
             continue;
         }
         if (argument == "--dump-symbols") {
-            if (i + 1 >= argc) {
-                return fail("--dump-symbols requires a file");
-            }
             dump_symbols = true;
-            inputs.emplace_back(argv[++i]);
             continue;
         }
         if (argument == "--json") {
@@ -329,7 +325,10 @@ int main(int argc, char** argv) {
     }
     const auto& profile = krc::target::get_target(*target_id);
 
-    if (inputs.empty()) {
+    // `--dump-symbols` takes the image as an ordinary input, so the documented
+    // `krc --dump-symbols --json IMAGE` order works as well as `--dump-symbols
+    // IMAGE --json`.
+    if (inputs.empty() && !dump_symbols) {
         print_usage(std::cout);
         return 0;
     }
@@ -348,6 +347,9 @@ int main(int argc, char** argv) {
     }
 
     if (dump_symbols) {
+        if (inputs.empty()) {
+            return fail("--dump-symbols requires a file");
+        }
         if (inputs.size() != 1) {
             return fail("--dump-symbols accepts exactly one image");
         }

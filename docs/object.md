@@ -122,3 +122,6 @@ the standard IEEE polynomial over the complete file with offset 108 zeroed.
 The linker builds a common linked model, then a per-target image writer emits
 the VM's loadable image (KR32, KR16). The writer receives sections, entry point,
 symbols/debug, and layout, and rejects unsupported placements or address ranges.
+A `.kex` carries the `.kdbg` payload beside its text and string table as an
+unallocated debug section; the payload records the image base at KDBG header
+offset 56 (docs/symbols.md).
