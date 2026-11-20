@@ -1,9 +1,11 @@
 # Embedding the KR compiler
 
-`krc::toolchain` compiles KR32 and KR16 code inside the host process. It opens no
-file, writes no file and starts no subprocess: a host supplies source text and
-receives assembly, object bytes, image bytes, structured diagnostics and listing
-rows. `krc` and `krld` are two consumers of the same library.
+`krc::toolchain` compiles KR32 and KR16 code inside the host process. It writes
+no file and starts no subprocess: a host supplies source text and receives
+assembly, object bytes, image bytes, structured diagnostics and listing rows.
+The host reads its own inputs and writes its own outputs; the only files the
+facade reads are headers a `#include` names, through the supplied include paths.
+`krc` and `krld` are two consumers of the same library.
 
 The facade header is [`include/krc/toolchain.h`](../include/krc/toolchain.h).
 KDBG is a separate package: [`include/krc/debug/kdbg.h`](../include/krc/debug/kdbg.h)

@@ -3,10 +3,12 @@
 // Public build facade for the KR compiler.
 //
 // A host supplies source text and receives assembly, object bytes, image bytes,
-// structured diagnostics and listing rows. The facade performs no file I/O: it
-// never opens, writes or removes a path, and it never starts a subprocess.
-// Include directories and the source name are metadata the pipeline needs, not
-// files the facade reads on the host's behalf.
+// structured diagnostics and listing rows. The facade never writes or removes a
+// file, never opens the source path or an output path, and never starts a
+// subprocess: the host reads its own inputs and writes its own outputs. The one
+// read it performs is a header a `#include` names, resolved against the include
+// paths and the including source's own directory; a source with no `#include`
+// needs no file at all.
 //
 // Every function is re-entrant. All compiler state -- source ids, type
 // canonicalisation, the backend's debug buffer -- is per call, so two calls in
