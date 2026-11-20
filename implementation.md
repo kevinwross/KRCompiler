@@ -497,6 +497,39 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T08:33:40-08:00 — boundary matrix (Windows + WSL)
+Revision: 047bc1e
+
+```
+windows-msvc-debug    PASS 911/911
+windows-msvc-release  PASS 911/911
+linux-gcc-debug       PASS 718/718
+linux-gcc-release     PASS 718/718
+linux-clang-debug     PASS 718/718
+linux-sanitize        PASS 718/718
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for item 4.10, KR16 debug-info emission: the KR16 backend's assembly gains
+`.Ldbg` labels, objects gain `.debug_info`, and the linker's placement of debug
+sections changes, so the backend output, the symbol payload and the image layout
+are all touched. Rows are incremental and were run one at a time in the order
+listed. The Windows configure resolves both VMs and registers 911 tests; the Linux
+configure registers 718 and starts no VM, which is the count difference. The only
+diagnostic was the vendored doctest `<ciso646>` warning on Clang. No row was
+re-run after a compiler failure; the sanitizer row is the outlier at 462 s of
+tests.
+
+One test-only assertion (a second KR16 build compared byte-for-byte) was added
+after the rows, so the four Linux rows re-ran their `krc_tests` binary on the
+final file: `1,496 assertions, 0 failed` on each. The compiler content is the
+tree committed as `047bc1e`. The ARM64 row is the tester's
+`docs/arm64-test-log.md` entry for the tested SHA per the plan's gate section; it
+is not re-run here.
+
+The timestamp is the modification time of the Windows debug row's rebuilt
+`krc-toolchain.lib`, its first build artifact.
+
 2026-11-20T04:25:12-08:00 — boundary matrix (Windows + WSL)
 Revision: b5740c8
 
@@ -7024,3 +7057,5 @@ not verified: native Linux x64, Linux ARM64
 
 - **2026-11-20T04:53:18-08:00** — **Stage A of the krc toolchain adoption is implemented: the compiler is now a library with two CLIs on it.** `include/krc/toolchain.h` is the in-memory build facade (`compile`, `preprocess`, `assemble`, `link`, `build`, `ListingRow`, resolved diagnostics); `krc::toolchain` and `krc::debug` are installed static packages with `krc-toolchain-config.cmake` and `krc-debug-config.cmake`; `krc` and `krld` are consumers; both assemblers return listing rows; `.kex` carries `.kdbg` with the image base at KDBG offset 56 and the reader rejects a mismatch. The eleven-output byte-identity check from `2026-11-20T03:47:13` passed for the refactor; after 4.6 a `.k32` differs only in those eight bytes and its CRC. The full record, the consumer evidence and every command result are in [docs/adopt-krc-log.md](docs/adopt-krc-log.md); the stage-A boundary matrices are the two most recent `## Gate verification` blocks.
 - **2026-11-20T04:53:18-08:00** — **The one stage-A item that is not complete is 4.6's literal done-when, and the reason is a plan gap rather than unfinished code.** A `.kex` now carries and decodes `.kdbg`, proven through a manufactured container and unit tests, but no KR16 compile can produce one: `Kr32Backend` is the only writer of `.debug_info` and `asmkr16::make_object` emits `.text` only. Stage A authorises neither KR16 debug emission nor a KDBG version change, so the missing source of KR16 debug info is recorded for the owner instead of invented here.
+
+- **2026-11-20T09:05:18-08:00** — **Item 4.10 makes a KR16 `.kex` decodable: the KR16 backend now emits the same textual bridge as KR32, so `attach_kdbg` runs for a KR16 link.** `KDBG target=2` with sources, lines, functions and variables decodes from both the single-image `krc -c --target=kr16` form and the linked `crt0 + libkrcrt + user` form; the linked fixture runs under the VM with exit 55. The change also fixed the linker: debug sections are placed at address zero and excluded from the image end, because the merged `.debug_info` for the KR16 runtime exceeds the 16-bit address space and overflowed a relocation when laid out after `.text`. That moves `__heap_start` on KR32 images from after debug data to the end of the loaded image, the intended meaning. The full record and the matrix at `047bc1e` are in [docs/adopt-krc-log.md](docs/adopt-krc-log.md) and the newest `## Gate verification` block. With this, all of stage A is complete.

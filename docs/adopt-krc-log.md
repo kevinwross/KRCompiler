@@ -264,3 +264,77 @@ is not rewritten.
 **Blocker:** unchanged — 4.6's container/reader half is done and published, and
 its "a compiled KR16 `.kex` decodes with sources/lines/functions" half waits on a
 decision about KR16 debug-info emission.
+
+## 2026-11-20T09:05:18-08:00
+
+**Changed (item 4.10, approved 2026-11-20T08:28:03-08:00):** the KR16 backend
+emits the textual debug bridge, so `attach_kdbg` runs for a KR16 link and a
+krc-built `.kex` carries `.kdbg`.
+
+- `Kr16Backend` now emits the same records the KR32 backend emits: `S`, `L` (an
+  `.Ldbg.<function>.<n>` label before each instruction that carries a debug
+  location), `F`, `V`, `T`, `C`/`M`, and `G`. `debug_info()` exposes the buffer,
+  and every field is cleared at the start of each `emit`, so two builds cannot
+  observe each other. The display name, frame size and return type are the same
+  fields the KR32 emitter uses.
+- A `V` offset is measured from the target's frame base. KR16 addresses slots
+  from `SP` (`R4 - frame_size`) and its reader uses `fp - offset`, so the record
+  stores `frame_size - slot_offset`; ADR 0008's amendment states the rule and
+  that a reader must apply the target from the KDBG header.
+- The facade now keeps the KR16 bridge (`compile`), appends `.debug_info` to a
+  KR16 object (`assemble`), and therefore `build`/`link` produce a `.kdbg`. The
+  CLI passes the bridge through the single-image `-c` path; the stub adds no
+  labels, so its absence would have lost every line.
+- **Linker layout fix, required by 4.10:** debug sections are placed at address
+  zero and excluded from the image end. The merged `.debug_info` for the KR16
+  runtime is larger than the whole 16-bit address space, so laying it out after
+  `.text` overflowed a relocation's width and moved `__heap_start` past debug
+  data the VM never maps. A `.kex` ships `.kdbg`, not the `.debug_info` bridge.
+- The `krc_kr16_kdbg_decode` ctest builds a real `.kex` and decodes it through
+  `krc --dump-symbols`; the unit test decodes a built KR16 `.kex` and asserts a
+  source, a line, a function and a variable, plus byte-identical repeat builds.
+
+**Commands and real results (Windows, `vcvarsall.bat x64`):**
+
+- `cmake --build --preset windows-msvc-debug --parallel` — clean.
+- `ctest --preset windows-msvc-debug --output-on-failure` — **911/911 passed**,
+  0 failed, 178.40 s (911 carries the new decode test).
+- `krc_tests.exe` — **159 test cases, 159 passed, 1,496 assertions**.
+- `krc -c --target=kr16 tests/fixtures/c/kr16_sum.c -o sum.kex` then
+  `krc --dump-symbols sum.kex` — `KDBG target=2 abi=1 sources=1 lines=21
+  functions=2 symbols=0 variables=3 types=1`; `function sum_to 0x11a-0x172
+  frame=26 type=i16`; `variable sum_to.n offset=2`, `variable sum_to.i
+  offset=24`, `variable sum_to.total offset=22`.
+- `krc --dump-symbols --json` on the same `.kex` — exit 0;
+  `"target":2`, `"path":"...kr16_sum.c"`, `"name":"sum_to"`. The frozen JSON
+  schema has never carried lines or variables, so those are asserted on the
+  text form.
+- The single-image `.kex` is 1,469 bytes with `section_count=3`,
+  `header_flags=2`, and the string table `.text|.debug_str|.kdbg` — no
+  `.debug_info`.
+- The linked image (`crt0.kro` + `libkrcrt.kro` + `sum.kro`, 96,409 bytes)
+  decodes as `sources=3 lines=2825 functions=46 symbols=9 variables=182
+  types=10`, including `function sum_to`/`variable sum_to.total`, and runs under
+  `vm/krc_kr16.exe` with exit **55** (`sum_to(10)`).
+- `.k32` delta from the 4.6 output: 9 bytes in 4,169 — `.debug_info`'s section
+  address becomes 0, `__heap_start` moves from `0x104E0` to `0x102C8` (the end of
+  `.cpp_except`, the last loaded section), and the header CRC follows.
+- Boundary matrix recorded in `implementation.md` for `990a381`:
+  `windows-msvc-debug` 911/911, `windows-msvc-release` 911/911,
+  `linux-gcc-debug` 718/718, `linux-gcc-release` 718/718,
+  `linux-clang-debug` 718/718, `linux-sanitize` 718/718.
+
+**Docs:** `docs/symbols.md` (both backends emit the bridge), ADR 0008's
+amendment (the record set is unchanged; the `V` offset is target-relative; debug
+sections are not guest-addressable), `docs/object.md` (debug sections are placed
+at zero and excluded from the image end), and `docs/toolchain-embedding.md`.
+
+**Commit:** `990a381` (`Emit KR16 debug info so a .kex carries .kdbg`). The gate
+record and this entry follow in a documentation commit.
+
+**Next step:** push `adopt-krc` for the kr16 pin and report that SHA.
+
+**Blocker:** none. 4.6's done-when is now met for both `.kex` forms: the
+single-image `krc -c --target=kr16` image and the linked image both decode with
+sources, lines, functions and variables. The kr16 repository can start its plan
+at the published SHA.
