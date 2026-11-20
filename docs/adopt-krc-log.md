@@ -549,3 +549,70 @@ built. The earlier entry is not rewritten.
 The KR32 session resumes from `28ad731`.
 
 **Blocker:** none.
+
+## 2026-11-20T11:06:53-08:00
+
+**Changed:** documentation only. This entry closes out stage A and corrects two
+documentation defects; no source, test or fixture changed.
+
+**Correction 1 — the facade SHA in the `2026-11-20T04:23:04-08:00` entry.** That
+entry records `Commit: d3367a8` for the facade. `d3367a8` is not in the published
+branch: it was the pre-rebase SHA, and the required `git pull --rebase` onto the
+tester's `ffd25c3`/`9423768` rewrote it. The published facade commit is
+**`b2eae12`** (`Add the krc::toolchain facade and publish it`); its content is
+unchanged. The earlier entry is not rewritten, and the same correction was made
+once already in the `2026-11-20T04:23:35-08:00` entry, which this entry repeats so
+the mistake is resolvable from either end of the log.
+
+**Correction 2 — `docs/cxx-front-end-gaps.md`, gap 3's boundary.** The document
+claimed "`S s = S();` for a *concrete struct* compiles (verified)". Reproduced at
+the current tip (`a099ddd`, compiler content `b680815`) with a full compile, not
+`-fsyntax-only`:
+
+```text
+gap3_struct.cpp:2:11: error: constructor-initialized class has no constructor
+  int f() { S s = S(); return s.x; }
+            ^
+```
+
+The same source under `-fsyntax-only` exits 0 with no diagnostic — that is how the
+old control was "verified", and it is why the claim was wrong: the rejection is in
+IR generation (`src/irgen/c_irgen.cpp:1829`), which a syntax check does not reach.
+At global scope the initializer fails earlier and differently:
+`S s = S();` on line 2 reports `global initializer is not supported yet`
+(`src/irgen/c_irgen_setup.cpp:2203`). KR32's observation at `0f61260` therefore
+reproduces exactly, and the gap description now records three distinct failures
+(scalar functional cast in the parser; dependent type and concrete struct in IR
+generation) instead of two. Corrected in commit **`0547395`**
+(`Correct the zero-argument functional cast gap`). No code changed.
+
+**The `.crt0` answer.** It was recorded in the `2026-11-20T10:25:42-08:00` entry
+and is repeated here because it was asked for again: `kr16/resources/libc.s`
+contains no `.crt0` and krc assembles it cleanly. `.crt0` is kr16's own **section
+directive for its startup block**, found in kr16-compiler-generated assembly:
+`..\kr16\build\windows-ninja\tests\hello.s:16` fails with
+`unknown directive '.crt0' on line 16`, and the tracked `..\kr16\examples\sum.s`
+has it at line **87** (that file first fails at `.file` on line 2). The hybrid
+route that reported it was assembling a kr16-generated `.s`, not the libc; it is
+out of scope, and this does not block anything.
+
+**Stage A close-out.** Items 4.1–4.12 are implemented, verified and published.
+The consumer pins are `37a5839` (kr16: directives) and `28ad731` (KR32: installed
+sysroot and runtime); the last published tip before this close-out is
+`a099ddd` (the ARM64 tester's log on top of `47fa4e5`). The close-out commits are
+`0547395` (this documentation correction) and the commit that carries this entry.
+KDBG v1.1 has not been started: it needs its own approved plan. `adopt-krc` has
+not been merged into `master`, and the built-in compiler path has not been changed
+or deleted.
+
+**Commands and real results:**
+
+- `krc -std=c++17 -c gap3_struct.cpp` → exit 1, the diagnostic above.
+- `krc -std=c++17 -fsyntax-only gap3_struct.cpp` → exit 0, no output.
+- `krc -std=c++17 -c gap3_struct_global.cpp` → exit 1,
+  `global initializer is not supported yet`.
+- No build was run: this entry and the document correction are prose only.
+
+**Next step:** none; stage A is closed.
+
+**Blocker:** none.
