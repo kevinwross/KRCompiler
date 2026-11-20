@@ -7,14 +7,13 @@
 #include <string_view>
 #include <vector>
 
-#include "asm/kro_writer.h"
-#include "asm/kr32_assembler.h"
 #include "krc/target/target.h"
+#include "krc/toolchain.h"
 #include "krc/version.h"
 #include "linker/archive.h"
 #include "linker/kro_object.h"
-#include "linker/kr16_image.h"
-#include "linker/linker.h"
+
+namespace toolchain = krc::toolchain;
 
 namespace {
 
@@ -60,6 +59,21 @@ std::uint64_t parse_address(std::string_view text, bool& ok) {
     }
     ok = true;
     return value;
+}
+
+bool read_binary_file(const std::string& path, std::vector<std::uint8_t>& bytes) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        std::cerr << "krld: cannot open '" << path << "'\n";
+        return false;
+    }
+    bytes.assign((std::istreambuf_iterator<char>(file)),
+                 std::istreambuf_iterator<char>());
+    if (file.bad()) {
+        std::cerr << "krld: cannot read '" << path << "'\n";
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -149,63 +163,47 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::vector<krc::linker::KroObject> objects;
+    toolchain::Options options;
+    options.target = toolchain::Target::Kr32;
+    options.base = base_set ? base : 0;
+    options.entry = entry;
+    options.gc_sections = gc_sections;
+    options.source_root = source_root;
+
+    std::vector<toolchain::Object> objects;
     for (const auto& path : inputs) {
-        std::ifstream file(path, std::ios::binary);
-        if (!file) {
-            std::cerr << "krld: cannot open '" << path << "'\n";
+        std::vector<std::uint8_t> bytes;
+        if (!read_binary_file(path, bytes)) {
             return 1;
         }
-        std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(file)),
-                                        std::istreambuf_iterator<char>());
-        krc::linker::KroObject object;
-        std::string error;
-        const auto extension = std::filesystem::path(path).extension().string();
         if (krc::linker::is_archive(bytes)) {
             std::vector<krc::linker::ArchiveMember> members;
+            std::string error;
             if (!krc::linker::read_archive(bytes, members, error)) {
                 std::cerr << "krld: " << path << ": " << error << '\n';
                 return 1;
             }
             for (const auto& member : members) {
-                krc::linker::KroObject member_object;
-                if (!krc::linker::read_object(member.data, member_object, error)) {
-                    std::cerr << "krld: " << path << "(" << member.name << "): " << error
-                              << '\n';
-                    return 1;
-                }
-                objects.push_back(std::move(member_object));
+                objects.push_back(toolchain::Object{
+                    path + "(" + member.name + ")",
+                    std::vector<std::uint8_t>(member.data.begin(), member.data.end())});
             }
             continue;
         }
+        const auto extension = std::filesystem::path(path).extension().string();
         if (extension == ".s" || extension == ".S") {
-            const std::string source(bytes.begin(), bytes.end());
-            krc::asmkr32::AssemblyResult assembly;
-            if (!krc::asmkr32::assemble(source, assembly, error)) {
-                std::cerr << "krld: " << path << ": " << error << '\n';
+            const std::string text(bytes.begin(), bytes.end());
+            const auto assembled = toolchain::assemble(text, options);
+            if (!assembled.ok) {
+                std::cerr << "krld: " << path << ": " << assembled.error << '\n';
                 return 1;
             }
-            const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
-            if (!krc::asmkr32::make_object(assembly, profile, object, error)) {
-                std::cerr << "krld: " << path << ": " << error << '\n';
-                return 1;
-            }
-        } else if (!krc::linker::read_object(bytes, object, error)) {
-            std::cerr << "krld: " << path << ": " << error << '\n';
-            return 1;
+            objects.push_back(toolchain::Object{path, assembled.object});
+            continue;
         }
-        objects.push_back(std::move(object));
+        objects.push_back(toolchain::Object{path, std::move(bytes)});
     }
 
-    const bool kr16 =
-        !objects.empty() && objects.front().target_id == 2;
-    if (kr16 && !base_set) {
-        base = 0x0100;
-    }
-    krc::linker::LinkOptions options;
-    options.base = base;
-    options.gc_sections = gc_sections;
-    options.entry_symbol = entry;
     if (!layout_path.empty()) {
         std::ifstream layout(layout_path);
         if (!layout) {
@@ -230,22 +228,18 @@ int main(int argc, char** argv) {
                 std::cerr << "krld: invalid layout address '" << address_text << "'\n";
                 return 1;
             }
-            options.section_addresses[name] = address;
+            options.section_addresses.push_back({name, address});
         }
     }
-    krc::linker::LinkedImage image;
-    std::string error;
-    if (!krc::linker::link_objects(objects, options, image, error)) {
-        std::cerr << "krld: " << error << '\n';
-        return 1;
-    }
-    if (!krc::linker::attach_kdbg(image, source_root, error)) {
-        std::cerr << "krld: " << error << '\n';
+
+    const auto linked = toolchain::link(objects, options);
+    if (!linked.ok) {
+        std::cerr << "krld: " << linked.error << '\n';
         return 1;
     }
 
     if (print_size) {
-        for (const auto& section : image.sections) {
+        for (const auto& section : linked.sections) {
             std::cout << section.name << " 0x" << std::hex << section.address << std::dec
                       << " size=" << section.size << " align=" << section.alignment << '\n';
         }
@@ -256,63 +250,32 @@ int main(int argc, char** argv) {
             std::cerr << "krld: cannot write map '" << map_path << "'\n";
             return 1;
         }
-        map << "base=0x" << std::hex << image.base << " entry=0x" << image.entry
+        map << "base=0x" << std::hex << linked.base << " entry=0x" << linked.entry
             << std::dec << '\n';
         map << "section address size\n";
-        for (const auto& section : image.sections) {
+        for (const auto& section : linked.sections) {
             map << section.name << " 0x" << std::hex << section.address << std::dec
                 << ' ' << section.size << '\n';
         }
         map << "symbol value size binding\n";
-        for (const auto& symbol : image.symbols) {
+        for (const auto& symbol : linked.symbols) {
             map << symbol.name << " 0x" << std::hex << symbol.value << std::dec << ' '
-                << symbol.size << ' '
-                << (symbol.binding == krc::linker::KroSymbolBinding::Global ? "global"
-                                                                            : "local")
-                << '\n';
+                << symbol.size << ' ' << (symbol.global ? "global" : "local") << '\n';
         }
     }
 
-    std::vector<std::uint8_t> executable;
-    bool wrote = false;
-    if (kr16) {
-        const krc::linker::LinkedSection* text = nullptr;
-        for (const auto& section : image.sections) {
-            if (section.type == krc::linker::KroSectionType::Text) {
-                text = &section;
-                break;
-            }
-        }
-        if (!text) {
-            std::cerr << "krld: KR16 image has no text section\n";
-            return 1;
-        }
-        if (image.entry > 0xFFFF || image.base > 0xFFFF) {
-            std::cerr << "krld: KR16 address exceeds 16 bits\n";
-            return 1;
-        }
-        wrote = krc::linker::write_kr16_image(
-            text->data, static_cast<std::uint16_t>(image.base),
-            static_cast<std::uint16_t>(image.entry), executable, error);
-    } else {
-        wrote = krc::linker::write_kr32_executable(image, executable, error);
-    }
-    if (!wrote) {
-        std::cerr << "krld: " << error << '\n';
-        return 1;
-    }
     std::ofstream file(output, std::ios::binary);
     if (!file) {
         std::cerr << "krld: cannot open output '" << output << "'\n";
         return 1;
     }
-    file.write(reinterpret_cast<const char*>(executable.data()),
-               static_cast<std::streamsize>(executable.size()));
+    file.write(reinterpret_cast<const char*>(linked.image.data()),
+               static_cast<std::streamsize>(linked.image.size()));
     if (!file) {
         std::cerr << "krld: failed to write '" << output << "'\n";
         return 1;
     }
     std::cout << "krld: linked " << objects.size() << " object(s) to " << output
-              << " (entry " << image.entry << ")\n";
+              << " (entry " << linked.entry << ")\n";
     return 0;
 }

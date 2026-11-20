@@ -1,6 +1,6 @@
 #include <doctest.h>
 
-#include "debug/kdbg.h"
+#include "krc/debug/kdbg.h"
 
 TEST_CASE("KDBG round-trips sources, functions, variables, and types") {
     krc::debug::KdbgImage image;

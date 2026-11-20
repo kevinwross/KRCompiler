@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+# Both public targets share one export set. A consumer of `krc-debug` links only
+# the KDBG reader/writer; the export also defines `krc::toolchain`, which this
+# package does not use.
+include("${CMAKE_CURRENT_LIST_DIR}/../krc/krc-targets.cmake")
+
+check_required_components(krc-debug)

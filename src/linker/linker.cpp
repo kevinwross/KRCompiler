@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "debug/kdbg.h"
+#include "krc/debug/kdbg.h"
 
 namespace krc::linker {
 
@@ -344,6 +344,7 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
         cursor += section.size;
     }
     image.base = options.base;
+    image.target_id = first.target_id;
 
     std::vector<std::uint32_t> output_section_for(objects.size());
     for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
@@ -380,6 +381,27 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
             }
             static_cast<void>(found);
             source_section[object_index][index] = static_cast<std::uint32_t>(output_index);
+        }
+    }
+
+    // Each object's `.text` starts where its merged section placed its bytes.
+    // `offsets` already carries the per-object alignment, so the final address
+    // is the output section's address plus that offset.
+    image.object_text_addresses.assign(objects.size(), 0);
+    for (std::size_t object_index = 0; object_index < objects.size(); ++object_index) {
+        if (!reachable[object_index]) {
+            continue;
+        }
+        for (std::size_t index = 0; index < objects[object_index].sections.size();
+             ++index) {
+            const auto& section = objects[object_index].sections[index];
+            if (section.name != ".text" || section.type != KroSectionType::Text) {
+                continue;
+            }
+            const auto output_section = source_section[object_index][index];
+            image.object_text_addresses[object_index] =
+                image.sections[output_section].address + offsets[object_index][index];
+            break;
         }
     }
 
@@ -585,7 +607,7 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
     }
 
     debug::KdbgImage kdbg;
-    kdbg.target_id = 1;
+    kdbg.target_id = image.target_id;
     kdbg.abi_version = 1;
     kdbg.compiler = "krc";
     std::unordered_map<std::string, std::size_t> type_index;

@@ -41,10 +41,53 @@ struct Item {
     Section section = Section::Text;
     std::size_t line = 0;
     std::size_t offset = 0;
+    std::size_t size = 0;
+    std::string text;
     std::string name;
     std::string mnemonic;
     std::vector<std::string> operands;
 };
+
+std::string_view section_name(Section section) {
+    switch (section) {
+    case Section::Text:
+        return ".text";
+    case Section::Data:
+        return ".data";
+    case Section::Exception:
+        break;
+    }
+    return ".cpp_except";
+}
+
+// The backend writes `.Ldbg.<function>.<line>.<column>:` before the first
+// instruction of every source line. The listing uses it to attribute a
+// statement to its source line; 0 means the statement had no such label.
+std::uint32_t debug_line_from_label(std::string_view name) {
+    if (!name.starts_with(".Ldbg.")) {
+        return 0;
+    }
+    const auto column_dot = name.rfind('.');
+    if (column_dot == std::string_view::npos || column_dot == 0) {
+        return 0;
+    }
+    const auto line_dot = name.rfind('.', column_dot - 1);
+    if (line_dot == std::string_view::npos) {
+        return 0;
+    }
+    const auto digits = name.substr(line_dot + 1, column_dot - line_dot - 1);
+    if (digits.empty()) {
+        return 0;
+    }
+    std::uint32_t value = 0;
+    for (const auto character : digits) {
+        if (character < '0' || character > '9') {
+            return 0;
+        }
+        value = value * 10 + static_cast<std::uint32_t>(character - '0');
+    }
+    return value;
+}
 
 struct MemoryOperand {
     int base = -1;
@@ -667,6 +710,7 @@ bool Assembler::parse(std::string_view source, std::string& error) {
             item.kind = ItemKind::Label;
             item.section = section;
             item.line = line_number;
+            item.text = std::string(line);
             item.name = std::string(trim(line.substr(0, line.size() - 1)));
             if (item.name.empty() || !is_identifier(item.name)) {
                 error = "line " + std::to_string(line_number) + ": invalid label";
@@ -708,6 +752,7 @@ bool Assembler::parse(std::string_view source, std::string& error) {
                 item.kind = ItemKind::Align;
                 item.section = section;
                 item.line = line_number;
+                item.text = std::string(line);
                 item.operands.push_back(std::to_string(value));
                 items_.push_back(std::move(item));
             } else if (directive == ".BYTE" || directive == ".WORD" || directive == ".ZERO") {
@@ -717,6 +762,7 @@ bool Assembler::parse(std::string_view source, std::string& error) {
                                                    : ItemKind::Zero;
                 item.section = section;
                 item.line = line_number;
+                item.text = std::string(line);
                 const auto parts = split_operands(rest);
                 if (item.kind == ItemKind::Zero) {
                     if (parts.size() != 1) {
@@ -744,6 +790,7 @@ bool Assembler::parse(std::string_view source, std::string& error) {
         item.kind = ItemKind::Instruction;
         item.section = section;
         item.line = line_number;
+        item.text = std::string(line);
         item.mnemonic = std::string(space == std::string_view::npos ? line
                                                                     : line.substr(0, space));
         item.operands = space == std::string_view::npos
@@ -796,21 +843,25 @@ bool Assembler::layout(std::string& error) {
                 return false;
             }
             item.offset = section_offset(item.section);
-            section_offset(item.section) += extension ? 8 : 4;
+            item.size = extension ? 8 : 4;
+            section_offset(item.section) += item.size;
             continue;
         }
         item.offset = section_offset(item.section);
         if (item.kind == ItemKind::Bytes) {
-            section_offset(item.section) += item.operands.size();
+            item.size = item.operands.size();
+            section_offset(item.section) += item.size;
         } else if (item.kind == ItemKind::Word) {
-            section_offset(item.section) += item.operands.size() * 4;
+            item.size = item.operands.size() * 4;
+            section_offset(item.section) += item.size;
         } else {
             std::int64_t size = 0;
             if (!parse_integer(item.operands.front(), size) || size < 0) {
                 error = "line " + std::to_string(item.line) + ": invalid .zero size";
                 return false;
             }
-            section_offset(item.section) += static_cast<std::size_t>(size);
+            item.size = static_cast<std::size_t>(size);
+            section_offset(item.section) += item.size;
         }
     }
     text_size_ = text_offset;
@@ -1303,6 +1354,36 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
         if (encoded->count == 2) {
             emit_word(bytes, item.offset + 4, encoded->words[1]);
         }
+    }
+
+    // The listing is one row per statement, in source order. A row carries the
+    // bytes its statement encoded and the source line the nearest preceding
+    // `.Ldbg` label named, so a host can render a `.lst` without re-reading the
+    // assembly text.
+    result.listing.reserve(items_.size());
+    std::uint32_t source_line = 0;
+    for (const auto& item : items_) {
+        if (item.kind == ItemKind::Label && item.name.starts_with(".Ldbg.")) {
+            source_line = debug_line_from_label(item.name);
+        }
+        toolchain::ListingRow row;
+        row.section = std::string(section_name(item.section));
+        row.address = item.offset;
+        row.text = item.text;
+        row.source_line = source_line;
+        if (item.size != 0) {
+            const auto& bytes = item.section == Section::Text
+                                    ? result.text
+                                    : (item.section == Section::Data ? result.data
+                                                                     : result.exception);
+            if (item.offset + item.size <= bytes.size()) {
+                row.bytes.assign(
+                    bytes.begin() + static_cast<std::ptrdiff_t>(item.offset),
+                    bytes.begin() +
+                        static_cast<std::ptrdiff_t>(item.offset + item.size));
+            }
+        }
+        result.listing.push_back(std::move(row));
     }
 
     for (const auto& [name, address] : addresses_) {

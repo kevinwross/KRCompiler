@@ -1,36 +1,22 @@
-#include <filesystem>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
-#include "asm/kr16_assembler.h"
-#include "asm/kr16_object.h"
-#include "asm/kr32_assembler.h"
-#include "asm/kro_writer.h"
-#include "backend/kr32_backend.h"
-#include "backend/kr16_backend.h"
-#include "debug/kdbg.h"
-#include "ir/ir.h"
-#include "irgen/c_irgen.h"
-#include "krc/frontend/ast.h"
-#include "krc/frontend/diagnostics.h"
-#include "krc/frontend/parser.h"
-#include "krc/frontend/preprocessor.h"
-#include "krc/frontend/sema.h"
-#include "krc/frontend/source_manager.h"
+#include "krc/debug/kdbg.h"
 #include "krc/target/target.h"
+#include "krc/toolchain.h"
 #include "krc/version.h"
-#include "linker/kro_object.h"
-#include "linker/kr16_image.h"
-#include "ir/passes.h"
 
 #ifndef KRC_SYSROOT_DIR
 #define KRC_SYSROOT_DIR "sysroot"
 #endif
+
+namespace frontend = krc::frontend;
+namespace toolchain = krc::toolchain;
 
 namespace {
 
@@ -52,7 +38,7 @@ void print_usage(std::ostream& out) {
         << "  --dump-stats           Print IR instruction and block counts per function\n"
         << "  -O0                    Straightforward lowering (the default)\n"
         << "  -O1                    The optimiser passes plan.md 8.8 lists\n"
-        << "  --dump-symbols FILE    Dump KDBG symbols from a .k32 image\n"
+        << "  --dump-symbols FILE    Dump KDBG symbols from a .k32 or .kex image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
         << "  -S                     Emit KR32 assembly to stdout, or to -o FILE\n"
         << "  -c                     Emit a relocatable KRO object\n"
@@ -70,12 +56,113 @@ int fail(std::string_view message) {
     return 2;
 }
 
-void add_include_directory(std::vector<std::filesystem::path>& paths,
+void add_include_directory(std::vector<std::string>& paths,
                            const std::filesystem::path& path) {
     std::error_code error;
     if (std::filesystem::exists(path, error) && !error) {
-        paths.push_back(path);
+        paths.push_back(path.string());
     }
+}
+
+bool read_text_file(const std::string& path, std::string& text, std::string& error) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        error = "unable to open '" + path + "'";
+        return false;
+    }
+    text.assign((std::istreambuf_iterator<char>(file)),
+                std::istreambuf_iterator<char>());
+    if (file.bad()) {
+        error = "unable to read '" + path + "'";
+        return false;
+    }
+    return true;
+}
+
+bool read_binary_file(const std::string& path, std::vector<std::uint8_t>& bytes,
+                      std::string& error) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        error = "cannot open '" + path + "'";
+        return false;
+    }
+    bytes.assign((std::istreambuf_iterator<char>(file)),
+                 std::istreambuf_iterator<char>());
+    if (file.bad()) {
+        error = "cannot read '" + path + "'";
+        return false;
+    }
+    return true;
+}
+
+bool write_text_file(const std::filesystem::path& path, std::string_view text,
+                     std::string& error) {
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+        error = "cannot open '" + path.string() + "'";
+        return false;
+    }
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
+    if (!file) {
+        error = "failed to write '" + path.string() + "'";
+        return false;
+    }
+    return true;
+}
+
+bool write_binary_file(const std::filesystem::path& path,
+                       const std::vector<std::uint8_t>& bytes, std::string& error) {
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+        error = "cannot open '" + path.string() + "'";
+        return false;
+    }
+    file.write(reinterpret_cast<const char*>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
+    if (!file) {
+        error = "failed to write '" + path.string() + "'";
+        return false;
+    }
+    return true;
+}
+
+toolchain::Target to_target(krc::target::TargetId id) {
+    switch (id) {
+    case krc::target::TargetId::Kr16:
+        return toolchain::Target::Kr16;
+    case krc::target::TargetId::Kr64:
+        return toolchain::Target::Kr64;
+    case krc::target::TargetId::Kr32:
+        break;
+    }
+    return toolchain::Target::Kr32;
+}
+
+// The stub a bare `krc -c --target=kr16` prepends so the image has an entry and
+// a way to report output without a separate runtime link. It is part of the
+// CLI's convenience form, not of the facade.
+constexpr std::string_view kKr16EntryStub =
+    ".text\n.global _start\n_start:\n"
+    "    CALL main\n"
+    "    HLT\n"
+    ".global puts\nputs:\n"
+    "    MOV R2, #0xF000\n"
+    ".Lputs_loop:\n"
+    "    LDB R0, [R1]\n"
+    "    CMP R0, #0\n"
+    "    BEQ .Lputs_done\n"
+    "    STB [R2], R0\n"
+    "    ADD R1, #1\n"
+    "    BRA .Lputs_loop\n"
+    ".Lputs_done:\n"
+    "    MOV R0, #0\n"
+    "    RET\n";
+
+toolchain::Diagnostic error_diagnostic(std::string message) {
+    toolchain::Diagnostic diagnostic;
+    diagnostic.severity = krc::frontend::Severity::Error;
+    diagnostic.message = std::move(message);
+    return diagnostic;
 }
 
 }  // namespace
@@ -83,13 +170,13 @@ void add_include_directory(std::vector<std::filesystem::path>& paths,
 int main(int argc, char** argv) {
     std::string target_name = "kr32";
     std::vector<std::string> inputs;
-    std::vector<std::filesystem::path> include_paths;
+    std::vector<std::string> include_paths;
     bool syntax_only = false;
     bool preprocess_only = false;
     bool dump_ast = false;
     bool dump_ir = false;
     bool dump_stats = false;
-    krc::backend::OptimizationLevel optimization = krc::backend::OptimizationLevel::O0;
+    int optimization = 0;
     bool emit_assembly = false;
     bool emit_object = false;
     bool emit_object_container = false;
@@ -170,11 +257,11 @@ int main(int argc, char** argv) {
         // a build without the flag is `-O0` and stays byte-identical to one that
         // names it.
         if (argument == "-O0") {
-            optimization = krc::backend::OptimizationLevel::O0;
+            optimization = 0;
             continue;
         }
         if (argument == "-O1" || argument == "-O") {
-            optimization = krc::backend::OptimizationLevel::O1;
+            optimization = 1;
             continue;
         }
         if (argument == "--dump-symbols") {
@@ -264,20 +351,14 @@ int main(int argc, char** argv) {
         if (inputs.size() != 1) {
             return fail("--dump-symbols accepts exactly one image");
         }
-        std::ifstream file(inputs.front(), std::ios::binary);
-        if (!file) {
-            return fail("cannot open '" + inputs.front() + "'");
-        }
-        const std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(file)),
-                                              std::istreambuf_iterator<char>());
-        std::span<const std::uint8_t> section;
-        std::string debug_error;
-        if (!krc::debug::find_k32_section(bytes, ".kdbg", section, debug_error)) {
-            return fail(debug_error);
+        std::vector<std::uint8_t> bytes;
+        std::string error;
+        if (!read_binary_file(inputs.front(), bytes, error)) {
+            return fail(error);
         }
         krc::debug::KdbgImage image;
-        if (!krc::debug::decode_kdbg(section, image, debug_error)) {
-            return fail(debug_error);
+        if (!krc::debug::decode_kdbg_image(bytes, image, error)) {
+            return fail(error);
         }
         std::cout << (json_output ? krc::debug::dump_kdbg_json(image)
                                   : krc::debug::dump_kdbg_text(image));
@@ -288,69 +369,78 @@ int main(int argc, char** argv) {
     add_include_directory(include_paths, sysroot / "include");
     add_include_directory(include_paths, sysroot / std::string(profile.name) / "include");
 
-    krc::frontend::SourceManager sources;
-    krc::frontend::DiagnosticEngine diagnostics(sources);
-    krc::frontend::Preprocessor::Options options;
+    toolchain::Options options;
+    options.target = to_target(*target_id);
+    options.cxx = cxx_mode;
+    options.optimize = optimization;
     options.include_paths = include_paths;
+    if (emit_assembly || emit_object) {
+        options.stage = toolchain::Stage::Assembly;
+    } else if (dump_ir || dump_stats) {
+        options.stage = toolchain::Stage::Ir;
+    } else {
+        options.stage = toolchain::Stage::Syntax;
+    }
+    options.dump_ast = dump_ast;
+    options.dump_ir = dump_ir;
+    options.dump_stats = dump_stats;
+
+    toolchain::Options link_options = options;
+    if (target_id == krc::target::TargetId::Kr16) {
+        link_options.base = 0x100;
+        link_options.entry = "_start";
+    }
+
+    std::vector<toolchain::Diagnostic> diagnostics;
+    bool failed = false;
 
     for (const auto& input : inputs) {
-        const auto input_extension =
-            std::filesystem::path(input).extension().string();
+        const auto input_extension = std::filesystem::path(input).extension().string();
         if (emit_object_container && input_extension == ".s") {
-            std::ifstream source_file(input, std::ios::binary);
-            if (!source_file) {
-                diagnostics.report(krc::frontend::Severity::Error,
-                                   "cannot open '" + input + "'");
+            std::string text;
+            std::string error;
+            if (!read_text_file(input, text, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
                 continue;
             }
-            const std::string source_text(
-                (std::istreambuf_iterator<char>(source_file)),
-                std::istreambuf_iterator<char>());
-            krc::asmkr16::AssemblyResult assembled;
-            std::string assemble_error;
-            if (!krc::asmkr16::assemble(source_text, assembled,
-                                        assemble_error)) {
-                diagnostics.report(krc::frontend::Severity::Error,
-                                   "KR16 assembler: " + assemble_error);
+            toolchain::Options assemble_options = options;
+            assemble_options.target = toolchain::Target::Kr16;
+            const auto assembled =
+                toolchain::assemble(text, assemble_options);
+            if (!assembled.ok) {
+                diagnostics.push_back(error_diagnostic(assembled.error));
+                failed = true;
                 continue;
             }
-            krc::linker::KroObject object;
-            std::string object_error;
-            if (!krc::asmkr16::make_object(assembled, profile, object,
-                                           object_error)) {
-                diagnostics.report(krc::frontend::Severity::Error,
-                                   "KR16 object: " + object_error);
-                continue;
+            const auto path = output_path.empty()
+                                  ? std::filesystem::path(input).replace_extension(".kro")
+                                  : std::filesystem::path(output_path);
+            if (!write_binary_file(path, assembled.object, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
             }
-            std::vector<std::uint8_t> bytes;
-            if (!krc::linker::write_object(object, bytes, object_error)) {
-                diagnostics.report(krc::frontend::Severity::Error,
-                                   "KR16 object: " + object_error);
-                continue;
-            }
-            auto path = output_path.empty()
-                            ? std::filesystem::path(input).replace_extension(
-                                  ".kro")
-                            : std::filesystem::path(output_path);
-            std::ofstream file(path, std::ios::binary);
-            if (!file) {
-                diagnostics.report(krc::frontend::Severity::Error,
-                                   "cannot open object output '" +
-                                       path.string() + "'");
-                continue;
-            }
-            file.write(reinterpret_cast<const char*>(bytes.data()),
-                       static_cast<std::streamsize>(bytes.size()));
             continue;
         }
-        krc::frontend::Preprocessor preprocessor(sources, diagnostics, profile, options);
-        auto tokens = preprocessor.preprocess_file(input);
-        if (!tokens) {
-            continue;
-        }
+
         if (preprocess_only) {
+            std::string text;
+            std::string error;
+            if (!read_text_file(input, text, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
+                continue;
+            }
+            const toolchain::Source source{input, text};
+            const auto preprocessed = toolchain::preprocess(source, options);
+            diagnostics.insert(diagnostics.end(), preprocessed.diagnostics.begin(),
+                               preprocessed.diagnostics.end());
+            if (!preprocessed.ok) {
+                failed = true;
+                continue;
+            }
             bool first = true;
-            for (const auto& token : *tokens) {
+            for (const auto& token : preprocessed.tokens) {
                 if (!first) {
                     std::cout << ' ';
                 }
@@ -361,352 +451,118 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        krc::frontend::Parser parser(std::move(*tokens), diagnostics, sources, cxx_mode);
-        auto ast = parser.parse_translation_unit();
-        if (dump_ast && ast) {
-            krc::frontend::dump_ast(*ast, std::cout);
+        std::string text;
+        std::string error;
+        if (!read_text_file(input, text, error)) {
+            diagnostics.push_back(error_diagnostic(error));
+            failed = true;
+            continue;
         }
-        if (ast && !parser.had_error()) {
-            krc::frontend::Sema sema(diagnostics, profile, cxx_mode);
-            sema.analyze(*ast);
-            // `--dump-stats` builds IR on its own: D-049 makes it the metric a pass
-            // is judged by, and asking for the numbers should not require also
-            // asking for a dump or an output.
-            if ((dump_ir || dump_stats || emit_assembly || emit_object) &&
-                !diagnostics.has_errors()) {
-                krc::irgen::CIRGen irgen(sema, *ast, profile, diagnostics);
-                auto module = irgen.generate();
-                if (module) {
-                    // Lowering, not optimisation: an identity cast computes nothing,
-                    // and D-049 makes selection quality a property of the lowering
-                    // rather than of an optimisation level, so this runs at -O0 too.
-                    static_cast<void>(krc::ir::fold_identity_casts(*module));
+        const toolchain::Source source{input, text};
+        const auto compiled = toolchain::compile(source, options);
+        diagnostics.insert(diagnostics.end(), compiled.diagnostics.begin(),
+                           compiled.diagnostics.end());
+        // A partial AST is dumped even when parsing reported errors, matching the
+        // drift the compiler has always allowed: the dump is what shows the
+        // reader where the parser stopped.
+        if (dump_ast) {
+            std::cout << compiled.ast_dump;
+        }
+        if (dump_ir) {
+            std::cout << compiled.ir_dump;
+        }
+        if (dump_stats) {
+            std::cout << compiled.stats;
+        }
+        if (!compiled.ok) {
+            failed = true;
+            continue;
+        }
+        if (!emit_assembly && !emit_object) {
+            continue;
+        }
+
+        const auto emit_path = [&](std::string_view extension) {
+            return output_path.empty()
+                       ? std::filesystem::path(input).replace_extension(extension)
+                       : std::filesystem::path(output_path);
+        };
+
+        // For KR16, `-c` owns the output: the old driver printed the assembly
+        // only in the branch that ran when no object was requested.
+        const bool suppress_assembly = target_id == krc::target::TargetId::Kr16 &&
+                                       emit_object;
+        if (emit_assembly && !suppress_assembly) {
+            if (output_path.empty()) {
+                std::cout << compiled.assembly;
+            } else if (!write_text_file(output_path, compiled.assembly, error)) {
+                diagnostics.push_back(
+                    error_diagnostic("cannot open assembly output '" +
+                                     std::string(output_path) + "'"));
+                failed = true;
+            }
+        }
+
+        if (target_id == krc::target::TargetId::Kr16) {
+            if (emit_object_container) {
+                const auto assembled = toolchain::assemble(
+                    compiled.assembly, compiled.debug_info, options);
+                if (!assembled.ok) {
+                    diagnostics.push_back(error_diagnostic(assembled.error));
+                    failed = true;
+                    continue;
                 }
-                if (module) {
-                    std::string verify_error;
-                    krc::ir::Verifier verifier;
-                    if (!verifier.verify(*module, verify_error)) {
-                        diagnostics.report(krc::frontend::Severity::Error,
-                                           "IR verifier: " + verify_error);
-                    }
-                    // The optimiser pipeline. `-O0` runs no pass, which is what
-                    // keeps its output byte-identical to a build without a flag;
-                    // the module is verified again afterwards, so a pass that
-                    // breaks an invariant fails here rather than in a backend.
-                    if (optimization == krc::backend::OptimizationLevel::O1 &&
-                        !diagnostics.has_errors()) {
-                        auto change = krc::ir::constant_folding(*module);
-                        // E6 before every other promotion pass: it creates the
-                        // phis, so the edges they write on are split first and
-                        // the passes below then see SSA values where a slot round
-                        // trip used to be.
-                        const auto edges = krc::ir::split_critical_edges(*module);
-                        change.edges_split += edges.edges_split;
-                        const auto across = krc::ir::promote_cross_block_allocas(*module);
-                        change.instructions_removed += across.instructions_removed;
-                        // Promotion runs before CSE deliberately: E2 shares only
-                        // expressions whose operands are identical SSA values, and
-                        // until the alloca round trips are gone every variable
-                        // read is a distinct load, so E2 has almost nothing to
-                        // share. Measured, not assumed — see implementation.md.
-                        const auto promoted = krc::ir::alloca_promotion(*module);
-                        change.instructions_removed += promoted.instructions_removed;
-                        const auto shared = krc::ir::copy_propagation(*module);
-                        change.instructions_removed += shared.instructions_removed;
-                        change.instructions_folded += shared.instructions_folded;
-                        // Dead code goes before the block pass: removing an
-                        // instruction can empty a block, and the block pass then
-                        // has one more to collapse.
-                        const auto unused = krc::ir::dead_code_elimination(*module);
-                        change.instructions_removed += unused.instructions_removed;
-                        // Last, because it removes blocks: the value passes above
-                        // are written against the CFG they were given, and this is
-                        // the only one whose result nothing else consumes.
-                        const auto simplified = krc::ir::empty_block_elimination(*module);
-                        change.instructions_removed += simplified.instructions_removed;
-                        if (change.changed()) {
-                            std::string optimized_error;
-                            if (!verifier.verify(*module, optimized_error)) {
-                                diagnostics.report(
-                                    krc::frontend::Severity::Error,
-                                    "IR verifier after optimiser: " + optimized_error);
-                            }
-                        }
-                    }
-                    if (dump_ir) {
-                        krc::ir::print_module(*module, std::cout);
-                    }
-                    if (dump_stats) {
-                        // Counts only. Every optimiser claim has to be compiler output rather
-                        // than a one-off script, and instruction count is the number a pass
-                        // moves; block count is printed beside it so a pass that only
-                        // reshapes control flow is visible too.
-                        std::size_t total_instructions = 0;
-                        std::size_t total_blocks = 0;
-                        std::uint64_t total_frame_bytes = 0;
-                        for (const auto& function : module->functions()) {
-                            if (!function) {
-                                continue;
-                            }
-                            std::size_t instructions = 0;
-                            for (const auto& block : function->blocks) {
-                                if (block) {
-                                    instructions += block->instructions.size();
-                                }
-                            }
-                            total_instructions += instructions;
-                            total_blocks += function->blocks.size();
-                            // Frame bytes are S4's metric (docs/optimize.md §7), and
-                            // D-049 requires the number before the pass. The layout
-                            // is the backend's, queried rather than emitted.
-                            std::uint32_t frame = 0;
-                            if (profile.id == krc::target::TargetId::Kr16) {
-                                frame = krc::backend::Kr16Backend(*module, profile, optimization)
-                                            .frame_bytes(*function);
-                            } else {
-                                frame = krc::backend::Kr32Backend(*module, profile, optimization)
-                                            .frame_bytes(*function);
-                            }
-                            total_frame_bytes += frame;
-                            std::cout << "stats\t" << function->name << "\t" << instructions
-                                      << "\t" << function->blocks.size() << "\t" << frame
-                                      << "\n";
-                        }
-                        std::cout << "stats\tTOTAL\t" << total_instructions << "\t"
-                                  << total_blocks << "\t" << total_frame_bytes << "\n";
-                    }
-                    if ((emit_assembly || emit_object) &&
-                        profile.id == krc::target::TargetId::Kr16) {
-                        krc::backend::Kr16Backend backend(*module, profile, optimization);
-                        std::string backend_error;
-                        auto assembly = backend.emit(backend_error);
-                        if (!assembly) {
-                            diagnostics.report(krc::frontend::Severity::Error,
-                                               "KR16 backend: " +
-                                                   backend_error);
-                        } else if (emit_object && !diagnostics.has_errors()) {
-                            std::string source;
-                            if (!emit_object_container) {
-                                source =
-                                    ".text\n.global _start\n_start:\n"
-                                    "    CALL main\n"
-                                    "    HLT\n"
-                                    ".global puts\nputs:\n"
-                                    "    MOV R2, #0xF000\n"
-                                    ".Lputs_loop:\n"
-                                    "    LDB R0, [R1]\n"
-                                    "    CMP R0, #0\n"
-                                    "    BEQ .Lputs_done\n"
-                                    "    STB [R2], R0\n"
-                                    "    ADD R1, #1\n"
-                                    "    BRA .Lputs_loop\n"
-                                    ".Lputs_done:\n"
-                                    "    MOV R0, #0\n"
-                                    "    RET\n";
-                            }
-                            source += *assembly;
-                            krc::asmkr16::AssemblyResult assembled;
-                            std::string assemble_error;
-                            if (!krc::asmkr16::assemble(source, assembled,
-                                                        assemble_error)) {
-                                diagnostics.report(
-                                    krc::frontend::Severity::Error,
-                                    "KR16 assembler: " + assemble_error);
-                            } else if (emit_object_container) {
-                                krc::linker::KroObject object;
-                                std::string object_error;
-                                if (!krc::asmkr16::make_object(
-                                        assembled, profile, object,
-                                        object_error)) {
-                                    diagnostics.report(
-                                        krc::frontend::Severity::Error,
-                                        "KR16 object: " + object_error);
-                                } else {
-                                    std::vector<std::uint8_t> bytes;
-                                    if (!krc::linker::write_object(
-                                            object, bytes, object_error)) {
-                                        diagnostics.report(
-                                            krc::frontend::Severity::Error,
-                                            "KR16 object: " + object_error);
-                                    } else {
-                                        auto path =
-                                            output_path.empty()
-                                                ? std::filesystem::path(input)
-                                                      .replace_extension(".kro")
-                                                : std::filesystem::path(
-                                                      output_path);
-                                        std::ofstream file(path,
-                                                           std::ios::binary);
-                                        if (!file) {
-                                            diagnostics.report(
-                                                krc::frontend::Severity::Error,
-                                                "cannot open object output '" +
-                                                    path.string() + "'");
-                                        } else {
-                                            file.write(
-                                                reinterpret_cast<const char*>(
-                                                    bytes.data()),
-                                                static_cast<std::streamsize>(
-                                                    bytes.size()));
-                                        }
-                                    }
-                                }
-                            } else {
-                                bool has_main = false;
-                                for (const auto& symbol : assembled.symbols) {
-                                    has_main = has_main || symbol.name == "main";
-                                }
-                                if (!has_main) {
-                                    diagnostics.report(
-                                        krc::frontend::Severity::Error,
-                                        "KR16 image has no 'main' entry");
-                                } else {
-                                    std::vector<std::uint8_t> bytes;
-                                    std::string image_error;
-                                    if (!krc::linker::write_kr16_image(
-                                            assembled.text, 0x0100, bytes,
-                                            image_error)) {
-                                        diagnostics.report(
-                                            krc::frontend::Severity::Error,
-                                            "KR16 image: " + image_error);
-                                    } else {
-                                        auto path =
-                                            output_path.empty()
-                                                ? std::filesystem::path(input)
-                                                      .replace_extension(".kex")
-                                                : std::filesystem::path(
-                                                      output_path);
-                                        std::ofstream file(path,
-                                                           std::ios::binary);
-                                        if (!file) {
-                                            diagnostics.report(
-                                                krc::frontend::Severity::Error,
-                                                "cannot open image output '" +
-                                                    path.string() + "'");
-                                        } else {
-                                            file.write(
-                                                reinterpret_cast<const char*>(
-                                                    bytes.data()),
-                                                static_cast<std::streamsize>(
-                                                    bytes.size()));
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            if (emit_assembly) {
-                                if (output_path.empty()) {
-                                    std::cout << *assembly;
-                                } else {
-                                    std::ofstream file(output_path, std::ios::binary);
-                                    if (!file) {
-                                        diagnostics.report(
-                                            krc::frontend::Severity::Error,
-                                            "cannot open assembly output '" + output_path + "'");
-                                    } else {
-                                        file << *assembly;
-                                    }
-                                }
-                            }
-                        }
-                    } else if ((emit_assembly || emit_object) &&
-                               !profile.backend_available) {
-                        diagnostics.report(krc::frontend::Severity::Error,
-                                           "target '" + target_name +
-                                               "' has no code generator yet");
-                    } else if ((emit_assembly || emit_object) &&
-                               profile.id == krc::target::TargetId::Kr32) {
-                        krc::backend::Kr32Backend backend(*module, profile, optimization);
-                        std::string backend_error;
-                        auto assembly = backend.emit(backend_error);
-                        if (!assembly) {
-                            diagnostics.report(krc::frontend::Severity::Error,
-                                               "KR32 backend: " + backend_error);
-                        } else {
-                            if (emit_assembly) {
-                                if (output_path.empty()) {
-                                    std::cout << *assembly;
-                                } else {
-                                    std::ofstream file(output_path, std::ios::binary);
-                                    if (!file) {
-                                        diagnostics.report(
-                                            krc::frontend::Severity::Error,
-                                            "cannot open assembly output '" + output_path + "'");
-                                    } else {
-                                        file << *assembly;
-                                    }
-                                }
-                            }
-                            // An object built from a failed code generation must
-                            // not reach disk: a build that ignores the exit
-                            // status would otherwise link and run it.
-                            if (emit_object && !diagnostics.has_errors()) {
-                                krc::asmkr32::AssemblyResult assembled;
-                                std::string assemble_error;
-                                if (!krc::asmkr32::assemble(*assembly, assembled,
-                                                            assemble_error)) {
-                                    diagnostics.report(krc::frontend::Severity::Error,
-                                                       "KR32 assembler: " + assemble_error);
-                                } else {
-                                    krc::linker::KroObject object;
-                                    std::string object_error;
-                                    if (!krc::asmkr32::make_object(assembled, profile, object,
-                                                                   object_error)) {
-                                        diagnostics.report(krc::frontend::Severity::Error,
-                                                           "KRO writer: " + object_error);
-                                    } else {
-                                        if (!backend.debug_info().empty()) {
-                                            krc::linker::KroSection debug;
-                                            debug.name = ".debug_info";
-                                            debug.type = krc::linker::KroSectionType::Debug;
-                                            debug.flags = 0;
-                                            debug.alignment = 1;
-                                            debug.data.assign(backend.debug_info().begin(),
-                                                              backend.debug_info().end());
-                                            debug.size = debug.data.size();
-                                            object.sections.push_back(std::move(debug));
-                                        }
-                                        std::vector<std::uint8_t> bytes;
-                                        std::string write_error;
-                                        if (!krc::linker::write_object(object, bytes, write_error)) {
-                                            diagnostics.report(krc::frontend::Severity::Error,
-                                                               "KRO writer: " + write_error);
-                                        } else {
-                                            auto path = output_path.empty()
-                                                            ? std::filesystem::path(input)
-                                                                  .replace_extension(".kro")
-                                                            : std::filesystem::path(output_path);
-                                            std::ofstream file(path, std::ios::binary);
-                                            if (!file) {
-                                                diagnostics.report(
-                                                    krc::frontend::Severity::Error,
-                                                    "cannot open object output '" +
-                                                        path.string() + "'");
-                                            } else {
-                                                file.write(reinterpret_cast<const char*>(
-                                                               bytes.data()),
-                                                           static_cast<std::streamsize>(
-                                                               bytes.size()));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else if (emit_assembly || emit_object) {
-                        diagnostics.report(krc::frontend::Severity::Error,
-                                           "assembly/object emission is only implemented for kr32");
-                    }
+                if (!write_binary_file(emit_path(".kro"), assembled.object, error)) {
+                    diagnostics.push_back(error_diagnostic(error));
+                    failed = true;
                 }
+                continue;
+            }
+            if (emit_object) {
+                std::string stub(kKr16EntryStub);
+                stub += compiled.assembly;
+                const auto image_object = toolchain::assemble(stub, options);
+                if (!image_object.ok) {
+                    diagnostics.push_back(error_diagnostic(image_object.error));
+                    failed = true;
+                    continue;
+                }
+                std::vector<toolchain::Object> objects{
+                    toolchain::Object{input, image_object.object}};
+                const auto linked = toolchain::link(objects, link_options);
+                if (!linked.ok) {
+                    diagnostics.push_back(
+                        error_diagnostic("KR16 image: " + linked.error));
+                    failed = true;
+                    continue;
+                }
+                if (!write_binary_file(emit_path(".kex"), linked.image, error)) {
+                    diagnostics.push_back(error_diagnostic(error));
+                    failed = true;
+                }
+            }
+            continue;
+        }
+
+        if (emit_object && target_id == krc::target::TargetId::Kr32) {
+            const auto assembled =
+                toolchain::assemble(compiled.assembly, compiled.debug_info, options);
+            if (!assembled.ok) {
+                diagnostics.push_back(error_diagnostic(assembled.error));
+                failed = true;
+                continue;
+            }
+            if (!write_binary_file(emit_path(".kro"), assembled.object, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
             }
         }
     }
 
-    if (diagnostics.has_errors() || diagnostics.warning_count() > 0) {
-        diagnostics.sort();
-        diagnostics.print(std::cerr);
+    if (!diagnostics.empty()) {
+        std::cerr << toolchain::format_diagnostics(diagnostics);
     }
-    if (diagnostics.has_errors()) {
+    if (failed || toolchain::has_errors(diagnostics)) {
         return 1;
     }
 

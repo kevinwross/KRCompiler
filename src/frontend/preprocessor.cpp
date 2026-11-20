@@ -407,6 +407,14 @@ void Preprocessor::seed_predefined() {
     if (profile_.char_unsigned) {
         define_object("__CHAR_UNSIGNED__", "1");
     }
+    for (const auto& definition : options_.defines) {
+        const auto equals = definition.find('=');
+        if (equals == std::string::npos) {
+            define_object(definition, "1");
+        } else {
+            define_object(definition.substr(0, equals), definition.substr(equals + 1));
+        }
+    }
 }
 
 void Preprocessor::define_object(std::string name, std::string replacement) {

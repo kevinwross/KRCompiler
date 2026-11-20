@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <map>
@@ -27,6 +28,8 @@ struct Line {
     std::string label;
     std::string mnemonic;
     std::vector<std::string> operands;
+    // The statement as written, trimmed of comments, for the listing.
+    std::string text;
 };
 
 std::string trim(std::string_view text) {
@@ -602,6 +605,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
                 // fills a vtable's typeinfo and destructor pointers.
                 Line data;
                 data.mnemonic = ".short";
+                data.text = line;
                 data.operands = split_operands(trim(line.substr(6)));
                 for (const auto& operand : data.operands) {
                     if (parse_number(operand)) {
@@ -628,6 +632,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
             } else if (name == ".byte") {
                 Line data;
                 data.mnemonic = ".byte";
+                data.text = line;
                 data.operands = split_operands(trim(line.substr(5)));
                 for (const auto& operand : data.operands) {
                     if (!parse_number(operand)) {
@@ -647,6 +652,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
         }
 
         Line parsed;
+        parsed.text = line;
         std::istringstream instruction(line);
         instruction >> parsed.mnemonic;
         std::string rest;
@@ -742,6 +748,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
     section = 0;
     offset = 0;
     for (const auto& line : lines) {
+        const auto start = offset;
         if (line.mnemonic == ".short") {
             for (const auto& operand : line.operands) {
                 // Only a digit or a sign makes a number; parse_number accepts an
@@ -769,9 +776,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
                 result.relocations.push_back(AssembledRelocation{symbol, 0, offset});
                 offset += 2;
             }
-            continue;
-        }
-        if (line.mnemonic == ".byte") {
+        } else if (line.mnemonic == ".byte") {
             for (const auto& operand : line.operands) {
                 const auto value = parse_number(operand);
                 if (!value) {
@@ -782,18 +787,29 @@ bool assemble(std::string_view source, AssemblyResult& result,
                     static_cast<std::uint8_t>(*value & 0xFF));
             }
             offset += line.operands.size();
-            continue;
+        } else {
+            const auto encoded =
+                encode_mnemonic(line, static_cast<std::uint32_t>(offset), labels,
+                                externs, result.relocations, error);
+            if (!encoded) {
+                return false;
+            }
+            for (std::uint8_t index = 0; index < encoded->count; ++index) {
+                append_word(result.text, encoded->words[index]);
+            }
+            offset += static_cast<std::uint64_t>(encoded->count) * 2;
         }
-        const auto encoded =
-            encode_mnemonic(line, static_cast<std::uint32_t>(offset), labels,
-                            externs, result.relocations, error);
-        if (!encoded) {
-            return false;
+
+        toolchain::ListingRow row;
+        row.section = ".text";
+        row.address = start;
+        row.text = line.text;
+        if (start <= result.text.size()) {
+            row.bytes.assign(
+                result.text.begin() + static_cast<std::ptrdiff_t>(start),
+                result.text.end());
         }
-        for (std::uint8_t index = 0; index < encoded->count; ++index) {
-            append_word(result.text, encoded->words[index]);
-        }
-        offset += static_cast<std::uint64_t>(encoded->count) * 2;
+        result.listing.push_back(std::move(row));
     }
 
     for (const auto& entry : labels) {

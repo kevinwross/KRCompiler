@@ -39,10 +39,15 @@ struct LinkedSymbol {
 };
 
 struct LinkedImage {
+    std::uint32_t target_id = 1;
     std::uint64_t base = 0;
     std::uint64_t entry = 0;
     std::vector<LinkedSection> sections;
     std::vector<LinkedSymbol> symbols;
+    // The final address of each input object's `.text`, in input order. Zero when
+    // the object was collected or has no `.text`. A listing uses it to turn a
+    // section-relative statement offset into an address.
+    std::vector<std::uint64_t> object_text_addresses;
 };
 
 [[nodiscard]] bool link_objects(std::span<const KroObject> objects, const LinkOptions& options,

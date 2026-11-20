@@ -1,4 +1,4 @@
-#include "kdbg.h"
+#include "krc/debug/kdbg.h"
 
 #include <algorithm>
 #include <array>
@@ -356,7 +356,10 @@ std::vector<std::uint8_t> encode_kdbg(const KdbgImage& image) {
     set_u32(output, 44, string_table_offset);
     set_u32(output, 48, static_cast<std::uint32_t>(strings.data().size()));
     set_u32(output, 52, 0);
-    set_u64(output, 56, 0);
+    // The eight reserved header bytes carry the image base the payload's
+    // absolute addresses were built for. ADR 0009 records the use; readers that
+    // skip reserved bytes are unaffected.
+    set_u64(output, 56, image.image_base);
     const auto checksum = crc32(output);
     set_u32(output, kCrcOffset, checksum);
     return output;
@@ -394,6 +397,7 @@ bool decode_kdbg(std::span<const std::uint8_t> data, KdbgImage& image, std::stri
     image.pointer_width = data[24];
     image.endianness = data[25];
     image.build_id = read_u64(data, 28);
+    image.image_base = read_u64(data, 56);
     const auto section_count = read_u16(data, 36);
     const auto table_offset = read_u32(data, 40);
     const auto string_offset = read_u32(data, 44);
@@ -594,40 +598,96 @@ std::string dump_kdbg_json(const KdbgImage& image) {
     return out.str();
 }
 
-bool find_k32_section(std::span<const std::uint8_t> image, std::string_view name,
-                      std::span<const std::uint8_t>& section, std::string& error) {
-    if (image.size() < 64) {
-        error = "image is shorter than the KR32 header";
+bool find_kdbg_section(std::span<const std::uint8_t> image, KdbgSection& section,
+                       std::string& error) {
+    section = KdbgSection{};
+    if (image.size() < 4) {
+        error = "image is shorter than its magic";
         return false;
     }
-    const auto section_count = read_u32(image, 12);
-    const auto string_offset = read_u32(image, 32);
+    const bool kr32 = image[0] == 'K' && image[1] == '3' && image[2] == '2';
+    const bool kex = image[0] == 'K' && image[1] == 'R' && image[2] == '1' &&
+                     image[3] == '6';
+    if (!kr32 && !kex) {
+        error = "unrecognised image container";
+        return false;
+    }
+    if (image.size() < kHeaderSize) {
+        error = "image is shorter than its header";
+        return false;
+    }
+
+    std::uint32_t section_count = 0;
+    std::uint32_t table_offset = 0;
+    std::uint32_t string_offset = 0;
+    if (kr32) {
+        section.container = "k32";
+        section.image_base = read_u32(image, 28);
+        section_count = read_u32(image, 12);
+        table_offset = kHeaderSize;
+        string_offset = read_u32(image, 32);
+    } else {
+        section.container = "kex";
+        section_count = read_u16(image, 20);
+        table_offset = read_u32(image, 28);
+        string_offset = read_u32(image, 36);
+        if (section_count > 0) {
+            const auto first = table_offset;
+            if (first + kSectionEntrySize > image.size()) {
+                error = "KR16 section table is out of bounds";
+                return false;
+            }
+            section.image_base = read_u16(image, first + 8);
+        }
+    }
     if (string_offset > image.size()) {
-        error = "KR32 string table is out of bounds";
+        error = "image string table is out of bounds";
         return false;
     }
-    if (section_count > (image.size() - 64) / 32) {
-        error = "KR32 section table is out of bounds";
+    if (table_offset > image.size() ||
+        section_count > (image.size() - table_offset) / kSectionEntrySize) {
+        error = "image section table is out of bounds";
         return false;
     }
     const auto strings = image.subspan(string_offset);
     for (std::size_t index = 0; index < section_count; ++index) {
-        const auto entry = 64 + index * 32;
-        const auto section_name = string_at(strings, read_u32(image, entry));
-        if (section_name != name) {
+        const auto entry = table_offset + index * kSectionEntrySize;
+        const auto name = string_at(strings, read_u32(image, entry));
+        if (name != ".kdbg") {
             continue;
         }
         const auto payload = read_u32(image, entry + 12);
         const auto size = read_u32(image, entry + 16);
         if (payload > image.size() || size > image.size() - payload) {
-            error = "KR32 section '" + section_name + "' is out of bounds";
+            error = "section '.kdbg' is out of bounds";
             return false;
         }
-        section = image.subspan(payload, size);
+        section.payload = image.subspan(payload, size);
         return true;
     }
-    error = "section '" + std::string(name) + "' was not found";
+    error = "section '.kdbg' was not found";
     return false;
+}
+
+bool decode_kdbg_image(std::span<const std::uint8_t> container, KdbgImage& image,
+                       std::string& error) {
+    KdbgSection section;
+    if (!find_kdbg_section(container, section, error)) {
+        return false;
+    }
+    KdbgImage decoded;
+    if (!decode_kdbg(section.payload, decoded, error)) {
+        return false;
+    }
+    if (decoded.image_base != 0 && decoded.image_base != section.image_base) {
+        std::ostringstream message;
+        message << "KDBG image base 0x" << std::hex << decoded.image_base
+                << " does not match the image's load base 0x" << section.image_base;
+        error = message.str();
+        return false;
+    }
+    image = std::move(decoded);
+    return true;
 }
 
 }  // namespace krc::debug

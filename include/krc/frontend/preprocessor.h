@@ -20,6 +20,10 @@ class Preprocessor {
 public:
     struct Options {
         std::vector<std::filesystem::path> include_paths;
+        // `NAME` or `NAME=VALUE`, applied after the target's predefined macros.
+        // The replacement is one token, so a value with whitespace does not
+        // expand to several tokens.
+        std::vector<std::string> defines;
     };
 
     Preprocessor(SourceManager& sources, DiagnosticEngine& diagnostics,

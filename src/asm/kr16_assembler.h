@@ -5,6 +5,8 @@
 #include <string_view>
 #include <vector>
 
+#include "krc/toolchain.h"
+
 namespace krc::asmkr16 {
 
 struct AssembledSymbol {
@@ -29,6 +31,10 @@ struct AssemblyResult {
     std::vector<std::uint8_t> data;
     std::vector<AssembledSymbol> symbols;
     std::vector<AssembledRelocation> relocations;
+    // One row per emitted statement, in source order. Addresses are relative to
+    // the start of the text buffer, which is the only section this assembler
+    // produces.
+    std::vector<toolchain::ListingRow> listing;
 };
 
 // Assembles the KR16 textual subset emitted by the backend. Text and data are

@@ -29,8 +29,10 @@ add_executable(krc_tests
     unit/test_sysroot_bits.cpp
     unit/test_target.cpp
     unit/test_fixture_extractor.cpp
+    unit/test_toolchain.cpp
 )
-target_link_libraries(krc_tests PRIVATE krc_core krc_fixture_extractor)
+target_link_libraries(krc_tests PRIVATE krc::toolchain krc_fixture_extractor)
+target_include_directories(krc_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_include_directories(krc_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/third_party/doctest")
 target_compile_definitions(krc_tests PRIVATE KRC_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_features(krc_tests PRIVATE cxx_std_20)

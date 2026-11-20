@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.25)
 
 project(KRCompiler VERSION 0.1.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -83,7 +86,10 @@ if(NOT KRC_KR16_VM)
     endif()
 endif()
 
-add_library(krc_core STATIC
+# The implementation is an object library, not an installable target. The public
+# surface is `krc::toolchain`, whose archive carries these objects; `krc_impl`
+# never appears in the exported package.
+add_library(krc_impl OBJECT
     src/asm/kro_writer.cpp
     src/asm/kr32_assembler.cpp
     src/asm/kr32_encoder.cpp
@@ -97,7 +103,6 @@ add_library(krc_core STATIC
     src/backend/kr32_descriptor.cpp
     src/backend/peephole.cpp
     src/backend/register_allocator.cpp
-    src/debug/kdbg.cpp
     src/frontend/ast.cpp
     src/linker/kro_object.cpp
     src/linker/kr16_image.cpp
@@ -119,26 +124,64 @@ add_library(krc_core STATIC
     src/target/sysroot_bits.cpp
     src/target/target.cpp
 )
-target_include_directories(krc_core PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+target_include_directories(krc_impl PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(krc_impl PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_compile_features(krc_impl PUBLIC cxx_std_20)
+krc_apply_warnings(krc_impl)
+krc_apply_sanitizers(krc_impl)
+
+# `krc::debug` is the KDBG reader/writer and depends only on the standard
+# library, so a host that only decodes images links it alone.
+add_library(krc_debug STATIC
+    src/debug/kdbg.cpp
 )
-target_compile_features(krc_core PUBLIC cxx_std_20)
-krc_apply_warnings(krc_core)
-krc_apply_sanitizers(krc_core)
+add_library(krc::debug ALIAS krc_debug)
+set_target_properties(krc_debug PROPERTIES
+    OUTPUT_NAME krc-debug
+    EXPORT_NAME debug
+)
+target_include_directories(krc_debug PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+target_compile_features(krc_debug PUBLIC cxx_std_20)
+krc_apply_warnings(krc_debug)
+krc_apply_sanitizers(krc_debug)
+
+# `krc::toolchain` is the public build facade. Its archive carries the compiler
+# implementation, so a host links one static library and gets compile, assemble
+# and link without a subprocess or a second entry point.
+add_library(krc_toolchain STATIC
+    src/toolchain/toolchain.cpp
+    $<TARGET_OBJECTS:krc_impl>
+)
+add_library(krc::toolchain ALIAS krc_toolchain)
+set_target_properties(krc_toolchain PROPERTIES
+    OUTPUT_NAME krc-toolchain
+    EXPORT_NAME toolchain
+)
+target_include_directories(krc_toolchain PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+target_include_directories(krc_toolchain PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(krc_toolchain PRIVATE krc_debug)
+target_compile_features(krc_toolchain PUBLIC cxx_std_20)
+krc_apply_warnings(krc_toolchain)
+krc_apply_sanitizers(krc_toolchain)
 
 add_library(krc_fixture_extractor STATIC
     src/tools/fixture_extractor.cpp
 )
 target_include_directories(krc_fixture_extractor PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(krc_fixture_extractor PUBLIC krc_core)
+target_link_libraries(krc_fixture_extractor PUBLIC krc_toolchain)
 target_compile_features(krc_fixture_extractor PUBLIC cxx_std_20)
 krc_apply_warnings(krc_fixture_extractor)
 krc_apply_sanitizers(krc_fixture_extractor)
 
 if(KRC_BUILD_TOOLS)
     add_executable(krc_gen_sysroot_bits src/tools/gen_sysroot_bits/main.cpp)
-    target_link_libraries(krc_gen_sysroot_bits PRIVATE krc_core)
+    target_link_libraries(krc_gen_sysroot_bits PRIVATE krc_toolchain)
     krc_apply_warnings(krc_gen_sysroot_bits)
     krc_apply_sanitizers(krc_gen_sysroot_bits)
 
@@ -162,7 +205,7 @@ if(KRC_BUILD_TOOLS)
     add_dependencies(krc_stage_sysroot krc_gen_sysroot_bits)
 
     add_executable(krc src/tools/krc/main.cpp)
-    target_link_libraries(krc PRIVATE krc_core)
+    target_link_libraries(krc PRIVATE krc::toolchain)
     target_compile_definitions(krc PRIVATE
         KRC_SYSROOT_DIR="${KRC_STAGE_SYSROOT}")
     krc_apply_warnings(krc)
@@ -170,7 +213,8 @@ if(KRC_BUILD_TOOLS)
     add_dependencies(krc krc_stage_sysroot)
 
     add_executable(krld src/tools/krld/main.cpp)
-    target_link_libraries(krld PRIVATE krc_core)
+    target_link_libraries(krld PRIVATE krc::toolchain)
+    target_include_directories(krld PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     krc_apply_warnings(krld)
     krc_apply_sanitizers(krld)
 
@@ -232,3 +276,30 @@ if(KRC_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# The exported package. Consumers see exactly two targets — `krc::toolchain` and
+# `krc::debug` — and the headers under include/krc. The compiler implementation
+# is compiled into krc-toolchain's archive and never exported as a target.
+install(TARGETS krc_toolchain krc_debug
+    EXPORT krcTargets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
+install(DIRECTORY include/krc DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(EXPORT krcTargets
+    NAMESPACE krc::
+    FILE krc-targets.cmake
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/krc"
+)
+
+foreach(package IN ITEMS krc-toolchain krc-debug)
+    configure_package_config_file(
+        "cmake/${package}-config.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/${package}-config.cmake"
+        INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${package}"
+    )
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${package}-config.cmake"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${package}"
+    )
+endforeach()

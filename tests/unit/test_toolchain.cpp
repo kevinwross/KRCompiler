@@ -1,0 +1,250 @@
+#include <doctest.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <filesystem>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "krc/toolchain.h"
+
+namespace {
+
+krc::toolchain::Source source(std::string name, std::string_view text) {
+    return krc::toolchain::Source{std::move(name), text};
+}
+
+// A host's own `.lst` format. The facade returns rows; this function is what a
+// VM front end would write, and it exists here to show the row model is enough
+// to render one.
+std::string format_listing(const std::vector<krc::toolchain::ListingRow>& rows) {
+    std::string output;
+    for (const auto& row : rows) {
+        if (row.bytes.empty()) {
+            continue;
+        }
+        char address[9] = {};
+        std::snprintf(address, sizeof(address), "%08llX",
+                      static_cast<unsigned long long>(row.address));
+        output += address;
+        output += "  ";
+        for (const auto byte : row.bytes) {
+            static constexpr char digits[] = "0123456789ABCDEF";
+            output.push_back(digits[byte >> 4]);
+            output.push_back(digits[byte & 0x0F]);
+            output.push_back(' ');
+        }
+        output += " ";
+        output += row.text;
+        output.push_back('\n');
+    }
+    return output;
+}
+
+class EmptyWorkingDirectory {
+public:
+    EmptyWorkingDirectory() {
+        std::error_code error;
+        path_ = std::filesystem::current_path(error) / "krc-toolchain-cwd";
+        if (error) {
+            message_ = error.message();
+            return;
+        }
+        std::filesystem::remove_all(path_, error);
+        error.clear();
+        std::filesystem::create_directories(path_, error);
+        if (error) {
+            message_ = error.message();
+            return;
+        }
+        previous_ = std::filesystem::current_path(error);
+        if (error) {
+            message_ = error.message();
+            return;
+        }
+        std::filesystem::current_path(path_, error);
+        if (error) {
+            message_ = error.message();
+            return;
+        }
+        ok_ = true;
+    }
+
+    ~EmptyWorkingDirectory() {
+        std::error_code error;
+        if (ok_) {
+            std::filesystem::current_path(previous_, error);
+        }
+        std::filesystem::remove_all(path_, error);
+    }
+
+    EmptyWorkingDirectory(const EmptyWorkingDirectory&) = delete;
+    EmptyWorkingDirectory& operator=(const EmptyWorkingDirectory&) = delete;
+
+    [[nodiscard]] bool ok() const { return ok_; }
+    [[nodiscard]] const std::string& message() const { return message_; }
+
+    [[nodiscard]] std::size_t entry_count() const {
+        std::error_code error;
+        std::size_t count = 0;
+        for (std::filesystem::directory_iterator it(path_, error);
+             !error && it != std::filesystem::directory_iterator(); ++it) {
+            ++count;
+        }
+        return count;
+    }
+
+private:
+    std::filesystem::path path_;
+    std::filesystem::path previous_;
+    std::string message_;
+    bool ok_ = false;
+};
+
+}  // namespace
+
+TEST_CASE("The facade builds an image from text with no files") {
+    krc::toolchain::Options options;
+    const auto result = krc::toolchain::build(
+        std::vector<krc::toolchain::Source>{source("answer.c", "int main() { return 42; }")},
+        options);
+    REQUIRE_MESSAGE(result.ok, result.error);
+    CHECK(result.diagnostics.empty());
+    REQUIRE(result.image.size() > 64);
+    CHECK_EQ(result.image[0], 'K');
+    CHECK_EQ(result.image[1], '3');
+    CHECK_EQ(result.image[2], '2');
+    CHECK(result.entry != 0);
+    CHECK_FALSE(result.listing.empty());
+}
+
+TEST_CASE("Two sequential builds are byte-identical") {
+    krc::toolchain::Options options;
+    const std::vector<krc::toolchain::Source> sources{
+        source("twice.c", "int add(int a, int b) { return a + b; }\nint main() { return add(1, 2); }")};
+    const auto first = krc::toolchain::build(sources, options);
+    const auto second = krc::toolchain::build(sources, options);
+    REQUIRE_MESSAGE(first.ok, first.error);
+    REQUIRE_MESSAGE(second.ok, second.error);
+    CHECK(first.image == second.image);
+    REQUIRE_EQ(first.listing.size(), second.listing.size());
+    for (std::size_t index = 0; index < first.listing.size(); ++index) {
+        CHECK_EQ(first.listing[index].address, second.listing[index].address);
+        CHECK_EQ(first.listing[index].bytes, second.listing[index].bytes);
+        CHECK_EQ(first.listing[index].text, second.listing[index].text);
+    }
+}
+
+TEST_CASE("A build from strings leaves the working directory empty") {
+    EmptyWorkingDirectory directory;
+    REQUIRE_MESSAGE(directory.ok(), directory.message());
+    krc::toolchain::Options options;
+    const auto result = krc::toolchain::build(
+        std::vector<krc::toolchain::Source>{source("cwd.c", "int main() { return 0; }")},
+        options);
+    REQUIRE_MESSAGE(result.ok, result.error);
+    CHECK_EQ(directory.entry_count(), 0);
+}
+
+TEST_CASE("The listing reproduces the assembly statements and addresses") {
+    const std::string assembly =
+        ".text\n"
+        ".Ldbg.main.3.1:\n"
+        "main:\n"
+        "    MOV R0, #42\n"
+        "    RET\n";
+    krc::toolchain::Options options;
+    const auto assembled = krc::toolchain::assemble(assembly, options);
+    REQUIRE_MESSAGE(assembled.ok, assembled.error);
+
+    const auto find_row = [&](std::string_view text) -> const krc::toolchain::ListingRow* {
+        for (const auto& row : assembled.listing) {
+            if (row.text == text) {
+                return &row;
+            }
+        }
+        return nullptr;
+    };
+    const auto* move = find_row("MOV R0, #42");
+    const auto* ret = find_row("RET");
+    REQUIRE(move != nullptr);
+    REQUIRE(ret != nullptr);
+    CHECK_EQ(move->section, ".text");
+    CHECK_EQ(move->source_line, 3);
+    CHECK_EQ(move->bytes.size(), 4);
+    CHECK_EQ(ret->address, move->address + 4);
+
+    const auto listing = format_listing(assembled.listing);
+    CHECK(listing.find("MOV R0, #42") != std::string::npos);
+    CHECK(listing.find("00000000") != std::string::npos);
+}
+
+TEST_CASE("A linked build places its listing at final addresses") {
+    krc::toolchain::Options options;
+    const auto result = krc::toolchain::build(
+        std::vector<krc::toolchain::Source>{source("final.c", "int main() { return 7; }")},
+        options);
+    REQUIRE_MESSAGE(result.ok, result.error);
+
+    std::uint64_t text_address = 0;
+    std::uint64_t text_size = 0;
+    for (const auto& section : result.sections) {
+        if (section.name == ".text") {
+            text_address = section.address;
+            text_size = section.size;
+        }
+    }
+    REQUIRE(text_size != 0);
+    bool saw_instruction = false;
+    for (const auto& row : result.listing) {
+        if (row.section != ".text" || row.bytes.empty()) {
+            continue;
+        }
+        saw_instruction = true;
+        CHECK(row.address >= text_address);
+        CHECK(row.address + row.bytes.size() <= text_address + text_size);
+    }
+    CHECK(saw_instruction);
+}
+
+TEST_CASE("Diagnostics are data a host can render after the call") {
+    krc::toolchain::Options options;
+    const auto result = krc::toolchain::compile(
+        source("broken.c", "int main() { return missing; }"), options);
+    CHECK_FALSE(result.ok);
+    REQUIRE_FALSE(result.diagnostics.empty());
+    CHECK(result.diagnostics.front().file == "broken.c");
+    CHECK(result.diagnostics.front().line == 1);
+    const auto text = krc::toolchain::format_diagnostics(result.diagnostics);
+    CHECK(text.find("broken.c:1:") != std::string::npos);
+    CHECK(text.find("error:") != std::string::npos);
+}
+
+TEST_CASE("The facade compiles and assembles for KR16") {
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr16;
+    const auto compiled = krc::toolchain::compile(
+        source("kr16.c", "int main() { return 7; }"), options);
+    REQUIRE_MESSAGE(compiled.ok, compiled.error);
+    CHECK_FALSE(compiled.assembly.empty());
+    CHECK(compiled.debug_info.empty());
+
+    const auto assembled =
+        krc::toolchain::assemble(compiled.assembly, compiled.debug_info, options);
+    REQUIRE_MESSAGE(assembled.ok, assembled.error);
+    CHECK_FALSE(assembled.object.empty());
+
+    const auto built = krc::toolchain::build(
+        std::vector<krc::toolchain::Source>{source("kr16.c", "int main() { return 7; }")},
+        options);
+    REQUIRE_MESSAGE(built.ok, built.error);
+    REQUIRE(built.image.size() > 64);
+    CHECK_EQ(built.image[0], 'K');
+    CHECK_EQ(built.image[1], 'R');
+    CHECK_EQ(built.image[2], '1');
+    CHECK_EQ(built.image[3], '6');
+    CHECK_EQ(built.base, 0x100);
+    CHECK_EQ(built.entry, 0x100);
+}
