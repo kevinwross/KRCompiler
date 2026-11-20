@@ -845,6 +845,28 @@ void Kr16Backend::emit_function(std::string& out,
             }
             case ir::Opcode::Call: {
                 const auto argument_count = instruction->operands.size() - 1;
+                // KR16's shipped runtime wrappers call `__host_call(n, block)`,
+                // which kr16's own compiler lowers to `SYS #n` with the block in
+                // R0 and then loads the status from the block
+                // (kr16 src/cc/compiler.cpp:8094-8100). The service number is a
+                // compile-time immediate; a non-constant or out-of-range service
+                // falls through to an ordinary call, which the linker then
+                // reports as an undefined symbol rather than mis-lowering it.
+                const auto* direct_callee = instruction->operands[0];
+                if (direct_callee && direct_callee->kind == ir::ValueKind::Function &&
+                    direct_callee->name == "__host_call" && argument_count == 2) {
+                    const auto* service = dynamic_cast<const ir::ConstantInt*>(
+                        instruction->operands[1]);
+                    if (service && service->value >= 0 && service->value <= 255) {
+                        load(instruction->operands[2], "R0");
+                        out += "    SYS #" + std::to_string(service->value) + "\n";
+                        out += "    LD R0, [R0]\n";
+                        if (instruction->type && !ir::is_void(instruction->type)) {
+                            store(*instruction, "R0");
+                        }
+                        break;
+                    }
+                }
                 const auto* callee_type = [&]() -> const ir::Type* {
                     const auto* callee = instruction->operands[0];
                     if (!callee || !callee->type) {

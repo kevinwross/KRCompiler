@@ -507,6 +507,34 @@ if(TARGET krc)
         set_tests_properties(krc_run_kr16_runtime PROPERTIES
             DEPENDS krc_kr16_link_runtime)
 
+        # 4.13: the shipped kr16 runtime calls `__host_call(n, block)`, which the
+        # KR16 backend lowers to SYS #n. The sibling sources are read unmodified;
+        # the test is registered only when the checkout is present.
+        set(_krc_kr16_source "${CMAKE_SOURCE_DIR}/../kr16")
+        if(EXISTS "${_krc_kr16_source}/resources/fileio.c" AND
+           EXISTS "${_krc_kr16_source}/tests/kevin/fileio.c")
+            add_test(NAME krc_kr16_link_shipped_fileio
+                COMMAND ${CMAKE_COMMAND}
+                        -DKRC=$<TARGET_FILE:krc>
+                        -DKRLD=$<TARGET_FILE:krld>
+                        -DKR16_SOURCE=${_krc_kr16_source}
+                        -DCRT0=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr16/shipped_fileio_crt0.s
+                        -DSYSROOT=${KRC_STAGE_SYSROOT}
+                        -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio.kex
+                        -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16ShippedFileio.cmake)
+            file(MAKE_DIRECTORY
+                "${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio_root")
+            add_test(NAME krc_run_kr16_shipped_fileio
+                COMMAND ${CMAKE_COMMAND}
+                        -DVM=${KRC_KR16_VM}
+                        -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio.kex
+                        -DEXPECT_EXIT=0
+                        -DFS_ROOT=${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio_root
+                        -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+            set_tests_properties(krc_run_kr16_shipped_fileio PROPERTIES
+                DEPENDS krc_kr16_link_shipped_fileio)
+        endif()
+
         # The single-unit images cover codegen shapes the linked fixtures do
         # not: globals with initializers, an index, a switch, a call in a loop,
         # shifts, a pointer write, a function pointer, pointer difference,
