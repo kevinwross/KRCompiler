@@ -92,7 +92,7 @@ synthesised type), not a local patch.
 
 ## 3. A zero-argument functional cast, `T()`
 
-Two different failures for what C++ treats as value-initialisation.
+Three different failures for what C++ treats as value-initialisation.
 
 **Concrete type name — rejected by the parser:**
 
@@ -123,9 +123,31 @@ gap3.cpp:3:5: error: parenthesized initializer takes exactly one value
 **Site:** `src/irgen/c_irgen.cpp:1710-1712` — the path that supports `int x(7)`
 requires exactly one argument and reports this message for an empty list.
 
-**Boundary:** `S s = S();` for a *concrete struct* compiles (verified), so it is
-the empty argument list and the dependent type that are unsupported, not
-parenthesised initialisation as a whole.
+**Concrete struct — rejected in IR generation:**
+
+```cpp
+struct S { int x; };
+int f() { S s = S(); return s.x; }
+```
+
+```text
+gap3_struct.cpp:2:11: error: constructor-initialized class has no constructor
+  int f() { S s = S(); return s.x; }
+            ^
+```
+
+The same source passes `-fsyntax-only` with exit status 0; the diagnostic comes
+from IR generation (`src/irgen/c_irgen.cpp:1829`), so a syntax check does not
+reach it. At global scope the initializer is rejected differently —
+`global initializer is not supported yet`
+(`src/irgen/c_irgen_setup.cpp:2203`).
+
+**Boundary:** the split is not concrete versus dependent. A concrete struct's
+empty parenthesised initialiser is rejected exactly as a dependent type's is, and
+both are IR-generation failures that `-fsyntax-only` does not see. The supported
+form is a parenthesised initialiser with one value, as in `int x(7)`. An earlier
+revision of this section called the concrete struct a compiling control; it had
+been checked only with `-fsyntax-only`.
 
 **Affects:** `examples/KRlibcpp.cpp:2982` (`KRFixedArray<T,N>::total()`) and
 `:3006` (`KRAccumulate<T>`), both instantiated with arithmetic types.
