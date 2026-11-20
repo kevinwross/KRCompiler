@@ -118,3 +118,83 @@ half and K2–K9.
 
 **Blocker:** K1's done-when has no producer under the plan's own "promotion and
 slot reuse stay off" rule.
+
+## 2026-11-20T13:08:33-08:00
+
+**Changed (K1–K9):** KDBG v1.1 is implemented, additively, on `kdbg-v1-1`. No v1
+record changed number or payload, and the allocator, promotion and slot reuse were
+not touched.
+
+- **K1.** The bridge parser in `attach_kdbg` reads `P` (register location with a
+  live range, KR32's spelling), `K` (lexical scope), `W` (variable kind, scope and
+  flags), `A` (array element type and count) and `R` (type reference); `C`'s
+  existing base field is now written. Both backends emit the records they already
+  know: a function `K` scope, `W` for every parameter and source local, `A`/`R`
+  for array and pointer types, and `C` with the base name. No path emits `P` yet:
+  the producer stays deferred under decision 6.
+- **K2.** KDBG gains `Location` tag 9 in the new `.kdbg_loc` (section type 8),
+  `Scope` 10 in `.kdbg_scope` (type 9) and `VarInfo` 11 in `.kdbg_var`; the
+  minor is `1`. The hand-built fixture (a `.debug_info` text with `S/L/F/V/P/K/W/
+  T/C/A/R`, run through `attach_kdbg`) decodes and both dumpers print it.
+- **K3.** `ir::Type` carries `base` and `base_type` as debug metadata only;
+  `complete_struct` accepts them and `map_record` passes the base's IR name and
+  type. Layout and code generation are unchanged. A compiled
+  `struct Derived : Base {}` prints `type Derived size=4 kind=struct base=Base`
+  and `type Base size=4 kind=struct`, and the JSON has `"base":"Base"`.
+- **K4.** `ArrayType` tag 13 and `TypeRef` tag 14, with no type-string parsing:
+  the decoder returns the element type and count, and a pointer's target. A
+  compiled `int a[3]; int *p = a;` prints
+  `type [3_x_i32] size=12 kind=array element=i32 count=3` and
+  `type ptr<i32> size=4 kind=pointer target=i32`.
+- **K5.** 64-bit variants `Line64` 15, `Function64` 16, `Symbol64` 17 and
+  `Location64` 18, written instead of the 32-bit forms when the header's pointer
+  width is `8`. A fixture with addresses above 2^32 (`0x1_0000_0004`,
+  `0x3_0000_0000`) round-trips and `require_kdbg_feature(WideAddresses)` passes.
+- **K6.** `target_id` comes from `kROTargetId`: a KR32 image says `1`, a KR16
+  image `2`, a future KR64 image `3`; the dumper prints it.
+- **K7.** Text and JSON print every new field (`minor`, `pointer`, counts,
+  `varinfo`, `location`, `scope`, type `base`/`element`/`count`/`target`); the
+  JSON schema is documented in `docs/symbols.md`. `require_kdbg_feature` reports
+  `newer KDBG` for a payload whose minor is newer than the reader, `predates` for
+  a v1 payload missing a v1.1 fact, and a plain missing-records error otherwise.
+- **K8.** Tests: the v1.1 round-trip, the hand-built bridge fixture, the v1-reader
+  fixture on a v1.1 payload, the 64-bit fixture, truncated and section-CRC
+  failures, the newer-minor report, and compiled base/array/pointer/target-id
+  records. The unit binary now has **172 cases / 1,654 assertions**, all passing.
+- **K9.** `docs/symbols.md` (v1.1 records, tags, ordering, JSON schema),
+  ADR 0009's v1.1 amendment, ADR 0052's update (the format half is the additive
+  `Location`, the `Variable`-grows recommendation is withdrawn), and
+  `docs/toolchain-embedding.md`'s reader notes.
+
+**Compatibility rows, real output:**
+
+- **A v1 reader on a v1.1 payload.** The test-side `decode_as_v1` (the previous
+  decoder's tag dispatch, tags 1–8 only) decodes the v1.1 fixture: sources 1,
+  lines 1, functions 1, variables 1, types 1, no error. The new tags and the
+  `.kdbg_loc`/`.kdbg_scope` sections are skipped because their tags are unknown.
+- **KR32's debug path on a v1.1-built `.k32`.** `..\KR32\build\windows-ninja\
+  kr32.exe debug arr.k32` (the `arr.k32` this tree built) exits **0** and prints
+  the parsed source paths and functions, starting with
+  `source 0 build/kdbg11-check/arr.c` and
+  `function use 0x10000-0x10084 frame=72 result=i32`. The new `K/W/A/R` letters
+  and the written `C` base are skipped or accepted, not errors.
+- **Both dumper forms.** `krc --dump-symbols arr.k32` prints
+  `KDBG target=1 abi=1 ... minor=1 pointer=4 locations=0 scopes=212 varinfo=696`,
+  `type [3_x_i32] ... element=i32 count=3`,
+  `type ptr<i32> ... target=i32`, `varinfo use.n kind=param ... scope=use` and
+  `scope use:use parent=- 0x10000-0x10090`. The JSON form contains `"minor":1`,
+  `"pointer":4`, `"variableInfo":`, `"locations":[]`, `"scopes":`, `"element"`,
+  `"target"`; `inherit.k32` adds `"base":"Base"`.
+
+**Boundary matrix, recorded in `implementation.md` for `ddae511`:**
+`windows-msvc-debug` 913/913, `windows-msvc-release` 913/913,
+`linux-gcc-debug` 719/719, `linux-gcc-release` 719/719,
+`linux-clang-debug` 719/719, `linux-sanitize` 719/719.
+
+**Commit:** `ddae511` (`Add KDBG v1.1 records additively`). The gate record and
+this entry follow in a documentation commit.
+
+**Next step:** push `kdbg-v1-1`; krdbg consumes it first (decision 3).
+
+**Blocker:** none. The `P` producer remains the deferred item recorded in
+decision 6; it arrives with the ADR 0052 promotion change.

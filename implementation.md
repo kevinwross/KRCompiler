@@ -497,6 +497,34 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T12:37:43-08:00 — boundary matrix (Windows + WSL)
+Revision: ddae511
+
+```
+windows-msvc-debug    PASS 913/913
+windows-msvc-release  PASS 913/913
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for KDBG v1.1, which changes the symbol/debug format, the IR's debug
+metadata, both backends and the linker's bridge parser. Rows are incremental and
+were run one at a time in the order listed. The Windows configure resolves both
+VMs and registers 913 tests; the Linux configure registers 719 and starts no VM.
+The only diagnostic was the vendored doctest `<ciso646>` warning on Clang. No row
+was re-run after a failure; the sanitizer row is the outlier at 472 s of tests.
+
+The compatibility rows are not presets and are recorded in
+`docs/kdbg-v1-1-log.md`: the test-side v1 reader decodes a v1.1 payload and sees
+only the v1 records; KR32's `debug` on a v1.1-built `.k32` exits 0 and prints its
+sources and functions; both `krc --dump-symbols` forms print the new fields. The
+rows cover the tree committed as `ddae511`. The ARM64 row is the tester's
+`docs/arm64-test-log.md` entry for the tested SHA, not re-run here. The timestamp
+is the modification time of the Windows debug row's rebuilt `krc-toolchain.lib`.
+
 2026-11-20T10:27:20-08:00 — boundary matrix (Windows + WSL)
 Revision: b680815
 
@@ -7126,3 +7154,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T11:06:53-08:00** — **Stage A is closed at `a099ddd` (consumer pins `37a5839` for kr16 and `28ad731` for KR32) after two documentation corrections.** `docs/cxx-front-end-gaps.md` claimed `S s = S();` for a concrete struct compiles; reproduced with a full compile it is rejected in IR generation with `constructor-initialized class has no constructor`, and `-fsyntax-only` is why the old control looked green — corrected in `0547395`. The log entry at 04:23 named `d3367a8` for the facade; the rebased, published SHA is `b2eae12`, and a correction entry names it without rewriting the earlier one. The `.crt0` directive behind kr16's hybrid error is kr16's own startup section in generated assembly (`build/windows-ninja/tests/hello.s:16`; tracked `examples/sum.s:87`), not `resources/libc.s`, and is out of scope. No code changed, KDBG v1.1 was not started, `adopt-krc` was not merged, and the built-in compiler path is untouched.
 
 - **2026-11-20T11:17:21-08:00** — **KDBG v1.1 (branch `kdbg-v1-1`) has its format design and no code yet.** `docs/symbols.md` now fixes the additive bridge letters (`P`, `K`, `W`, `A`, `R`, with `C`'s existing base field written) and the v1.1 tags (`Location` 9, `Scope` 10, `VarInfo` 11, `Base` 12, `ArrayType` 13, `TypeRef` 14, and the 64-bit `Line64`/`Function64`/`Symbol64`/`Location64` 15–18), the minor `1.1` rule and the compatibility rules. K1's emission half is blocked on a plan premise: no source variable is register-held with promotion and slot reuse off (`layout_function` reserves every parameter and alloca slot; `keep_local_allocations` skips allocas and has no parameters; `docs/plan-o1-debugger.md:42-45` says so), so a `P` record has no honest producer yet. The options and evidence are in [docs/kdbg-v1-1-log.md](kdbg-v1-1-log.md); the design is committed for review.
+
+- **2026-11-20T13:08:33-08:00** — **KDBG v1.1 lands on `kdbg-v1-1` at `ddae511`: additive new bridge letters and KDBG tags, minor `1`, both dumpers, and the compatibility rows.** The bridge gains `P/K/W/A/R` plus `C`'s existing base field; KDBG gains `Location` 9 in `.kdbg_loc`, `Scope` 10 in `.kdbg_scope`, `VarInfo` 11, `Base` 12, `ArrayType` 13, `TypeRef` 14 and 64-bit `Line64`/`Function64`/`Symbol64`/`Location64` 15–18. No v1 record is resized, and promotion/slot reuse and the allocator were not touched. A test-side v1 reader decodes a v1.1 payload and sees only the v1 records; KR32's `debug` exits 0 on a v1.1-built `.k32`; text and JSON print the new fields. The full record is [docs/kdbg-v1-1-log.md](kdbg-v1-1-log.md); the matrix at `ddae511` is the newest `## Gate verification` block.
