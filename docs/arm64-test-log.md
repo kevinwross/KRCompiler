@@ -64,3 +64,20 @@ First real change to reach this branch: the `krc::toolchain` facade (`include/kr
 every linked image keeps its debug payload and still runs. Also present are the `kdbg` v1 freeze ADR, the
 host-embedding guide, the `include/krc/toolchain.h` read corrections and more `test_kdbg` cases. Count
 stays 910 because the additions are cases inside existing test binaries. No disturbance, no retry.
+
+## 2026-11-20T09:15:19-08:00 — adopt-krc @ 797dfac
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: 5956bbe..797dfac, 3 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, <1 s (`cmake/CheckKr16Kdbg.cmake` added, so it was re-run; VM paths retained)
+- Build: linux-gcc-debug — ok, 44 s, 23 targets
+- Test: linux-gcc-debug — 911/911 passed, 269 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+Count rises 910 → 911: the KR16 backend now emits debug info so a `.kex` carries `.kdbg`, and a new
+check registers against that (the KR16 pin SHA is reported alongside). This is the first time the KR16
+debug path runs here — the 191 executed rows include KR16 images, so a regression that broke KR16 object
+emission would have shown up as a failing run rather than only a compile error. `include/krc/toolchain.h`,
+`src/toolchain/toolchain.cpp` and the linker also changed. No disturbance, no retry.
