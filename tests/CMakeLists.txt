@@ -21,6 +21,7 @@ add_executable(krc_tests
     unit/test_kro_object.cpp
     unit/test_linker.cpp
     unit/test_kdbg.cpp
+    unit/test_kdbg_v11.cpp
     unit/test_archive.cpp
     unit/test_lexer.cpp
     unit/test_parser.cpp

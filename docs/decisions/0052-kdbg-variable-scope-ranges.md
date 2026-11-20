@@ -1,11 +1,26 @@
 # 0052 — Live ranges on KDBG `Variable` records
 
-**Status:** proposed 2026-11-19. Not accepted, and not implementable inside this repository alone:
-the reader is the sibling `KR32` VM, so accepting it needs the format change and the two readers
-moving together.
+**Status:** proposed 2026-11-19. The **format half is superseded** by the approved
+KDBG v1.1 additive design (2026-11-20): a live range is a new `Location` record,
+not a grown `Variable`. Enabling slot reuse or promotion remains unaccepted and
+still needs the promotion change this ADR describes.
 **Date:** 2026-11-19.
 **Relates to:** [ADR 0009](0009-kdbg-v1-freeze.md), `docs/symbols.md`, `docs/plan-o1-debugger.md`
 W4/W5, `docs/optimize.md` §7 row **S4**, `src/backend/machine_liveness.h`.
+
+## Update (2026-11-20): the format half lands additively
+
+The approved KDBG v1.1 plan keeps v1 records frozen. A live range is carried by a
+new `Location` record (tag 9 in `.kdbg_loc`, payload function, name, register, fp,
+start, end) fed by the bridge's `P` letter, with the 64-bit form as tag 18. No
+`Variable` record grows, and a v1 reader skips the new record rather than
+rejecting the payload. The earlier recommendation below that every `Variable`
+record grows by eight bytes is withdrawn; the rest of the ADR — why ranges are
+needed, and that the compiler must not reuse a slot or promote a named variable
+until a reader honours them — stands.
+
+The compiler still does not emit `P`: promotion and slot reuse stay off, as the
+v1.1 plan requires. The producer arrives with the separate promotion change.
 
 ## Context
 

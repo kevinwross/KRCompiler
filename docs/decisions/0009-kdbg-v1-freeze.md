@@ -40,6 +40,29 @@ older image is invalidated. The version stays 1.0 and no record type changes;
 readers that skip reserved bytes are unaffected. [docs/symbols.md](../symbols.md)
 records the field.
 
+## Amendment: KDBG v1.1 (2026-11-20)
+
+KDBG gains a minor version, `1.1`, without changing a v1 record. The new facts
+are new `.debug_info` letters (`P` for a register location, `K` for a lexical
+scope, `W` for variable flags and scope, `A` for an array's element type and
+count, `R` for a type reference) and the existing `C` record's base field now
+written, plus new KDBG tags and two sections: `Location` 9 in `.kdbg_loc`,
+`Scope` 10 in `.kdbg_scope`, `VarInfo` 11, `Base` 12, `ArrayType` 13,
+`TypeRef` 14, and 64-bit variants `Line64` 15, `Function64` 16, `Symbol64` 17 and
+`Location64` 18. `target_id` is written from the KRO target id (`1` KR32, `2`
+KR16, `3` KR64).
+
+The rules: a v1 reader skips unknown tags and sections and reports the v1
+records; a v1.1 reader accepts a v1 payload with the new fields empty; a caller
+that requires a v1.1 fact reports "newer KDBG" rather than guessing. No v1 tag
+changes number or payload, so no v2 is implied by this amendment. The 64-bit
+variants are written instead of the 32-bit records when the header's pointer
+width is 8.
+
+The format can now describe a register-held variable with a live range; the
+compiler still does not create one. Enabling promotion or slot reuse remains
+ADR 0052's separate decision, so no krc path emits `P` yet.
+
 ## Consequences
 
 - KDBG images are self-describing, versioned, and checksummed.

@@ -138,6 +138,36 @@ the tag the target selects, so a reader never has to try both.
   error, so `K`, `W`, `A`, `R` are skipped; `P` is already parsed with the same
   spelling. No existing record's field order changes.
 
+The encoder writes the v1 sections first (sources, lines, functions, symbols,
+variables, types, build), then `.kdbg_loc` and `.kdbg_scope`, so the order stays
+deterministic for the same input. A `.kdbg_type` section carries a type's `Type`
+record, its `Member` records, then any `Base`/`ArrayType`/`TypeRef` records for
+that type; a reader applies the last three to the named type.
+
+### JSON dump schema
+
+`krc --dump-symbols --json` prints one object. v1 keys keep their names and
+types; v1.1 adds keys and never renames or retypes a v1 key.
+
+| Key | Type | Present |
+|---|---|---|
+| `target` | number | always |
+| `abi` | number | always |
+| `minor` | number | always (v1.1 addition) |
+| `pointer` | number | always (v1.1 addition) |
+| `compiler` | string | always |
+| `sources` | array of `{id, path}` | always |
+| `functions` | array of `{name, start, end, frame, type}` | always |
+| `variables` | array of `{function, name, offset, size, type}` | always |
+| `variableInfo` | array of `{function, name, kind, flags, scope}` | v1.1 |
+| `locations` | array of `{function, name, reg, fp, start, end}` | v1.1 |
+| `scopes` | array of `{function, name, parent, start, end}` | v1.1 |
+| `types` | array of `{name, size, kind, members}` plus optional `base`, `element`+`count`, `target` | always, optional keys v1.1 |
+
+`reg` is `"R9"` or `"F0"`; `fp` is a JSON boolean. Addresses are numbers, not
+strings, and may exceed 2^32 only in a v1.1 wide payload.
+
+
 
 A `Line` record is written for each instruction that carries a source location, so a
 line has a record exactly while the image still has an instruction at it. A line

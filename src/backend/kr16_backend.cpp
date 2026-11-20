@@ -312,7 +312,13 @@ void Kr16Backend::add_debug_type(ir::TypePtr type) const {
     const auto size = type_size(type);
     debug_info_ += "T " + name + " " + std::to_string(size) + std::string(1, '\0');
     if (type->kind == ir::TypeKind::Struct) {
+        // The C record's base field is written now, `-` for none (v1.1), and
+        // the base's own record is emitted first so a reader can follow it.
+        if (type->base_type) {
+            add_debug_type(type->base_type);
+        }
         debug_info_ += "C " + name + " " + std::to_string(size) + " " +
+                       (type->base.empty() ? "-" : type->base) +
                        std::string(1, '\0');
         std::uint32_t offset = 0;
         for (std::size_t index = 0; index < type->fields.size(); ++index) {
@@ -330,8 +336,12 @@ void Kr16Backend::add_debug_type(ir::TypePtr type) const {
         }
     } else if (type->kind == ir::TypeKind::Array) {
         add_debug_type(type->element);
+        debug_info_ += "A " + name + " " + debug_type_name(type->element) + " " +
+                       std::to_string(type->count) + std::string(1, '\0');
     } else if (type->kind == ir::TypeKind::Pointer) {
         add_debug_type(type->element);
+        debug_info_ += "R " + name + " " + debug_type_name(type->element) +
+                       std::string(1, '\0');
     }
 }
 
@@ -1063,6 +1073,11 @@ void Kr16Backend::emit_function(std::string& out,
                    debug_type_name(function.type ? function.type->return_type
                                                  : nullptr) +
                    std::string(1, '\0');
+    // The function scope; `-` marks the function level, which has no parent.
+    // KR16 has no separate `.end` label: `.ret` is its function end.
+    debug_info_ += "K " + function.name + " " + function.name + " - " +
+                   function.name + " .L" + function.name + ".ret" +
+                   std::string(1, '\0');
     // A frame offset in the bridge is positive and measured from the frame base,
     // as KR32's is from R7. This frame base is R4 and the slots are addressed
     // from SP (= R4 - frame_size), so a slot at [SP+off] is at R4 - (frame_size -
@@ -1088,6 +1103,8 @@ void Kr16Backend::emit_function(std::string& out,
                        debug_type_name(parameter->type) + " " +
                        std::to_string(type_size(parameter->type)) +
                        std::string(1, '\0');
+        debug_info_ += "W " + function.name + " " + parameter->name + " param " +
+                       function.name + " 0x0" + std::string(1, '\0');
     }
     std::unordered_set<std::string> parameter_names;
     for (const auto& parameter : function.parameters) {
@@ -1122,6 +1139,8 @@ void Kr16Backend::emit_function(std::string& out,
                            debug_type_name(instruction->allocated_type) + " " +
                            std::to_string(type_size(instruction->allocated_type)) +
                            std::string(1, '\0');
+            debug_info_ += "W " + function.name + " " + name + " local " +
+                           function.name + " 0x0" + std::string(1, '\0');
         }
     }
 

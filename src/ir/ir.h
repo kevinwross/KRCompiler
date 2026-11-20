@@ -44,6 +44,12 @@ struct Type {
     bool variadic = false;
     bool packed = false;
     std::string name;
+    // The base class's IR type name for a derived record, empty otherwise.
+    // Debug metadata only: the base's fields are already flattened into `fields`
+    // and this does not participate in layout.
+    std::string base;
+    // The mapped base type, so a backend can emit its own record. Debug-only.
+    const Type* base_type = nullptr;
 };
 
 using TypePtr = const Type*;
@@ -66,7 +72,8 @@ public:
     [[nodiscard]] TypePtr struct_forward(std::string name);
     [[nodiscard]] bool complete_struct(TypePtr type, std::vector<TypePtr> fields,
                                        std::vector<std::string> field_names = {},
-                                       bool packed = false);
+                                       bool packed = false, std::string base = {},
+                                       TypePtr base_type = nullptr);
     [[nodiscard]] TypePtr union_type(std::string name, std::vector<TypePtr> fields,
                                      std::vector<std::string> field_names = {});
     [[nodiscard]] TypePtr function_type(TypePtr return_type, std::vector<TypePtr> parameters,
