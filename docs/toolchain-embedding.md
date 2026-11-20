@@ -1,0 +1,119 @@
+# Embedding the KR compiler
+
+`krc::toolchain` compiles KR32 and KR16 code inside the host process. It opens no
+file, writes no file and starts no subprocess: a host supplies source text and
+receives assembly, object bytes, image bytes, structured diagnostics and listing
+rows. `krc` and `krld` are two consumers of the same library.
+
+The facade header is [`include/krc/toolchain.h`](../include/krc/toolchain.h).
+KDBG is a separate package: [`include/krc/debug/kdbg.h`](../include/krc/debug/kdbg.h)
+and [symbols.md](symbols.md).
+
+## Requiring the package
+
+Both libraries are static and installed together:
+
+```cmake
+find_package(krc-toolchain CONFIG REQUIRED)
+target_link_libraries(my_host PRIVATE krc::toolchain)
+```
+
+`krc-debug` provides `krc::debug` for a host that only decodes images:
+
+```cmake
+find_package(krc-debug CONFIG REQUIRED)
+target_link_libraries(my_reader PRIVATE krc::debug)
+```
+
+Configure with `-DCMAKE_PREFIX_PATH=<install prefix>`. The installed interface
+exposes `include/krc` and nothing under `src/`; the compiler implementation is
+inside `libkrc-toolchain.a` / `krc-toolchain.lib`.
+
+## Ten lines to an image
+
+```cpp
+#include <fstream>
+#include <iostream>
+#include <vector>
+
+#include "krc/toolchain.h"
+
+int main() {
+    std::vector<krc::toolchain::Source> sources{
+        {"hello.c", "int main() { return 42; }"}};
+    const auto built = krc::toolchain::build(sources, krc::toolchain::Options{});
+    if (!built.ok) {
+        std::cerr << krc::toolchain::format_diagnostics(built.diagnostics)
+                  << built.error << '\n';
+        return 1;
+    }
+    std::ofstream image("hello.k32", std::ios::binary);
+    image.write(reinterpret_cast<const char*>(built.image.data()),
+                static_cast<std::streamsize>(built.image.size()));
+}
+```
+
+`build` compiles every source in order, assembles each one and links the objects;
+the result is a `.k32` for `Target::Kr32` and a `.kex` for `Target::Kr16`. It
+links exactly the sources it was given. A runnable image also needs the target
+runtime and startup object: read those bytes, wrap them in
+`krc::toolchain::Object`, and call `link`, or assemble `targets/kr32/runtime/crt0.s`
+with `assemble` first. The facade never finds a runtime on its own.
+
+## The call sequence
+
+`compile` → `assemble` → `link` exposes the stages; `build` is the three calls in
+a row and returns the listing and the linked sections. Each result has `ok`:
+
+- `compile` returns assembly (`assembly`), the textual `.debug_info` bridge
+  (`debug_info`), and, when requested, `ast_dump`, `ir_dump` and `stats`.
+- `assemble` takes assembly text and returns `object` bytes and `listing` rows.
+- `link` takes object bytes and returns `image`, `sections`, `symbols`, `entry`
+  and `base`. It infers the target from the objects.
+
+`Options`:
+
+| Field | Meaning |
+|---|---|
+| `target` | `Kr32` or `Kr16`; `Kr64` is accepted only up to `Stage::Syntax` |
+| `cxx` | C++ mode; named explicitly rather than inferred from a file name |
+| `debug` | emit the `.debug_info` bridge into a produced KR32 object |
+| `optimize` | `0` or `1`, matching `-O0` / `-O1` |
+| `stage` | `Syntax`, `Ir` or `Assembly`; a syntax check never reaches the backend |
+| `dump_ast`, `dump_ir`, `dump_stats` | fill the matching result string |
+| `base` | `0` selects `0x10000` for KR32 and `0x100` for KR16 |
+| `entry` | empty selects `main` |
+| `include_paths`, `defines` | passed to the preprocessor; a define is `NAME` or `NAME=VALUE` |
+| `source_root` | applied by the linker's debug source-path rewrite |
+| `gc_sections` | drop objects the entry symbol cannot reach |
+| `section_addresses` | `NAME`/`ADDRESS` placements, as a `krld` layout file holds |
+
+## Ownership and errors
+
+An input's text is borrowed for the duration of the call; every output is owned
+by the caller. A user error returns `ok == false`, diagnostics with
+`file`/`line`/`column`/`line_text` already resolved, and, where there is no
+source location, a non-empty `error`. `format_diagnostics` renders them in the
+compiler's canonical form. A violated internal invariant still throws; no
+exception is turned into an empty message.
+
+The facade keeps no mutable global state. Source ids, type canonicalisation and
+the backend's debug buffer are per call, so two builds in one process do not
+observe each other. The same request produces identical bytes regardless of
+working directory, time or environment.
+
+## Listing
+
+A [`ListingRow`](../include/krc/toolchain.h) carries a section name, the
+statement's address, its encoded bytes, its text and the source line a preceding
+`.Ldbg` label attributed it to. `assemble` reports the address within the section;
+`build` reports the final address in the image. The facade does not choose a
+`.lst` format — KR32 and kr16 keep their own — so the host renders the rows.
+
+## Reading KDBG
+
+`krc::debug::find_kdbg_section` locates `.kdbg` in a `.k32` or `.kex` and reports
+the container's load base; `decode_kdbg_image` finds, decodes and rejects a
+payload whose recorded image base differs from that base. `encode_kdbg`,
+`decode_kdbg` and the text/JSON dumpers work on bytes and need no toolchain
+library.
