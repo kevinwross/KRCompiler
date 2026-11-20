@@ -113,3 +113,18 @@ are the meaningful coverage and they all ran. No disturbance, no retry.
 `cmake/krc-toolchain-config.cmake.in` carry the change while the only compiled difference is small — hence
 the 11 s build. Count is unchanged at 913: the install rules add no test, and the executed rows still run
 the same binaries from `vm/`. No disturbance, no retry.
+
+## 2026-11-20T13:45:02-08:00 — adopt-krc @ 7d005d5
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: 0951c6e..7d005d5, 2 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, <1 s (`cmake/LinkKr16ShippedFileio.cmake` added; VM paths retained)
+- Build: linux-gcc-debug — ok, 31 s, 10 targets
+- Test: linux-gcc-debug — 915/915 passed, 270 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+Count rises 913 → 915 with `__host_call` in the KR16 backend plus a shipped-fileio link path and a
+`shipped_fileio_crt0.s` fixture. The new intrinsic reaches the host through the VM, so the executed KR16
+images are exactly what exercises it, and both new rows ran and passed here. No disturbance, no retry.
