@@ -1549,6 +1549,27 @@ if(TARGET krc)
     set_tests_properties(krc_volatile_member_ir PROPERTIES
         PASS_REGULAR_EXPRESSION "member.load = load i32, %member.[0-9]+, volatile")
 
+    # A volatile access through a pointer expression, not a name. The qualifier lives on
+    # the declared pointer, so the front end has to follow the addition to find it; the
+    # three tests pin the load, the store, and that a plain pointer stays unmarked.
+    add_test(NAME krc_volatile_pointer_arithmetic_load
+        COMMAND $<TARGET_FILE:krc> --dump-ir
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/volatile_pointer_arithmetic.c")
+    set_tests_properties(krc_volatile_pointer_arithmetic_load PROPERTIES
+        PASS_REGULAR_EXPRESSION "load i32, %ptradd[.0-9]*, volatile")
+
+    add_test(NAME krc_volatile_pointer_arithmetic_store
+        COMMAND $<TARGET_FILE:krc> --dump-ir
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/volatile_pointer_arithmetic.c")
+    set_tests_properties(krc_volatile_pointer_arithmetic_store PROPERTIES
+        PASS_REGULAR_EXPRESSION "store i32 [^,]+, %ptradd[.0-9]*, volatile")
+
+    add_test(NAME krc_volatile_pointer_arithmetic_plain
+        COMMAND $<TARGET_FILE:krc> --dump-ir
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/volatile_pointer_arithmetic_plain.c")
+    set_tests_properties(krc_volatile_pointer_arithmetic_plain PROPERTIES
+        FAIL_REGULAR_EXPRESSION ", volatile")
+
     add_test(NAME krc_link_volatile
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

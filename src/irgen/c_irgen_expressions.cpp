@@ -13,6 +13,18 @@ bool pointer_to_volatile(const frontend::TypePtr& type) {
 }  // namespace
 
 bool CIRGen::dereference_is_volatile(const frontend::AstNode& operand) {
+    // Pointer arithmetic keeps the pointee, so `*(p + 1)` is as volatile as `*p` and
+    // `*(1 + p)` is the same expression. IRGen has no general expression typing -- the
+    // AST carries no types, `ir::Type` has no qualifier, and the qualifier survives only
+    // on a declared binding -- so the rule stops at the forms whose pointee is a
+    // declared type. A call result or a cast answers false, which loses the marking
+    // rather than inventing one: no pass acts on a load's volatility today, whereas a
+    // false positive would suppress optimisation of a non-volatile access.
+    if (operand.kind == frontend::AstKind::BinaryExpression && operand.children.size() == 2 &&
+        (operand.text == "+" || operand.text == "-")) {
+        return dereference_is_volatile(*operand.children[0]) ||
+               dereference_is_volatile(*operand.children[1]);
+    }
     if (operand.kind != frontend::AstKind::Identifier) {
         return false;
     }

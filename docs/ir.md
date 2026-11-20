@@ -93,6 +93,10 @@ Exceptions: `invoke` is a call with two successors — the normal edge and the l
 
 - No strict-aliasing assumptions in v1.0.
 - `volatile` loads/stores are never removed, reordered across other volatile operations, or combined.
+- The flag is set from the source access, not from the type: a dereference is `volatile` when the
+  pointee is, through a declared pointer and through pointer arithmetic over one — `*p` and `*(p + 1)`
+  are both marked. IRGen has no general expression typing, so a pointer returned by a call or
+  produced by a cast is not recognised, and an access through it is emitted unmarked.
 - Atomics use `seq_cst` first; weaker orders are target/runtime dependent and are not emitted in v1.0 C.
 - `memcpy`/`memset` are explicit for aggregate copies and initialization.
 - `load` has a result type; `store` has a value operand and a pointer operand. Pointer pointee types are checked where the type is available.
