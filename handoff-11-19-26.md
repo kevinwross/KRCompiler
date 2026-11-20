@@ -258,9 +258,13 @@ than from this file.
 
 ```
 git log --oneline -1                     # expect 085a8f5 or a descendant
-ctest --preset windows-msvc-debug        # expect 889/889
+ctest --preset windows-msvc-debug        # expect 889/889 at 085a8f5, 910/910 at 94c3295
 build/.../krc --dump-stats -O1 targets/kr32/runtime/libc.c   # expect 9896 IR instr, 22320 frame bytes
 ```
+
+The test count is the one expectation here that a later change moves without the compiler changing:
+W1–W3 added 18 tests and the `volatile` qualifier rule 3, all after `085a8f5`. The `--dump-stats`
+figures did not move, because none of that work touches what the backend emits.
 
 If those disagree, the tree has moved: read `implementation.md`'s newest entries by timestamp and
 `docs/optimize.md` §11 before planning anything.

@@ -497,6 +497,36 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-19T16:57:34-08:00 — host gate (Windows + WSL)
+Revision: 94c3295
+
+```
+windows-msvc-debug    PASS 910/910
+linux-gcc-debug       PASS 717/717
+linux-clang-debug     PASS 717/717
+linux-sanitize        PASS 717/717
+not verified: windows-msvc-release, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+Clean gate: each row deleted its build directory and configured from scratch, one row at a time, with
+the row's build and test run to completion before the next began. The Windows and GCC rows built
+`254e919` and the clang and sanitizer rows built `94c3295`; `git diff 254e919..94c3295` over
+`src include targets sysroot tests CMakeLists.txt CMakePresets.json` is empty, so all four rows cover
+one code revision and the gap is documentation.
+
+The counts differ because 193 tests need a runnable VM and only the Windows configure finds one:
+`KRC_KR32_VM` and `KRC_KR16_VM` resolve to `vm/krc_kr32.exe` and `vm/krc_kr16.exe` there, while the
+Linux configure leaves both empty — the VM binaries are PE executables and the sibling-checkout
+fallback is Windows-only. The three Linux rows therefore register no executed-image test and no DAP
+session, because `krc_debug_dap_session` is gated on a resolved VM. This is a property of this host,
+not of the suite: a Linux host with a native VM registers the executed rows and the session, and the
+ARM64 machine does exactly that.
+
+Nothing disturbed the run and nothing was re-run. GCC 15 did not hit its intermittent internal
+compiler error, no `krld` KRO CRC mismatch appeared, and every row passed its suite on the first
+attempt. The sanitizer row is the time outlier at 401 s of tests against 129–141 s for the others,
+which is the instrumented test binary rather than a difference in what ran.
+
 2026-11-19T15:12:37-08:00 — ARM64 poll
 Revision: 0e78cff
 
