@@ -112,6 +112,31 @@ statement's address, its encoded bytes, its text and the source line a preceding
 `build` reports the final address in the image. The facade does not choose a
 `.lst` format — KR32 and kr16 keep their own — so the host renders the rows.
 
+## The installed sysroot and runtime
+
+`cmake --install` (with the default `KRC_BUILD_TOOLS=ON`) installs the target
+sysroot and runtime under `<prefix>/share/krc/sysroot`, and
+`find_package(krc-toolchain CONFIG REQUIRED)` exports:
+
+- `KRC_SYSROOT` — `<prefix>/share/krc/sysroot`
+- `KRC_KR32_RUNTIME_DIR` — `${KRC_SYSROOT}/kr32/lib`
+
+```text
+share/krc/sysroot/
+  include/                 the shared C/C++ headers, including krc/host.h
+  kr32/include/bits/       stdint.h and types.h generated for the profile
+  kr32/lib/                libkrcrt.kro, crt0.s, fileio.s, eh.s
+  kr16/include/            the KR16 profile headers
+  kr64/include/            the KR64 profile headers
+```
+
+To build a runnable KR32 image, compile with `KRC_SYSROOT/include` and
+`KRC_SYSROOT/kr32/include` on `Options::include_paths`, assemble the three
+runtime sources, read `libkrcrt.kro` as an `Object`, and link in the order the
+CLI uses — user object, `libkrcrt.kro`, `fileio.s`, `eh.s`, `crt0.s` — with
+`entry = "_start"`. The installed tree is self-contained: no KRCompiler source
+or build tree is needed.
+
 ## Reading KDBG
 
 A KR32 or KR16 compile produces the textual `.debug_info` bridge (`debug_info`),

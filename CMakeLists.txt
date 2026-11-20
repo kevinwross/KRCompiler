@@ -293,6 +293,24 @@ install(EXPORT krcTargets
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/krc"
 )
 
+# The target sysroot and runtime. A consumer builds a runnable image from the
+# install alone: the staged sysroot carries the headers, the generated bits and
+# `libkrcrt.kro`, and the KR32 runtime assembly is installed beside them.
+# `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR` are exported by the package config.
+set(KRC_INSTALL_SYSROOT_REL "${CMAKE_INSTALL_DATADIR}/krc/sysroot")
+if(KRC_BUILD_TOOLS)
+    install(DIRECTORY "${KRC_STAGE_SYSROOT}/"
+        DESTINATION "${KRC_INSTALL_SYSROOT_REL}")
+    install(FILES
+        targets/kr32/runtime/crt0.s
+        targets/kr32/runtime/fileio.s
+        targets/kr32/runtime/eh.s
+        DESTINATION "${KRC_INSTALL_SYSROOT_REL}/kr32/lib")
+else()
+    message(STATUS
+        "KRC_BUILD_TOOLS=OFF: the installed package carries no target sysroot or runtime")
+endif()
+
 foreach(package IN ITEMS krc-toolchain krc-debug)
     configure_package_config_file(
         "cmake/${package}-config.cmake.in"

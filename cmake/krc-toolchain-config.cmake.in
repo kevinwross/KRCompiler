@@ -4,4 +4,10 @@
 # `krc-debug` is the KDBG reader/writer and can be used alone.
 include("${CMAKE_CURRENT_LIST_DIR}/../krc/krc-targets.cmake")
 
+# The installed target sysroot and runtime. A consumer passes the first to the
+# preprocessor and reads the runtime objects from the second instead of pointing
+# at a KRCompiler build tree.
+set(KRC_SYSROOT "${PACKAGE_PREFIX_DIR}/@KRC_INSTALL_SYSROOT_REL@")
+set(KRC_KR32_RUNTIME_DIR "${KRC_SYSROOT}/kr32/lib")
+
 check_required_components(krc-toolchain)

@@ -10,6 +10,7 @@ Two roots define what is host code and what is target code.
 | `tests/fixtures/` | target fixtures and golden expected output | `krc`/`krld` through CMake |
 | `build/<preset>/host/` | host binaries and libraries | host build |
 | `build/<preset>/stage/` | install-shaped target sysroot and test images | target build steps |
+| `<prefix>/share/krc/sysroot/` | installed target sysroot and KR32 runtime | `cmake --install` |
 
 Rules:
 
@@ -17,7 +18,10 @@ Rules:
 - Host CMake never adds `targets/` or `sysroot/` files to a host executable.
 - Tests and the build pass explicit output paths under `build/<preset>/stage/`; the source
   tree is not an output directory.
-- `stage/sysroot` has the same layout as an installed sysroot.
+- `stage/sysroot` has the same layout as an installed sysroot, and
+  `krc-toolchain-config.cmake` exports `KRC_SYSROOT` (the installed sysroot) and
+  `KRC_KR32_RUNTIME_DIR` (its `kr32/lib`), so a consumer does not need this build
+  tree.
 
 The rationale and migration phases are in
 [source-tree-reorganization.md](planning/source-tree-reorganization.md).
