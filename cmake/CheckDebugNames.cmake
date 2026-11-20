@@ -15,7 +15,14 @@ endif()
 set(object "${OUTPUT}.o.kro")
 file(REMOVE "${object}" "${OUTPUT}")
 
-execute_process(COMMAND "${KRC}" -c "${SOURCE}" -o "${object}"
+# Optional: LEVEL is a compiler flag such as `-O1`, applied to the fixture compile, so
+# the same name assertions can be checked on an optimised image.
+set(level_args)
+if(DEFINED LEVEL AND NOT LEVEL STREQUAL "")
+    list(APPEND level_args "${LEVEL}")
+endif()
+
+execute_process(COMMAND "${KRC}" -c ${level_args} "${SOURCE}" -o "${object}"
                 RESULT_VARIABLE compile_result)
 if(NOT compile_result EQUAL 0)
     message(FATAL_ERROR "krc failed to compile ${SOURCE}")

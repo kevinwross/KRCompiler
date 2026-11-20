@@ -6783,6 +6783,202 @@ set_tests_properties(krc_debug_c_variable PROPERTIES
     PASS_REGULAR_EXPRESSION "variable main\\.pair offset=8 type=Pair"
     DEPENDS krc_link_debug_struct)
 
+# Everything above reads the debug data through `--dump-symbols`; none of it
+# drives the adapter a debugger actually talks to, so a DAP server that answered
+# no breakpoints would have passed the suite. This session runs the real thing:
+# break on `return total;`, and assert the breakpoint verifies, execution stops
+# there, the frame is `main` at that line, and `total` reads the 42 that
+# `compute(41)` returned. The image is built at the default level; the `-O1`
+# twin belongs to docs/plan-o1-debugger.md W3.
+add_test(NAME krc_link_debug_dap
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_dap.c
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_dap_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_debug_dap_session
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/debug_dap_linked.k32
+                -DBREAK_LINE=17
+                -DEXPECT_FUNCTION=main
+                -DEXPECT_SOURCE=tests/fixtures/c/debug_dap.c
+                -DEXPECT_VARIABLE=total
+                -DEXPECT_VALUE=0x0000002A
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDapSession.cmake)
+    set_tests_properties(krc_debug_dap_session PROPERTIES
+        DEPENDS krc_link_debug_dap)
+endif()
+
+# docs/symbols.md states that a `Line` record exists only while an instruction is at
+# the line, and that a line whose code a pass removed is absent rather than mapped
+# onto a neighbour. At -O1 that is observable: E5 eliminates the single-`br` block a
+# `continue;` or `break;` lowers to, so both jump lines lose their address while the
+# statements around them keep theirs. The -O0 twin pins that the level, not the
+# fixture, is what removes them.
+add_test(NAME krc_link_debug_folded_lines_o0
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_folded_lines.c
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_folded_lines_o0_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+add_test(NAME krc_link_debug_folded_lines_o1
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DLEVEL=-O1
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_folded_lines.c
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_folded_lines_o1_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+add_test(NAME krc_debug_o0_jump_only_lines
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DIMAGE=${KRC_TEST_OUTPUT_DIR}/debug_folded_lines_o0_linked.k32
+            -DSOURCE=debug_folded_lines.c
+            -DPRESENT_LINES=17,19,25,27
+            -P ${CMAKE_SOURCE_DIR}/cmake/CheckLineRecords.cmake)
+set_tests_properties(krc_debug_o0_jump_only_lines PROPERTIES
+    DEPENDS krc_link_debug_folded_lines_o0)
+add_test(NAME krc_debug_o1_jump_only_lines
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DIMAGE=${KRC_TEST_OUTPUT_DIR}/debug_folded_lines_o1_linked.k32
+            -DSOURCE=debug_folded_lines.c
+            -DABSENT_LINES=17,25
+            -DPRESENT_LINES=19,27
+            -P ${CMAKE_SOURCE_DIR}/cmake/CheckLineRecords.cmake)
+set_tests_properties(krc_debug_o1_jump_only_lines PROPERTIES
+    DEPENDS krc_link_debug_folded_lines_o1)
+
+# The same assertions on images compiled at -O1 (docs/plan-o1-debugger.md W3a).
+# Optimisation must not cost the debugger its records: function, member, variable, type
+# and line data have to survive it. Each twin links its own image at -O1 rather than
+# reusing the default-level one, because the optimised image is the subject.
+#
+# The names twin is here and the paths twin is not: `krld --source-root` rewrites source
+# paths after code generation, so a level cannot change that answer, and a twin would
+# assert nothing new. The name twin can fail, because level-specific code can drop a
+# function record.
+add_test(NAME krc_link_debug_cxx_class_o1
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DLEVEL=-O1
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_cxx_class.cpp
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_o1_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+add_test(NAME krc_debug_cxx_class_o1
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_o1_linked.k32)
+set_tests_properties(krc_debug_cxx_class_o1 PROPERTIES
+    PASS_REGULAR_EXPRESSION "function Counter::add"
+    DEPENDS krc_link_debug_cxx_class_o1)
+add_test(NAME krc_debug_cxx_members_o1
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_o1_linked.k32)
+set_tests_properties(krc_debug_cxx_members_o1 PROPERTIES
+    PASS_REGULAR_EXPRESSION "member value_ offset=0 type=i32"
+    DEPENDS krc_link_debug_cxx_class_o1)
+add_test(NAME krc_debug_cxx_variables_o1
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_o1_linked.k32)
+set_tests_properties(krc_debug_cxx_variables_o1 PROPERTIES
+    PASS_REGULAR_EXPRESSION "variable main\\.counter offset=8 type=Counter"
+    DEPENDS krc_link_debug_cxx_class_o1)
+add_test(NAME krc_debug_cxx_lines_o1
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_cxx_class_o1_linked.k32)
+set_tests_properties(krc_debug_cxx_lines_o1 PROPERTIES
+    PASS_REGULAR_EXPRESSION "source=0 line=15"
+    DEPENDS krc_link_debug_cxx_class_o1)
+add_test(NAME krc_link_debug_struct_o1
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DLEVEL=-O1
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_struct.c
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_struct_o1_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+add_test(NAME krc_debug_c_struct_o1
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_struct_o1_linked.k32)
+set_tests_properties(krc_debug_c_struct_o1 PROPERTIES
+    PASS_REGULAR_EXPRESSION "member b offset=4 type=i32"
+    DEPENDS krc_link_debug_struct_o1)
+add_test(NAME krc_debug_c_variable_o1
+    COMMAND $<TARGET_FILE:krc> --dump-symbols
+            ${KRC_TEST_OUTPUT_DIR}/debug_struct_o1_linked.k32)
+set_tests_properties(krc_debug_c_variable_o1 PROPERTIES
+    PASS_REGULAR_EXPRESSION "variable main\\.pair offset=8 type=Pair"
+    DEPENDS krc_link_debug_struct_o1)
+add_test(NAME krc_debug_names_o1
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DLEVEL=-O1
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_names.cpp
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DIO=${CMAKE_SOURCE_DIR}/targets/kr32/runtime/fileio.s
+            -DEH=${CMAKE_SOURCE_DIR}/targets/kr32/runtime/eh.s
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_names_o1.k32
+            "-DEXPECT=function Widget::Widget;function Widget::~Widget;function Widget::size;function Widget::doubled;function Counter::bump;function Counter::value;function helper"
+            -P ${CMAKE_SOURCE_DIR}/cmake/CheckDebugNames.cmake)
+
+# The two invariants a debugger's answer depends on (W3b), over a corpus image at -O1:
+# every line address inside some function, and every variable inside the frame its
+# function claims. The image is the tier-1 printf program linked with the staged
+# runtime, which the -O1 execution test already builds -- 10,081 lines and 693
+# variables, so a defect has somewhere to show up.
+add_test(NAME krc_debug_invariants_o1
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DIMAGE=${KRC_TEST_OUTPUT_DIR}/tier1_printf_o1_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/CheckDebugInvariants.cmake)
+set_tests_properties(krc_debug_invariants_o1 PROPERTIES
+    DEPENDS krc_link_tier1_printf_o1)
+
+# The session from krc_debug_dap_session, on an -O1 image. This is the question the
+# plan exists to answer -- whether an optimised image is debuggable at all, not merely
+# loadable -- and it is the only test that drives a breakpoint into one. W3's record
+# assertions cannot stand in for it: they check what the image says about itself, and
+# this checks what the debugger gets back.
+add_test(NAME krc_link_debug_dap_o1
+    COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DKRLD=$<TARGET_FILE:krld>
+            -DLEVEL=-O1
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_dap.c
+            -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+            -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+            -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/debug_dap_o1_linked.k32
+            -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+    add_test(NAME krc_debug_dap_session_o1
+        COMMAND ${CMAKE_COMMAND}
+                -DVM=${KRC_KR32_VM}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/debug_dap_o1_linked.k32
+                -DBREAK_LINE=17
+                -DEXPECT_FUNCTION=main
+                -DEXPECT_SOURCE=tests/fixtures/c/debug_dap.c
+                -DEXPECT_VARIABLE=total
+                -DEXPECT_VALUE=0x0000002A
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDapSession.cmake)
+    set_tests_properties(krc_debug_dap_session_o1 PROPERTIES
+        DEPENDS krc_link_debug_dap_o1)
+endif()
+
 # Copy construction of a class that declares a destructor and an explicit constructor.
 # This shape selected the wrong constructor (arity alone matched `explicit Counter(int)`),
 # and once the copy path was taken it skipped destructor registration, so two objects ran

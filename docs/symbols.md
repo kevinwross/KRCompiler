@@ -55,6 +55,18 @@ name is not unique, so anything that resolves keeps using the symbol. Records ar
 emitted deterministically: sources, lines, functions, symbols, variables, types,
 then build metadata.
 
+A `Line` record is written for each instruction that carries a source location, so a
+line has a record exactly while the image still has an instruction at it. A line
+whose instructions a pass removed has no record: the format does not map it onto a
+neighbouring line, because a breakpoint that cannot be placed is better than one
+that stops in the wrong place. A debugger showing a stopped frame therefore reports
+the next line that still has code.
+
+`-O1` shrinks the set of placeable lines by the code it removes. The case worth
+naming is E5 (`empty_block_elimination`, `src/ir/passes.cpp`): a statement whose
+whole body is one jump — `break;`, `continue;` — lowers to a block holding a single
+`br`, and eliminating that block deletes the only instruction that carried the line.
+
 A `Variable` record exists for each **source variable**, which the IR names
 `<variable>.addr`; a compiler temporary — `call.temp`, `operator.temp`,
 `subscript.this` — is not recorded, so a pass may promote one without leaving a
