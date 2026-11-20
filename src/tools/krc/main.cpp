@@ -523,7 +523,10 @@ int main(int argc, char** argv) {
             if (emit_object) {
                 std::string stub(kKr16EntryStub);
                 stub += compiled.assembly;
-                const auto image_object = toolchain::assemble(stub, options);
+                // The bridge names labels in the user assembly; the stub adds
+                // none, so passing it through is what makes the image decodable.
+                const auto image_object =
+                    toolchain::assemble(stub, compiled.debug_info, options);
                 if (!image_object.ok) {
                     diagnostics.push_back(error_diagnostic(image_object.error));
                     failed = true;

@@ -36,6 +36,22 @@ This section is a **bridge**, not KDBG. KDBG's binary sections, location
 expressions, and shared reader remain the v1 contract. The bridge is removed
 when `libkrcdebug` and the KDBG writer land.
 
+## Amendment: KR16 emits the same bridge (2026-11-20)
+
+The KR16 backend now emits the same records, so `attach_kdbg` can build `.kdbg`
+for a `.kex` (KRCompiler plan item 4.10). The record format is unchanged. One
+field is target-relative by nature: `V`'s offset is measured from the frame base
+a debugger uses for that target — `R7` on KR32; on KR16 the base is `R4` and the
+slots are addressed from `SP` (`R4 - frame_size`), so the record stores
+`frame_size - slot_offset`, which is the positive `fp - offset` form kr16's own
+debug reader already uses. A reader must know the target (KDBG's header carries
+the target ID) before it applies an offset.
+
+Debug sections are not guest-addressable, and the linker now enforces that for
+both targets by placing every `Debug` section at address zero and excluding it
+from the image end. Without it, KR16's merged `.debug_info` consumed the 64 KiB
+address space and overflowed 16-bit relocations.
+
 ## Consequences
 
 The KR32 GUI and DAP debugger can set source breakpoints, show lines, functions,

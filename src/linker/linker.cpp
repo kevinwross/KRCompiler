@@ -327,21 +327,31 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     std::uint64_t cursor = options.base;
     for (const auto index : order) {
         auto& section = sections[index];
-        const auto placement = options.section_addresses.find(section.name);
-        const auto requested = placement == options.section_addresses.end()
-                                   ? cursor
-                                   : placement->second;
-        cursor = align_up(requested, std::max<std::uint64_t>(1, section.alignment));
         LinkedSection output;
         output.name = section.name;
         output.type = section.type;
         output.flags = section.flags;
         output.alignment = section.alignment;
-        output.address = cursor;
         output.data = section.data;
         output.size = section.size;
+        // Debug data lives in the container, not in the load image. Advancing
+        // the cursor past it would make every following address depend on how
+        // much debug information a translation unit happened to carry; on KR16
+        // the whole address space is 64 KiB and the merged `.debug_info` for a
+        // runtime exceeds it, which overflowed a relocation's 16-bit width.
+        // `__heap_start` must stay the byte after the loaded image as well.
+        if (section.type == KroSectionType::Debug) {
+            output.address = 0;
+        } else {
+            const auto placement = options.section_addresses.find(section.name);
+            const auto requested = placement == options.section_addresses.end()
+                                       ? cursor
+                                       : placement->second;
+            cursor = align_up(requested, std::max<std::uint64_t>(1, section.alignment));
+            output.address = cursor;
+            cursor += section.size;
+        }
         image.sections.push_back(std::move(output));
-        cursor += section.size;
     }
     image.base = options.base;
     image.target_id = first.target_id;
@@ -474,6 +484,9 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
 
     std::uint64_t image_end = options.base;
     for (const auto& section : image.sections) {
+        if (section.type == KroSectionType::Debug) {
+            continue;
+        }
         image_end = std::max(image_end, section.address + section.size);
     }
     std::uint64_t eh_start = 0;

@@ -114,8 +114,9 @@ statement's address, its encoded bytes, its text and the source line a preceding
 
 ## Reading KDBG
 
-`krc::debug::find_kdbg_section` locates `.kdbg` in a `.k32` or `.kex` and reports
-the container's load base; `decode_kdbg_image` finds, decodes and rejects a
-payload whose recorded image base differs from that base. `encode_kdbg`,
-`decode_kdbg` and the text/JSON dumpers work on bytes and need no toolchain
-library.
+A KR32 or KR16 compile produces the textual `.debug_info` bridge (`debug_info`),
+and `link` converts it to `.kdbg` for the image. `krc::debug::find_kdbg_section`
+locates `.kdbg` in a `.k32` or `.kex` and reports the container's load base;
+`decode_kdbg_image` finds, decodes and rejects a payload whose recorded image
+base differs from that base. `encode_kdbg`, `decode_kdbg` and the text/JSON
+dumpers work on bytes and need no toolchain library.

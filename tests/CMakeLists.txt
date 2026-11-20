@@ -65,6 +65,15 @@ if(TARGET krc)
     add_test(NAME krc_version COMMAND $<TARGET_FILE:krc> --version)
     set_tests_properties(krc_version PROPERTIES PASS_REGULAR_EXPRESSION "krc 0\\.1\\.0")
 
+    # 4.10: a krc-built `.kex` decodes through the CLI with sources, lines,
+    # functions and a variable, and the payload records the image base.
+    add_test(NAME krc_kr16_kdbg_decode
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_kdbg.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr16Kdbg.cmake)
+
     add_test(NAME krc_list_targets COMMAND $<TARGET_FILE:krc> --list-targets)
     set_tests_properties(krc_list_targets PROPERTIES PASS_REGULAR_EXPRESSION "kr32")
 

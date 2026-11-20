@@ -146,8 +146,8 @@ struct Diagnostic {
 struct CompileResult {
     bool ok = false;
     std::string assembly;
-    // The textual bridge for the same translation unit. Empty for a target whose
-    // backend does not produce it.
+    // The textual bridge for the same translation unit. Both VM backends produce
+    // it; it is empty for KR64, or when `Options::debug` is false.
     std::string debug_info;
     std::string ast_dump;
     std::string ir_dump;

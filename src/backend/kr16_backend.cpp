@@ -132,6 +132,15 @@ std::uint32_t type_size(const ir::TypePtr& type) {
     }
 }
 
+// The spelling `.debug_info` uses for a type: no IR sigils and no spaces, so a
+// record field can hold it. The same transformation Kr32Backend applies.
+std::string debug_type_name(const ir::TypePtr& type) {
+    auto name = ir::type_to_string(type);
+    name.erase(std::remove(name.begin(), name.end(), '%'), name.end());
+    std::replace(name.begin(), name.end(), ' ', '_');
+    return name;
+}
+
 // An aggregate return passes its destination as a hidden stack argument (ADR 0048).
 // A variadic callee reads its arguments by position, so its destination would be
 // ambiguous; those keep the rejection.
@@ -290,6 +299,40 @@ Kr16Backend::FrameLayout Kr16Backend::layout_function(
         error = "KR16 frame exceeds the signed 16-bit displacement range";
     }
     return layout;
+}
+
+void Kr16Backend::add_debug_type(ir::TypePtr type) const {
+    if (!type || ir::is_void(type)) {
+        return;
+    }
+    const auto name = debug_type_name(type);
+    if (!debug_types_.insert(name).second) {
+        return;
+    }
+    const auto size = type_size(type);
+    debug_info_ += "T " + name + " " + std::to_string(size) + std::string(1, '\0');
+    if (type->kind == ir::TypeKind::Struct) {
+        debug_info_ += "C " + name + " " + std::to_string(size) + " " +
+                       std::string(1, '\0');
+        std::uint32_t offset = 0;
+        for (std::size_t index = 0; index < type->fields.size(); ++index) {
+            const auto& field = type->fields[index];
+            offset = round_up(offset, type_alignment(field));
+            const auto field_size = type_size(field);
+            const auto field_name = index < type->field_names.size()
+                                        ? type->field_names[index]
+                                        : std::to_string(index);
+            debug_info_ += "M " + name + " " + field_name + " " +
+                           std::to_string(offset) + " " + debug_type_name(field) +
+                           " " + std::to_string(field_size) + std::string(1, '\0');
+            add_debug_type(field);
+            offset += field_size;
+        }
+    } else if (type->kind == ir::TypeKind::Array) {
+        add_debug_type(type->element);
+    } else if (type->kind == ir::TypeKind::Pointer) {
+        add_debug_type(type->element);
+    }
 }
 
 void Kr16Backend::emit_function(std::string& out,
@@ -456,6 +499,7 @@ void Kr16Backend::emit_function(std::string& out,
             }
         }
     }
+    std::size_t debug_label_counter = 0;
     for (const auto& block : function.blocks) {
         out += label_for(*block) + ":\n";
         for (const auto& instruction : block->instructions) {
@@ -514,6 +558,27 @@ void Kr16Backend::emit_function(std::string& out,
                         }
                     }
                 }
+            }
+            // The bridge records a source line per emitted instruction, the same
+            // way Kr32Backend does: an `.Ldbg` label the linker resolves to an
+            // address, and an L record naming its file, line and column. A line
+            // whose instructions a pass removed has no label and no record.
+            if (instruction->debug.valid()) {
+                auto source = debug_sources_.find(instruction->debug.file);
+                if (source == debug_sources_.end()) {
+                    const auto id = next_debug_source_++;
+                    source = debug_sources_.emplace(instruction->debug.file, id).first;
+                    debug_info_ += "S " + std::to_string(id) + " " +
+                                   instruction->debug.file + std::string(1, '\0');
+                }
+                const auto label = ".Ldbg." + function.name + "." +
+                                   std::to_string(debug_label_counter++);
+                out += label + ":\n";
+                debug_info_ += "L " + label + " " +
+                               std::to_string(source->second) + " " +
+                               std::to_string(instruction->debug.line) + " " +
+                               std::to_string(instruction->debug.column) +
+                               std::string(1, '\0');
             }
             switch (instruction->opcode) {
             case ir::Opcode::Alloca:
@@ -988,6 +1053,78 @@ void Kr16Backend::emit_function(std::string& out,
             }
         }
     }
+    // The display name is what a debugger shows; the symbol stays mangled
+    // (docs/decisions/0030-debug-display-names.md).
+    const auto& display_name =
+        function.debug_name.empty() ? function.name : function.debug_name;
+    debug_info_ += "F " + display_name + " " + function.name + " .L" +
+                   function.name + ".ret " + std::to_string(layout.frame_size) +
+                   " " +
+                   debug_type_name(function.type ? function.type->return_type
+                                                 : nullptr) +
+                   std::string(1, '\0');
+    // A frame offset in the bridge is positive and measured from the frame base,
+    // as KR32's is from R7. This frame base is R4 and the slots are addressed
+    // from SP (= R4 - frame_size), so a slot at [SP+off] is at R4 - (frame_size -
+    // off): the offset a debugger that reads `fp - offset` expects, which is the
+    // convention kr16's own `.debug_vars` uses.
+    const auto frame_offset = [&](std::uint32_t slot_offset) {
+        return layout.frame_size >= slot_offset ? layout.frame_size - slot_offset
+                                                : 0u;
+    };
+    std::unordered_set<std::string> debug_variable_names;
+    for (const auto& parameter : function.parameters) {
+        const auto parameter_slot = layout.slots.find(parameter.get());
+        if (parameter_slot == layout.slots.end() || !parameter->type) {
+            continue;
+        }
+        if (!debug_variable_names.insert(function.name + "." + parameter->name)
+                 .second) {
+            continue;
+        }
+        add_debug_type(parameter->type);
+        debug_info_ += "V " + function.name + " " + parameter->name + " " +
+                       std::to_string(frame_offset(parameter_slot->second)) + " " +
+                       debug_type_name(parameter->type) + " " +
+                       std::to_string(type_size(parameter->type)) +
+                       std::string(1, '\0');
+    }
+    std::unordered_set<std::string> parameter_names;
+    for (const auto& parameter : function.parameters) {
+        parameter_names.insert(parameter->name);
+    }
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Alloca ||
+                !instruction->allocated_type) {
+                continue;
+            }
+            const auto object = layout.allocas.find(instruction.get());
+            if (object == layout.allocas.end()) {
+                continue;
+            }
+            // A source variable is the alloca IRGen named `<variable>.addr`; a
+            // compiler temporary is not one a debugger should list (docs/symbols.md).
+            auto name = instruction->name;
+            if (name.size() <= 5 || name.compare(name.size() - 5, 5, ".addr") != 0) {
+                continue;
+            }
+            name.resize(name.size() - 5);
+            if (parameter_names.contains(name)) {
+                continue;
+            }
+            if (!debug_variable_names.insert(function.name + "." + name).second) {
+                continue;
+            }
+            add_debug_type(instruction->allocated_type);
+            debug_info_ += "V " + function.name + " " + name + " " +
+                           std::to_string(frame_offset(object->second)) + " " +
+                           debug_type_name(instruction->allocated_type) + " " +
+                           std::to_string(type_size(instruction->allocated_type)) +
+                           std::string(1, '\0');
+        }
+    }
+
     out += ".L" + function.name + ".ret:\n";
     out += "    MOV SP, R4\n";
     out += "    POP R4\n";
@@ -1002,6 +1139,11 @@ std::uint32_t Kr16Backend::frame_bytes(const ir::Function& function) const {
 std::optional<std::string> Kr16Backend::emit(std::string& error) const {
     static_cast<void>(profile_);
     std::string out = "; KR16 assembly generated by krc\n";
+    // Per-emission state: one build's bridge cannot leak into the next.
+    debug_info_.clear();
+    debug_sources_.clear();
+    debug_types_.clear();
+    next_debug_source_ = 0;
     out += ".text\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
@@ -1097,6 +1239,16 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
             }
             out += "\n";
         }
+    }
+    for (const auto& global : module_.globals()) {
+        if (global->external) {
+            continue;
+        }
+        add_debug_type(global->element_type);
+        debug_info_ += "G " + global->name + " " + global->name + " " +
+                       debug_type_name(global->element_type) + " " +
+                       std::to_string(type_size(global->element_type)) +
+                       std::string(1, '\0');
     }
     // `-O1` runs the text pass; `-O0` returns the emitter's text untouched, which
     // is what keeps the default level byte-identical to a build without the flag.

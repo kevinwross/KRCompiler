@@ -173,6 +173,7 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
             result.error = "KR16 object: " + error;
             return result;
         }
+        append_debug_info(object, debug_info);
         result.listing = std::move(assembled.listing);
     } else if (id == target::TargetId::Kr32) {
         asmkr32::AssemblyResult assembled;
@@ -289,9 +290,17 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
         }
         std::vector<linker::LinkedSection> extra;
         for (const auto& section : image.sections) {
-            if (section.name != ".text") {
-                extra.push_back(section);
+            if (section.name == ".text") {
+                continue;
             }
+            // `.debug_info` is the bridge `attach_kdbg` consumed, not a shipped
+            // section. The image carries the converted `.kdbg` and every
+            // allocated section; other debug data stays in the object files.
+            if (section.type == linker::KroSectionType::Debug &&
+                section.name != ".kdbg") {
+                continue;
+            }
+            extra.push_back(section);
         }
         if (!linker::write_kr16_image(text->data,
                                       static_cast<std::uint16_t>(image.base),
@@ -498,6 +507,9 @@ CompileResult compile(const Source& source, const Options& options) {
                                "KR16 backend: " + backend_error);
         } else {
             result.assembly = std::move(*assembly);
+            if (options.debug) {
+                result.debug_info = backend.debug_info();
+            }
         }
     } else {
         backend::Kr32Backend backend(*module, profile, level);

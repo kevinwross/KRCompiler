@@ -22,6 +22,10 @@ class Kr16Backend {
                 OptimizationLevel level = OptimizationLevel::O0);
 
     [[nodiscard]] std::optional<std::string> emit(std::string& error) const;
+    // The textual `.debug_info` bridge for the functions this backend emitted.
+    // Same record format as Kr32Backend's; `attach_kdbg` converts it while
+    // linking, and a `.kex` carries the result as `.kdbg`.
+    [[nodiscard]] const std::string& debug_info() const { return debug_info_; }
     // The frame this function needs, in bytes, for `--dump-stats` (S4's metric).
     [[nodiscard]] std::uint32_t frame_bytes(const ir::Function& function) const;
 
@@ -41,6 +45,9 @@ class Kr16Backend {
                                               std::string& error) const;
     void emit_function(std::string& out, const ir::Function& function,
                        const FrameLayout& layout, std::string& error) const;
+    // Adds a T record, and a C record with its M members for a record type, once
+    // per type name.
+    void add_debug_type(ir::TypePtr type) const;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;
@@ -49,6 +56,13 @@ class Kr16Backend {
     // a conditional branch, so the branch carries the comparison and the boolean
     // is never materialised.
     mutable std::unordered_set<const ir::Instruction*> folded_conditions_;
+    // The KDBG bridge being built by the current `emit` call. Mutable because the
+    // emitter is const; every field is cleared at the start of `emit`, so two
+    // builds in one process cannot observe each other.
+    mutable std::string debug_info_;
+    mutable std::unordered_map<std::string, std::uint32_t> debug_sources_;
+    mutable std::unordered_set<std::string> debug_types_;
+    mutable std::uint32_t next_debug_source_ = 0;
 };
 
 }  // namespace krc::backend

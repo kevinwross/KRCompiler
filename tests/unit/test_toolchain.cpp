@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "krc/debug/kdbg.h"
 #include "krc/toolchain.h"
 
 namespace {
@@ -222,14 +223,19 @@ TEST_CASE("Diagnostics are data a host can render after the call") {
     CHECK(text.find("error:") != std::string::npos);
 }
 
-TEST_CASE("The facade compiles and assembles for KR16") {
+TEST_CASE("The facade compiles, assembles and links a debuggable KR16 image") {
     krc::toolchain::Options options;
     options.target = krc::toolchain::Target::Kr16;
-    const auto compiled = krc::toolchain::compile(
-        source("kr16.c", "int main() { return 7; }"), options);
+    const std::string_view text =
+        "int add(int a, int b) {\n"
+        "  int sum = a + b;\n"
+        "  return sum;\n"
+        "}\n"
+        "int main() { return add(20, 22); }\n";
+    const auto compiled = krc::toolchain::compile(source("kr16_debug.c", text), options);
     REQUIRE_MESSAGE(compiled.ok, compiled.error);
     CHECK_FALSE(compiled.assembly.empty());
-    CHECK(compiled.debug_info.empty());
+    CHECK_FALSE(compiled.debug_info.empty());
 
     const auto assembled =
         krc::toolchain::assemble(compiled.assembly, compiled.debug_info, options);
@@ -237,8 +243,7 @@ TEST_CASE("The facade compiles and assembles for KR16") {
     CHECK_FALSE(assembled.object.empty());
 
     const auto built = krc::toolchain::build(
-        std::vector<krc::toolchain::Source>{source("kr16.c", "int main() { return 7; }")},
-        options);
+        std::vector<krc::toolchain::Source>{source("kr16_debug.c", text)}, options);
     REQUIRE_MESSAGE(built.ok, built.error);
     REQUIRE(built.image.size() > 64);
     CHECK_EQ(built.image[0], 'K');
@@ -246,5 +251,45 @@ TEST_CASE("The facade compiles and assembles for KR16") {
     CHECK_EQ(built.image[2], '1');
     CHECK_EQ(built.image[3], '6');
     CHECK_EQ(built.base, 0x100);
-    CHECK_EQ(built.entry, 0x100);
+    // The entry is `main`'s address, not the load base: the fixture's first
+    // function is `add`.
+    CHECK(built.entry > built.base);
+
+    // 4.10: a krc-built `.kex` decodes with sources, lines, functions and a
+    // variable, and the payload records the base it was built for.
+    krc::debug::KdbgImage image;
+    std::string error;
+    REQUIRE_MESSAGE(krc::debug::decode_kdbg_image(built.image, image, error), error);
+    CHECK_EQ(image.target_id, 2);
+    CHECK_EQ(image.image_base, 0x100);
+    REQUIRE_EQ(image.sources.size(), 1);
+    CHECK_EQ(image.sources[0].path, "kr16_debug.c");
+    CHECK_FALSE(image.lines.empty());
+    CHECK_FALSE(image.functions.empty());
+
+    bool saw_add = false;
+    for (const auto& function : image.functions) {
+        saw_add = saw_add || function.name == "add";
+    }
+    CHECK(saw_add);
+
+    bool saw_variable = false;
+    for (const auto& variable : image.variables) {
+        saw_variable = saw_variable ||
+                       (variable.function == "add" && variable.name == "sum");
+    }
+    CHECK(saw_variable);
+
+    bool saw_line = false;
+    for (const auto& line : image.lines) {
+        saw_line = saw_line || line.line == 2;
+    }
+    CHECK(saw_line);
+
+    // The bridge and its maps are per-emission state; a second build of the same
+    // request must not observe the first one.
+    const auto again = krc::toolchain::build(
+        std::vector<krc::toolchain::Source>{source("kr16_debug.c", text)}, options);
+    REQUIRE_MESSAGE(again.ok, again.error);
+    CHECK(again.image == built.image);
 }

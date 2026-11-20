@@ -1,9 +1,11 @@
 # KDBG symbol and debug format
 
 **Status:** KDBG v1 frozen for the M4 subset. Images carry one `.kdbg` debug
-section built from the textual `.debug_info` bridge. The bridge remains only to
-feed the existing KR32 GUI/DAP debugger until it consumes KDBG directly. See
-[ADR 0009](decisions/0009-kdbg-v1-freeze.md).
+section built from the textual `.debug_info` bridge. Both VM backends emit the
+bridge: KR32 for its GUI/DAP debugger, KR16 so a `.kex` can carry `.kdbg` at all.
+The bridge remains an intermediate format; KDBG is the contract. See
+[ADR 0009](decisions/0009-kdbg-v1-freeze.md) and
+[ADR 0008](decisions/0008-debug-info-bridge.md).
 
 **Magic:** `KDBG`. **One format for every target and every debugger.**
 
