@@ -497,12 +497,19 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
             eh_end = section.address + section.size;
         }
     }
-    const auto heap_start = align_up(image_end, 8);
+    const bool kr16 = objects.front().target_id ==
+                      kROTargetId(target::TargetId::Kr16);
+    // The heap starts at the end of the loaded image, aligned to the target's
+    // allocation unit: 8 on KR32, and the 2-byte word on KR16, which is what
+    // kr16's own linker uses. A different alignment here moved the value libc's
+    // `.data` embeds, so a krc-built image differed from the reference by one
+    // word.
+    const auto heap_start = align_up(image_end, kr16 ? 2 : 8);
     // KR32 sits above a 64 KiB window at 0x08000000; IP16 has a 64 KiB address
     // space whose RAM ends below the memory-mapped I/O window.
     std::uint64_t stack_top = 0x08010000;
     std::uint64_t stack_limit = stack_top - 0x10000;
-    if (objects.front().target_id == kROTargetId(target::TargetId::Kr16)) {
+    if (kr16) {
         stack_top = 0xF000;
         stack_limit = 0xE000;
     }

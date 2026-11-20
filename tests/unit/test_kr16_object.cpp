@@ -72,3 +72,44 @@ _start:
     CHECK(decoded.pointer_width == 16);
     CHECK(decoded.sections[0].data == assembly.text);
 }
+
+TEST_CASE("kr16 object writer emits .data and a NOBITS .bss") {
+    const std::string source = R"(
+.text
+.global main
+main:
+    RET
+.data
+.word 0x1234
+.bss
+.align 2
+buffer:
+    .space 8
+)";
+    krc::asmkr16::AssemblyResult assembly;
+    std::string error;
+    REQUIRE_MESSAGE(krc::asmkr16::assemble(source, assembly, error), error);
+
+    krc::linker::KroObject object;
+    REQUIRE_MESSAGE(
+        krc::asmkr16::make_object(assembly, krc::target::get_target(
+                                                krc::target::TargetId::Kr16),
+                                  object, error),
+        error);
+    REQUIRE(object.sections.size() == 3);
+    CHECK(object.sections[0].type == krc::linker::KroSectionType::Text);
+    CHECK(object.sections[1].type == krc::linker::KroSectionType::Data);
+    CHECK(object.sections[1].data.size() == 2);
+    CHECK(object.sections[2].type == krc::linker::KroSectionType::Bss);
+    CHECK(object.sections[2].size == 8);
+    CHECK(object.sections[2].data.empty());
+
+    std::vector<std::uint8_t> bytes;
+    REQUIRE_MESSAGE(krc::linker::write_object(object, bytes, error), error);
+    krc::linker::KroObject decoded;
+    REQUIRE_MESSAGE(krc::linker::read_object(bytes, decoded, error), error);
+    REQUIRE(decoded.sections.size() == 3);
+    CHECK(decoded.sections[2].type == krc::linker::KroSectionType::Bss);
+    CHECK(decoded.sections[2].size == 8);
+    CHECK(decoded.sections[2].data.empty());
+}

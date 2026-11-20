@@ -102,6 +102,26 @@ if(TARGET krc)
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c"
                 -o "${KRC_TEST_OUTPUT_DIR}/kr16_sum.kex")
 
+    # `.bss` reserves a zero-filled section with no file bytes. The image test
+    # proves it assembles and links; the gated run proves the loader zero-fills it.
+    add_test(NAME krc_kr16_bss_image
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr16/bss_zero.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_bss.kex
+                -P ${CMAKE_SOURCE_DIR}/cmake/AssembleKr16.cmake)
+    if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
+        add_test(NAME krc_run_kr16_bss
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR16_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_bss.kex
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
+        set_tests_properties(krc_run_kr16_bss PROPERTIES
+            DEPENDS krc_kr16_bss_image)
+    endif()
+
     add_test(NAME krc_kr16_hello_image
         COMMAND $<TARGET_FILE:krc> -c --target=kr16
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_hello.c"

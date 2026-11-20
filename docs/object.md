@@ -126,6 +126,9 @@ Debug sections are not part of the load image: the linker gives them address
 zero and excludes them from the image end, so `__heap_start` names the byte after
 the loaded image rather than after debug data. That matters on KR16, whose whole
 address space is 64 KiB and whose merged `.debug_info` exceeds it.
+A `.bss` section is NOBITS: the section table carries its size, it has no file
+payload, and the loader zero-fills the range. `__heap_start` is aligned to 8 on
+KR32 and to the 2-byte word on KR16, matching `kr16`'s linker.
 A `.kex` carries the `.kdbg` payload beside its text and string table as an
 unallocated debug section; the payload records the image base at KDBG header
 offset 56 (docs/symbols.md).

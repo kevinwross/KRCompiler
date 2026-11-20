@@ -69,6 +69,8 @@ std::uint16_t section_flags(KroSectionType type) {
         return kSectionAlloc;
     case KroSectionType::Data:
         return kSectionAlloc | kSectionWrite;
+    case KroSectionType::Bss:
+        return kSectionAlloc | kSectionWrite;
     case KroSectionType::Debug:
         return kSectionDebug;
     default:

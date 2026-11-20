@@ -30,6 +30,8 @@ struct Line {
     std::vector<std::string> operands;
     // The statement as written, trimmed of comments, for the listing.
     std::string text;
+    // 0 = .text, 1 = .data, 2 = .bss. A `.bss` statement reserves space only.
+    std::uint32_t section = 0;
 };
 
 std::string trim(std::string_view text) {
@@ -90,6 +92,34 @@ std::optional<std::uint8_t> parse_register(std::string_view text) {
 std::optional<std::int32_t> parse_number(std::string_view text) {
     const auto value = trim(text);
     if (value.empty()) {
+        return std::nullopt;
+    }
+    // A character literal holds the character's byte value. kr16's expression
+    // evaluator accepts these, and `resources/libc.s` uses `#'0'` and `#'9'`.
+    if (value.size() >= 3 && value.front() == '\'' && value.back() == '\'') {
+        const auto inner = value.substr(1, value.size() - 2);
+        if (inner.size() == 1) {
+            return static_cast<std::int32_t>(
+                static_cast<unsigned char>(inner.front()));
+        }
+        if (inner.size() == 2 && inner.front() == '\\') {
+            switch (inner.back()) {
+            case 'n':
+                return '\n';
+            case 't':
+                return '\t';
+            case 'r':
+                return '\r';
+            case '0':
+                return 0;
+            case '\\':
+                return '\\';
+            case '\'':
+                return '\'';
+            default:
+                return std::nullopt;
+            }
+        }
         return std::nullopt;
     }
     char* end = nullptr;
@@ -153,10 +183,23 @@ std::optional<EncodedInstruction> encode_mnemonic(
         return parse_number(text);
     };
 
+    if (name == "NEG" || name == "NOT" || name == "INC" || name == "DEC") {
+        const auto rd = register_at(0);
+        if (!rd || operands.size() != 1) {
+            error = "expected one destination register";
+            return std::nullopt;
+        }
+        const std::map<std::string, RFunction> unary{
+            {"NEG", RFunction::Neg}, {"NOT", RFunction::Not},
+            {"INC", RFunction::Inc}, {"DEC", RFunction::Dec}};
+        // The R-type encoding has a source field with no meaning for a unary
+        // operation; kr16's assembler writes the destination there too.
+        return encode_r(*rd, *rd, unary.at(name), error);
+    }
     if (name == "ADD" || name == "SUB" || name == "CMP" || name == "AND" ||
         name == "OR" || name == "XOR" || name == "MOV" || name == "TEST" ||
-        name == "MUL" || name == "DIV" || name == "DIVU" || name == "MOD" ||
-        name == "MODU") {
+        name == "MUL" || name == "MULU" || name == "DIV" || name == "DIVU" ||
+        name == "MOD" || name == "MODU") {
         const auto rd = register_at(0);
         if (!rd) {
             error = "expected destination register";
@@ -202,14 +245,24 @@ std::optional<EncodedInstruction> encode_mnemonic(
                     {"CMP", IFunction::Cmp},   {"AND", IFunction::And},
                     {"OR", IFunction::Or},     {"XOR", IFunction::Xor},
                     {"MOV", IFunction::Mov},   {"TEST", IFunction::Test}};
-                return encode_i(*rd, functions.at(name), *immediate, error);
+                const auto function = functions.find(name);
+                if (function == functions.end()) {
+                    error = "'" + name + "' needs a register source";
+                    return std::nullopt;
+                }
+                return encode_i(*rd, function->second, *immediate, error);
             }
             const std::map<std::string, XOp> extended{
                 {"ADD", XOp::AddImmediate}, {"SUB", XOp::SubImmediate},
                 {"CMP", XOp::CmpImmediate}, {"AND", XOp::AndImmediate},
                 {"OR", XOp::OrImmediate},   {"XOR", XOp::XorImmediate},
                 {"MOV", XOp::MoveImmediate}, {"TEST", XOp::TestImmediate}};
-            return encode_x(extended.at(name), *rd, 0,
+            const auto operation = extended.find(name);
+            if (operation == extended.end()) {
+                error = "'" + name + "' needs a register source";
+                return std::nullopt;
+            }
+            return encode_x(operation->second, *rd, 0,
                             static_cast<std::uint16_t>(*immediate), error);
         }
         const auto rs = register_at(1);
@@ -222,9 +275,9 @@ std::optional<EncodedInstruction> encode_mnemonic(
             {"CMP", RFunction::Cmp},   {"AND", RFunction::And},
             {"OR", RFunction::Or},     {"XOR", RFunction::Xor},
             {"MOV", RFunction::Mov},   {"TEST", RFunction::Test},
-            {"MUL", RFunction::Mul},   {"DIV", RFunction::Div},
-            {"DIVU", RFunction::DivU}, {"MOD", RFunction::Mod},
-            {"MODU", RFunction::ModU}};
+            {"MUL", RFunction::Mul},   {"MULU", RFunction::MulU},
+            {"DIV", RFunction::Div},   {"DIVU", RFunction::DivU},
+            {"MOD", RFunction::Mod},   {"MODU", RFunction::ModU}};
         return encode_r(*rd, *rs, functions.at(name), error);
     }
 
@@ -262,6 +315,29 @@ std::optional<EncodedInstruction> encode_mnemonic(
             }
             const auto absolute = immediate_at(1);
             if (!absolute) {
+                // An absolute address in brackets: `[0xF005]` or `[symbol]`.
+                // kr16's assembler accepts both, and `resources/libc.s` uses
+                // them for the console port and its static buffers.
+                const auto& operand = operands[1];
+                if (operand.size() >= 3 && operand.front() == '[' &&
+                    operand.back() == ']') {
+                    const auto inner =
+                        trim(std::string_view(operand).substr(1, operand.size() - 2));
+                    if (const auto value = parse_number(inner)) {
+                        return encode_x(extended, *rd, 0,
+                                        static_cast<std::uint16_t>(*value), error);
+                    }
+                    relocations.push_back(
+                        AssembledRelocation{inner, 0, address + 2});
+                    const auto target = labels.find(inner);
+                    return encode_x(
+                        extended, *rd, 0,
+                        target == labels.end()
+                            ? std::uint16_t{0}
+                            : static_cast<std::uint16_t>(0x0100 +
+                                                         target->second.offset),
+                        error);
+                }
                 error = "expected memory operand";
                 return std::optional<EncodedInstruction>{};
             }
@@ -313,6 +389,28 @@ std::optional<EncodedInstruction> encode_mnemonic(
         std::uint8_t base = 0;
         std::int32_t displacement = 0;
         if (!parse_memory(operands[0], base, displacement)) {
+            const auto& operand = operands[0];
+            if (operand.size() >= 3 && operand.front() == '[' &&
+                operand.back() == ']') {
+                const auto inner =
+                    trim(std::string_view(operand).substr(1, operand.size() - 2));
+                const auto opcode_absolute = name == "ST" ? XOp::StoreAbsolute
+                                                          : XOp::StoreByteAbsolute;
+                if (const auto value = parse_number(inner)) {
+                    return encode_x(opcode_absolute, *source, 0,
+                                    static_cast<std::uint16_t>(*value), error);
+                }
+                relocations.push_back(
+                    AssembledRelocation{inner, 0, address + 2});
+                const auto target = labels.find(inner);
+                return encode_x(
+                    opcode_absolute, *source, 0,
+                    target == labels.end()
+                        ? std::uint16_t{0}
+                        : static_cast<std::uint16_t>(0x0100 +
+                                                     target->second.offset),
+                    error);
+            }
             error = "expected memory destination";
             return std::nullopt;
         }
@@ -441,6 +539,7 @@ std::optional<EncodedInstruction> encode_mnemonic(
     static const std::map<std::string, Condition> conditions{
         {"BEQ", Condition::Eq}, {"BNE", Condition::Ne},
         {"BCS", Condition::Cs}, {"BCC", Condition::Cc},
+        {"BHS", Condition::Cs}, {"BLO", Condition::Cc},
         {"BMI", Condition::Mi}, {"BPL", Condition::Pl},
         {"BVS", Condition::Vs}, {"BVC", Condition::Vc},
         {"BHI", Condition::Hi}, {"BLS", Condition::Ls},
@@ -496,8 +595,8 @@ std::optional<std::uint8_t> instruction_size(const Line& line,
 
     if (name == "ADD" || name == "SUB" || name == "CMP" || name == "AND" ||
         name == "OR" || name == "XOR" || name == "MOV" || name == "TEST" ||
-        name == "MUL" || name == "DIV" || name == "DIVU" || name == "MOD" ||
-        name == "MODU") {
+        name == "MUL" || name == "MULU" || name == "DIV" || name == "DIVU" ||
+        name == "MOD" || name == "MODU") {
         if (line.operands.size() >= 2 && !line.operands[1].empty() &&
             line.operands[1].front() == '#') {
             const auto immediate = immediate_at(1);
@@ -543,6 +642,26 @@ void append_word(std::vector<std::uint8_t>& bytes, std::uint16_t word) {
 
 bool assemble(std::string_view source, AssemblyResult& result,
               std::string& error) {
+    constexpr std::uint32_t kText = 0;
+    constexpr std::uint32_t kData = 1;
+    constexpr std::uint32_t kBss = 2;
+    const auto align_up = [](std::uint64_t value, std::uint64_t alignment) {
+        if (alignment <= 1) {
+            return value;
+        }
+        return (value + alignment - 1) / alignment * alignment;
+    };
+    const auto section_name = [](std::uint32_t section) -> std::string_view {
+        switch (section) {
+        case kData:
+            return ".data";
+        case kBss:
+            return ".bss";
+        default:
+            return ".text";
+        }
+    };
+
     std::vector<Line> lines;
     std::map<std::string, Label> labels;
     // Where each label sits in the line sequence. Promotion widens an
@@ -553,11 +672,14 @@ bool assemble(std::string_view source, AssemblyResult& result,
     std::vector<std::string> weaks;
     std::vector<std::string> externs;
 
-    std::uint32_t section = 0;
-    std::uint64_t offset = 0;
+    std::uint32_t section = kText;
     std::istringstream stream{std::string(source)};
     std::string raw;
     std::size_t line_number = 0;
+    const auto note_section = [&]() {
+        result.has_data = result.has_data || section == kData;
+        result.has_bss = result.has_bss || section == kBss;
+    };
     while (std::getline(stream, raw)) {
         ++line_number;
         const auto comment = raw.find(';');
@@ -574,7 +696,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
                 error = "empty label on line " + std::to_string(line_number);
                 return false;
             }
-            labels[name] = Label{section, offset};
+            labels[name] = Label{section, 0};
             label_positions[name] = lines.size();
             continue;
         }
@@ -583,9 +705,14 @@ bool assemble(std::string_view source, AssemblyResult& result,
             std::string name;
             directive >> name;
             if (name == ".text") {
-                section = 0;
+                section = kText;
+                note_section();
             } else if (name == ".data") {
-                section = 1;
+                section = kData;
+                note_section();
+            } else if (name == ".bss") {
+                section = kBss;
+                note_section();
             } else if (name == ".global") {
                 std::string symbol;
                 directive >> symbol;
@@ -599,17 +726,28 @@ bool assemble(std::string_view source, AssemblyResult& result,
                 std::string symbol;
                 directive >> symbol;
                 externs.push_back(symbol);
-            } else if (name == ".short") {
+            } else if (name == ".short" || name == ".word" || name == ".byte") {
                 // A data word holds either a number or a symbol. A symbol needs a
-                // relocation at this offset in the data section, which is what
-                // fills a vtable's typeinfo and destructor pointers.
+                // relocation at this offset in its section, which is what fills a
+                // vtable's typeinfo and destructor pointers.
+                if (section == kBss) {
+                    error = name + " is not allowed in .bss on line " +
+                            std::to_string(line_number);
+                    return false;
+                }
                 Line data;
-                data.mnemonic = ".short";
+                data.mnemonic = name;
                 data.text = line;
-                data.operands = split_operands(trim(line.substr(6)));
+                data.section = section;
+                data.operands = split_operands(trim(line.substr(name.size())));
                 for (const auto& operand : data.operands) {
                     if (parse_number(operand)) {
                         continue;
+                    }
+                    if (name == ".byte") {
+                        error = "invalid .byte value on line " +
+                                std::to_string(line_number);
+                        return false;
                     }
                     const auto symbol = trim(operand);
                     const auto name_of = [](std::string_view text) {
@@ -622,26 +760,38 @@ bool assemble(std::string_view source, AssemblyResult& result,
                             });
                     };
                     if (symbol.empty() || !name_of(symbol)) {
-                        error = "invalid .short operand on line " +
+                        error = "invalid " + name + " operand on line " +
                                 std::to_string(line_number);
                         return false;
                     }
                 }
-                offset += data.operands.size() * 2;
                 lines.push_back(std::move(data));
-            } else if (name == ".byte") {
-                Line data;
-                data.mnemonic = ".byte";
-                data.text = line;
-                data.operands = split_operands(trim(line.substr(5)));
-                for (const auto& operand : data.operands) {
-                    if (!parse_number(operand)) {
-                        error = "invalid .byte value on line " +
-                                std::to_string(line_number);
-                        return false;
-                    }
+            } else if (name == ".space" || name == ".zero") {
+                // kr16 reserves at most one 64 KiB section in a single .space.
+                const auto value = parse_number(trim(line.substr(name.size())));
+                if (!value || *value < 0 || *value > 0x10000) {
+                    error = name + " size out of range on line " +
+                            std::to_string(line_number);
+                    return false;
                 }
-                offset += data.operands.size();
+                Line data;
+                data.mnemonic = ".space";
+                data.text = line;
+                data.section = section;
+                data.operands.push_back(std::to_string(*value));
+                lines.push_back(std::move(data));
+            } else if (name == ".align" || name == ".balign") {
+                const auto value = parse_number(trim(line.substr(name.size())));
+                if (!value || *value < 0) {
+                    error = name + " needs a constant on line " +
+                            std::to_string(line_number);
+                    return false;
+                }
+                Line data;
+                data.mnemonic = ".align";
+                data.text = line;
+                data.section = section;
+                data.operands.push_back(std::to_string(*value));
                 lines.push_back(std::move(data));
             } else {
                 error = "unknown directive '" + name + "' on line " +
@@ -653,58 +803,108 @@ bool assemble(std::string_view source, AssemblyResult& result,
 
         Line parsed;
         parsed.text = line;
+        parsed.section = section;
         std::istringstream instruction(line);
         instruction >> parsed.mnemonic;
         std::string rest;
         std::getline(instruction, rest);
         parsed.operands = split_operands(trim(rest));
+        if (section == kBss) {
+            error = "instruction in .bss on line " + std::to_string(line_number);
+            return false;
+        }
         const auto size = instruction_size(parsed, error);
         if (!size) {
             error += " (line " + std::to_string(line_number) + ")";
             return false;
         }
         lines.push_back(std::move(parsed));
-        offset += static_cast<std::uint64_t>(*size) * 2;
     }
+
+    // One pass computes every section's cursor, each line's section-relative
+    // address, and each label's address. A label takes the cursor of the section
+    // it was declared in at its position, which is what makes a label at the end
+    // of `.bss` resolve to the end of `.bss` rather than to `.text`'s origin.
+    struct Layout {
+        std::vector<std::uint64_t> offsets;
+        std::uint64_t sizes[3] = {0, 0, 0};
+        std::map<std::string, std::uint64_t> label_addresses;
+    };
+    const auto compute_layout = [&](Layout& layout) -> bool {
+        layout.offsets.assign(lines.size(), 0);
+        layout.sizes[kText] = 0;
+        layout.sizes[kData] = 0;
+        layout.sizes[kBss] = 0;
+        layout.label_addresses.clear();
+        std::map<std::size_t, std::vector<std::string>> at;
+        for (const auto& entry : label_positions) {
+            at[entry.second].push_back(entry.first);
+        }
+        for (std::size_t index = 0; index < lines.size(); ++index) {
+            for (const auto& name : at[index]) {
+                layout.label_addresses[name] = layout.sizes[labels[name].section];
+            }
+            const auto& line = lines[index];
+            const auto line_section = line.section;
+            layout.offsets[index] = layout.sizes[line_section];
+            std::uint64_t size = 0;
+            if (line.mnemonic == ".short" || line.mnemonic == ".word") {
+                size = line.operands.size() * 2;
+            } else if (line.mnemonic == ".byte") {
+                size = line.operands.size();
+            } else if (line.mnemonic == ".space") {
+                size = static_cast<std::uint64_t>(
+                    parse_number(line.operands.front()).value_or(0));
+            } else if (line.mnemonic == ".align") {
+                const auto alignment = static_cast<std::uint64_t>(
+                    parse_number(line.operands.front()).value_or(0));
+                size = align_up(layout.sizes[line_section], alignment) -
+                       layout.sizes[line_section];
+            } else {
+                std::string size_error;
+                const auto instruction_bytes = instruction_size(line, size_error);
+                if (!instruction_bytes) {
+                    error = size_error;
+                    return false;
+                }
+                size = static_cast<std::uint64_t>(*instruction_bytes) * 2;
+            }
+            layout.sizes[line_section] += size;
+        }
+        for (const auto& name : at[lines.size()]) {
+            layout.label_addresses[name] = layout.sizes[labels[name].section];
+        }
+        return true;
+    };
 
     // Promote an out-of-range BRA to JMP. Promotion widens the instruction, which
     // moves every later label, so this repeats until nothing changes. Only BRA is
     // promoted: an out-of-range conditional needs the inverse condition plus a JMP
     // over a synthetic label, which this assembler has no way to name (ADR 0043),
     // and it keeps reporting the range error instead.
+    Layout layout;
     for (int pass = 0; pass < 64; ++pass) {
-        std::vector<std::uint64_t> line_address(lines.size(), 0);
-        std::uint64_t address = 0;
-        for (std::size_t index = 0; index < lines.size(); ++index) {
-            line_address[index] = address;
-            if (lines[index].mnemonic == ".short") {
-                address += lines[index].operands.size() * 2;
-            } else if (lines[index].mnemonic == ".byte") {
-                address += lines[index].operands.size();
-            } else {
-                std::string size_error;
-                const auto size = instruction_size(lines[index], size_error);
-                address += size ? static_cast<std::uint64_t>(*size) * 2 : 2;
-            }
-        }
-        std::map<std::string, std::uint64_t> addresses;
-        for (const auto& entry : label_positions) {
-            addresses[entry.first] = entry.second < line_address.size()
-                                         ? line_address[entry.second]
-                                         : address;
+        if (!compute_layout(layout)) {
+            return false;
         }
         bool changed = false;
         for (std::size_t index = 0; index < lines.size(); ++index) {
             if (lines[index].mnemonic != "BRA" || lines[index].operands.empty()) {
                 continue;
             }
-            const auto target = addresses.find(trim(lines[index].operands[0]));
-            if (target == addresses.end()) {
+            const auto name = trim(lines[index].operands[0]);
+            const auto target = layout.label_addresses.find(name);
+            if (target == layout.label_addresses.end()) {
+                continue;
+            }
+            const auto declared = labels.find(name);
+            if (declared == labels.end() ||
+                declared->second.section != lines[index].section) {
                 continue;
             }
             const auto displacement =
                 static_cast<std::int64_t>(target->second) -
-                static_cast<std::int64_t>(line_address[index] + 2);
+                static_cast<std::int64_t>(layout.offsets[index] + 2);
             const auto words = displacement / 2;
             if (words < -128 || words > 127) {
                 lines[index].mnemonic = "JMP";
@@ -715,41 +915,47 @@ bool assemble(std::string_view source, AssemblyResult& result,
             break;
         }
     }
-    // The encoder resolves branch targets through `labels`, whose offsets were
-    // recorded by the parse pass. Any promotion moved them, so they are rewritten
-    // from the final layout here -- otherwise a promoted instruction encodes a
-    // displacement to where the label used to be.
-    {
-        std::vector<std::uint64_t> line_address(lines.size(), 0);
-        std::uint64_t address = 0;
-        for (std::size_t index = 0; index < lines.size(); ++index) {
-            line_address[index] = address;
-            if (lines[index].mnemonic == ".short") {
-                address += lines[index].operands.size() * 2;
-            } else if (lines[index].mnemonic == ".byte") {
-                address += lines[index].operands.size();
-            } else {
-                std::string size_error;
-                const auto size = instruction_size(lines[index], size_error);
-                address += size ? static_cast<std::uint64_t>(*size) * 2 : 2;
-            }
-        }
-        for (const auto& entry : label_positions) {
-            const auto found = labels.find(entry.first);
-            if (found == labels.end()) {
-                continue;
-            }
-            found->second.offset = entry.second < line_address.size()
-                                       ? line_address[entry.second]
-                                       : address;
+    if (!compute_layout(layout)) {
+        return false;
+    }
+    // The encoder resolves branch targets through `labels`, whose offsets are now
+    // final and section-relative.
+    for (auto& entry : labels) {
+        const auto found = layout.label_addresses.find(entry.first);
+        if (found != layout.label_addresses.end()) {
+            entry.second.offset = found->second;
         }
     }
 
-    section = 0;
-    offset = 0;
-    for (const auto& line : lines) {
-        const auto start = offset;
-        if (line.mnemonic == ".short") {
+    result.text.clear();
+    result.data.clear();
+    result.bss_size = 0;
+    result.relocations.clear();
+    result.symbols.clear();
+    result.listing.clear();
+    result.listing.reserve(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto& line = lines[index];
+        const auto line_section = line.section;
+        const auto offset = layout.offsets[index];
+        const bool nobits = line_section == kBss;
+        auto& bytes = line_section == kData ? result.data : result.text;
+        const auto start = bytes.size();
+
+        if (line.mnemonic == ".align") {
+            if (!nobits) {
+                const auto alignment = static_cast<std::uint64_t>(
+                    parse_number(line.operands.front()).value_or(0));
+                const auto padding = align_up(start, alignment) - start;
+                bytes.insert(bytes.end(), static_cast<std::size_t>(padding), 0);
+            }
+        } else if (line.mnemonic == ".space") {
+            if (!nobits) {
+                const auto count = static_cast<std::size_t>(
+                    parse_number(line.operands.front()).value_or(0));
+                bytes.insert(bytes.end(), count, 0);
+            }
+        } else if (line.mnemonic == ".short" || line.mnemonic == ".word") {
             for (const auto& operand : line.operands) {
                 // Only a digit or a sign makes a number; parse_number accepts an
                 // identifier as zero, which would silently drop the relocation.
@@ -763,18 +969,16 @@ bool assemble(std::string_view source, AssemblyResult& result,
                                        : std::optional<std::int32_t>{};
                 if (value) {
                     const auto word = static_cast<std::uint16_t>(*value & 0xFFFF);
-                    result.text.push_back(static_cast<std::uint8_t>(word & 0xFF));
-                    result.text.push_back(static_cast<std::uint8_t>(word >> 8));
-                    offset += 2;
+                    bytes.push_back(static_cast<std::uint8_t>(word & 0xFF));
+                    bytes.push_back(static_cast<std::uint8_t>(word >> 8));
                     continue;
                 }
                 const auto symbol = trim(operand);
-                result.text.push_back(0);
-                result.text.push_back(0);
-                // This object has one section: the offset is absolute within
-                // it, which is where the linker patches the symbol.
-                result.relocations.push_back(AssembledRelocation{symbol, 0, offset});
-                offset += 2;
+                bytes.push_back(0);
+                bytes.push_back(0);
+                result.relocations.push_back(AssembledRelocation{
+                    symbol, line_section,
+                    offset + static_cast<std::uint64_t>(bytes.size() - start - 2)});
             }
         } else if (line.mnemonic == ".byte") {
             for (const auto& operand : line.operands) {
@@ -783,34 +987,38 @@ bool assemble(std::string_view source, AssemblyResult& result,
                     error = "invalid .byte value";
                     return false;
                 }
-                result.text.push_back(
-                    static_cast<std::uint8_t>(*value & 0xFF));
+                bytes.push_back(static_cast<std::uint8_t>(*value & 0xFF));
             }
-            offset += line.operands.size();
         } else {
+            const auto relocation_start = result.relocations.size();
             const auto encoded =
                 encode_mnemonic(line, static_cast<std::uint32_t>(offset), labels,
                                 externs, result.relocations, error);
             if (!encoded) {
                 return false;
             }
-            for (std::uint8_t index = 0; index < encoded->count; ++index) {
-                append_word(result.text, encoded->words[index]);
+            for (std::uint8_t word = 0; word < encoded->count; ++word) {
+                append_word(bytes, encoded->words[word]);
             }
-            offset += static_cast<std::uint64_t>(encoded->count) * 2;
+            // The encoder assumes text; a statement in `.data` must carry the
+            // section the linker patches.
+            for (std::size_t relocation = relocation_start;
+                 relocation < result.relocations.size(); ++relocation) {
+                result.relocations[relocation].section = line_section;
+            }
         }
 
         toolchain::ListingRow row;
-        row.section = ".text";
-        row.address = start;
+        row.section = std::string(section_name(line_section));
+        row.address = offset;
         row.text = line.text;
-        if (start <= result.text.size()) {
-            row.bytes.assign(
-                result.text.begin() + static_cast<std::ptrdiff_t>(start),
-                result.text.end());
+        if (!nobits && start <= bytes.size()) {
+            row.bytes.assign(bytes.begin() + static_cast<std::ptrdiff_t>(start),
+                             bytes.end());
         }
         result.listing.push_back(std::move(row));
     }
+    result.bss_size = layout.sizes[kBss];
 
     for (const auto& entry : labels) {
         const bool global = std::find(globals.begin(), globals.end(),

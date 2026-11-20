@@ -29,11 +29,17 @@ struct AssembledRelocation {
 struct AssemblyResult {
     std::vector<std::uint8_t> text;
     std::vector<std::uint8_t> data;
+    // The size of the `.bss` section: allocated and zero-filled at load, with no
+    // bytes in the object or the image.
+    std::uint64_t bss_size = 0;
+    // Whether the source entered each section, even if it emitted no bytes. A
+    // label can live in an otherwise empty section.
+    bool has_data = false;
+    bool has_bss = false;
     std::vector<AssembledSymbol> symbols;
     std::vector<AssembledRelocation> relocations;
     // One row per emitted statement, in source order. Addresses are relative to
-    // the start of the text buffer, which is the only section this assembler
-    // produces.
+    // the start of the statement's section.
     std::vector<toolchain::ListingRow> listing;
 };
 
