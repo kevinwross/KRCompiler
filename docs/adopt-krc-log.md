@@ -674,3 +674,70 @@ and this entry follow in a documentation commit.
 work remains; that branch is finished at `e04b3b2` with the vendor SHA recorded.
 
 **Blocker:** none.
+
+## 2026-11-20T14:06:31-08:00
+
+**Changed (4.14):** `cmake --install` now writes `krc` and `krld` under
+`<prefix>/bin` in addition to the two libraries and the target sysroot. The rule
+uses the same GNUInstallDirs prefix the other installs use and sits inside the
+existing `KRC_BUILD_TOOLS` guard:
+
+```cmake
+install(TARGETS krc krld
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+```
+
+The executables are not exported as CMake targets; consumers still see only
+`krc::toolchain` and `krc::debug`. `docs/tree.md` and
+`docs/toolchain-embedding.md` record the `bin/` layout and the one thing an
+installed `krc` needs: `--sysroot <prefix>/share/krc/sysroot`, because its
+compiled-in default sysroot is the build-time stage path. That value is already
+exported as `KRC_SYSROOT`.
+
+**Proof, real output.** Installed a scratch prefix, confirmed both files, moved
+the prefix to a second scratch path and deleted the first, then built a `.c` from
+a scratch directory with `PATH` limited to the install's `bin` plus the Windows
+system directories:
+
+```text
+-- Installing: C:\Users\kevin\AppData\Local\Temp\krc-4.14-a/bin/krc.exe
+-- Installing: C:\Users\kevin\AppData\Local\Temp\krc-4.14-a/bin/krld.exe
+krc.exe   7,085,056 bytes
+krld.exe  7,046,656 bytes
+a exists: False
+```
+
+`krc -c hello.c --sysroot <prefix>/share/krc/sysroot -o hello.kro` exits **0**;
+`krld` links the installed startup, `fileio.s`, `eh.s` and `libkrcrt.kro` with it:
+
+```text
+krld: linked 5 object(s) to C:\Users\kevin\AppData\Local\Temp\krc-4.14-b\consume\hello.k32 (entry 65536)
+hello.k32  1,277,518 bytes
+```
+
+The linked image runs under the KR32 VM and returns the program's value in R0:
+`R0=42`. No KRCompiler build tree was on `PATH`, and the original install prefix
+no longer existed. The first attempt at assembling the runtime `.s` files with
+`krc --emit-object` failed because that flag selects the KR16 object path; `krld`
+assembles `.s` inputs directly, which is the route above and the route the
+project's own link scripts use.
+
+**Gate (revision `402cfaf`):** `windows-msvc-debug` 915/915,
+`windows-msvc-release` 915/915, `linux-gcc-debug` 719/719,
+`linux-gcc-release` 719/719, `linux-clang-debug` 719/719,
+`linux-sanitize` 719/719. The counts are unchanged from 4.13; this change is
+install rules only. The record is the newest `## Gate verification` block in
+`implementation.md`.
+
+**Commit:** `402cfaf` (`Install krc and krld with the package`). The required
+rebase onto the ARM64 tester's `ae69da6` rewrote the unpublished commit, so
+`402cfaf` is the published SHA; the content is unchanged. The gate record and
+this entry follow in a documentation commit.
+
+**SHA for krdbg M5:** `402cfaf` (the branch tip after the documentation commit
+contains the same install rules).
+
+**Next step:** nothing is unfinished on `kdbg-v1-1`; that branch is finished at
+`e04b3b2`, with `af46ae4` recorded as the krdbg vendor SHA.
+
+**Blocker:** none.

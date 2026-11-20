@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T13:45:00-08:00 — boundary matrix (Windows + WSL)
+Revision: 402cfaf
+
+```
+windows-msvc-debug    PASS 915/915
+windows-msvc-release  PASS 915/915
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for 4.14, the installed `krc`/`krld`. The change is install rules and
+documentation only, so the test counts are unchanged from the 4.13 matrix. Rows
+ran one at a time; the Windows debug row's tests started at 13:45 per
+`Testing/Temporary/LastTest.log`, and the release row at 13:49. The Linux rows
+register 719 because the two shipped-fileio tests need the sibling kr16 sources
+and the VM. The sanitizer row was the outlier at 486 s. The 4.14 install proof is
+recorded in `docs/adopt-krc-log.md`.
+
 2026-11-20T13:11:49-08:00 — boundary matrix (Windows + WSL)
 Revision: 7dc7477
 
@@ -7153,3 +7174,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T11:06:53-08:00** — **Stage A is closed at `a099ddd` (consumer pins `37a5839` for kr16 and `28ad731` for KR32) after two documentation corrections.** `docs/cxx-front-end-gaps.md` claimed `S s = S();` for a concrete struct compiles; reproduced with a full compile it is rejected in IR generation with `constructor-initialized class has no constructor`, and `-fsyntax-only` is why the old control looked green — corrected in `0547395`. The log entry at 04:23 named `d3367a8` for the facade; the rebased, published SHA is `b2eae12`, and a correction entry names it without rewriting the earlier one. The `.crt0` directive behind kr16's hybrid error is kr16's own startup section in generated assembly (`build/windows-ninja/tests/hello.s:16`; tracked `examples/sum.s:87`), not `resources/libc.s`, and is out of scope. No code changed, KDBG v1.1 was not started, `adopt-krc` was not merged, and the built-in compiler path is untouched.
 
 - **2026-11-20T13:37:22-08:00** — **4.13 lands at `7dc7477`: krc understands KR16's `__host_call`, so the shipped `resources/fileio.c` builds unmodified.** A constant service in 0..255 lowers to the block pointer in R0, `SYS #service`, and a status load from the block, matching kr16's own compiler; the shipped `libc.s`, `fileio.c` and `tests/kevin/fileio.c` now link and run to exit 0 under the VM with a filesystem root. Two gated tests cover it; the Windows matrix is 915/915 and the Linux rows 719/719 (the gated tests need the sibling checkout and VM). This unblocks kr16's stage A. The record is [docs/adopt-krc-log.md](adopt-krc-log.md).
+
+- **2026-11-20T14:06:31-08:00** — **4.14 lands at `eb202e2`: `cmake --install` now writes `bin/krc` and `bin/krld` beside the libraries and the sysroot.** The tools are not exported as CMake targets; an installed `krc` is given `--sysroot <prefix>/share/krc/sysroot` (the package's `KRC_SYSROOT`) because its compiled-in default is the build-stage path. A scratch prefix was installed, moved and the original deleted; with `PATH` limited to the install's `bin`, the installed `krc` compiled a `.c` and the installed `krld` linked a 1,277,518-byte image that ran under the VM. The matrix is 915/915 on Windows and 719/719 on Linux, unchanged from 4.13. Full record: [docs/adopt-krc-log.md](adopt-krc-log.md).
