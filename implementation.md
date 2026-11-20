@@ -498,7 +498,7 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 ## Gate verification
 
 2026-11-20T04:25:12-08:00 — boundary matrix (Windows + WSL)
-Revision: 0ca73e8
+Revision: b5740c8
 
 ```
 windows-msvc-debug    PASS 910/910
@@ -513,7 +513,7 @@ not verified: native Linux x64, Linux ARM64
 Tier 2 for the second half of stage A (4.6–4.8), which changes the KDBG header's
 reserved bytes and the `.kex` section table, so the object and symbol formats are
 both touched. The rows are incremental and were run one at a time in the order
-listed. They cover the tree committed as `0ca73e8`; the follow-on `ba1fbb8` is
+listed. They cover the tree committed as `b5740c8`; `631e680` and `c30793b` are
 documentation only and rebuilt nothing.
 
 The Windows configure resolves both VMs and registers 193 executed-image tests;

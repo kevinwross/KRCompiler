@@ -239,3 +239,28 @@ through the linker API to prove the mechanism, not compiled from a KR16 source.
 Making it real needs KR16 debug-info emission, which no stage-A item authorises;
 that is a decision for the programme owner, not something this session will
 invent. Everything else in stage A is landed.
+
+## 2026-11-20T04:53:45-08:00
+
+**Changed:** published the kr16 pin and corrected the SHAs the previous entry
+named.
+
+**Pushed:** `c30793b` on `adopt-krc`. This is the SHA kr16 pins for 4.6; it also
+carries 4.7's verification and the 4.8 document. The tester had logged `f936155`
+and pushed one commit while the stage-A work was local, so `git pull --rebase`
+rewrote the four unpublished commits. Their content is unchanged; the SHAs are:
+
+- `b5740c8` — `Carry .kdbg in .kex and record the image base` (was `0ca73e8`)
+- `631e680` — `Document how a host embeds the toolchain` (was `ba1fbb8`)
+- `c30793b` — `Record the 4.6 gate and stage-A status`
+
+`implementation.md`'s second gate block now names `b5740c8`, the code revision
+its six rows built; `631e680` and `c30793b` are documentation. The earlier entry
+is not rewritten.
+
+**Next step:** none in stage A; the outstanding decision is the KR16
+`.debug_info` source named in the previous entry.
+
+**Blocker:** unchanged — 4.6's container/reader half is done and published, and
+its "a compiled KR16 `.kex` decodes with sources/lines/functions" half waits on a
+decision about KR16 debug-info emission.
