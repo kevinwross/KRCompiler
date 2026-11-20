@@ -525,3 +525,27 @@ and this entry follow in a documentation commit.
 when it is ready.
 
 **Blocker:** none.
+
+## 2026-11-20T10:51:46-08:00
+
+**Changed:** published 4.12 and corrected the SHA the previous entry named.
+
+**Pushed:** `28ad731` on `adopt-krc`. It carries the installed sysroot and
+runtime; the exported `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR` are what KR32
+should read instead of its two hand-set `-D` variables.
+
+**Correction to the `2026-11-20T10:51:26-08:00` entry:** that entry named
+`49ac890` as the 4.12 commit. The tester pushed `77fd893` while the work was
+local, so `git pull --rebase` rewrote the two unpublished commits. Their content
+is unchanged; the SHAs are:
+
+- `b680815` — `Install the target sysroot and runtime` (was `49ac890`)
+- `28ad731` — `Record the installed-package gate`
+
+`implementation.md`'s newest gate block names `b680815`, the revision its six rows
+built. The earlier entry is not rewritten.
+
+**Next step:** none in stage A (items 4.1–4.12 are implemented and published).
+The KR32 session resumes from `28ad731`.
+
+**Blocker:** none.
