@@ -143,3 +143,19 @@ images are exactly what exercises it, and both new rows ran and passed here. No 
 `402cfaf` installs `krc` and `krld` with the package, so only `CMakeLists.txt` changed and the compiled
 code is unchanged — hence the 11 s build and the same 915 count. The install rules were exercised by the
 configure step here; they do not add a test of their own. No disturbance, no retry.
+
+## 2026-11-20T14:49:57-08:00 — adopt-krc @ b2d12dc
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: 0eee39c..b2d12dc, 2 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — not re-run, `CMakeLists.txt` unchanged
+- Build: linux-gcc-debug — ok, 30 s, 11 targets
+- Test: linux-gcc-debug — 915/915 passed, 265 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+`57182f6` fixes KR16 line-table attribution for declarations in `src/backend/kr16_backend.cpp`, with a
+`test_toolchain` case alongside. Line tables are debug-only, so the compile-and-run rows are the ones that
+show the fix did not disturb code generation: all 915 passed, executed images included. Count is unchanged
+at 915 because the new case lives inside an existing binary. No disturbance, no retry.
