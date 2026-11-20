@@ -46,9 +46,10 @@ The VM (`vm/krc_kr32.exe`, `krc_kr16.exe`) has a debugger interface: `vm debug <
   `git diff --stat 085a8f5..HEAD -- src include targets sysroot tests CMakeLists.txt CMakePresets.json benchmarks`,
   which is empty. So `git log -1` showing a later sha is expected and does not mean the numbers
   below have moved.
-- Tree clean apart from three untracked generated files — `examples/KRlibcpp.S`,
-  `examples/KRlibcpp.O1.S` and `libc.S` at the root — plus `build-loop.md` at the root (not ours).
-  See §6.8.
+- Tree clean. At this revision three untracked generated files — `examples/KRlibcpp.S`,
+  `examples/KRlibcpp.O1.S` and `libc.S` at the root — plus `build-loop.md` at the root (not ours) sat
+  outside version control. **None of them is present at `3aabc28`**; nothing was lost, because they
+  are build products. See §6.8.
 - **Suite 889/889** on `windows-msvc-debug`, `windows-msvc-release`, `linux-gcc-debug`,
   `linux-gcc-release`, `linux-clang-debug`, `linux-sanitize` — clean gate at `2b602f5`
   (`implementation.md` → `## Gate verification`). **58 tests execute at `-O1`** across tiers 0–2.
@@ -215,8 +216,11 @@ today, so nothing miscompiles — but the documented contract is not yet the imp
   and `libc.S` at the root. Note the case: the assembly **inputs** already in the tree are `.s`
   (lowercase — `targets/kr32/runtime/crt0.s`, `eh.s`, `fileio.s`, `host.s`,
   `tests/fixtures/c/branch_promotion.s`), while these three are `.S`. If one is ever meant to be
-  committed, add the path explicitly rather than by pattern.
-- `build-loop.md` at the repo root is untracked and not from this work.
+  committed, add the path explicitly rather than by pattern. **None of the three is in the tree at
+  `3aabc28`** — a cleanup, not a regression, and the rule above still applies if a build recreates
+  one.
+- `build-loop.md` at the repo root is untracked and not from this work. It is also no longer present
+  at `3aabc28`.
 
 ---
 

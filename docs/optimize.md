@@ -589,6 +589,14 @@ shortfall names the number rather than being marked "in progress".
 Each gate is recorded in `implementation.md` under `## Gate verification` in the existing shape,
 with the corpus table as its evidence.
 
+The two remaining shortfalls are bounded by work outside this programme rather than by a missing
+measurement. **OG1**'s 0.9 points is what `-O0` selection leaves on the table on KR16 — the number is
+−24.1% against a −25% target, and closing it would mean removing another 0.9% of KR16 instructions at
+`-O0`, which no measured pass does. **OG4**'s frame-bytes half needs S4's
+measured −28.6%, and S4 is blocked: it reuses frame slots the IR never names, so it needs an emission
+path that owns every slot address (ADR 0051, proposed) and scope ranges in KDBG (W4 of
+`docs/plan-o1-debugger.md`). Neither is a gap to close by measuring again.
+
 ---
 
 ## 12. Decisions needed before code is written
