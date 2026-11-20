@@ -34,3 +34,16 @@ separately.
 The tip's code tree is identical to `master` @ `6d638c4`, which passed 910/910 forty minutes earlier; this
 branch adds one documentation commit on top, so the build had nothing to compile. Recorded because
 `adopt-krc` had no entry and its tip is therefore untested under this protocol, not because the code differs.
+
+## 2026-11-20T04:31:31-08:00 — adopt-krc @ f936155
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: c4b6cfe..f936155, 3 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, <1 s (`CMakeLists.txt` and `cmake/` changed, so it was re-run; the cache kept `KRC_KR32_VM`/`KRC_KR16_VM` at `vm/`)
+- Build: linux-gcc-debug — ok, 121 s, 78 targets
+- Test: linux-gcc-debug — 910/910 passed, 264 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+First real change to reach this branch: the `krc::toolchain` facade (`include/krc/toolchain.h`, `src/toolchain/toolchain.cpp`), the `kdbg` surface extended for the debugger work, preprocessor and assembler/linker changes, and two unit suites (`test_toolchain.cpp`, `test_kdbg.cpp`). The count is unchanged at 910 because the two new unit files add cases inside the existing binaries rather than registering new tests at top level. No disturbance: no compiler warning, no KRO CRC mismatch, no retry.
