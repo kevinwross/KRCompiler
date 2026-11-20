@@ -445,3 +445,26 @@ record and this entry follow in a documentation commit.
 **Next step:** push `adopt-krc` so kr16 can resume at that SHA; then item 4.12.
 
 **Blocker:** none for 4.11.
+
+## 2026-11-20T10:26:15-08:00
+
+**Changed:** published 4.11 and corrected the SHA the previous entry named.
+
+**Pushed:** `37a5839` on `adopt-krc`. This is the SHA kr16 resumes from: it carries
+the KR16 assembler directives and their tests, and `kr16/resources/libc.s`
+assembles under krc to the same loaded image bytes as kr16's own assembler.
+
+**Correction to the `2026-11-20T10:25:42-08:00` entry:** that entry named
+`3860fcd` as the 4.11 commit. The tester pushed `3ba93c0` while the work was
+local, so `git pull --rebase` rewrote the two unpublished commits. Their content
+is unchanged; the SHAs are:
+
+- `b63d668` — `Add the KR16 directives kr16's libc needs` (was `3860fcd`)
+- `37a5839` — `Record the KR16 directive gate`
+
+`implementation.md`'s newest gate block names `b63d668`, the compiler revision
+its six rows built. The earlier entry is not rewritten.
+
+**Next step:** item 4.12, the installed sysroot and runtime.
+
+**Blocker:** none.
