@@ -97,3 +97,19 @@ Count rises 911 → 913 with the KR16 directives `kr16`'s libc needs: `src/asm/k
 `src/asm/kr16_object.cpp` and `src/linker/kr16_image.cpp` changed, and a `bss_zero.s` fixture was added
 alongside new assembler and object unit cases. This is the KR16 object path, so the executed KR16 images
 are the meaningful coverage and they all ran. No disturbance, no retry.
+
+## 2026-11-20T10:59:46-08:00 — adopt-krc @ 47fa4e5
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: 77fd893..47fa4e5, 3 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, <1 s (`CMakeLists.txt` and the toolchain config template changed; VM paths retained)
+- Build: linux-gcc-debug — ok, 11 s (incremental; only the staged runtimes relinked)
+- Test: linux-gcc-debug — 913/913 passed, 274 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+`b680815` installs the target sysroot and runtime through the toolchain package, so `CMakeLists.txt` and
+`cmake/krc-toolchain-config.cmake.in` carry the change while the only compiled difference is small — hence
+the 11 s build. Count is unchanged at 913: the install rules add no test, and the executed rows still run
+the same binaries from `vm/`. No disturbance, no retry.
