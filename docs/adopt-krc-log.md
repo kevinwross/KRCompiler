@@ -616,3 +616,61 @@ or deleted.
 **Next step:** none; stage A is closed.
 
 **Blocker:** none.
+
+## 2026-11-20T13:37:22-08:00
+
+**Changed (4.13):** the KR16 backend now recognizes `__host_call(service, block)`
+as an intrinsic and lowers it the way kr16's own compiler does
+(`kr16/src/cc/compiler.cpp:8094-8100`): the block pointer goes in R0, `SYS #service`
+runs, and the status word is loaded from the block. The service must be a
+compile-time constant in 0..255; any other call falls through to an ordinary call,
+so the linker reports an undefined symbol instead of the backend mis-lowering it.
+The shipped runtime is unchanged — the compiler learned the contract, as 4.10 and
+4.11 did.
+
+**Why it blocked kr16.** `kr16/resources/fileio.c` declares and calls
+`__host_call`, so krc emitted a call to a symbol nothing defines:
+
+```text
+krld: undefined symbol '__host_call'
+```
+
+Reproduced by assembling the shipped `libc.s`, compiling `resources/fileio.c` and
+`tests/kevin/fileio.c` with krc, and linking with a minimal startup. After the
+change the same link succeeds: `krld: linked 4 object(s) ... (entry 256)`.
+
+**Real output:**
+
+- `krc --target=kr16 --emit-object -c ..\kr16\resources\fileio.c -I ..\kr16\include`
+  exits **0**; the same for `..\kr16\tests\kevin\fileio.c` and for
+  `..\kr16\resources\libc.s` (the shipped libc assembles with krc).
+- `krc --target=kr16 -S` on the shipped fileio shows the lowering:
+  `SYS #0` / `LD R0, [R0]`, `SYS #1` / `LD R0, [R0]`, … through the wrappers.
+- `krld crt0.kro fileio.kro test.kro libc.kro -o fileio.kex` exits **0**.
+- `kr16 vm fileio.kex --fs-root build\hostcall-check\sandbox` exits **0** with no
+  output — kr16's own `fileio.run` program performs `fopen`/`fwrite`/`fseek`/
+  `fgetc`/`fgets`/`fputs`/`rename`/`remove` and returns 0 only if every step
+  succeeds.
+- The two tests `krc_kr16_link_shipped_fileio` and
+  `krc_run_kr16_shipped_fileio` compile and run exactly those sibling sources;
+  they are registered only when the kr16 checkout and the KR16 VM resolve. Both
+  passed (`2/2`, 1.08 s + 0.04 s). They add the startup fixture
+  `tests/fixtures/kr16/shipped_fileio_crt0.s` because krc's own `crt0.s` defines
+  `puts`/`abort`, which the shipped libc also defines.
+
+**Gate (revision `7dc7477`):** `windows-msvc-debug` 915/915,
+`windows-msvc-release` 915/915, `linux-gcc-debug` 719/719,
+`linux-gcc-release` 719/719, `linux-clang-debug` 719/719,
+`linux-sanitize` 719/719. The Linux rows register 719 because the two shipped-
+fileio tests need the sibling sources and the VM; the configure skips them there.
+The record is the newest `## Gate verification` block in `implementation.md`.
+
+**Docs:** `docs/targets/kr16.md` documents the intrinsic and the two tests.
+
+**Commit:** `7dc7477` (`Teach krc the KR16 __host_call intrinsic`). The gate record
+and this entry follow in a documentation commit.
+
+**Next step:** kr16's stage A can build `resources/fileio.c` with krc. No KDBG v1.1
+work remains; that branch is finished at `e04b3b2` with the vendor SHA recorded.
+
+**Blocker:** none.

@@ -497,6 +497,33 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T13:11:49-08:00 — boundary matrix (Windows + WSL)
+Revision: 7dc7477
+
+```
+windows-msvc-debug    PASS 915/915
+windows-msvc-release  PASS 915/915
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for 4.13, the KR16 `__host_call` intrinsic, which changes KR16 code
+generation and test registration. Rows ran one at a time in the order listed.
+Windows registers 915 tests because the two shipped-fileio tests are added when
+the sibling kr16 sources and the KR16 VM resolve; the Linux configure registers
+719 and skips those two for the same reason, and starts no VM. Only the vendored
+doctest `<ciso646>` warning appeared on Clang. The sanitizer row is the outlier at
+462 s of tests. The timestamp is the modification time of the Windows debug row's
+`krc.exe`.
+
+The 4.13 runtime check is recorded in `docs/adopt-krc-log.md`: the shipped
+`resources/fileio.c`, `tests/kevin/fileio.c` and `resources/libc.s` build with krc,
+link into a `.kex`, and run to exit 0 under the KR16 VM with a filesystem root.
+The ARM64 row is the tester's log entry, not re-run here.
+
 2026-11-20T10:27:20-08:00 — boundary matrix (Windows + WSL)
 Revision: b680815
 
@@ -7124,3 +7151,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T10:51:26-08:00** — **Item 4.12 lands: the installed package carries the target sysroot and runtime, and a consumer builds a runnable `.k32` from it alone.** `cmake --install` puts the staged sysroot (headers, generated bits, `libkrcrt.kro`, the KR16/KR64 profile headers) under `share/krc/sysroot` and the KR32 `crt0.s`/`fileio.s`/`eh.s` in its `kr32/lib`; `krc-toolchain-config.cmake` exports `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR`. The acceptance consumer was moved to a temp prefix with the original deleted, configured with only that prefix, built a 1,277,747-byte `.k32`, and ran it under the KR32 VM with the expected output and exit 0; its build files contain no KRCompiler path. The matrix at `b680815` is the newest `## Gate verification` block.
 
 - **2026-11-20T11:06:53-08:00** — **Stage A is closed at `a099ddd` (consumer pins `37a5839` for kr16 and `28ad731` for KR32) after two documentation corrections.** `docs/cxx-front-end-gaps.md` claimed `S s = S();` for a concrete struct compiles; reproduced with a full compile it is rejected in IR generation with `constructor-initialized class has no constructor`, and `-fsyntax-only` is why the old control looked green — corrected in `0547395`. The log entry at 04:23 named `d3367a8` for the facade; the rebased, published SHA is `b2eae12`, and a correction entry names it without rewriting the earlier one. The `.crt0` directive behind kr16's hybrid error is kr16's own startup section in generated assembly (`build/windows-ninja/tests/hello.s:16`; tracked `examples/sum.s:87`), not `resources/libc.s`, and is out of scope. No code changed, KDBG v1.1 was not started, `adopt-krc` was not merged, and the built-in compiler path is untouched.
+
+- **2026-11-20T13:37:22-08:00** — **4.13 lands at `7dc7477`: krc understands KR16's `__host_call`, so the shipped `resources/fileio.c` builds unmodified.** A constant service in 0..255 lowers to the block pointer in R0, `SYS #service`, and a status load from the block, matching kr16's own compiler; the shipped `libc.s`, `fileio.c` and `tests/kevin/fileio.c` now link and run to exit 0 under the VM with a filesystem root. Two gated tests cover it; the Windows matrix is 915/915 and the Linux rows 719/719 (the gated tests need the sibling checkout and VM). This unblocks kr16's stage A. The record is [docs/adopt-krc-log.md](adopt-krc-log.md).
