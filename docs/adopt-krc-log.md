@@ -178,3 +178,64 @@ tree the six rows built. The earlier entry is not rewritten.
 `.debug_info`, so a KR16 `.kex` has nothing to convert. The container/base
 mechanism proceeds; a `.kex` that decodes with sources, lines and functions needs
 a decision on KR16 debug-info emission.
+
+## 2026-11-20T04:53:18-08:00
+
+**Changed (items 4.6, 4.7, 4.8):**
+
+- **4.6.** `attach_kdbg` writes the image base into the KDBG header's eight
+  reserved bytes at offset 56 as a little-endian `u64`; `write_kr16_image`
+  carries `.kdbg` beside `.text` and `.debug_str` in a `.kex`, and
+  `decode_kdbg_image` rejects a payload whose recorded base differs from the
+  container's (0 means "not recorded" and is accepted, so older images stay
+  readable). `docs/symbols.md`'s header row and ADR 0009 are amended; no version
+  bump and no record type changes. `krc --dump-symbols` now takes its image as an
+  ordinary input, so the plan's documented `krc --dump-symbols --json IMAGE`
+  order works (the previous parser consumed `--json` as the file name).
+- **4.7.** No further code: the package consumer built in the previous entry
+  already links `krc::debug` alone and decodes a fixture through the installed
+  package (`decoded 1 source(s), 1 function(s) from 333 bytes`).
+- **4.8.** `docs/toolchain-embedding.md` is written and indexed in
+  `docs/README.md`: requiring the packages, a ten-line build, the
+  compile/assemble/link sequence, the `Options` table, ownership and error rules,
+  the listing rows and the KDBG reader.
+
+**Commands and real results:**
+
+- `cmake --build --preset windows-msvc-debug --parallel` — clean.
+- `ctest --preset windows-msvc-debug --output-on-failure` — **910/910 passed**,
+  0 failed, 175.16 s.
+- `krc_tests.exe` — **159 test cases, 159 passed, 1,484 assertions** (four new
+  KDBG tests: base round-trip, `.kex` carry and decode, `.kex` mismatch rejection,
+  `.k32` carry and mismatch rejection).
+- Byte delta on a `.k32` against the pre-4.6 baseline: **9 bytes differ** in a
+  4,169-byte image — offsets 56–63 (the base) and the header CRC at 52. Nothing
+  else moved, which is the intended consequence of writing the field.
+- `krc --dump-symbols --json hello.k32` — exit 0, 442 bytes of JSON.
+- `krc --dump-symbols fixture.kex` (a `.kex` manufactured through
+  `attach_kdbg` + `write_kr16_image`, 674 bytes) — prints
+  `KDBG target=2 abi=1 sources=1 lines=1 functions=1`, `source 0 main.c`,
+  `line 0x100 source=0 line=3 column=1`, `function main 0x100-0x110`.
+  The JSON form prints sources and functions; the frozen JSON schema has never
+  carried lines, so the line assertion uses the text form.
+- Boundary matrix, recorded in `implementation.md` under `## Gate verification`
+  for `0ca73e8`: `windows-msvc-debug` 910/910, `windows-msvc-release` 910/910,
+  `linux-gcc-debug` 717/717, `linux-gcc-release` 717/717,
+  `linux-clang-debug` 717/717, `linux-sanitize` 717/717.
+
+**Commits:** `0ca73e8` (`Carry .kdbg in .kex and record the image base`),
+`ba1fbb8` (`Document how a host embeds the toolchain`). The gate record and this
+entry follow in a documentation commit.
+
+**Next step:** push `adopt-krc` for kr16 to pin the resulting tip, then report that
+SHA.
+
+**Blocker:** 4.6's done-when says a `.kex` decodes "with sources, lines and
+functions that match the source". The container and reader do; what is missing is
+a `.kex` that a KR16 compile produced, because no KR16 object carries
+`.debug_info`. `Kr32Backend` is the only producer of the bridge records and
+`asmkr16::make_object` writes `.text` only. The `.kex` above is manufactured
+through the linker API to prove the mechanism, not compiled from a KR16 source.
+Making it real needs KR16 debug-info emission, which no stage-A item authorises;
+that is a decision for the programme owner, not something this session will
+invent. Everything else in stage A is landed.

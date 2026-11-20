@@ -497,6 +497,34 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T04:25:12-08:00 — boundary matrix (Windows + WSL)
+Revision: 0ca73e8
+
+```
+windows-msvc-debug    PASS 910/910
+windows-msvc-release  PASS 910/910
+linux-gcc-debug       PASS 717/717
+linux-gcc-release     PASS 717/717
+linux-clang-debug     PASS 717/717
+linux-sanitize        PASS 717/717
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for the second half of stage A (4.6–4.8), which changes the KDBG header's
+reserved bytes and the `.kex` section table, so the object and symbol formats are
+both touched. The rows are incremental and were run one at a time in the order
+listed. They cover the tree committed as `0ca73e8`; the follow-on `ba1fbb8` is
+documentation only and rebuilt nothing.
+
+The Windows configure resolves both VMs and registers 193 executed-image tests;
+the Linux configure resolves neither, which is the whole of the count difference.
+The only diagnostic was the vendored doctest `<ciso646>` `#warning` on Clang. No
+row was re-run, no compiler crash occurred, and no KRO CRC mismatch appeared. The
+sanitizer row is again the time outlier at 450 s of tests.
+
+The timestamp is the modification time of the Windows debug row's rebuilt
+`krc-toolchain.lib`, its first build artifact.
+
 2026-11-20T03:56:51-08:00 — boundary matrix (Windows + WSL)
 Revision: b2eae12
 
@@ -6993,3 +7021,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-19T19:32:43-08:00** — **Measured cost of the choice, so the next session can reverse it with a number rather than an opinion:** the suite is **163.6 s against 155.3 s** with the release pair, the 193 VM-dependent tests **17.08 s against 8.18 s**, and each DAP session **0.20 s against 0.07 s**. That is about 5% of a suite run for a checker whose own assertions are compiled in, which is the right side of the trade for the KDBG format work that follows (ADR 0052): the VM is the third party that reads our container, records and line table, and a release build silently drops its asserts. Reversing it is a rename, or `-DKRC_KR32_VM=<abs>/vm/krc_release_kr32.exe -DKRC_KR16_VM=<abs>/vm/krc_release_kr16.exe` at configure.
 - **2026-11-19T19:32:43-08:00** — **910/910 with the Debug pair, and this is the first time `krc_debug_kr16.exe` has run against this suite** — its own repository exercised `--version`, `build` and `vm` only. Two traps recorded because they cost time to find: `KRC_KR32_VM` and `KRC_KR16_VM` are **cache** variables, so a tree configured before the rename keeps the dead path and the executed tests **fail to launch** rather than dropping out — here the cache already named `vm/krc_kr32.exe`, so restoring the name re-validated it with no reconfigure. And a *fresh* Windows configure that finds nothing under those names silently falls back to `../kr32/build/windows-msvc/Debug/kr32.exe` and `../kr16/build/windows-ninja/kr16.exe`, trees their own agents rebuild — a gate can then run against a binary no one chose. On Linux the fallback is Windows-only, so nothing resolves and no executed test registers.
 - **2026-11-19T19:32:43-08:00** — The gate recorded at `16:57:34` ran against the **release** pair, so its executed-row evidence and the `17:44:22` entry describe a binary that is no longer installed under the canonical name. The 910/910 above re-establishes that evidence against the Debug pair; what it does not do is re-run the three Linux rows, which start no VM on this host and are unchanged at 717/717. `vm/kr32-to-krcompiler.md` and `vm/kr16-to-krcompiler.md` carry the delivery notes; the KR16 pair needs no `SDL2.dll`, and a manual `krc_kr16.exe build` outside the kr16 tree needs `KR16_RESOURCE_DIR` set to that tree's `resources/`.
+
+- **2026-11-20T04:53:18-08:00** — **Stage A of the krc toolchain adoption is implemented: the compiler is now a library with two CLIs on it.** `include/krc/toolchain.h` is the in-memory build facade (`compile`, `preprocess`, `assemble`, `link`, `build`, `ListingRow`, resolved diagnostics); `krc::toolchain` and `krc::debug` are installed static packages with `krc-toolchain-config.cmake` and `krc-debug-config.cmake`; `krc` and `krld` are consumers; both assemblers return listing rows; `.kex` carries `.kdbg` with the image base at KDBG offset 56 and the reader rejects a mismatch. The eleven-output byte-identity check from `2026-11-20T03:47:13` passed for the refactor; after 4.6 a `.k32` differs only in those eight bytes and its CRC. The full record, the consumer evidence and every command result are in [docs/adopt-krc-log.md](docs/adopt-krc-log.md); the stage-A boundary matrices are the two most recent `## Gate verification` blocks.
+- **2026-11-20T04:53:18-08:00** — **The one stage-A item that is not complete is 4.6's literal done-when, and the reason is a plan gap rather than unfinished code.** A `.kex` now carries and decodes `.kdbg`, proven through a manufactured container and unit tests, but no KR16 compile can produce one: `Kr32Backend` is the only writer of `.debug_info` and `asmkr16::make_object` emits `.text` only. Stage A authorises neither KR16 debug emission nor a KDBG version change, so the missing source of KR16 debug info is recorded for the owner instead of invented here.
