@@ -363,3 +363,85 @@ not rewritten.
 
 **Blocker:** none. All of stage A, including 4.10, is implemented, verified and
 published.
+
+## 2026-11-20T10:25:42-08:00
+
+**Changed (item 4.11, approved 2026-11-20T09:48:15-08:00):** krc's KR16 assembler
+assembles kr16's shipped `resources/libc.s`.
+
+- `.bss` selects a NOBITS section: allocated and zero-filled at load, with a size
+  and no bytes in the object or the image. `.space N` (and `.zero N`) reserves
+  bytes, size-only inside `.bss`; `.align N` (and `.balign N`) aligns to **bytes**
+  in the current section, padding with zeros; `.word` emits one little-endian
+  16-bit value per operand, or an `Abs16` relocation for a symbol.
+- The assembler now models sections instead of one text buffer. Instructions,
+  data and labels carry a section, labels take the offset of the section they
+  were declared in, branch promotion works per section, and the listing reports
+  the section name and the section-relative address.
+- `make_object` writes `.text`, `.data` and, when present, a NOBITS `.bss`;
+  symbol and relocation section indices are remapped to those emitted sections.
+  A text-only source still produces one `.text` section, so existing objects are
+  unchanged.
+- The linker aligns `__heap_start` to the target's unit: 8 on KR32, the 2-byte
+  word on KR16, matching kr16's own linker. Without it libc's `.data` embedded a
+  different `__heap_start` and the linked image differed by one word.
+- **Beyond the four directives**, the real file needed five more syntax forms,
+  all assembler-only: character literals (`#'0'`, `#'9'`), the unary
+  `NEG`/`NOT`/`INC`/`DEC` (the encoder already had their R-type functions), the
+  `MULU` multiply-pair, the `BHS`/`BLO` condition aliases, and absolute memory
+  operands (`[0xF005]`, `[symbol]`) for LD/LDB/LDSB/ST/STB. No runtime was
+  installed and kr16's libc was not changed, so decision 6's fallback was not
+  needed.
+- Tests: directive unit tests (`.bss` size/no-bytes, `.align` padding, `.space`
+  size, `.word` value and relocation, object section types), plus
+  `krc_kr16_bss_image` and the VM-gated `krc_run_kr16_bss`, which assembles a
+  program that reads a never-written `.bss` word and exits **42** only when the
+  loader zero-filled it.
+
+**The `.crt0` question:** `resources/libc.s` does contain no `.crt0`, and krc
+assembles it cleanly. `.crt0` is kr16's own **section directive** for its startup
+block; it appears in kr16 compiler-generated assembly, not in the libc source.
+Reproduced against the built-in compiler's output:
+`..\kr16\build\windows-ninja\tests\hello.s:16` fails with
+`unknown directive '.crt0' on line 16`, and the tracked
+`..\kr16\examples\sum.s` has it at line 87 (that file fails earlier, at
+`.file` on line 2). The hybrid route therefore needs kr16's `.crt0` section and
+`.file`/debug directives as well; it is **out of scope** for 4.11, whose input is
+`resources/libc.s` and whose recipe is krc's own compile and link.
+
+**Commands and real results:**
+
+- `krc -c --target=kr16 --emit-object ../kr16/resources/libc.s -o libc.kro` —
+  exit 0, 9,286-byte KRO. `kr16 size` on krc's and kr16's objects:
+  **text 1698, data 6, bss 74** for both.
+- Object parity against `kr16 as resources/libc.s`: `.data` (6 bytes) **identical**;
+  `.text` has the same **33 relocations at the same offsets**, and with those two
+  relocation bytes zeroed in both buffers the 1,698-byte `.text` is **identical**.
+  The only pre-link difference is that krc pre-fills the label value and kr16
+  writes zero; both linkers overwrite the field. Symbols match by name and value,
+  including `stdin_buffer`/`stdin_index`/`stdin_count` at `.bss` 0/64/66 and
+  `__kr16_free_list`/`_used_bytes`/`_peak_bytes` at 68/70/72.
+- Linked-image parity (`_start` probe + libc, krc's krld vs `kr16 ld`):
+  section addresses **identical** (text `0x100`, data `0x7AE`, bss `0x7B4`),
+  sizes identical (1710/6/74), and both `.text` (1,710 bytes) and `.data`
+  (6 bytes) **byte-identical**. The container headers and debug string tables
+  differ because the linkers are different; the loaded image does not.
+- `krc`-built hello: `krc -c --target=kr16 --emit-object ../kr16/examples/hello.c`,
+  assembled libc and a four-line `_start`, linked with `krld`, run under
+  `kr16 vm` — prints **`Hello, KR16!`**, exit 0. kr16's own `build` of the same
+  source prints the same text and exits 0.
+- Boundary matrix recorded in `implementation.md` for `3860fcd`:
+  `windows-msvc-debug` 913/913, `windows-msvc-release` 913/913,
+  `linux-gcc-debug` 719/719, `linux-gcc-release` 719/719,
+  `linux-clang-debug` 719/719, `linux-sanitize` 719/719.
+
+**Docs:** [docs/targets/kr16.md](targets/kr16.md) gains the assembly subset and
+its directive table; [docs/object.md](object.md) records NOBITS `.bss` and the
+target-specific `__heap_start` alignment.
+
+**Commit:** `3860fcd` (`Add the KR16 directives kr16's libc needs`). The gate
+record and this entry follow in a documentation commit.
+
+**Next step:** push `adopt-krc` so kr16 can resume at that SHA; then item 4.12.
+
+**Blocker:** none for 4.11.

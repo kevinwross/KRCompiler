@@ -497,6 +497,33 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T10:00:24-08:00 — boundary matrix (Windows + WSL)
+Revision: b63d668
+
+```
+windows-msvc-debug    PASS 913/913
+windows-msvc-release  PASS 913/913
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for item 4.11, the KR16 assembler directives: the KR16 assembler, the KRO
+object it writes and the linker's `__heap_start` alignment all change, so the
+object format and the image layout are touched. Rows are incremental and were run
+one at a time in the order listed. The Windows configure resolves both VMs and
+registers 913 tests; the Linux configure registers 719 because it does not
+register the new `krc_run_kr16_bss`. The only diagnostic was the vendored doctest
+`<ciso646>` warning on Clang. No row was re-run after a failure; the sanitizer row
+is the outlier at 470 s of tests.
+
+The rows cover the tree committed as `b63d668`. The ARM64 row is the tester's
+`docs/arm64-test-log.md` entry for the tested SHA per the plan's gate section; it
+is not re-run here. The timestamp is the modification time of the Windows debug
+row's rebuilt `krc-toolchain.lib`.
+
 2026-11-20T08:33:40-08:00 — boundary matrix (Windows + WSL)
 Revision: 047bc1e
 
@@ -7059,3 +7086,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T04:53:18-08:00** — **The one stage-A item that is not complete is 4.6's literal done-when, and the reason is a plan gap rather than unfinished code.** A `.kex` now carries and decodes `.kdbg`, proven through a manufactured container and unit tests, but no KR16 compile can produce one: `Kr32Backend` is the only writer of `.debug_info` and `asmkr16::make_object` emits `.text` only. Stage A authorises neither KR16 debug emission nor a KDBG version change, so the missing source of KR16 debug info is recorded for the owner instead of invented here.
 
 - **2026-11-20T09:05:18-08:00** — **Item 4.10 makes a KR16 `.kex` decodable: the KR16 backend now emits the same textual bridge as KR32, so `attach_kdbg` runs for a KR16 link.** `KDBG target=2` with sources, lines, functions and variables decodes from both the single-image `krc -c --target=kr16` form and the linked `crt0 + libkrcrt + user` form; the linked fixture runs under the VM with exit 55. The change also fixed the linker: debug sections are placed at address zero and excluded from the image end, because the merged `.debug_info` for the KR16 runtime exceeds the 16-bit address space and overflowed a relocation when laid out after `.text`. That moves `__heap_start` on KR32 images from after debug data to the end of the loaded image, the intended meaning. The full record and the matrix at `047bc1e` are in [docs/adopt-krc-log.md](docs/adopt-krc-log.md) and the newest `## Gate verification` block. With this, all of stage A is complete.
+
+- **2026-11-20T10:25:42-08:00** — **Item 4.11 lands: krc's KR16 assembler assembles kr16's shipped `resources/libc.s`, and the linked image matches kr16's own.** The directives are `.bss` (NOBITS), `.space`/`.zero`, `.align`/`.balign` (bytes, not words), and `.word`; the real file also needed character literals, `NEG`/`NOT`/`INC`/`DEC`, `MULU`, `BHS`/`BLO` and absolute memory operands, all recorded in [docs/adopt-krc-log.md](docs/adopt-krc-log.md). The object writer emits `.text`/`.data`/NOBITS `.bss`, and `__heap_start` now aligns to the KR16 word, which made libc's linked `.data` byte-identical to kr16's. Assembled section sizes match kr16's (1698/6/74); text matches once relocation fields are masked; the linked probe's text and data are byte-identical at the same addresses; a krc-built hello prints `Hello, KR16!`. The reported `.crt0` is kr16's own startup section directive in generated assembly (`build/windows-ninja/tests/hello.s:16`, tracked example `examples/sum.s:87`), not `resources/libc.s`, and is out of scope. The matrix at `b63d668` is the newest `## Gate verification` block.
