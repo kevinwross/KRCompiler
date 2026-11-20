@@ -47,3 +47,20 @@ branch adds one documentation commit on top, so the build had nothing to compile
 - Next: nothing pending
 
 First real change to reach this branch: the `krc::toolchain` facade (`include/krc/toolchain.h`, `src/toolchain/toolchain.cpp`), the `kdbg` surface extended for the debugger work, preprocessor and assembler/linker changes, and two unit suites (`test_toolchain.cpp`, `test_kdbg.cpp`). The count is unchanged at 910 because the two new unit files add cases inside the existing binaries rather than registering new tests at top level. No disturbance: no compiler warning, no KRO CRC mismatch, no retry.
+
+## 2026-11-20T05:00:19-08:00 — adopt-krc @ d576c24
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: 85eb9fb..d576c24, 6 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — not re-run, `CMakeLists.txt` unchanged
+- Build: linux-gcc-debug — ok, 48 s (incremental)
+- Test: linux-gcc-debug — 910/910 passed, 268 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+`b5740c8` carries the `.kdbg` debug container inside `.kex` and records the image base, which touches
+`src/linker/linker.cpp` and the `krc` driver, so the executed-image rows are the ones that matter here:
+every linked image keeps its debug payload and still runs. Also present are the `kdbg` v1 freeze ADR, the
+host-embedding guide, the `include/krc/toolchain.h` read corrections and more `test_kdbg` cases. Count
+stays 910 because the additions are cases inside existing test binaries. No disturbance, no retry.
