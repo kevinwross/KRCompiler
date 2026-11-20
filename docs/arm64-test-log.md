@@ -128,3 +128,18 @@ the same binaries from `vm/`. No disturbance, no retry.
 Count rises 913 → 915 with `__host_call` in the KR16 backend plus a shipped-fileio link path and a
 `shipped_fileio_crt0.s` fixture. The new intrinsic reaches the host through the VM, so the executed KR16
 images are exactly what exercises it, and both new rows ran and passed here. No disturbance, no retry.
+
+## 2026-11-20T14:14:41-08:00 — adopt-krc @ 937b2f4
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: ae69da6..937b2f4, 2 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, <1 s (`CMakeLists.txt` changed; VM paths retained)
+- Build: linux-gcc-debug — ok, 11 s (incremental; only the staged runtimes relinked)
+- Test: linux-gcc-debug — 915/915 passed, 268 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+`402cfaf` installs `krc` and `krld` with the package, so only `CMakeLists.txt` changed and the compiled
+code is unchanged — hence the 11 s build and the same 915 count. The install rules were exercised by the
+configure step here; they do not add a test of their own. No disturbance, no retry.
