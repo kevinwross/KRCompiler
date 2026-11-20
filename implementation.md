@@ -497,6 +497,26 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T14:17:00-08:00 — boundary matrix (Windows + WSL)
+Revision: 57182f6
+
+```
+windows-msvc-debug    PASS 915/915
+windows-msvc-release  PASS 915/915
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for 4.15, the KR16 line-table fix, which changes KR16 code generation.
+Rows ran one at a time; the Windows debug row's tests started at 14:17 per
+`Testing/Temporary/LastTest.log` and the release row at 14:21. Counts are
+unchanged because the regression assertion lives inside `krc_tests`. The
+sanitizer row was the outlier at 484 s. The attempt to run `kr16.unit` under krc
+and the compiler-side evidence are recorded in `docs/adopt-krc-log.md`.
+
 2026-11-20T13:45:00-08:00 — boundary matrix (Windows + WSL)
 Revision: 402cfaf
 

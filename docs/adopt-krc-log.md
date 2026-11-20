@@ -741,3 +741,80 @@ contains the same install rules).
 `e04b3b2`, with `af46ae4` recorded as the krdbg vendor SHA.
 
 **Blocker:** none.
+
+## 2026-11-20T14:41:41-08:00
+
+**Changed (4.15):** the KR16 line table no longer gives a declaration a line
+record. An `Alloca` emits no code, but the backend emitted an `.Ldbg` label and an
+`L` record for it before the instruction dispatch, so `int local;` on line 2 and
+the `local = 7;` store on line 3 shared the same address and a debugger stopping
+there reported line 2. The debug-label block now skips `Alloca`, with a comment
+recording why.
+
+**Evidence, krc-built image.** Source:
+
+```c
+int main(void) {
+    int local;
+    local = 7;
+    return local;
+}
+```
+
+Before the fix, `krc --dump-symbols` on the linked `.kex` printed
+`line 0x128 ... line=2` then `line 0x128 ... line=3`: the first record at the
+statement's address was the declaration. After the fix the same image prints
+
+```text
+line 0x128 source=0 line=3 column=5
+line 0x12c source=0 line=4 column=5
+line 0x130 source=0 line=4 column=5
+```
+
+so the first line-bearing instruction of `main` is line 3 and no line-2 record
+exists. A regression test in `tests/unit/test_toolchain.cpp` builds that exact
+source for KR16 and asserts both facts; the unit binary is **165 cases / 1,565
+assertions**, all passing.
+
+**`kr16.unit` under krc — attempted, not completed.** kr16 is configured for the
+krc path in a scratch build from the installed package
+(`-DKR16_TOOLCHAIN=krc -DKR16_KRC_PREFIX=<prefix> -DKR16_KDBG=ON`), but linking
+`kr16_tests` failed with
+
+```text
+krc-toolchain.lib(ir.obj) : error LNK2001: unresolved external symbol __imp__wassert
+tests\kr16_tests.exe : fatal error LNK1120: 1 unresolved externals
+```
+
+The installed Debug `krc-toolchain.lib` and the scratch kr16 test link disagree on
+the CRT (the package carries only the built library, and the scratch configure did
+not reproduce the package's CRT flags). That is an environment/link mismatch, not
+the line-table change; no assertion in `kr16.unit` was run against a krc-built
+image in this session. The krc-built image above is the direct evidence for the
+same statement.
+
+**Gate (revision `57182f6`):** `windows-msvc-debug` 915/915,
+`windows-msvc-release` 915/915, `linux-gcc-debug` 719/719,
+`linux-gcc-release` 719/719, `linux-clang-debug` 719/719,
+`linux-sanitize` 719/719. The record is the newest `## Gate verification` block
+in `implementation.md`.
+
+**Commit:** `57182f6` (`Fix the KR16 line-table attribution for declarations`).
+The required rebase onto the tester's `0eee39c` rewrote the unpublished commit;
+the content is unchanged.
+
+**4.16 — not started.** Function sections with `--gc-sections` were not
+implemented in this session, so there is no 4.16 SHA. The work spans four layers
+and is not a small edit: the KR16 assembler has only fixed `.text`/`.data`/`.bss`
+section ids and one `text` buffer (`src/asm/kr16_assembler.cpp:33,654-661,707`);
+the KR16 object writer emits one `.text` plus optional `.data`/`.bss`
+(`src/asm/kr16_object.cpp`); the linker's `--gc-sections` is **object-level**, not
+section-level (`src/linker/linker.cpp:216-265`), and `write_kr16_image` takes one
+concatenated text blob plus extra sections (`src/linker/kr16_image.cpp:115-137`).
+Function sections need a named-section model, per-section labels/relocations, a
+section-reachability walk rooted at the entry, and a KR16 image writer that lays
+out and preserves the kept sections. I did not start it rather than leave a
+half-change.
+
+**Blocker:** 4.16 needs its own session; 4.15 is complete apart from the
+`kr16.unit` link mismatch noted above.
