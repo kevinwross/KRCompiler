@@ -81,3 +81,19 @@ check registers against that (the KR16 pin SHA is reported alongside). This is t
 debug path runs here — the 191 executed rows include KR16 images, so a regression that broke KR16 object
 emission would have shown up as a failing run rather than only a compile error. `include/krc/toolchain.h`,
 `src/toolchain/toolchain.cpp` and the linker also changed. No disturbance, no retry.
+
+## 2026-11-20T10:35:11-08:00 — adopt-krc @ 0defcce
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: 3ba93c0..0defcce, 3 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, <1 s (`cmake/AssembleKr16.cmake` changed; VM paths retained)
+- Build: linux-gcc-debug — ok, 36 s, 16 targets
+- Test: linux-gcc-debug — 913/913 passed, 273 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+Count rises 911 → 913 with the KR16 directives `kr16`'s libc needs: `src/asm/kr16_assembler.cpp`,
+`src/asm/kr16_object.cpp` and `src/linker/kr16_image.cpp` changed, and a `bss_zero.s` fixture was added
+alongside new assembler and object unit cases. This is the KR16 object path, so the executed KR16 images
+are the meaningful coverage and they all ran. No disturbance, no retry.
