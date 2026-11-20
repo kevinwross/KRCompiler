@@ -338,3 +338,28 @@ record and this entry follow in a documentation commit.
 single-image `krc -c --target=kr16` image and the linked image both decode with
 sources, lines, functions and variables. The kr16 repository can start its plan
 at the published SHA.
+
+## 2026-11-20T09:06:07-08:00
+
+**Changed:** published 4.10 and corrected the SHA the previous entry named.
+
+**Pushed:** `0f61260` on `adopt-krc`. This is the SHA kr16 pins: it carries
+`.kdbg` in `.kex` with the image base (4.6) and the KR16 debug-info emission that
+makes the payload real (4.10). 4.6's done-when is now met for both `.kex` forms.
+
+**Correction to the `2026-11-20T09:05:18-08:00` entry:** that entry named
+`990a381` as the 4.10 commit. The tester pushed `5956bbe` (its log of `d576c24`)
+while the work was local, so `git pull --rebase` rewrote the two unpublished
+commits. Their content is unchanged; the SHAs are:
+
+- `047bc1e` — `Emit KR16 debug info so a .kex carries .kdbg` (was `990a381`)
+- `0f61260` — `Record the KR16 debug-info gate`
+
+`implementation.md`'s newest gate block names `047bc1e`, the compiler revision its
+six rows built; `0f61260` is that record plus documentation. The earlier entry is
+not rewritten.
+
+**Next step:** none. The kr16 plan can start at `0f61260`.
+
+**Blocker:** none. All of stage A, including 4.10, is implemented, verified and
+published.
