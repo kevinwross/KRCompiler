@@ -10,6 +10,7 @@ Two roots define what is host code and what is target code.
 | `tests/fixtures/` | target fixtures and golden expected output | `krc`/`krld` through CMake |
 | `build/<preset>/host/` | host binaries and libraries | host build |
 | `build/<preset>/stage/` | install-shaped target sysroot and test images | target build steps |
+| `<prefix>/bin/` | installed `krc` and `krld` | `cmake --install` |
 | `<prefix>/share/krc/sysroot/` | installed target sysroot and KR32 runtime | `cmake --install` |
 
 Rules:
@@ -22,6 +23,11 @@ Rules:
   `krc-toolchain-config.cmake` exports `KRC_SYSROOT` (the installed sysroot) and
   `KRC_KR32_RUNTIME_DIR` (its `kr32/lib`), so a consumer does not need this build
   tree.
+- `cmake --install` also writes `bin/krc` and `bin/krld`; a host that runs the
+  build chain uses those and the installed sysroot. The tools are not exported as
+  CMake targets. `krc`'s default sysroot is its build-time path, so an installed
+  tool is given `--sysroot <prefix>/share/krc/sysroot` (the package's
+  `KRC_SYSROOT`).
 
 The rationale and migration phases are in
 [source-tree-reorganization.md](planning/source-tree-reorganization.md).

@@ -299,6 +299,12 @@ install(EXPORT krcTargets
 # `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR` are exported by the package config.
 set(KRC_INSTALL_SYSROOT_REL "${CMAKE_INSTALL_DATADIR}/krc/sysroot")
 if(KRC_BUILD_TOOLS)
+    # The build chain itself: a host that gets the package can run the compiler
+    # and linker from <prefix>/bin instead of a KRCompiler build tree. This is
+    # the same prefix rule the libraries use; the executables are not exported
+    # as CMake targets.
+    install(TARGETS krc krld
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
     install(DIRECTORY "${KRC_STAGE_SYSROOT}/"
         DESTINATION "${KRC_INSTALL_SYSROOT_REL}")
     install(FILES

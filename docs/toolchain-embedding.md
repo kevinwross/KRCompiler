@@ -112,16 +112,20 @@ statement's address, its encoded bytes, its text and the source line a preceding
 `build` reports the final address in the image. The facade does not choose a
 `.lst` format — KR32 and kr16 keep their own — so the host renders the rows.
 
-## The installed sysroot and runtime
+## The installed sysroot, runtime and tools
 
-`cmake --install` (with the default `KRC_BUILD_TOOLS=ON`) installs the target
-sysroot and runtime under `<prefix>/share/krc/sysroot`, and
-`find_package(krc-toolchain CONFIG REQUIRED)` exports:
+`cmake --install` (with the default `KRC_BUILD_TOOLS=ON`) installs `krc` and
+`krld` under `<prefix>/bin`, and the target sysroot and runtime under
+`<prefix>/share/krc/sysroot`. `find_package(krc-toolchain CONFIG REQUIRED)`
+exports:
 
 - `KRC_SYSROOT` — `<prefix>/share/krc/sysroot`
 - `KRC_KR32_RUNTIME_DIR` — `${KRC_SYSROOT}/kr32/lib`
 
 ```text
+bin/
+  krc[.exe]                the compiler driver
+  krld[.exe]               the linker
 share/krc/sysroot/
   include/                 the shared C/C++ headers, including krc/host.h
   kr32/include/bits/       stdint.h and types.h generated for the profile
@@ -129,6 +133,11 @@ share/krc/sysroot/
   kr16/include/            the KR16 profile headers
   kr64/include/            the KR64 profile headers
 ```
+
+`krc`'s compiled-in default sysroot is its build-time path, so a host that runs
+the installed tool passes `--sysroot <prefix>/share/krc/sysroot` (the package's
+`KRC_SYSROOT`). With that, `krc -c` and `krld` build and link from the install
+alone: no KRCompiler build tree is needed on `PATH`.
 
 To build a runnable KR32 image, compile with `KRC_SYSROOT/include` and
 `KRC_SYSROOT/kr32/include` on `Options::include_paths`, assemble the three
