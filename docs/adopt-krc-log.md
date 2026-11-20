@@ -468,3 +468,60 @@ its six rows built. The earlier entry is not rewritten.
 **Next step:** item 4.12, the installed sysroot and runtime.
 
 **Blocker:** none.
+
+## 2026-11-20T10:51:26-08:00
+
+**Changed (item 4.12, approved 2026-11-20T10:16:44-08:00):** the package installs
+the target sysroot and runtime, and exports a way to find them.
+
+- `cmake --install` now installs the staged target sysroot under
+  `<prefix>/share/krc/sysroot`: `include/**` (the shared headers), the generated
+  `kr32/include/bits/{stdint,types}.h`, `kr32/lib/libkrcrt.kro`, and the
+  `kr16/`/`kr64/` profile headers. The KR32 runtime assembly —
+  `targets/kr32/runtime/{crt0.s,fileio.s,eh.s}` — is installed into
+  `share/krc/sysroot/kr32/lib` beside `libkrcrt.kro`.
+- `krc-toolchain-config.cmake` exports `KRC_SYSROOT` and
+  `KRC_KR32_RUNTIME_DIR` (`${KRC_SYSROOT}/kr32/lib`), computed from the package
+  prefix, so the consumer does not hand-set paths or read a build tree. The
+  datadir is substituted from `CMAKE_INSTALL_DATADIR`, so a custom `--prefix` or
+  datadir follows.
+- The install requires `KRC_BUILD_TOOLS=ON` (the default), because the sysroot is
+  the staged tree the build produces; with tools off the configure prints a
+  status line and installs no sysroot. This is documented rather than silently
+  skipped.
+- Docs: [docs/toolchain-embedding.md](toolchain-embedding.md) gains the installed
+  layout and the KR32 link recipe; [docs/tree.md](tree.md) records the install
+  path and the two exported variables.
+
+**Acceptance check, real output:** installed to a temp prefix with
+`cmake --install build\windows-msvc-debug --prefix <temp> --config Debug`, copied
+the prefix to a second temp directory, deleted the first. A scratch project in a
+temp directory with only the second prefix on `CMAKE_PREFIX_PATH`:
+
+- `find_package(krc-toolchain CONFIG REQUIRED)` → `KRC_SYSROOT=<temp>/share/krc/sysroot`,
+  `KRC_KR32_RUNTIME_DIR=<temp>/share/krc/sysroot/kr32/lib`.
+- It compiled `#include <stdio.h> int main(){puts(...)}` with the installed
+  sysroot headers, assembled the installed `crt0.s`/`fileio.s`/`eh.s`, read the
+  installed `libkrcrt.kro`, linked with `entry = "_start"` and wrote
+  **`hello.k32`, 1,277,747 bytes, entry 0x2f4c8**.
+- `vm/krc_kr32.exe vm hello.k32` printed `built from the installed package` and
+  exited **0**.
+- `CMakeCache.txt` and the project files contain **no** `KRCompiler` path; the
+  original install prefix was deleted before the build, so nothing pointed at it.
+- The installed files include every entry on KR32's manifest:
+  `include/stdio.h`, `kr32/include/bits/stdint.h` and `bits/types.h`,
+  `kr32/lib/libkrcrt.kro`, and `crt0.s`/`fileio.s`/`eh.s`.
+
+**Commands and results (matrix):** `windows-msvc-debug` 913/913,
+`windows-msvc-release` 913/913, `linux-gcc-debug` 719/719,
+`linux-gcc-release` 719/719, `linux-clang-debug` 719/719,
+`linux-sanitize` 719/719, recorded in `implementation.md` for `49ac890`.
+
+**Commit:** `49ac890` (`Install the target sysroot and runtime`). The gate record
+and this entry follow in a documentation commit.
+
+**Next step:** push `adopt-krc`; the KR32 session can drop
+`KR32_KRC_SYSROOT`/`KR32_KRC_RUNTIME_DIR` in favour of the exported variables
+when it is ready.
+
+**Blocker:** none.

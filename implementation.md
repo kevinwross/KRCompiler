@@ -497,6 +497,38 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T10:27:20-08:00 — boundary matrix (Windows + WSL)
+Revision: b680815
+
+```
+windows-msvc-debug    PASS 913/913
+windows-msvc-release  PASS 913/913
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for item 4.12, the installed sysroot and runtime: `CMakeLists.txt` and the
+exported package config change, which is a package boundary. Rows are incremental
+and were run one at a time in the order listed. The Windows configure resolves
+both VMs and registers 913 tests; the Linux configure registers 719 because it
+does not register `krc_run_kr16_bss`. The only diagnostic was the vendored doctest
+`<ciso646>` warning on Clang. No row was re-run after a failure; the sanitizer row
+is the outlier at 458 s of tests.
+
+The installed-package consumer is a separate check, not a preset: after
+`cmake --install` the prefix was moved to a temp directory, the original deleted,
+and a scratch project with only that prefix on `CMAKE_PREFIX_PATH` built a
+1,277,747-byte `.k32` that ran under the KR32 VM and printed its message (exit 0).
+Its `CMakeCache.txt` and project files contain no KRCompiler path.
+
+The rows cover the tree committed as `b680815`. The ARM64 row is the tester's
+`docs/arm64-test-log.md` entry for the tested SHA per the plan's gate section; it
+is not re-run here. The timestamp is the modification time of the Windows debug
+row's rebuilt `krc-toolchain.lib`.
+
 2026-11-20T10:00:24-08:00 — boundary matrix (Windows + WSL)
 Revision: b63d668
 
@@ -7088,3 +7120,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T09:05:18-08:00** — **Item 4.10 makes a KR16 `.kex` decodable: the KR16 backend now emits the same textual bridge as KR32, so `attach_kdbg` runs for a KR16 link.** `KDBG target=2` with sources, lines, functions and variables decodes from both the single-image `krc -c --target=kr16` form and the linked `crt0 + libkrcrt + user` form; the linked fixture runs under the VM with exit 55. The change also fixed the linker: debug sections are placed at address zero and excluded from the image end, because the merged `.debug_info` for the KR16 runtime exceeds the 16-bit address space and overflowed a relocation when laid out after `.text`. That moves `__heap_start` on KR32 images from after debug data to the end of the loaded image, the intended meaning. The full record and the matrix at `047bc1e` are in [docs/adopt-krc-log.md](docs/adopt-krc-log.md) and the newest `## Gate verification` block. With this, all of stage A is complete.
 
 - **2026-11-20T10:25:42-08:00** — **Item 4.11 lands: krc's KR16 assembler assembles kr16's shipped `resources/libc.s`, and the linked image matches kr16's own.** The directives are `.bss` (NOBITS), `.space`/`.zero`, `.align`/`.balign` (bytes, not words), and `.word`; the real file also needed character literals, `NEG`/`NOT`/`INC`/`DEC`, `MULU`, `BHS`/`BLO` and absolute memory operands, all recorded in [docs/adopt-krc-log.md](docs/adopt-krc-log.md). The object writer emits `.text`/`.data`/NOBITS `.bss`, and `__heap_start` now aligns to the KR16 word, which made libc's linked `.data` byte-identical to kr16's. Assembled section sizes match kr16's (1698/6/74); text matches once relocation fields are masked; the linked probe's text and data are byte-identical at the same addresses; a krc-built hello prints `Hello, KR16!`. The reported `.crt0` is kr16's own startup section directive in generated assembly (`build/windows-ninja/tests/hello.s:16`, tracked example `examples/sum.s:87`), not `resources/libc.s`, and is out of scope. The matrix at `b63d668` is the newest `## Gate verification` block.
+
+- **2026-11-20T10:51:26-08:00** — **Item 4.12 lands: the installed package carries the target sysroot and runtime, and a consumer builds a runnable `.k32` from it alone.** `cmake --install` puts the staged sysroot (headers, generated bits, `libkrcrt.kro`, the KR16/KR64 profile headers) under `share/krc/sysroot` and the KR32 `crt0.s`/`fileio.s`/`eh.s` in its `kr32/lib`; `krc-toolchain-config.cmake` exports `KRC_SYSROOT` and `KRC_KR32_RUNTIME_DIR`. The acceptance consumer was moved to a temp prefix with the original deleted, configured with only that prefix, built a 1,277,747-byte `.k32`, and ran it under the KR32 VM with the expected output and exit 0; its build files contain no KRCompiler path. The matrix at `b680815` is the newest `## Gate verification` block.
