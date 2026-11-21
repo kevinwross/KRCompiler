@@ -818,3 +818,74 @@ half-change.
 
 **Blocker:** 4.16 needs its own session; 4.15 is complete apart from the
 `kr16.unit` link mismatch noted above.
+
+## 2026-11-20T22:37:47-08:00
+
+**Changed (4.16):** KR16 function sections with section-level GC.
+
+- **Assembler.** `.section .text.<name>` selects a named text section. Section
+  ids stay `.text`=0, `.data`=1, `.bss`=2, then each `.text.<name>` in first-use
+  order; labels, relocations and listing rows carry the id. A malformed section
+  name is rejected; the directive is limited to `.section .text.<name>`.
+- **Object.** `make_object` emits `.text`, then the named text sections, then
+  `.data`/`.bss`, each with the `.text` flags (`alloc|exec`) and a symbol of type
+  `function`. A section is present when it has bytes, a label, or a relocation.
+- **Linker.** `--gc-sections` is now **section-level**. The entry symbol's
+  section is the root; a relocation from a reachable section marks the section
+  that defines its target symbol; objects with no reachable section are dropped.
+  Debug sections of an object that keeps a section are retained. Layout skips
+  dropped sections; `object_text_addresses` and symbols/relocations follow the
+  same set.
+- **Image.** Survivors keep their layout addresses and are written at those
+  addresses; a named section remains its own `.kex` section. With no named
+  section and GC off, the image is byte-identical (see below).
+
+**Proof — the synthetic two-function input** (`.text` `_start` calls `used`;
+`used` in `.text.used`; `unused` in `.text.unused`), assembled with
+`krc --target=kr16 --emit-object`, then:
+
+```text
+krld sections.kro -o all.kex              -> linked 1 object(s) ... (entry 256)
+krld sections.kro --gc-sections -o gc.kex -> linked 1 object(s) ... (entry 256)
+
+all.kex  sections=4  size=249
+  .text         addr=0x100 size=8
+  .debug_str    addr=0x0   size=41
+  .text.unused  addr=0x108 size=4
+  .text.used    addr=0x10C size=4
+
+gc.kex   sections=3  size=200
+  .text         addr=0x100 size=8
+  .debug_str    addr=0x0   size=28
+  .text.used    addr=0x108 size=4
+```
+
+`gc.kex` has no `.text.unused` and is 49 bytes smaller; `all.kex` still carries
+both function sections. The unit test
+`tests/unit/test_kr16_sections.cpp` asserts the same at the API level: the
+assembler's section ids (3 and 4), the object's three text sections, the GC link
+without `.text.unused`, and the survivors' addresses `0x100`/`0x108`.
+
+**Existing images stay identical.** A `hello.c` object and `crt0.s` object were
+built and linked with the immediately previous toolchain (the 4.15 installed
+prefix at `%TEMP%\krc-4.15`) and with this tree; both images hash to
+`BEFCF35150620865360105A62FBD17F63805E6C892DDCC1422CADDE347F1F902` (SHA-256),
+and the Windows suite's double-build determinism test stays green. The image
+writer lays the sections out in the same text/data/bss order at the same
+addresses as before when there are no named sections.
+
+**No kr16 edit.** `kr16/resources/libc.s` and `resources/fileio.c` were not
+touched; the split into function sections is kr16's once this lands. 4.17 was
+not started.
+
+**Gate (revision `5983f90`):** `windows-msvc-debug` 915/915,
+`windows-msvc-release` 915/915, `linux-gcc-debug` 719/719,
+`linux-gcc-release` 719/719, `linux-clang-debug` 719/719,
+`linux-sanitize` 719/719. The record is the newest `## Gate verification` block
+in `implementation.md`.
+
+**Commit:** `5983f90` (`Add KR16 function sections and section-level GC`). The
+required rebase onto the tester's `57232f0` rewrote the unpublished commit; the
+content is unchanged.
+
+**Blocker:** none.

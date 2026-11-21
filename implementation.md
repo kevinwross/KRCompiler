@@ -497,6 +497,27 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-20T22:12:00-08:00 — boundary matrix (Windows + WSL)
+Revision: 5983f90
+
+```
+windows-msvc-debug    PASS 915/915
+windows-msvc-release  PASS 915/915
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for 4.16, function sections and section-level `--gc-sections`, which
+change the KR16 assembler, object writer, linker and image path. Rows ran one at
+a time; the Windows debug row's tests started at 22:12 per
+`Testing/Temporary/LastTest.log` and the release row at 22:16. Counts are
+unchanged; the new assertions live inside `krc_tests`. The sanitizer row was the
+outlier at 483 s. The section-drop and byte-identity evidence is in
+`docs/adopt-krc-log.md`.
+
 2026-11-20T14:17:00-08:00 — boundary matrix (Windows + WSL)
 Revision: 57182f6
 
@@ -7196,3 +7217,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T13:37:22-08:00** — **4.13 lands at `7dc7477`: krc understands KR16's `__host_call`, so the shipped `resources/fileio.c` builds unmodified.** A constant service in 0..255 lowers to the block pointer in R0, `SYS #service`, and a status load from the block, matching kr16's own compiler; the shipped `libc.s`, `fileio.c` and `tests/kevin/fileio.c` now link and run to exit 0 under the VM with a filesystem root. Two gated tests cover it; the Windows matrix is 915/915 and the Linux rows 719/719 (the gated tests need the sibling checkout and VM). This unblocks kr16's stage A. The record is [docs/adopt-krc-log.md](adopt-krc-log.md).
 
 - **2026-11-20T14:06:31-08:00** — **4.14 lands at `eb202e2`: `cmake --install` now writes `bin/krc` and `bin/krld` beside the libraries and the sysroot.** The tools are not exported as CMake targets; an installed `krc` is given `--sysroot <prefix>/share/krc/sysroot` (the package's `KRC_SYSROOT`) because its compiled-in default is the build-stage path. A scratch prefix was installed, moved and the original deleted; with `PATH` limited to the install's `bin`, the installed `krc` compiled a `.c` and the installed `krld` linked a 1,277,518-byte image that ran under the VM. The matrix is 915/915 on Windows and 719/719 on Linux, unchanged from 4.13. Full record: [docs/adopt-krc-log.md](adopt-krc-log.md).
+
+- **2026-11-20T22:37:47-08:00** — **4.16 lands at `5983f90`: KR16 `.section .text.<name>` and section-level `--gc-sections`.** The assembler keeps named text section ids on labels/relocations/listings; the object emits them after `.text`; the linker's GC walk is over sections rooted at the entry, so an unreferenced function section is dropped before layout. Synthetic two-function proof: without GC the image has `.text.used` and `.text.unused` (249 B), with GC only `.text.used` (200 B). A `hello` image is byte-identical to the 4.15 toolchain's (`BEFCF3…F902`). kr16's runtime was not edited and 4.17 was not started. Full record: [docs/adopt-krc-log.md](adopt-krc-log.md).
