@@ -3,7 +3,7 @@
 **Created:** 2026-11-20T03:19:09-08:00
 **Read by:** the ARM64 tester session on a Raspberry Pi.
 **Repository:** `https://github.com/kevinwross/KRCompiler` — the clone on the Pi.
-**Watch:** `master` and `adopt-krc`.
+**Watch:** `master`.
 **You are:** the single ARM64 tester for this repository.
 
 ---

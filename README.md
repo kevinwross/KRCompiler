@@ -72,3 +72,7 @@ krld path/to/file.kro ... -o path/to/image.k32
 - [docs/ir.md](docs/ir.md)
 - [docs/attributes.md](docs/attributes.md)
 - [docs/targets/kr32.md](docs/targets/kr32.md), [kr16.md](docs/targets/kr16.md), [kr64.md](docs/targets/kr64.md)
+
+**Branches.** `master` is the shipped line: stage A of the toolchain adoption and
+KDBG v1.1 are merged into it. `adopt-krc` and `kdbg-v1-1` remain as history (and
+as the revisions consumers pin) but are not where new work lands.
