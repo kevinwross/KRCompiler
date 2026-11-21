@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <limits>
@@ -775,12 +776,87 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
         } else if (tag == "C") {
             std::string name;
             std::uint32_t size = 0;
+            std::string base;
             stream >> name >> size;
+            stream >> base;
             auto& type = ensure_type(name, size, "struct");
             type.kind = "struct";
             if (type.size == 0) {
                 type.size = size;
             }
+            if (!base.empty() && base != "-") {
+                type.base = base;
+            }
+        } else if (tag == "P") {
+            // A register-held variable over a half-open range. The spelling is
+            // KR32's; no krc path emits one until promotion lands (ADR 0052).
+            debug::KdbgLocation location;
+            std::string reg;
+            std::string start_label;
+            std::string end_label;
+            stream >> location.function >> location.name >> reg >> start_label >>
+                end_label;
+            const auto start_found = symbols.find(start_label);
+            const auto end_found = symbols.find(end_label);
+            if (!reg.empty() && start_found != symbols.end() &&
+                end_found != symbols.end()) {
+                location.fp = reg[0] == 'F' || reg[0] == 'f';
+                location.reg = static_cast<std::uint16_t>(
+                    std::strtoul(reg.c_str() + 1, nullptr, 10));
+                location.start = start_found->second;
+                location.end = end_found->second;
+                kdbg.locations.push_back(std::move(location));
+            }
+        } else if (tag == "K") {
+            debug::KdbgScope scope;
+            std::string parent;
+            std::string start_label;
+            std::string end_label;
+            stream >> scope.function >> scope.name >> parent >> start_label >>
+                end_label;
+            const auto start_found = symbols.find(start_label);
+            const auto end_found = symbols.find(end_label);
+            if (start_found != symbols.end() && end_found != symbols.end()) {
+                if (parent != "-") {
+                    scope.parent = parent;
+                }
+                scope.start = start_found->second;
+                scope.end = end_found->second;
+                kdbg.scopes.push_back(std::move(scope));
+            }
+        } else if (tag == "W") {
+            debug::KdbgVarInfo info;
+            std::string kind;
+            std::string scope;
+            std::string flags;
+            stream >> info.function >> info.name >> kind >> scope >> flags;
+            if (kind == "param" || kind == "local" || kind == "static") {
+                info.kind = kind == "param" ? debug::KdbgVariableKind::Parameter
+                            : kind == "static" ? debug::KdbgVariableKind::Static
+                                               : debug::KdbgVariableKind::Local;
+                if (scope != "-") {
+                    info.scope = scope;
+                }
+                info.flags = static_cast<std::uint16_t>(
+                    std::strtoul(flags.c_str(), nullptr, 0));
+                kdbg.variable_info.push_back(std::move(info));
+            }
+        } else if (tag == "A") {
+            std::string name;
+            std::string element;
+            std::uint32_t count = 0;
+            stream >> name >> element >> count;
+            auto& type = ensure_type(name, 0, "array");
+            type.kind = "array";
+            type.element = element;
+            type.element_count = count;
+        } else if (tag == "R") {
+            std::string name;
+            std::string target;
+            stream >> name >> target;
+            auto& type = ensure_type(name, 0, "pointer");
+            type.kind = "pointer";
+            type.target = target;
         } else if (tag == "M") {
             std::string type_name;
             debug::KdbgMember member;

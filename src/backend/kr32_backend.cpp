@@ -805,8 +805,21 @@ void Kr32Backend::add_debug_type(ir::TypePtr type) const {
         return;
     }
     debug_info_ += "T " + name + " " + std::to_string(size) + std::string(1, '\0');
+    const auto name_of = [](ir::TypePtr value) {
+        auto text = type_to_string(value);
+        text.erase(std::remove(text.begin(), text.end(), '%'), text.end());
+        std::replace(text.begin(), text.end(), ' ', '_');
+        return text;
+    };
     if (type->kind == ir::TypeKind::Struct) {
+        // The base field has always existed in the C record; it is written now,
+        // with `-` for a type that has no base (docs/symbols.md v1.1). Emit the
+        // base's own record first so a reader can follow the name.
+        if (type->base_type) {
+            add_debug_type(type->base_type);
+        }
         debug_info_ += "C " + name + " " + std::to_string(size) + " " +
+                       (type->base.empty() ? "-" : type->base) +
                        std::string(1, '\0');
         std::uint64_t offset = 0;
         for (std::size_t index = 0; index < type->fields.size(); ++index) {
@@ -836,8 +849,12 @@ void Kr32Backend::add_debug_type(ir::TypePtr type) const {
         }
     } else if (type->kind == ir::TypeKind::Array) {
         add_debug_type(type->element);
+        debug_info_ += "A " + name + " " + name_of(type->element) + " " +
+                       std::to_string(type->count) + std::string(1, '\0');
     } else if (type->kind == ir::TypeKind::Pointer) {
         add_debug_type(type->element);
+        debug_info_ += "R " + name + " " + name_of(type->element) +
+                       std::string(1, '\0');
     }
 }
 
@@ -1433,6 +1450,11 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                        std::replace(result.begin(), result.end(), ' ', '_');
                        return result;
                    }() + std::string(1, '\0');
+    // The function scope. `W` records name it as the scope of its variables;
+    // `-` marks the function-level scope, which has no parent. v1.1.
+    debug_info_ += "K " + function.name + " " + function.name + " - " +
+                   function.name + " .L" + function.name + ".end" +
+                   std::string(1, '\0');
     std::unordered_set<std::string> debug_variable_names;
     for (const auto& parameter : function.parameters) {
         const auto slot = layout.slots.find(parameter.get());
@@ -1455,6 +1477,8 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
         debug_info_ += "V " + function.name + " " + parameter->name + " " +
                        std::to_string(slot->second) + " " + parameter_type + " " +
                        std::to_string(size) + std::string(1, '\0');
+        debug_info_ += "W " + function.name + " " + parameter->name + " param " +
+                       function.name + " 0x0" + std::string(1, '\0');
     }
     std::unordered_set<std::string> parameter_names;
     for (const auto& parameter : function.parameters) {
@@ -1498,6 +1522,8 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
             debug_info_ += "V " + function.name + " " + name + " " +
                            std::to_string(object->second) + " " + variable_type + " " +
                            std::to_string(size) + std::string(1, '\0');
+            debug_info_ += "W " + function.name + " " + name + " local " +
+                           function.name + " 0x0" + std::string(1, '\0');
         }
     }
 

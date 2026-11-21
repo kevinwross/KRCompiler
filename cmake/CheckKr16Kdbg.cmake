@@ -29,6 +29,8 @@ endif()
 # the text form.
 foreach(needle IN ITEMS
         "\"target\":2"
+        "\"minor\":1"
+        "\"variableInfo\":"
         "kr16_sum.c"
         "\"name\":\"sum_to\"")
     string(FIND "${json}" "${needle}" position)
@@ -39,10 +41,13 @@ endforeach()
 
 foreach(needle IN ITEMS
         "KDBG target=2"
+        "minor=1"
         "source 0 "
         "line 0x"
         "function sum_to "
-        "variable sum_to.total ")
+        "variable sum_to.total "
+        "varinfo sum_to.total kind=local"
+        "scope sum_to:sum_to ")
     string(FIND "${text}" "${needle}" position)
     if(position EQUAL -1)
         message(FATAL_ERROR "text dump is missing '${needle}'")

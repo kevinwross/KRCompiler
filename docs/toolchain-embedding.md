@@ -154,3 +154,10 @@ locates `.kdbg` in a `.k32` or `.kex` and reports the container's load base;
 `decode_kdbg_image` finds, decodes and rejects a payload whose recorded image
 base differs from that base. `encode_kdbg`, `decode_kdbg` and the text/JSON
 dumpers work on bytes and need no toolchain library.
+
+`KdbgImage::minor_version` is `1` for a payload this writer produces and `0` for
+a v1 payload; a decoder accepts both, and the v1.1 fields (`locations`, `scopes`,
+`variable_info`, and a type's `base`/`element`/`element_count`/`target`) are
+empty for a v1 payload. `require_kdbg_feature` reports "newer KDBG" when a caller
+needs a v1.1 fact from a payload this reader cannot interpret, rather than
+guessing. The JSON schema is in [symbols.md](symbols.md).

@@ -283,7 +283,8 @@ TypePtr TypeContext::struct_forward(std::string name) {
 }
 
 bool TypeContext::complete_struct(TypePtr type, std::vector<TypePtr> fields,
-                                  std::vector<std::string> field_names, bool packed) {
+                                  std::vector<std::string> field_names, bool packed,
+                                  std::string base, TypePtr base_type) {
     if (!type || type->kind != TypeKind::Struct) {
         return false;
     }
@@ -294,6 +295,8 @@ bool TypeContext::complete_struct(TypePtr type, std::vector<TypePtr> fields,
     mutable_type->fields = std::move(fields);
     mutable_type->field_names = std::move(field_names);
     mutable_type->packed = packed;
+    mutable_type->base = std::move(base);
+    mutable_type->base_type = base_type;
     return true;
 }
 

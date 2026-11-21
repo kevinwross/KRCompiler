@@ -585,6 +585,33 @@ The 4.13 runtime check is recorded in `docs/adopt-krc-log.md`: the shipped
 `resources/fileio.c`, `tests/kevin/fileio.c` and `resources/libc.s` build with krc,
 link into a `.kex`, and run to exit 0 under the KR16 VM with a filesystem root.
 The ARM64 row is the tester's log entry, not re-run here.
+2026-11-20T12:37:43-08:00 — boundary matrix (Windows + WSL)
+Revision: ddae511
+
+```
+windows-msvc-debug    PASS 913/913
+windows-msvc-release  PASS 913/913
+linux-gcc-debug       PASS 719/719
+linux-gcc-release     PASS 719/719
+linux-clang-debug     PASS 719/719
+linux-sanitize        PASS 719/719
+not verified: native Linux x64, Linux ARM64
+```
+
+Tier 2 for KDBG v1.1, which changes the symbol/debug format, the IR's debug
+metadata, both backends and the linker's bridge parser. Rows are incremental and
+were run one at a time in the order listed. The Windows configure resolves both
+VMs and registers 913 tests; the Linux configure registers 719 and starts no VM.
+The only diagnostic was the vendored doctest `<ciso646>` warning on Clang. No row
+was re-run after a failure; the sanitizer row is the outlier at 472 s of tests.
+
+The compatibility rows are not presets and are recorded in
+`docs/kdbg-v1-1-log.md`: the test-side v1 reader decodes a v1.1 payload and sees
+only the v1 records; KR32's `debug` on a v1.1-built `.k32` exits 0 and prints its
+sources and functions; both `krc --dump-symbols` forms print the new fields. The
+rows cover the tree committed as `ddae511`. The ARM64 row is the tester's
+`docs/arm64-test-log.md` entry for the tested SHA, not re-run here. The timestamp
+is the modification time of the Windows debug row's rebuilt `krc-toolchain.lib`.
 
 2026-11-20T10:27:20-08:00 — boundary matrix (Windows + WSL)
 Revision: b680815
@@ -7221,3 +7248,6 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T22:37:47-08:00** — **4.16 lands at `5983f90`: KR16 `.section .text.<name>` and section-level `--gc-sections`.** The assembler keeps named text section ids on labels/relocations/listings; the object emits them after `.text`; the linker's GC walk is over sections rooted at the entry, so an unreferenced function section is dropped before layout. Synthetic two-function proof: without GC the image has `.text.used` and `.text.unused` (249 B), with GC only `.text.used` (200 B). A `hello` image is byte-identical to the 4.15 toolchain's (`BEFCF3…F902`). kr16's runtime was not edited and 4.17 was not started. Full record: [docs/adopt-krc-log.md](adopt-krc-log.md).
 
 - **2026-11-20T23:04:47-08:00** — **The release version is `0.2.0`, and the installed package reports it.** `project(KRCompiler VERSION 0.2.0)` and `include/krc/version.h` agree, so `krc --version`/`krld --version` print `0.2.0`; each package config now installs a `write_basic_package_version_file` result, so `find_package(krc-toolchain 0.2.0)` succeeds and `krc-toolchain_VERSION` is `0.2.0`. The install check ran the installed tools and a versioned scratch consumer; Windows debug is 915/915. The matrix was not re-run for metadata.
+- **2026-11-20T11:17:21-08:00** — **KDBG v1.1 (branch `kdbg-v1-1`) has its format design and no code yet.** `docs/symbols.md` now fixes the additive bridge letters (`P`, `K`, `W`, `A`, `R`, with `C`'s existing base field written) and the v1.1 tags (`Location` 9, `Scope` 10, `VarInfo` 11, `Base` 12, `ArrayType` 13, `TypeRef` 14, and the 64-bit `Line64`/`Function64`/`Symbol64`/`Location64` 15–18), the minor `1.1` rule and the compatibility rules. K1's emission half is blocked on a plan premise: no source variable is register-held with promotion and slot reuse off (`layout_function` reserves every parameter and alloca slot; `keep_local_allocations` skips allocas and has no parameters; `docs/plan-o1-debugger.md:42-45` says so), so a `P` record has no honest producer yet. The options and evidence are in [docs/kdbg-v1-1-log.md](kdbg-v1-1-log.md); the design is committed for review.
+
+- **2026-11-20T13:08:33-08:00** — **KDBG v1.1 lands on `kdbg-v1-1` at `ddae511`: additive new bridge letters and KDBG tags, minor `1`, both dumpers, and the compatibility rows.** The bridge gains `P/K/W/A/R` plus `C`'s existing base field; KDBG gains `Location` 9 in `.kdbg_loc`, `Scope` 10 in `.kdbg_scope`, `VarInfo` 11, `Base` 12, `ArrayType` 13, `TypeRef` 14 and 64-bit `Line64`/`Function64`/`Symbol64`/`Location64` 15–18. No v1 record is resized, and promotion/slot reuse and the allocator were not touched. A test-side v1 reader decodes a v1.1 payload and sees only the v1 records; KR32's `debug` exits 0 on a v1.1-built `.k32`; text and JSON print the new fields. The full record is [docs/kdbg-v1-1-log.md](kdbg-v1-1-log.md); the matrix at `ddae511` is the newest `## Gate verification` block.

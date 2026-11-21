@@ -1160,9 +1160,15 @@ ir::TypePtr CIRGen::map_record(const frontend::RecordInfo& record) {
         fields.push_back(module_->types().pointer_type(module_->types().int_type(8)));
         field_names.push_back("vptr");
     }
+    std::string base_name;
+    ir::TypePtr base_ir_type = nullptr;
     if (record.base && record.base->kind == frontend::TypeKind::Record &&
         record.base->record) {
         const auto base_type = map_record(*record.base->record);
+        if (base_type) {
+            base_name = base_type->name;
+            base_ir_type = base_type;
+        }
         for (std::size_t index = 0; base_type && index < base_type->fields.size(); ++index) {
             fields.push_back(base_type->fields[index]);
             field_names.push_back(index < base_type->field_names.size()
@@ -1178,7 +1184,7 @@ ir::TypePtr CIRGen::map_record(const frontend::RecordInfo& record) {
         field_names.push_back(member.name);
     }
     if (!module_->types().complete_struct(forward, std::move(fields), std::move(field_names),
-                                          false)) {
+                                          false, std::move(base_name), base_ir_type)) {
         error(frontend::SourceLocation{}, "cannot complete struct type '" + name + "'");
     }
     return forward;
