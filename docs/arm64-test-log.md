@@ -159,3 +159,22 @@ configure step here; they do not add a test of their own. No disturbance, no ret
 `test_toolchain` case alongside. Line tables are debug-only, so the compile-and-run rows are the ones that
 show the fix did not disturb code generation: all 915 passed, executed images included. Count is unchanged
 at 915 because the new case lives inside an existing binary. No disturbance, no retry.
+
+## 2026-11-20T22:47:54-08:00 — adopt-krc @ d2be672
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: b2d12dc..d2be672, 2 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, 1 s (`tests/CMakeLists.txt` changed; VM paths retained)
+- Build: linux-gcc-debug — ok, 49 s, 23 targets
+- Test: linux-gcc-debug — 915/915 passed, 386 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+`5983f90` adds KR16 function sections and section-level GC across `src/asm/kr16_object.cpp`,
+`src/linker/linker.cpp` and the assembler, with a new `test_kr16_sections` unit file and
+`krc_link_kr16_gc_sections` / `krc_run_kr16_gc_sections` coverage. All 915 passed, but the suite took
+386 s against a 265–274 s band on the previous nine runs of this preset: the added time sits almost
+entirely in the link and run tests (their summed time 251.6 s → 358.9 s, +43%), spread across every test
+rather than concentrated in one outlier. That is consistent with the linker doing section-level GC on
+each link, but I did not trace it, so treat it as an unexplained slowdown rather than a confirmed cost.
