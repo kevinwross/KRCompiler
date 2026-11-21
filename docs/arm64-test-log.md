@@ -178,3 +178,18 @@ at 915 because the new case lives inside an existing binary. No disturbance, no 
 entirely in the link and run tests (their summed time 251.6 s → 358.9 s, +43%), spread across every test
 rather than concentrated in one outlier. That is consistent with the linker doing section-level GC on
 each link, but I did not trace it, so treat it as an unexplained slowdown rather than a confirmed cost.
+
+## 2026-11-20T23:14:48-08:00 — adopt-krc @ 75aee3b
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: d2be672..75aee3b, 1 commit
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, 1 s (`CMakeLists.txt` and `tests/CMakeLists.txt` changed; VM paths retained)
+- Build: linux-gcc-debug — ok, 16 s, 7 targets
+- Test: linux-gcc-debug — 915/915 passed, 270 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+`75aee3b` releases 0.2.0 and versions the package configs. The suite is back in its usual band at 270 s;
+the 386 s recorded for `d2be672` did not persist across this SHA, so that slowdown was not a lasting cost of
+the section-level GC and I am leaving it as an unexplained one-off rather than reopening it.
