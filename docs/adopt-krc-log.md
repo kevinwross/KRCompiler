@@ -889,3 +889,45 @@ required rebase onto the tester's `57232f0` rewrote the unpublished commit; the
 content is unchanged.
 
 **Blocker:** none.
+
+## 2026-11-20T23:04:47-08:00
+
+**Changed:** the release version is `0.2.0` everywhere the package reports it.
+
+- `project(KRCompiler VERSION 0.2.0)` replaces `0.1.0`.
+- `include/krc/version.h` matches, so `krc --version` and `krld --version` print
+  `0.2.0`.
+- The package config now installs a version file for each package:
+  `write_basic_package_version_file(... VERSION "${PROJECT_VERSION}"
+  COMPATIBILITY SameMajorVersion)`, installed as
+  `krc-toolchain-config-version.cmake` and `krc-debug-config-version.cmake`
+  beside the configs. `find_package` therefore reports a version instead of an
+  empty string.
+- The two CLI version tests now expect `0.2.0` (they asserted `0.1.0`); no other
+  test changed.
+
+**Install check, version visible.** Installed to a scratch prefix
+`%TEMP%\krc-0.2.0` and ran the installed tools:
+
+```text
+krc 0.2.0
+krld 0.2.0
+```
+
+The installed version file contains `set(PACKAGE_VERSION "0.2.0")`. A scratch
+consumer configured with `-DCMAKE_PREFIX_PATH=<prefix>` and
+`find_package(krc-toolchain 0.2.0 CONFIG REQUIRED)` printed:
+
+```text
+-- krc-toolchain_VERSION=0.2.0
+-- KRC_SYSROOT=C:/Users/kevin/AppData/Local/Temp/krc-0.2.0/share/krc/sysroot
+-- Configuring done (0.6s)
+```
+
+and built and ran a host program linked to `krc::toolchain` (exit 0).
+
+**Tests:** `windows-msvc-debug` 915/915. The release version is metadata and a
+header constant; the full boundary matrix was not re-run for it.
+
+**Blocker:** none. 4.17 remains tracked and not started; it waits for kr16's
+post-split C-for-U measurement.

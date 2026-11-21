@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(KRCompiler VERSION 0.1.0 LANGUAGES CXX)
+project(KRCompiler VERSION 0.2.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -323,7 +323,14 @@ foreach(package IN ITEMS krc-toolchain krc-debug)
         "${CMAKE_CURRENT_BINARY_DIR}/${package}-config.cmake"
         INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${package}"
     )
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${package}-config.cmake"
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/${package}-config-version.cmake"
+        VERSION "${PROJECT_VERSION}"
+        COMPATIBILITY SameMajorVersion
+    )
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/${package}-config.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/${package}-config-version.cmake"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${package}"
     )
 endforeach()

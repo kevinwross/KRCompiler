@@ -64,7 +64,7 @@ add_test(NAME krc_tree_boundary
 
 if(TARGET krc)
     add_test(NAME krc_version COMMAND $<TARGET_FILE:krc> --version)
-    set_tests_properties(krc_version PROPERTIES PASS_REGULAR_EXPRESSION "krc 0\\.1\\.0")
+    set_tests_properties(krc_version PROPERTIES PASS_REGULAR_EXPRESSION "krc 0\\.2\\.0")
 
     # 4.10: a krc-built `.kex` decodes through the CLI with sources, lines,
     # functions and a variable, and the payload records the image base.
@@ -6289,7 +6289,7 @@ endif()
 
 if(TARGET krld)
     add_test(NAME krld_version COMMAND $<TARGET_FILE:krld> --version)
-    set_tests_properties(krld_version PROPERTIES PASS_REGULAR_EXPRESSION "krld 0\\.1\\.0")
+    set_tests_properties(krld_version PROPERTIES PASS_REGULAR_EXPRESSION "krld 0\\.2\\.0")
 endif()
 
 # A record's layout must be one number everywhere it is measured: sizeof of a type
