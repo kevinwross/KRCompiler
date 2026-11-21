@@ -497,6 +497,24 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-21T06:38:00-08:00 — host gate (Windows + WSL)
+Revision: 2ee0eb3
+
+```
+windows-msvc-debug    PASS 915/915
+linux-gcc-debug       PASS 719/719
+not verified: windows-msvc-release, linux-gcc-release, linux-clang-debug, linux-sanitize, native Linux x64, Linux ARM64
+```
+
+The first gate on `master` after the fast-forward to `adopt-krc` (`0e7251e`) and
+the `kdbg-v1-1` merge (`4d6159b`). The merge conflict was `implementation.md`
+only, resolved as the union of both sides' gate blocks and dated entries. Windows
+registers 915 tests (including the two shipped-fileio rows); Linux registers 719
+because those two need the sibling kr16 sources and the VM. Counts are unchanged
+from the pre-merge rows. The two requested rows ran one at a time; the release,
+Clang and sanitizer rows were not re-run for the merge. The timestamp is the
+Windows debug row's test start from `Testing/Temporary/LastTest.log`.
+
 2026-11-20T22:12:00-08:00 — boundary matrix (Windows + WSL)
 Revision: 5983f90
 
@@ -7251,3 +7269,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-20T11:17:21-08:00** — **KDBG v1.1 (branch `kdbg-v1-1`) has its format design and no code yet.** `docs/symbols.md` now fixes the additive bridge letters (`P`, `K`, `W`, `A`, `R`, with `C`'s existing base field written) and the v1.1 tags (`Location` 9, `Scope` 10, `VarInfo` 11, `Base` 12, `ArrayType` 13, `TypeRef` 14, and the 64-bit `Line64`/`Function64`/`Symbol64`/`Location64` 15–18), the minor `1.1` rule and the compatibility rules. K1's emission half is blocked on a plan premise: no source variable is register-held with promotion and slot reuse off (`layout_function` reserves every parameter and alloca slot; `keep_local_allocations` skips allocas and has no parameters; `docs/plan-o1-debugger.md:42-45` says so), so a `P` record has no honest producer yet. The options and evidence are in [docs/kdbg-v1-1-log.md](kdbg-v1-1-log.md); the design is committed for review.
 
 - **2026-11-20T13:08:33-08:00** — **KDBG v1.1 lands on `kdbg-v1-1` at `ddae511`: additive new bridge letters and KDBG tags, minor `1`, both dumpers, and the compatibility rows.** The bridge gains `P/K/W/A/R` plus `C`'s existing base field; KDBG gains `Location` 9 in `.kdbg_loc`, `Scope` 10 in `.kdbg_scope`, `VarInfo` 11, `Base` 12, `ArrayType` 13, `TypeRef` 14 and 64-bit `Line64`/`Function64`/`Symbol64`/`Location64` 15–18. No v1 record is resized, and promotion/slot reuse and the allocator were not touched. A test-side v1 reader decodes a v1.1 payload and sees only the v1 records; KR32's `debug` exits 0 on a v1.1-built `.k32`; text and JSON print the new fields. The full record is [docs/kdbg-v1-1-log.md](kdbg-v1-1-log.md); the matrix at `ddae511` is the newest `## Gate verification` block.
+
+- **2026-11-21T06:38:00-08:00** — **`master` is the shipped line.** `adopt-krc` fast-forwarded `master` from `9423768` to `0e7251e` (42 commits), then `kdbg-v1-1` merged as `4d6159b`; the only conflict was `implementation.md`, resolved by keeping both sides' gate blocks and dated entries. The post-merge gate on `2ee0eb3` is **`windows-msvc-debug` 915/915** and **`linux-gcc-debug` 719/719**; the release, Clang and sanitizer rows were not re-run. `AGENTS.local.md`, the README and `docs/arm64-tester.md` now name `master`; `adopt-krc` and `kdbg-v1-1` remain as history and consumer pins.
