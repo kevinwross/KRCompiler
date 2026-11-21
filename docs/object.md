@@ -129,6 +129,15 @@ address space is 64 KiB and whose merged `.debug_info` exceeds it.
 A `.bss` section is NOBITS: the section table carries its size, it has no file
 payload, and the loader zero-fills the range. `__heap_start` is aligned to 8 on
 KR32 and to the 2-byte word on KR16, matching `kr16`'s linker.
+
+A KR16 object can carry named executable sections (`.text.<name>`, from the
+assembler's `.section` directive) alongside the base `.text`. The linker keeps
+each name as its own output section, lays text sections out together in name
+order after `.text`, and with `--gc-sections` drops a section that no reachable
+section relocates to. Survivors keep their assigned addresses; an image built
+without GC and without named sections is byte-identical to one from before the
+directive existed.
+
 A `.kex` carries the `.kdbg` payload beside its text and string table as an
 unallocated debug section; the payload records the image base at KDBG header
 offset 56 (docs/symbols.md).

@@ -651,15 +651,32 @@ bool assemble(std::string_view source, AssemblyResult& result,
         }
         return (value + alignment - 1) / alignment * alignment;
     };
-    const auto section_name = [](std::uint32_t section) -> std::string_view {
-        switch (section) {
-        case kData:
-            return ".data";
-        case kBss:
-            return ".bss";
-        default:
-            return ".text";
+    // Section ids: the three fixed sections first, then `.section .text.<name>`
+    // sections in first-use order. Labels, relocations and listing rows carry the
+    // id, so a named section keeps its identity through the object.
+    std::vector<std::string> section_names{".text", ".data", ".bss"};
+    std::vector<std::uint32_t> section_types{0, 1, 2};
+    std::map<std::string, std::uint32_t> named_sections;
+    const auto ensure_section = [&](const std::string& name) -> std::uint32_t {
+        const auto found = named_sections.find(name);
+        if (found != named_sections.end()) {
+            return found->second;
         }
+        const auto id = static_cast<std::uint32_t>(section_names.size());
+        section_names.push_back(name);
+        section_types.push_back(0);
+        named_sections.emplace(name, id);
+        return id;
+    };
+    const auto section_name = [&](std::uint32_t section) -> const std::string& {
+        return section_names[section];
+    };
+    const auto valid_section_name = [](std::string_view name) {
+        return std::all_of(name.begin(), name.end(), [](char character) {
+            return std::isalnum(static_cast<unsigned char>(character)) != 0 ||
+                   character == '_' || character == '.' || character == '$' ||
+                   character == '-';
+        });
     };
 
     std::vector<Line> lines;
@@ -707,6 +724,17 @@ bool assemble(std::string_view source, AssemblyResult& result,
             if (name == ".text") {
                 section = kText;
                 note_section();
+            } else if (name == ".section") {
+                std::string target;
+                directive >> target;
+                if (target.rfind(".text.", 0) != 0 || target.size() <= 6 ||
+                    !valid_section_name(target)) {
+                    error = "unsupported section '" + target + "' on line " +
+                            std::to_string(line_number) +
+                            " (expected .section .text.<name>)";
+                    return false;
+                }
+                section = ensure_section(target);
             } else if (name == ".data") {
                 section = kData;
                 note_section();
@@ -827,14 +855,12 @@ bool assemble(std::string_view source, AssemblyResult& result,
     // of `.bss` resolve to the end of `.bss` rather than to `.text`'s origin.
     struct Layout {
         std::vector<std::uint64_t> offsets;
-        std::uint64_t sizes[3] = {0, 0, 0};
+        std::vector<std::uint64_t> sizes;
         std::map<std::string, std::uint64_t> label_addresses;
     };
     const auto compute_layout = [&](Layout& layout) -> bool {
         layout.offsets.assign(lines.size(), 0);
-        layout.sizes[kText] = 0;
-        layout.sizes[kData] = 0;
-        layout.sizes[kBss] = 0;
+        layout.sizes.assign(section_names.size(), 0);
         layout.label_addresses.clear();
         std::map<std::size_t, std::vector<std::string>> at;
         for (const auto& entry : label_positions) {
@@ -930,16 +956,18 @@ bool assemble(std::string_view source, AssemblyResult& result,
     result.text.clear();
     result.data.clear();
     result.bss_size = 0;
+    result.sections.clear();
     result.relocations.clear();
     result.symbols.clear();
     result.listing.clear();
     result.listing.reserve(lines.size());
+    std::vector<std::vector<std::uint8_t>> section_bytes(section_names.size());
     for (std::size_t index = 0; index < lines.size(); ++index) {
         const auto& line = lines[index];
         const auto line_section = line.section;
         const auto offset = layout.offsets[index];
         const bool nobits = line_section == kBss;
-        auto& bytes = line_section == kData ? result.data : result.text;
+        auto& bytes = section_bytes[line_section];
         const auto start = bytes.size();
 
         if (line.mnemonic == ".align") {
@@ -1018,7 +1046,21 @@ bool assemble(std::string_view source, AssemblyResult& result,
         }
         result.listing.push_back(std::move(row));
     }
-    result.bss_size = layout.sizes[kBss];
+    result.sections.reserve(section_names.size());
+    for (std::size_t index = 0; index < section_names.size(); ++index) {
+        AssembledSection assembled_section;
+        assembled_section.name = section_names[index];
+        assembled_section.type = section_types[index];
+        assembled_section.size = layout.sizes[index];
+        assembled_section.data = std::move(section_bytes[index]);
+        assembled_section.present =
+            index == kText || !assembled_section.data.empty() ||
+            assembled_section.size > 0;
+        result.sections.push_back(std::move(assembled_section));
+    }
+    result.text = result.sections[kText].data;
+    result.data = result.sections[kData].data;
+    result.bss_size = result.sections[kBss].size;
 
     for (const auto& entry : labels) {
         const bool global = std::find(globals.begin(), globals.end(),

@@ -16,6 +16,7 @@ add_executable(krc_tests
     unit/test_kr16_assembler.cpp
     unit/test_kr16_image.cpp
     unit/test_kr16_object.cpp
+    unit/test_kr16_sections.cpp
     unit/test_assembler.cpp
     unit/test_register_allocator.cpp
     unit/test_kro_object.cpp

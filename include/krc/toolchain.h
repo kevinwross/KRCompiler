@@ -104,7 +104,9 @@ struct Options {
     // Applied by the linker's source-path rewrite before KDBG is built. Empty
     // leaves the recorded paths unchanged.
     std::string source_root;
-    // Drop objects the entry symbol cannot reach (object granularity).
+    // Drop sections the entry symbol cannot reach (section granularity). A
+    // `.text.<name>` function section with no reference from a reachable
+    // section is removed before layout.
     bool gc_sections = false;
     // Section placements for the layout the host wants; empty uses the linker's
     // default packing.

@@ -26,6 +26,15 @@ struct AssembledRelocation {
     std::uint64_t offset = 0;
 };
 
+struct AssembledSection {
+    std::string name;
+    // 0 = text (exec), 1 = data, 2 = bss.
+    std::uint32_t type = 0;
+    std::vector<std::uint8_t> data;
+    std::uint64_t size = 0;
+    bool present = false;
+};
+
 struct AssemblyResult {
     std::vector<std::uint8_t> text;
     std::vector<std::uint8_t> data;
@@ -36,6 +45,11 @@ struct AssemblyResult {
     // label can live in an otherwise empty section.
     bool has_data = false;
     bool has_bss = false;
+    // Every section, in id order: `.text`, `.data`, `.bss`, then the
+    // `.section .text.<name>` sections in first-use order. `text` and `data`
+    // above are the first two entries, kept for callers that predate named
+    // sections.
+    std::vector<AssembledSection> sections;
     std::vector<AssembledSymbol> symbols;
     std::vector<AssembledRelocation> relocations;
     // One row per emitted statement, in source order. Addresses are relative to
