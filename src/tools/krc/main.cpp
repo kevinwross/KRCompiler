@@ -388,6 +388,19 @@ int main(int argc, char** argv) {
     options.dump_ast = dump_ast;
     options.dump_ir = dump_ir;
     options.dump_stats = dump_stats;
+    // A bare `krc --target=kr216 file.c` is a request to produce something, like
+    // the other targets' default paths: assembly on stdout, or an object when -o
+    // names a file. The old fall-through printed the front-end-only message after
+    // the backend existed.
+    if (target_id == krc::target::TargetId::Kr216 && options.stage == toolchain::Stage::Syntax &&
+        !syntax_only && !preprocess_only && !dump_ast && !dump_ir && !dump_stats) {
+        options.stage = toolchain::Stage::Assembly;
+        if (output_path.empty()) {
+            emit_assembly = true;
+        } else {
+            emit_object = true;
+        }
+    }
 
     toolchain::Options link_options = options;
     if (target_id == krc::target::TargetId::Kr16 ||

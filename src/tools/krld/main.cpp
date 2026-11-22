@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -23,6 +24,7 @@ void print_usage(std::ostream& out) {
         << "Usage: krld [options] objects... -o image\n"
         << "\n"
         << "Options:\n"
+        << "  --target=NAME          Target for .s inputs (kr32, kr16, kr64, kr216)\n"
         << "  --entry=NAME           Entry symbol (default _start)\n"
         << "  --base=ADDR            Image base (default 0x00010000)\n"
         << "  -o FILE                Output executable\n"
@@ -88,6 +90,7 @@ int main(int argc, char** argv) {
     std::string source_root;
     bool print_size = false;
     bool gc_sections = false;
+    std::optional<krc::target::TargetId> options_target;
     std::vector<std::string> inputs;
 
     for (int index = 1; index < argc; ++index) {
@@ -111,6 +114,17 @@ int main(int argc, char** argv) {
         if (argument.starts_with("--source-root=")) {
             source_root =
                 std::string(argument.substr(std::string_view("--source-root=").size()));
+            continue;
+        }
+        if (argument.starts_with("--target=")) {
+            const auto name =
+                argument.substr(std::string_view("--target=").size());
+            const auto parsed = krc::target::parse_target(name);
+            if (!parsed) {
+                std::cerr << "krld: unknown target '" << name << "'\n";
+                return 1;
+            }
+            options_target = *parsed;
             continue;
         }
         if (argument.starts_with("--entry=")) {
@@ -165,6 +179,14 @@ int main(int argc, char** argv) {
 
     toolchain::Options options;
     options.target = toolchain::Target::Kr32;
+    if (options_target) {
+        switch (*options_target) {
+        case krc::target::TargetId::Kr32: options.target = toolchain::Target::Kr32; break;
+        case krc::target::TargetId::Kr16: options.target = toolchain::Target::Kr16; break;
+        case krc::target::TargetId::Kr64: options.target = toolchain::Target::Kr64; break;
+        case krc::target::TargetId::Kr216: options.target = toolchain::Target::Kr216; break;
+        }
+    }
     options.base = base_set ? base : 0;
     options.entry = entry;
     options.gc_sections = gc_sections;

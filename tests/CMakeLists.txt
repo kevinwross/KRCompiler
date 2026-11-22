@@ -2037,10 +2037,12 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_debug_names PROPERTIES
             DEPENDS krc_link_debug_names)
+        file(MAKE_DIRECTORY "${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_root")
         add_test(NAME krc_run_div_and_vsprintf
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}
                     -DIMAGE=${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_linked.k32
+                    -DFS_ROOT=${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_root
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_div_and_vsprintf PROPERTIES

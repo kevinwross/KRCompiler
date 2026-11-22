@@ -432,6 +432,15 @@ TEST_CASE("kr216 resolves a branch label relative to the next instruction") {
     CHECK(program.bytes[2] == 0x71);
 }
 
+TEST_CASE("kr216 accepts CRLF assembly input") {
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text("nop\r\nret\r\n", program, error));
+    REQUIRE(program.bytes.size() == 2);
+    CHECK(program.bytes[0] == 0x71);
+    CHECK(program.bytes[1] == 0x70);
+}
+
 TEST_CASE("kr216 records global labels and accepts the text section") {
     AssembledProgram program;
     std::string error;

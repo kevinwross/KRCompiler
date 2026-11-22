@@ -5,8 +5,9 @@
 # suite. When no VM is configured the caller does not register these tests.
 #
 # Required: VM, IMAGE, EXPECT_EXIT
-# Optional: MAX_STEPS (default 20000000), EXPECT_OUTPUT (a regular expression
-#           matched against stdout; newlines became '|' before matching)
+# Optional: MAX_STEPS (default 20000000), FS_ROOT (the host filesystem sandbox
+#           root; without it the VM defaults to ./sandbox and an open fails),
+#           EXPECT_OUTPUT (a regular expression matched against stdout)
 
 if(NOT DEFINED VM OR NOT DEFINED IMAGE OR NOT DEFINED EXPECT_EXIT)
     message(FATAL_ERROR "VM, IMAGE, and EXPECT_EXIT are required")
@@ -21,8 +22,12 @@ if(NOT EXISTS "${IMAGE}")
     message(FATAL_ERROR "image not found: ${IMAGE}")
 endif()
 
+set(vm_args)
+if(DEFINED FS_ROOT AND NOT FS_ROOT STREQUAL "")
+    list(APPEND vm_args --fs-root "${FS_ROOT}")
+endif()
 execute_process(
-    COMMAND "${VM}" vm "${IMAGE}" --max-steps ${MAX_STEPS}
+    COMMAND "${VM}" vm "${IMAGE}" --max-steps ${MAX_STEPS} ${vm_args}
     OUTPUT_VARIABLE output
     ERROR_VARIABLE error
     RESULT_VARIABLE result)
