@@ -32,6 +32,8 @@ bool label_global(const AssembledProgram& assembly, std::string_view name) {
 
 linker::KroSectionType section_type(std::uint16_t type) {
     switch (type) {
+    case 1:
+        return linker::KroSectionType::Text;
     case 3:
         return linker::KroSectionType::Rodata;
     case 4:

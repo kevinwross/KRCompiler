@@ -217,6 +217,20 @@ bool encode_normal_add_imm8(std::uint8_t rd, std::int32_t value, Encoding& out,
     return true;
 }
 
+bool encode_normal_sub_imm8(std::uint8_t rd, std::int32_t value, Encoding& out,
+                            std::string& error) {
+    if (!check_register(rd, error)) return false;
+    if (value < -128 || value > 127) {
+        error = "kr216 imm8 out of range";
+        return false;
+    }
+    out.bytes[0] = 0xC8;
+    out.bytes[1] = static_cast<std::uint8_t>((rd << 4) | 0);
+    out.bytes[2] = static_cast<std::uint8_t>(value & 0xFF);
+    out.size = 3;
+    return true;
+}
+
 bool encode_normal_jmp_absolute(std::uint16_t address, Encoding& out) {
     out.bytes[0] = 0xCF;
     out.bytes[1] = static_cast<std::uint8_t>(address & 0xFF);
@@ -731,6 +745,7 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
                 return false;
             }
             if (mnemonic == "add") return encode_normal_add_imm8(rd, value, out, error);
+            if (mnemonic == "sub") return encode_normal_sub_imm8(rd, value, out, error);
             if (mnemonic == "cmp") return encode_normal_cmp_imm8(rd, value, out, error);
             error = "kr216: " + mnemonic + " has no immediate form yet";
             return false;
@@ -1138,7 +1153,7 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         } else if (name == ".fini_array") {
             switch_section(name, 6, 0x1 | 0x2, 2);
         } else if (name.starts_with(".text.")) {
-            switch_section(".text", 1, 0x1 | 0x4, 2);
+            switch_section(name, 1, 0x1 | 0x4, 2);
         } else {
             error = "kr216: unknown section '" + std::string(name) + "'";
         }
@@ -1320,15 +1335,17 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         Encoding encoding;
         if (!assemble_line(line, encoding, error)) return false;
         if (!encoding.label.empty()) {
+            const auto offset = section_bytes().size();
             if (encoding.relative) {
-                fixups.push_back({out.bytes.size(), std::move(encoding.label), 2, true,
-                                  encoding.condition, 0});
+                fixups.push_back({offset, std::move(encoding.label), 2, true,
+                                  encoding.condition, current_section});
             } else {
-                fixups.push_back({out.bytes.size() + 1, std::move(encoding.label), 2, false, 0,
-                                  0});
+                fixups.push_back({offset + 1, std::move(encoding.label), 2, false, 0,
+                                  current_section});
             }
         }
-        out.bytes.insert(out.bytes.end(), encoding.bytes, encoding.bytes + encoding.size);
+        auto& target = section_bytes();
+        target.insert(target.end(), encoding.bytes, encoding.bytes + encoding.size);
     }
 
     for (const auto& fixup : fixups) {
@@ -1336,7 +1353,7 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         std::uint32_t address = 0;
         const bool found = label_exists(fixup.label, label_section, address);
         if (fixup.relative) {
-            if (!found || label_section != 0) {
+            if (!found || label_section != fixup.section) {
                 error = "kr216: undefined text label '" + fixup.label + "'";
                 return false;
             }
@@ -1349,8 +1366,11 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
                 error = "kr216: branch to '" + fixup.label + "': " + branch_error;
                 return false;
             }
-            out.bytes[fixup.offset] = branch.bytes[0];
-            out.bytes[fixup.offset + 1] = branch.bytes[1];
+            auto& branch_bytes = fixup.section == 0
+                                     ? out.bytes
+                                     : out.data_sections[fixup.section - 1].bytes;
+            branch_bytes[fixup.offset] = branch.bytes[0];
+            branch_bytes[fixup.offset + 1] = branch.bytes[1];
             continue;
         }
         auto& bytes = fixup.section == 0 ? out.bytes

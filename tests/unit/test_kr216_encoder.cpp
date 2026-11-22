@@ -82,6 +82,9 @@ TEST_CASE("kr216 Normal class immediate, absolute jump and LEAVE") {
     std::string error;
     REQUIRE(encode_normal_add_imm8(2, 5, out, error));   // add r2, #5
     CHECK(out.size == 3); CHECK(out.bytes[0] == 0xC7); CHECK(out.bytes[1] == 0x20); CHECK(out.bytes[2] == 0x05);
+    REQUIRE(encode_normal_sub_imm8(2, 5, out, error));   // sub r2, #5
+    CHECK(out.size == 3); CHECK(out.bytes[0] == 0xC8); CHECK(out.bytes[1] == 0x20); CHECK(out.bytes[2] == 0x05);
+    CHECK_FALSE(encode_normal_sub_imm8(2, 128, out, error));
     REQUIRE(encode_normal_jmp_absolute(0x0200, out));
     CHECK(out.bytes[0] == 0xCF); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x02);
     REQUIRE(encode_normal_leave(0x0300, out, error));
@@ -90,6 +93,42 @@ TEST_CASE("kr216 Normal class immediate, absolute jump and LEAVE") {
     CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x00);
     CHECK_FALSE(encode_normal_add_imm8(2, 128, out, error));
 }
+TEST_CASE("kr216 assembler accepts SUB with an immediate") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("sub r2, #5", out, error));
+    CHECK(out.size == 3);
+    CHECK(out.bytes[0] == 0xC8);
+    CHECK(out.bytes[1] == 0x20);
+    CHECK(out.bytes[2] == 0x05);
+    CHECK_FALSE(assemble_line("sub r2, #128", out, error));
+}
+
+TEST_CASE("kr216 .text.* sections keep their own code") {
+    const std::string source =
+        ".section .text.first\n"
+        ".global first\n"
+        "first:\n"
+        "  ld r2, #1\n"
+        "  beq first\n"
+        ".section .text.second\n"
+        ".global second\n"
+        "second:\n"
+        "  ld r2, #2\n"
+        "  ret\n";
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text(source, program, error));
+    REQUIRE(program.bytes.empty());
+    REQUIRE(program.data_sections.size() == 2);
+    CHECK(program.data_sections[0].name == ".text.first");
+    CHECK(program.data_sections[0].type == 1);
+    CHECK(program.data_sections[0].bytes.size() == 5);
+    CHECK(program.data_sections[1].name == ".text.second");
+    CHECK(program.data_sections[1].type == 1);
+    CHECK(program.data_sections[1].bytes.size() == 4);
+}
+
 TEST_CASE("kr216 Normal class compare, SXTB, absolute CALL and shifts") {
     Encoding out;
     std::string error;

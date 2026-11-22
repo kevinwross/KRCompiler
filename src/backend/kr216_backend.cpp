@@ -171,9 +171,18 @@ std::vector<ArgClass> classify_arguments(const std::vector<const ir::Value*>& va
         argument.value = value;
         argument.aggregate = value && is_aggregate(value->type);
         argument.words = value ? word_count(value->type) : 1;
-        if (value && ir::is_float(value->type) && fp_registers < 2) {
+        if (value && ir::is_float(value->type)) {
+            if (!spilled && fp_registers < 2) {
+                argument.floating = true;
+                argument.fp_register = fp_registers++;
+                result.push_back(argument);
+                continue;
+            }
             argument.floating = true;
-            argument.fp_register = fp_registers++;
+            argument.on_stack = true;
+            argument.words = 4;
+            argument.first_stack_word = stack_words;
+            stack_words += 4;
             result.push_back(argument);
             continue;
         }
@@ -452,6 +461,16 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         const auto destination = slot(argument.value);
         if (argument.floating) {
             const auto width = type_size(argument.value->type);
+            if (argument.on_stack) {
+                const auto base = 4u + 2u * argument.first_stack_word;
+                out += "    MOV R7, FP\n";
+                add_immediate("R7", static_cast<std::int32_t>(base));
+                out += width == 8 ? "    FLD F2, [R7]\n" : "    FLDS F2, [R7]\n";
+                out += "    MOV R7, SP\n";
+                add_immediate("R7", static_cast<std::int32_t>(destination));
+                out += width == 8 ? "    FST F2, [R7]\n" : "    FSTS F2, [R7]\n";
+                continue;
+            }
             out += "    MOV R7, SP\n";
             add_immediate("R7", static_cast<std::int32_t>(destination));
             out += width == 8
@@ -1383,6 +1402,41 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                      static_cast<std::uint32_t>(2 * pushed_words));
                         out += "    PUSH R7\n";
                         ++pushed_words;
+                        continue;
+                    }
+                    if (argument.floating) {
+                        const auto words = type_size(argument.value->type) / 2;
+                        std::uint64_t bits = 0;
+                        const auto* floating =
+                            argument.value->kind == ir::ValueKind::ConstantFloat
+                                ? static_cast<const ir::ConstantFloat*>(argument.value)
+                                : nullptr;
+                        if (floating) {
+                            if (words == 2) {
+                                const float narrowed = static_cast<float>(floating->value);
+                                std::memcpy(&bits, &narrowed, sizeof(narrowed));
+                            } else {
+                                std::memcpy(&bits, &floating->value, sizeof(floating->value));
+                            }
+                        }
+                        for (std::uint32_t word = 4; word > 0; --word) {
+                            if (word <= words) {
+                                if (floating) {
+                                    out += "    LD R7, #" +
+                                           std::to_string(static_cast<std::uint16_t>(
+                                               (bits >> ((word - 1) * 16)) & 0xFFFF)) +
+                                           "\n";
+                                } else {
+                                    load_word_at(argument.value, "R7", word - 1,
+                                                 static_cast<std::uint32_t>(
+                                                     2 * pushed_words));
+                                }
+                            } else {
+                                out += "    LD R7, #0\n";
+                            }
+                            out += "    PUSH R7\n";
+                            ++pushed_words;
+                        }
                         continue;
                     }
                     for (std::uint32_t word = argument.words; word > 0; --word) {
