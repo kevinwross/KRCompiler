@@ -350,3 +350,13 @@ TEST_CASE("kr216 refuses a duplicate label") {
     CHECK_FALSE(assemble_text("a:\n a:\n nop\n", program, error));
     CHECK(error.find("duplicate") != std::string::npos);
 }
+TEST_CASE("kr216 resolves a forward label in call and rejects an undefined one") {
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text("call done\n nop\ndone:\n halt\n", program, error));
+    CHECK(program.bytes[0] == 0xD0);
+    CHECK(program.bytes[1] == 4);  // call = 3 bytes, nop = 1, so done is at offset 4
+    CHECK(program.bytes[4] == 0x76);
+    CHECK_FALSE(assemble_text("call missing\n", program, error));
+    CHECK(error.find("undefined") != std::string::npos);
+}

@@ -16,6 +16,9 @@ inline constexpr std::uint8_t kStackPointer = 15;
 struct Encoding {
     std::uint8_t bytes[6] = {};
     std::uint8_t size = 0;
+    // Set when an absolute jmp/call operand named a label instead of a number; the address field
+    // holds zero and the multi-line assembler patches it once every label is known.
+    std::string label;
 };
 
 // Section 5, Register class: `LD Rd, #imm16` (0x50+R), `LD Rd, [addr16]` (0x60+R),

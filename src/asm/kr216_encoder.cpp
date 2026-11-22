@@ -842,8 +842,9 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         }
         std::uint16_t address = 0;
         if (!parse_number(first, address)) {
-            error = "kr216: " + mnemonic + " needs an address";
-            return false;
+            // A label: the field stays zero here and assemble_text patches it at the end.
+            out.label = std::string(first);
+            address = 0;
         }
         if (mnemonic == "jmp") return encode_normal_jmp_absolute(address, out);
         return encode_normal_call_absolute(address, out);
@@ -887,6 +888,7 @@ std::vector<std::string_view> split_commas(std::string_view text) {
 bool assemble_text(std::string_view source, AssembledProgram& out, std::string& error) {
     out.bytes.clear();
     out.labels.clear();
+    std::vector<std::pair<std::size_t, std::string>> pending;
     for (const std::string_view raw : split_lines(source)) {
         std::string_view line = raw;
         const std::size_t comment = line.find(';');
@@ -934,7 +936,25 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
 
         Encoding encoding;
         if (!assemble_line(line, encoding, error)) return false;
+        const auto base = out.bytes.size();
         out.bytes.insert(out.bytes.end(), encoding.bytes, encoding.bytes + encoding.size);
+        if (!encoding.label.empty()) pending.emplace_back(base + 1, encoding.label);
+    }
+    for (const auto& fixup : pending) {
+        std::uint16_t address = 0;
+        bool found = false;
+        for (const auto& label : out.labels) {
+            if (label.first != fixup.second) continue;
+            address = label.second;
+            found = true;
+            break;
+        }
+        if (!found) {
+            error = "kr216: undefined label '" + fixup.second + "'";
+            return false;
+        }
+        out.bytes[fixup.first] = static_cast<std::uint8_t>(address & 0xFF);
+        out.bytes[fixup.first + 1] = static_cast<std::uint8_t>(address >> 8);
     }
     return true;
 }
