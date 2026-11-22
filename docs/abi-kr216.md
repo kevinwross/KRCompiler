@@ -1,6 +1,6 @@
 # KR216 ABI
 
-**Status:** Draft. The data model, register roles, calling convention, frame
+**Status:** Accepted 2026-11-22, frozen at the M3 close. The data model, register roles, calling convention, frame
 layout and aggregate rules are fixed by `../../kr216/kr216-plan.md` v0.11
 (sections 7, 11, 12) and recorded in
 [ADR 0053](decisions/0053-kr216-target-profile.md), accepted 2026-11-21. The

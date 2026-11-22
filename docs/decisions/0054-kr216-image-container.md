@@ -1,6 +1,6 @@
 # 0054 — The kr216 executable image container
 
-- Status: proposed (owner acceptance at review)
+- Status: accepted (2026-11-22, at the M3 close)
 - Date: 2026-11-22
 - Decision: fixes the byte layout of the kr216 loadable image, the fields the loader validates, and the reset-vector convention, so the compiler's image writer and the emulator's loader are written against one specification
 - Scope: the loadable image only. KRO relocatable objects are unchanged (ADR 0005); the 16-bit exception descriptor remains ADR 0055.
