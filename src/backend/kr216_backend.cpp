@@ -677,6 +677,29 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::SRem:
             case ir::Opcode::URem: {
                 if (is_wide(instruction->type)) {
+                    if (word_count(instruction->type) > 2) {
+                        if (instruction->opcode != ir::Opcode::Mul) {
+                            error = "kr216 64-bit division and remainder are not implemented";
+                            return;
+                        }
+                        std::uint32_t pushed = 0;
+                        const auto push_value = [&](const ir::Value* value) {
+                            for (std::uint32_t word = 4; word > 0; --word) {
+                                load_word_at(value, "R2", word - 1, pushed);
+                                out += "    PUSH R2\n";
+                                pushed += 2;
+                            }
+                        };
+                        push_value(instruction->operands[0]);
+                        push_value(instruction->operands[1]);
+                        out += "    MOV R2, SP\n";
+                        out += "    ADD R2, #8\n";
+                        out += "    MOV R3, SP\n";
+                        load_address(instruction.get(), "R4", 16);
+                        out += "    CALL __krc_mul64\n";
+                        out += "    ADD SP, #16\n";
+                        break;
+                    }
                     if (instruction->opcode == ir::Opcode::SDiv ||
                         instruction->opcode == ir::Opcode::UDiv ||
                         instruction->opcode == ir::Opcode::SRem ||
@@ -1454,6 +1477,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".extern __krc_shl64\n";
     out += ".extern __krc_shr64\n";
     out += ".extern __krc_sar64\n";
+    out += ".extern __krc_mul64\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";

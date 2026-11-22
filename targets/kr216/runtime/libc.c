@@ -196,6 +196,36 @@ unsigned long __krc_sar32(unsigned long value, unsigned int count) {
     return value;
 }
 
+void __krc_mul64(unsigned int *left, unsigned int *right, unsigned int *out) {
+    unsigned long long a;
+    unsigned long long b;
+    unsigned long long result = 0;
+    unsigned int *ap = (unsigned int *)&a;
+    unsigned int *bp = (unsigned int *)&b;
+    ap[0] = left[0];
+    ap[1] = left[1];
+    ap[2] = left[2];
+    ap[3] = left[3];
+    bp[0] = right[0];
+    bp[1] = right[1];
+    bp[2] = right[2];
+    bp[3] = right[3];
+    int bit = 0;
+    while (bit < 64) {
+        if ((b & 1) != 0) {
+            result = result + a;
+        }
+        a = a << 1;
+        b = b >> 1;
+        bit++;
+    }
+    unsigned int *rp = (unsigned int *)&result;
+    out[0] = rp[0];
+    out[1] = rp[1];
+    out[2] = rp[2];
+    out[3] = rp[3];
+}
+
 void __krc_shl64(unsigned int *words, unsigned int count) {
     while (count != 0) {
         words[3] = (words[3] << 1) | (words[2] >> 15);
