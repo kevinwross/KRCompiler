@@ -290,8 +290,12 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
             reachable[object_index] = true;
             for (std::size_t index = 0; index < objects[object_index].sections.size();
                  ++index) {
-                if (objects[object_index].sections[index].type ==
-                    KroSectionType::Debug) {
+                const auto& section = objects[object_index].sections[index];
+                if (section.type == KroSectionType::Debug ||
+                    section.name == ".cpp_except") {
+                    // Debug data and the exception table describe the code that
+                    // survived; neither is the target of a relocation, so GC
+                    // cannot discover them by reachability.
                     section_reachable[object_index][index] = true;
                 }
             }
@@ -328,7 +332,13 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
             }
             output.alignment = std::max(output.alignment, section.alignment);
             if (section.type == KroSectionType::Bss) {
-                output.size = std::max(output.size, section.size);
+                // Each object's uninitialized data is appended, not overlaid:
+                // two objects that both define a BSS symbol must get distinct
+                // addresses or one silently aliases the other.
+                const auto offset = static_cast<std::uint32_t>(
+                    align_up(output.size, std::max<std::uint64_t>(1, section.alignment)));
+                offsets[object_index][index] = offset;
+                output.size = offset + section.size;
             } else {
                 const auto offset = static_cast<std::uint32_t>(
                     align_up(output.data.size(), std::max<std::uint64_t>(1, section.alignment)));

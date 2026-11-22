@@ -76,6 +76,55 @@ TEST_CASE("The KR16 assembler keeps .section .text.<name> sections") {
     CHECK_EQ(object.sections[2].name, ".text.unused");
 }
 
+TEST_CASE("krld gives each object's BSS symbols a distinct address") {
+    constexpr std::string_view kFirst =
+        ".bss\n"
+        ".global first\n"
+        ".align 2\n"
+        "first:\n"
+        "    .space 2\n"
+        ".text\n"
+        ".global _start\n"
+        "_start:\n"
+        "    MOV R0, #first\n"
+        "    RET\n";
+    constexpr std::string_view kSecond =
+        ".bss\n"
+        ".global second\n"
+        ".align 2\n"
+        "second:\n"
+        "    .space 2\n"
+        ".text\n"
+        ".global second_body\n"
+        "second_body:\n"
+        "    RET\n";
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr16;
+    options.entry = "_start";
+    const auto first = krc::toolchain::assemble(kFirst, std::string{}, options);
+    REQUIRE_MESSAGE(first.ok, first.error);
+    const auto second = krc::toolchain::assemble(kSecond, std::string{}, options);
+    REQUIRE_MESSAGE(second.ok, second.error);
+    const std::vector<krc::toolchain::Object> objects{
+        {"first.kro", first.object}, {"second.kro", second.object}};
+    const auto linked = krc::toolchain::link(objects, options);
+    REQUIRE_MESSAGE(linked.ok, linked.error);
+    std::uint64_t first_address = 0;
+    std::uint64_t second_address = 0;
+    for (const auto& symbol : linked.symbols) {
+        if (symbol.name == "first") {
+            first_address = symbol.value;
+        }
+        if (symbol.name == "second") {
+            second_address = symbol.value;
+        }
+    }
+    CHECK(first_address != second_address);
+    const bool disjoint = first_address + 2 <= second_address ||
+                          second_address + 2 <= first_address;
+    CHECK(disjoint);
+}
+
 TEST_CASE("krld --gc-sections drops an unreferenced KR16 function section") {
     krc::toolchain::Options options;
     options.target = krc::toolchain::Target::Kr16;
