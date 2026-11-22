@@ -11,6 +11,7 @@ enum class TargetId : std::uint8_t {
     Kr32,
     Kr16,
     Kr64,
+    Kr216,
 };
 
 enum class TargetFamily : std::uint8_t {
@@ -28,6 +29,7 @@ enum class DataModel : std::uint8_t {
     Ilp32,
     Ip16,
     Lp64,
+    Ip16Long32,
 };
 
 // docs/targets/schema.md's ABI `aggregate_rules`: how a by-value aggregate is

@@ -107,7 +107,40 @@ constexpr TargetProfile kKr64{
     AggregateRules::RegistersOrMemory,
 };
 
-constexpr std::array<TargetProfile, 3> kProfiles{kKr32, kKr16, kKr64};
+constexpr TargetProfile kKr216{
+    TargetId::Kr216,
+    "kr216",
+    "__kr216__",
+    TargetFamily::Register,
+    16,
+    Endianness::Little,
+    DataModel::Ip16Long32,
+    8,
+    false,
+    16,
+    16,
+    32,
+    64,
+    32,
+    64,
+    64,
+    16,
+    16,
+    64,
+    16,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    true,
+    false,
+    AggregateRules::RegistersOrMemory,
+};
+
+constexpr std::array<TargetProfile, 4> kProfiles{kKr32, kKr16, kKr64, kKr216};
 
 }  // namespace
 
@@ -119,6 +152,8 @@ std::string_view to_string(TargetId id) noexcept {
         return "kr16";
     case TargetId::Kr64:
         return "kr64";
+    case TargetId::Kr216:
+        return "kr216";
     }
     return "unknown";
 }
@@ -143,6 +178,8 @@ std::string_view to_string(DataModel model) noexcept {
         return "ip16";
     case DataModel::Lp64:
         return "lp64";
+    case DataModel::Ip16Long32:
+        return "ip16-long32";
     }
     return "unknown";
 }
@@ -166,6 +203,9 @@ std::optional<TargetId> parse_target(std::string_view name) noexcept {
     }
     if (name == "kr64") {
         return TargetId::Kr64;
+    }
+    if (name == "kr216") {
+        return TargetId::Kr216;
     }
     return std::nullopt;
 }
