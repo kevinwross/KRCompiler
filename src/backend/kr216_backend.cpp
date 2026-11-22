@@ -290,7 +290,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
     const auto slot = [&](const ir::Value* value) -> std::uint32_t {
         const auto found = layout.slots.find(value);
         if (found == layout.slots.end()) {
-            error = "kr216 value '" + value->name + "' has no frame slot";
+            error = "kr216 value '" + value->name + "' kind " +
+                    std::to_string(static_cast<int>(value->kind)) + " bits " +
+                    std::to_string(value->type ? value->type->bits : 0) + " in " +
+                    function.name + " has no frame slot";
             return 0;
         }
         return found->second;
@@ -1360,21 +1363,21 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                 std::memcpy(&bits, &floating->value, sizeof(floating->value));
                             }
                             for (std::uint32_t offset = width; offset > 0; offset -= 2) {
-                                out += "    LD R2, #" +
+                                out += "    LD R7, #" +
                                        std::to_string(static_cast<std::uint16_t>(
                                            (bits >> ((offset - 2) * 8)) & 0xFFFF)) +
                                        "\n";
-                                out += "    PUSH R2\n";
+                                out += "    PUSH R7\n";
                             }
-                            out += "    MOV R2, SP\n";
+                            out += "    MOV R7, SP\n";
                         } else {
-                            load_address(argument.value, "R2");
+                            load_address(argument.value, "R7");
                         }
                         out += width == 8
                                    ? "    FLD F" +
-                                         std::to_string(argument.fp_register) + ", [R2]\n"
+                                         std::to_string(argument.fp_register) + ", [R7]\n"
                                    : "    FLDS F" +
-                                         std::to_string(argument.fp_register) + ", [R2]\n";
+                                         std::to_string(argument.fp_register) + ", [R7]\n";
                         if (constant) {
                             out += "    ADD SP, #" + std::to_string(width) + "\n";
                         }
@@ -1494,9 +1497,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                             out += "    ST [R7+" + std::to_string(offset) + "], R6\n";
                         }
                     } else if (ir::is_float(value->type)) {
-                        const auto width = type_size(value->type);
-                        load_address(value, "R2");
-                        out += width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
+                        load_fp(value, "F0", type_size(value->type));
                     } else {
                         const auto words = word_count(value->type);
                         for (std::uint32_t word = 0; word < words; ++word) {
