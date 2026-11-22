@@ -170,32 +170,6 @@ std::vector<ArgClass> classify_arguments(const std::vector<const ir::Value*>& va
     return result;
 }
 
-std::string inverse_condition(ir::ICmpPredicate predicate) {
-    switch (predicate) {
-    case ir::ICmpPredicate::Eq:
-        return "BNE";
-    case ir::ICmpPredicate::Ne:
-        return "BEQ";
-    case ir::ICmpPredicate::Ult:
-        return "BCS";
-    case ir::ICmpPredicate::Ule:
-        return "BHI";
-    case ir::ICmpPredicate::Ugt:
-        return "BLS";
-    case ir::ICmpPredicate::Uge:
-        return "BCC";
-    case ir::ICmpPredicate::Slt:
-        return "BGE";
-    case ir::ICmpPredicate::Sle:
-        return "BGT";
-    case ir::ICmpPredicate::Sgt:
-        return "BLE";
-    case ir::ICmpPredicate::Sge:
-        return "BLT";
-    }
-    return "BNE";
-}
-
 }  // namespace
 
 Kr216Backend::Kr216Backend(const ir::Module& module, const target::TargetProfile& profile,
