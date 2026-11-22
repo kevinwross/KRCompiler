@@ -94,6 +94,7 @@ add_library(krc_impl OBJECT
     src/asm/kr32_assembler.cpp
     src/asm/kr32_encoder.cpp
     src/asm/kr16_encoder.cpp
+    src/asm/kr216_encoder.cpp
     src/asm/kr16_assembler.cpp
     src/asm/kr16_object.cpp
     src/backend/kr32_backend.cpp

@@ -30,6 +30,7 @@ add_executable(krc_tests
     unit/test_sema.cpp
     unit/test_sysroot_bits.cpp
     unit/test_target.cpp
+    unit/test_kr216_encoder.cpp
     unit/test_fixture_extractor.cpp
     unit/test_toolchain.cpp
 )
