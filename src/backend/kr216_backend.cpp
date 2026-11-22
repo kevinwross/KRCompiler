@@ -817,6 +817,78 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 store_word(*instruction, "R2");
                 break;
             }
+            case ir::Opcode::FCmp: {
+                const auto width = type_size(instruction->operands[0]->type);
+                load_address(instruction->operands[0], "R2");
+                out += width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
+                load_address(instruction->operands[1], "R2");
+                out += width == 8 ? "    FLD F1, [R2]\n" : "    FLDS F1, [R2]\n";
+                out += "    FCMP F0, F1\n";
+                const auto suffix = "." + function.name + "." + std::to_string(synthetic_label);
+                ++synthetic_label;
+                const auto true_label = ".Lfcmp.true" + suffix;
+                const auto false_label = ".Lfcmp.false" + suffix;
+                const auto done_label = ".Lfcmp.done" + suffix;
+                const auto jump = [&](std::string_view condition, const std::string& label) {
+                    out += "    " + std::string(condition) + " " + label + "\n";
+                };
+                switch (instruction->fcmp_predicate) {
+                case ir::FCmpPredicate::False:
+                    jump("JMP", false_label);
+                    break;
+                case ir::FCmpPredicate::True:
+                    jump("JMP", true_label);
+                    break;
+                case ir::FCmpPredicate::Uno:
+                    jump("BVS", true_label);
+                    jump("JMP", false_label);
+                    break;
+                case ir::FCmpPredicate::Ord:
+                    jump("BVS", false_label);
+                    jump("JMP", true_label);
+                    break;
+                case ir::FCmpPredicate::Oeq:
+                    jump("BVS", false_label);
+                    jump("BEQ", true_label);
+                    jump("JMP", false_label);
+                    break;
+                case ir::FCmpPredicate::One:
+                    jump("BVS", true_label);
+                    jump("BNE", true_label);
+                    jump("JMP", false_label);
+                    break;
+                case ir::FCmpPredicate::Olt:
+                    jump("BVS", false_label);
+                    jump("BMI", true_label);
+                    jump("JMP", false_label);
+                    break;
+                case ir::FCmpPredicate::Ole:
+                    jump("BVS", false_label);
+                    jump("BEQ", true_label);
+                    jump("BMI", true_label);
+                    jump("JMP", false_label);
+                    break;
+                case ir::FCmpPredicate::Ogt:
+                    jump("BVS", false_label);
+                    jump("BEQ", false_label);
+                    jump("BMI", false_label);
+                    jump("JMP", true_label);
+                    break;
+                case ir::FCmpPredicate::Oge:
+                    jump("BVS", false_label);
+                    jump("BMI", false_label);
+                    jump("JMP", true_label);
+                    break;
+                }
+                out += true_label + ":\n";
+                out += "    LD R2, #1\n";
+                out += "    JMP " + done_label + "\n";
+                out += false_label + ":\n";
+                out += "    LD R2, #0\n";
+                out += done_label + ":\n";
+                store_word(*instruction, "R2");
+                break;
+            }
             case ir::Opcode::ICmp: {
                 if (is_wide(instruction->operands[0]->type)) {
                     // Equality is enough for the M3 literal check; the ordered
