@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 int __krc_write(int fd, const char *buffer, int count);
 
 extern char __heap_start[];
@@ -99,4 +101,80 @@ int puts(const char *text) {
     __krc_write(1, text, (int)length);
     putchar('\n');
     return (int)(length + 1);
+}
+
+static int print_unsigned(unsigned int value, unsigned int base) {
+    char buffer[16];
+    int length = 0;
+    do {
+        const unsigned int digit = value % base;
+        buffer[length++] = (char)(digit < 10 ? '0' + digit : 'a' + digit - 10);
+        value /= base;
+    } while (value != 0);
+    for (int index = length - 1; index >= 0; index--) {
+        putchar(buffer[index]);
+    }
+    return length;
+}
+
+int printf(const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    int written = 0;
+    int index = 0;
+    while (format[index] != 0) {
+        if (format[index] != '%') {
+            putchar(format[index++]);
+            written++;
+            continue;
+        }
+        index++;
+        if (format[index] == '%') {
+            putchar('%');
+            index++;
+            written++;
+            continue;
+        }
+        if (format[index] == 'c') {
+            putchar(va_arg(arguments, int));
+            index++;
+            written++;
+            continue;
+        }
+        if (format[index] == 's') {
+            const char *text = va_arg(arguments, const char *);
+            const unsigned int length = strlen(text);
+            __krc_write(1, text, (int)length);
+            written += (int)length;
+            index++;
+            continue;
+        }
+        if (format[index] == 'd' || format[index] == 'i') {
+            int value = va_arg(arguments, int);
+            if (value < 0) {
+                putchar('-');
+                written++;
+                value = -value;
+            }
+            written += print_unsigned((unsigned int)value, 10);
+            index++;
+            continue;
+        }
+        if (format[index] == 'u') {
+            written += print_unsigned(va_arg(arguments, unsigned int), 10);
+            index++;
+            continue;
+        }
+        if (format[index] == 'x') {
+            written += print_unsigned(va_arg(arguments, unsigned int), 16);
+            index++;
+            continue;
+        }
+        putchar('%');
+        putchar(format[index]);
+        written += 2;
+        index++;
+    }
+    va_end(arguments);
+    return written;
 }

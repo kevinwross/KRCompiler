@@ -277,12 +277,26 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         if (value >= -128 && value <= 127) {
             out += "    ADD " + std::string(reg) + ", #" + std::to_string(value) + "\n";
         } else {
-            out += "    LD R7, #" + std::to_string(static_cast<std::uint16_t>(value)) + "\n";
-            out += "    ADD " + std::string(reg) + ", R7\n";
+            const std::string scratch = reg == "R7" ? "R6" : "R7";
+            out += "    LD " + scratch + ", #" +
+                   std::to_string(static_cast<std::uint16_t>(value)) + "\n";
+            out += "    ADD " + std::string(reg) + ", " + scratch + "\n";
         }
     };
     // A value is loaded low word first. `adjust` compensates for bytes pushed
     // below SP after the frame was laid out.
+    const auto frame_store = [&](std::uint32_t offset, std::string_view reg) {
+        if (offset <= 127) {
+            out += "    ST [SP+" + std::to_string(offset) + "], " + std::string(reg) +
+                   "\n";
+        } else {
+            const std::string scratch = reg == "R6" ? "R7" : "R6";
+            out += "    MOV " + scratch + ", SP\n";
+            out += "    LD R5, #" + std::to_string(offset) + "\n";
+            out += "    ADD " + scratch + ", R5\n";
+            out += "    ST [" + scratch + "], " + std::string(reg) + "\n";
+        }
+    };
     const auto load_word = [&](const ir::Value* value, std::string_view reg,
                                bool high = false, std::uint32_t adjust = 0) {
         if (!value) {
@@ -309,23 +323,40 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             const auto* instruction = static_cast<const ir::Instruction*>(value);
             if (instruction->opcode == ir::Opcode::Alloca) {
                 const auto offset = slot(value);
-                if (offset + adjust > 127) {
-                    error = "kr216 alloca offset exceeds the immediate add range";
-                    return;
-                }
                 out += "    MOV " + std::string(reg) + ", SP\n";
-                add_immediate(reg, static_cast<std::int32_t>(offset + adjust));
+                if (offset + adjust <= 127) {
+                    add_immediate(reg, static_cast<std::int32_t>(offset + adjust));
+                } else {
+                    const std::string scratch = reg == "R7" ? "R6" : "R7";
+                    out += "    LD " + scratch + ", #" +
+                           std::to_string(static_cast<std::uint16_t>(offset + adjust)) + "\n";
+                    out += "    ADD " + std::string(reg) + ", " + scratch + "\n";
+                }
                 return;
             }
         }
-        out += "    LD " + std::string(reg) + ", [SP+" +
-               std::to_string(slot(value) + (high ? 2u : 0u) + adjust) + "]\n";
+        const auto offset = slot(value) + (high ? 2u : 0u) + adjust;
+        if (offset <= 127) {
+            out += "    LD " + std::string(reg) + ", [SP+" + std::to_string(offset) +
+                   "]\n";
+        } else {
+            const std::string scratch = reg == "R7" ? "R6" : "R7";
+            out += "    MOV " + scratch + ", SP\n";
+            add_immediate(scratch, static_cast<std::int32_t>(offset));
+            out += "    LD " + std::string(reg) + ", [" + scratch + "]\n";
+        }
     };
     const auto store_word = [&](const ir::Instruction& instruction, std::string_view reg,
                                 bool high = false, std::uint32_t adjust = 0) {
-        out += "    ST [SP+" +
-               std::to_string(slot(&instruction) + (high ? 2u : 0u) + adjust) + "], " +
-               std::string(reg) + "\n";
+        const auto offset = slot(&instruction) + (high ? 2u : 0u) + adjust;
+        if (offset <= 127) {
+            out += "    ST [SP+" + std::to_string(offset) + "], " + std::string(reg) +
+                   "\n";
+        } else {
+            out += "    MOV R7, SP\n";
+            add_immediate("R7", static_cast<std::int32_t>(offset));
+            out += "    ST [R7], " + std::string(reg) + "\n";
+        }
     };
     const auto copy_from_pointer = [&](std::string_view pointer, std::uint32_t destination,
                                        std::uint32_t size) {
@@ -333,7 +364,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         // them here discarded every copied word.
         for (std::uint32_t offset = 0; offset < size; offset += kSlotSize) {
             out += "    LD R6, [" + std::string(pointer) + "+" + std::to_string(offset) + "]\n";
-            out += "    ST [SP+" + std::to_string(destination + offset) + "], R6\n";
+            frame_store(destination + offset, "R6");
         }
     };
 
@@ -360,10 +391,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             if (argument.aggregate) {
                 copy_from_pointer("R7", destination, type_size(argument.value->type));
             } else {
-                out += "    ST [SP+" + std::to_string(destination) + "], R7\n";
+                frame_store(destination, "R7");
                 if (argument.words == 2) {
                     out += "    LD R7, [FP+" + std::to_string(base + 2) + "]\n";
-                    out += "    ST [SP+" + std::to_string(destination + 2) + "], R7\n";
+                    frame_store(destination + 2, "R7");
                 }
             }
         } else {
@@ -372,11 +403,9 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 out += "    MOV R7, R" + std::to_string(first) + "\n";
                 copy_from_pointer("R7", destination, type_size(argument.value->type));
             } else {
-                out += "    ST [SP+" + std::to_string(destination) + "], R" +
-                       std::to_string(first) + "\n";
+                frame_store(destination, "R" + std::to_string(first));
                 if (argument.words == 2) {
-                    out += "    ST [SP+" + std::to_string(destination + 2) + "], R" +
-                           std::to_string(first + 1) + "\n";
+                    frame_store(destination + 2, "R" + std::to_string(first + 1));
                 }
             }
         }
@@ -407,6 +436,15 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             switch (instruction->opcode) {
             case ir::Opcode::Alloca:
                 break;
+            case ir::Opcode::VaStart: {
+                // A variadic call passes every argument on the stack; the first
+                // variable one follows the named parameters at FP+4.
+                const auto fixed = function.parameters.size();
+                out += "    MOV R2, FP\n";
+                add_immediate("R2", static_cast<std::int32_t>(4 + 2 * fixed));
+                store_word(*instruction, "R2");
+                break;
+            }
             case ir::Opcode::Load: {
                 const auto size = type_size(instruction->type);
                 if (is_aggregate(instruction->type)) {
