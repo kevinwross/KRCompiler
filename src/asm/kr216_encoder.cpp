@@ -411,4 +411,132 @@ bool encode_f4(std::uint8_t opcode, std::uint8_t fd, std::uint8_t mode, std::uin
     return true;
 }
 
+bool parse_register(std::string_view text, std::uint8_t& out) {
+    if (text.size() < 2 || (text[0] != 'r' && text[0] != 'R')) return false;
+    unsigned value = 0;
+    for (std::size_t index = 1; index < text.size(); ++index) {
+        const char c = text[index];
+        if (c < '0' || c > '9') return false;
+        value = value * 10 + static_cast<unsigned>(c - '0');
+        if (value > 15) return false;
+    }
+    out = static_cast<std::uint8_t>(value);
+    return true;
+}
+
+bool parse_number(std::string_view text, std::uint16_t& out) {
+    if (text.empty()) return false;
+    unsigned base = 10;
+    std::size_t index = 0;
+    if (text.size() > 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
+        base = 16;
+        index = 2;
+    }
+    if (index >= text.size()) return false;
+    unsigned value = 0;
+    for (; index < text.size(); ++index) {
+        const char c = text[index];
+        unsigned digit = 0;
+        if (c >= '0' && c <= '9') {
+            digit = static_cast<unsigned>(c - '0');
+        } else if (base == 16 && c >= 'a' && c <= 'f') {
+            digit = static_cast<unsigned>(c - 'a' + 10);
+        } else if (base == 16 && c >= 'A' && c <= 'F') {
+            digit = static_cast<unsigned>(c - 'A' + 10);
+        } else {
+            return false;
+        }
+        value = value * base + digit;
+        if (value > 0xFFFF) return false;
+    }
+    out = static_cast<std::uint16_t>(value);
+    return true;
+}
+
+namespace {
+
+std::string_view trim(std::string_view text) {
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.remove_suffix(1);
+    return text;
+}
+
+}  // namespace
+
+bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
+    line = trim(line);
+    if (line.empty()) {
+        error = "kr216: empty line";
+        return false;
+    }
+    const std::size_t space = line.find_first_of(" \t");
+    std::string mnemonic(line.substr(0, space));
+    for (char& c : mnemonic) c = static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+    const std::string_view operands = space == std::string_view::npos ? std::string_view{}
+                                                                     : trim(line.substr(space));
+
+    if (operands.empty()) {
+        static const struct {
+            const char* name;
+            std::uint8_t opcode;
+        } kSystem[] = {{"ret", 0x70}, {"nop", 0x71}, {"brk", 0x72}, {"sys", 0x73},
+                       {"ei", 0x74},  {"di", 0x75},  {"halt", 0x76}, {"iret", 0x77},
+                       {"rdcycle", 0x78}};
+        for (const auto& entry : kSystem) {
+            if (mnemonic == entry.name) return encode_system(entry.opcode, out, error);
+        }
+        error = "kr216: unknown mnemonic '" + mnemonic + "'";
+        return false;
+    }
+
+    const std::size_t comma = operands.find(',');
+    const std::string_view first =
+        trim(comma == std::string_view::npos ? operands : operands.substr(0, comma));
+    const std::string_view second =
+        comma == std::string_view::npos ? std::string_view{} : trim(operands.substr(comma + 1));
+
+    std::uint8_t rd = 0;
+    if (mnemonic == "push" || mnemonic == "pop" || mnemonic == "inc" || mnemonic == "dec") {
+        if (!parse_register(first, rd)) {
+            error = "kr216: " + mnemonic + " needs a register";
+            return false;
+        }
+        if (mnemonic == "push") return encode_push_register(rd, out, error);
+        if (mnemonic == "pop") return encode_pop_register(rd, out, error);
+        if (mnemonic == "inc") return encode_inc_register(rd, out, error);
+        return encode_dec_register(rd, out, error);
+    }
+    if (mnemonic == "mov") {
+        if (!parse_register(first, rd)) {
+            error = "kr216: mov needs a destination register";
+            return false;
+        }
+        std::uint8_t rs = 0;
+        if (!parse_register(second, rs)) {
+            error = "kr216: mov needs a source register";
+            return false;
+        }
+        return encode_compact(0, rd, rs, out, error);
+    }
+    if (mnemonic == "ld") {
+        if (!parse_register(first, rd)) {
+            error = "kr216: ld needs a destination register";
+            return false;
+        }
+        const bool bracketed = second.size() > 2 && second.front() == '[' && second.back() == ']';
+        std::string_view number =
+            bracketed ? trim(second.substr(1, second.size() - 2)) : second;
+        if (!bracketed && !number.empty() && number.front() == '#') number.remove_prefix(1);
+        std::uint16_t value = 0;
+        if (!parse_number(number, value)) {
+            error = "kr216: ld needs an immediate or an address";
+            return false;
+        }
+        if (bracketed) return encode_ld_absolute(rd, value, out, error);
+        return encode_ld_immediate(rd, value, out, error);
+    }
+    error = "kr216: unknown mnemonic '" + mnemonic + "'";
+    return false;
+}
+
 }  // namespace krc::asmkr216

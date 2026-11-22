@@ -200,3 +200,15 @@ TEST_CASE("kr216 F4 FP load and store") {
     CHECK_FALSE(encode_f4(0, 0, 1, 2, 200, out, error));
     CHECK_FALSE(encode_f7_enter(8, 0x2000, out, error));
 }
+TEST_CASE("kr216 assembles the first forms") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("nop", out, error));              CHECK(out.bytes[0] == 0x71);
+    REQUIRE(assemble_line("push r3", out, error));          CHECK(out.bytes[0] == 0x03);
+    REQUIRE(assemble_line("mov r2, r3", out, error));       CHECK(out.bytes[0] == 0x80); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("ld r2, #0x1234", out, error));   CHECK(out.bytes[0] == 0x52); CHECK(out.bytes[1] == 0x34);
+    REQUIRE(assemble_line("ld r2, [0x4000]", out, error));  CHECK(out.bytes[0] == 0x62); CHECK(out.bytes[2] == 0x40);
+    CHECK_FALSE(assemble_line("bogus", out, error));
+    CHECK_FALSE(assemble_line("push r16", out, error));
+    CHECK_FALSE(assemble_line("ld r2, #70000", out, error));
+}

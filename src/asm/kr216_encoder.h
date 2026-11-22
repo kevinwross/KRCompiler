@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace krc::asmkr216 {
 
@@ -97,5 +98,12 @@ struct Encoding {
 [[nodiscard]] bool encode_f4(std::uint8_t opcode, std::uint8_t fd, std::uint8_t mode,
                              std::uint8_t base, std::int32_t displacement, Encoding& out,
                              std::string& error);
+
+// Assembly for the forms the compiler emits first: the system mnemonics, PUSH/POP/INC/DEC,
+// `MOV Rd, Rs`, `LD Rd, #imm` and `LD Rd, [addr]`. Text in, bytes out; an unknown mnemonic or a
+// malformed operand is an error naming the line, never a silent guess.
+[[nodiscard]] bool parse_register(std::string_view text, std::uint8_t& out);
+[[nodiscard]] bool parse_number(std::string_view text, std::uint16_t& out);
+[[nodiscard]] bool assemble_line(std::string_view line, Encoding& out, std::string& error);
 
 }  // namespace krc::asmkr216
