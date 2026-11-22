@@ -8,19 +8,19 @@ namespace krc::target {
 namespace {
 
 std::string size_type_spelling(const TargetProfile& profile) {
-    return profile.data_model == DataModel::Ip16 ? "unsigned int" : "unsigned long";
+    return profile.pointer_bits == 16 ? "unsigned int" : "unsigned long";
 }
 
 std::string ptrdiff_type_spelling(const TargetProfile& profile) {
-    return profile.data_model == DataModel::Ip16 ? "int" : "long";
+    return profile.pointer_bits == 16 ? "int" : "long";
 }
 
 std::string int16_spelling(const TargetProfile& profile) {
-    return profile.data_model == DataModel::Ip16 ? "int" : "short";
+    return profile.int_bits <= 16 ? "int" : "short";
 }
 
 std::string uint16_spelling(const TargetProfile& profile) {
-    return profile.data_model == DataModel::Ip16 ? "unsigned int" : "unsigned short";
+    return profile.int_bits <= 16 ? "unsigned int" : "unsigned short";
 }
 
 std::string int32_spelling(const TargetProfile& profile) {
