@@ -1160,6 +1160,8 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             switch_section(name, 5, 0x1 | 0x2, 2);
         } else if (name == ".fini_array") {
             switch_section(name, 6, 0x1 | 0x2, 2);
+        } else if (name == ".cpp_except") {
+            switch_section(name, 2, 0x1 | 0x2, 2);
         } else if (name.starts_with(".text.")) {
             switch_section(name, 1, 0x1 | 0x4, 2);
         } else {

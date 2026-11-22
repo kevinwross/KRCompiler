@@ -234,6 +234,21 @@ Kr216Backend::FrameLayout Kr216Backend::layout_function(const ir::Function& func
         layout.has_return_pointer = true;
         offset += kSlotSize;
     }
+    const bool has_landing_pad = std::any_of(
+        function.blocks.begin(), function.blocks.end(),
+        [](const std::unique_ptr<ir::BasicBlock>& block) {
+            return std::any_of(
+                block->instructions.begin(), block->instructions.end(),
+                [](const std::unique_ptr<ir::Instruction>& instruction) {
+                    return instruction->opcode == ir::Opcode::LandingPad;
+                });
+        });
+    if (has_landing_pad) {
+        offset = round_up(offset, 2);
+        layout.eh_scratch = offset;
+        layout.has_eh_scratch = true;
+        offset += 8;
+    }
     for (const auto& parameter : function.parameters) {
         offset = round_up(offset, 2);
         layout.slots[parameter.get()] = offset;
@@ -287,6 +302,7 @@ void Kr216Backend::add_debug_type(ir::TypePtr type) const {
 
 void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                  const FrameLayout& layout, std::string& error) const {
+    eh_regions_.clear();
     const auto slot = [&](const ir::Value* value) -> std::uint32_t {
         const auto found = layout.slots.find(value);
         if (found == layout.slots.end()) {
@@ -1329,7 +1345,9 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     out += "    JMP " + label_for(*instruction->successors[1]) + "\n";
                 }
                 break;
-            case ir::Opcode::Call: {
+            case ir::Opcode::Call:
+            case ir::Opcode::Invoke: {
+                const bool invoke = instruction->opcode == ir::Opcode::Invoke;
                 const auto* callee = instruction->operands[0];
                 std::vector<const ir::Value*> values;
                 for (std::size_t index = 1; index < instruction->operands.size(); ++index) {
@@ -1459,11 +1477,27 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     out += "    MOV R6, SP\n";
                     add_immediate("R6", static_cast<std::int32_t>(destination));
                 }
+                std::string region_start;
+                if (invoke) {
+                    region_start = ".Linvoke." + function.name + "." +
+                                   std::to_string(eh_regions_.size());
+                    out += region_start + ":\n";
+                }
                 if (callee && callee->kind == ir::ValueKind::Function) {
                     out += "    CALL " + callee->name + "\n";
                 } else {
                     load_word(callee, "R7", false, pushed_words * 2);
                     out += "    CALL R7\n";
+                }
+                if (invoke) {
+                    const std::string region_end = region_start + ".end";
+                    out += region_end + ":\n";
+                    if (instruction->successors.size() >= 2 &&
+                        instruction->successors[1]) {
+                        eh_regions_.push_back(
+                            {region_start, region_end,
+                             label_for(*instruction->successors[1])});
+                    }
                 }
                 if (pushed_words > 0) add_immediate("SP", static_cast<std::int32_t>(pushed_words * 2));
                 if (!aggregate_return && instruction->type && !ir::is_void(instruction->type)) {
@@ -1479,8 +1513,29 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         }
                     }
                 }
+                if (invoke && !instruction->successors.empty() &&
+                    instruction->successors[0]) {
+                    out += "    JMP " + label_for(*instruction->successors[0]) + "\n";
+                }
                 break;
             }
+            case ir::Opcode::LandingPad: {
+                if (!layout.has_eh_scratch) {
+                    error = "kr216 landing pad has no frame scratch";
+                    return;
+                }
+                frame_store(layout.eh_scratch, "R2");
+                frame_store(layout.eh_scratch + 4, "R3");
+                out += "    MOV R2, SP\n";
+                add_immediate("R2", static_cast<std::int32_t>(layout.eh_scratch));
+                store_word(*instruction, "R2");
+                break;
+            }
+            case ir::Opcode::Resume:
+                load_word(instruction->operands[0], "R2");
+                out += "    CALL _Unwind_Resume\n";
+                out += "    HALT\n";
+                break;
             case ir::Opcode::Ret:
                 if (!instruction->operands.empty() && instruction->operands[0]) {
                     const auto& value = instruction->operands[0];
@@ -1576,6 +1631,21 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
     out += ".L" + function.name + ".ret:\n";
     out += "    LEAVE #0\n";
     out += "    RET\n";
+    if (!eh_regions_.empty()) {
+        out += ".section .cpp_except\n";
+        out += ".align 2\n";
+        out += ".word 0xE216\n";
+        out += ".word " + function.name + "\n";
+        out += ".word .L" + function.name + ".ret\n";
+        out += ".word " + std::to_string(layout.frame_size) + "\n";
+        out += ".word " + std::to_string(eh_regions_.size()) + "\n";
+        for (const auto& region : eh_regions_) {
+            out += ".word " + region.start + "\n";
+            out += ".word " + region.end + "\n";
+            out += ".word " + region.pad + "\n";
+        }
+        out += ".text\n";
+    }
 }
 
 std::optional<std::string> Kr216Backend::emit(std::string& error) const {
@@ -1611,6 +1681,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".extern __krc_f64_to_u32\n";
     out += ".extern __krc_f64_to_i64\n";
     out += ".extern __krc_f64_to_u64\n";
+    out += ".extern _Unwind_Resume\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";

@@ -132,7 +132,7 @@ constexpr TargetProfile kKr216{
     false,
     false,
     false,
-    false,
+    true,
     true,
     false,
     true,

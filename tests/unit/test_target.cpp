@@ -64,7 +64,7 @@ TEST_CASE("KR216 profile matches the approved data model") {
     CHECK(profile.intmax_bits == 64);
     CHECK(profile.has_fpu);
     CHECK(profile.has_cpp);
-    CHECK_FALSE(profile.has_eh);
+    CHECK(profile.has_eh);
     CHECK(profile.backend_available);
 }
 

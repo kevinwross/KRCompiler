@@ -1,6 +1,9 @@
 #include <stdarg.h>
 
 int __krc_write(int fd, const char *buffer, int count);
+void *malloc(unsigned int size);
+void free(void *pointer);
+void _Unwind_Resume(void *exception);
 
 void *__krc_dynamic_cast(unsigned char *object, unsigned char *target_type);
 
@@ -36,6 +39,49 @@ void *__krc_dynamic_cast(unsigned char *object, unsigned char *target_type) {
         typeinfo = *(unsigned char **)(typeinfo + 6);
     }
     return 0;
+}
+
+static unsigned char *__krc_catch_object;
+
+int __krc_eh_matches(void *thrown, void *candidate) {
+    unsigned char *typeinfo = (unsigned char *)thrown;
+    while (typeinfo != 0) {
+        if (typeinfo == (unsigned char *)candidate) {
+            return 1;
+        }
+        typeinfo = *(unsigned char **)(typeinfo + 6);
+    }
+    return 0;
+}
+
+void *__cxa_allocate_exception(unsigned int size) {
+    unsigned char *block = (unsigned char *)malloc(size + 8);
+    if (block == 0) {
+        return 0;
+    }
+    return block + 8;
+}
+
+void __cxa_free_exception(void *object) {
+    if (object != 0) {
+        free((unsigned char *)object - 8);
+    }
+}
+
+void *__cxa_begin_catch(void *object) {
+    __krc_catch_object = (unsigned char *)object;
+    return object;
+}
+
+void __cxa_end_catch(void) {
+    if (__krc_catch_object != 0) {
+        free(__krc_catch_object - 8);
+        __krc_catch_object = 0;
+    }
+}
+
+void __cxa_rethrow(void) {
+    _Unwind_Resume(__krc_catch_object);
 }
 
 static char *heap_cursor;

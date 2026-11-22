@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "backend/peephole.h"
 #include "ir/ir.h"
@@ -31,6 +32,8 @@ private:
         std::unordered_map<const ir::Instruction*, std::uint32_t> allocas;
         std::uint32_t return_pointer = 0;
         bool has_return_pointer = false;
+        std::uint32_t eh_scratch = 0;
+        bool has_eh_scratch = false;
         std::uint32_t frame_size = 0;
     };
 
@@ -47,6 +50,12 @@ private:
     mutable std::unordered_map<std::string, std::uint32_t> debug_sources_;
     mutable std::unordered_set<std::string> debug_types_;
     mutable std::uint32_t next_debug_source_ = 0;
+    struct EhRegion {
+        std::string start;
+        std::string end;
+        std::string pad;
+    };
+    mutable std::vector<EhRegion> eh_regions_;
 };
 
 }  // namespace krc::backend
