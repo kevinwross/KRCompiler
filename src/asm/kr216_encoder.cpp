@@ -363,4 +363,22 @@ bool encode_f8_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std
     return true;
 }
 
+bool encode_f5(std::uint8_t opcode, std::uint8_t fd, std::uint8_t reg, Encoding& out,
+               std::string& error) {
+    if (opcode > 3) {
+        error = "kr216 F5 opcode must be 0-3";
+        return false;
+    }
+    if (fd > 3) {
+        error = "kr216 FP register must be f0-f3";
+        return false;
+    }
+    if (!check_register(reg, error)) return false;
+    out.bytes[0] = 0xF5;
+    out.bytes[1] = static_cast<std::uint8_t>((opcode << 4) | (fd << 2));
+    out.bytes[2] = static_cast<std::uint8_t>(reg << 4);
+    out.size = 3;
+    return true;
+}
+
 }  // namespace krc::asmkr216

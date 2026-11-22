@@ -170,3 +170,18 @@ TEST_CASE("kr216 F6 FP stack and F8 wide ENTER") {
     CHECK(out.bytes[2] == 0x01); CHECK(out.bytes[3] == 0x00); CHECK(out.bytes[4] == 0x03);
     CHECK_FALSE(encode_f8_enter(3, 0x0300, out, error));
 }
+TEST_CASE("kr216 F5 conversions") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_f5(0, 0, 2, out, error));  // i2f f0, r2
+    CHECK(out.size == 3); CHECK(out.bytes[0] == 0xF5); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x20);
+    REQUIRE(encode_f5(1, 0, 2, out, error));  // u2f
+    CHECK(out.bytes[1] == 0x10);
+    REQUIRE(encode_f5(2, 0, 2, out, error));  // f2i r2, f0
+    CHECK(out.bytes[1] == 0x20);
+    REQUIRE(encode_f5(3, 0, 2, out, error));  // f2u
+    CHECK(out.bytes[1] == 0x30);
+    CHECK_FALSE(encode_f5(4, 0, 2, out, error));
+    CHECK_FALSE(encode_f5(0, 4, 2, out, error));
+    CHECK_FALSE(encode_f5(0, 0, 16, out, error));
+}
