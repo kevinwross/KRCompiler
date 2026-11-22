@@ -90,6 +90,13 @@ std::uint32_t word_count(const ir::TypePtr& type) {
     return (type_size(type) + 1) / 2;
 }
 
+std::string debug_type_name(const ir::TypePtr& type) {
+    auto name = ir::type_to_string(type);
+    name.erase(std::remove(name.begin(), name.end(), '%'), name.end());
+    std::replace(name.begin(), name.end(), ' ', '_');
+    return name;
+}
+
 bool returns_aggregate(const ir::Function& function) {
     return function.type && !function.type->variadic &&
            is_aggregate(function.type->return_type);
@@ -221,6 +228,40 @@ std::uint32_t Kr216Backend::frame_bytes(const ir::Function& function) const {
     return layout_function(function, error).frame_size;
 }
 
+void Kr216Backend::add_debug_type(ir::TypePtr type) const {
+    if (!type || ir::is_void(type)) return;
+    const auto name = debug_type_name(type);
+    if (!debug_types_.insert(name).second) return;
+    const auto size = type_size(type);
+    debug_info_ += "T " + name + " " + std::to_string(size) + std::string(1, '\0');
+    if (type->kind == ir::TypeKind::Struct) {
+        debug_info_ += "C " + name + " " + std::to_string(size) + " -" +
+                       std::string(1, '\0');
+        std::uint32_t offset = 0;
+        for (std::size_t index = 0; index < type->fields.size(); ++index) {
+            const auto& field = type->fields[index];
+            offset = round_up(offset, type_alignment(field));
+            const auto field_size = type_size(field);
+            const auto field_name = index < type->field_names.size()
+                                        ? type->field_names[index]
+                                        : std::to_string(index);
+            debug_info_ += "M " + name + " " + field_name + " " +
+                           std::to_string(offset) + " " + debug_type_name(field) +
+                           " " + std::to_string(field_size) + std::string(1, '\0');
+            add_debug_type(field);
+            offset += field_size;
+        }
+    } else if (type->kind == ir::TypeKind::Array) {
+        add_debug_type(type->element);
+        debug_info_ += "A " + name + " " + debug_type_name(type->element) + " " +
+                       std::to_string(type->count) + std::string(1, '\0');
+    } else if (type->kind == ir::TypeKind::Pointer) {
+        add_debug_type(type->element);
+        debug_info_ += "R " + name + " " + debug_type_name(type->element) +
+                       std::string(1, '\0');
+    }
+}
+
 void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                  const FrameLayout& layout, std::string& error) const {
     const auto slot = [&](const ir::Value* value) -> std::uint32_t {
@@ -342,9 +383,27 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
     }
 
     std::size_t synthetic_label = 0;
+    std::size_t debug_label_counter = 0;
     for (const auto& block : function.blocks) {
         out += label_for(*block) + ":\n";
         for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Alloca && instruction->debug.valid()) {
+                auto source = debug_sources_.find(instruction->debug.file);
+                if (source == debug_sources_.end()) {
+                    const auto id = next_debug_source_++;
+                    source = debug_sources_.emplace(instruction->debug.file, id).first;
+                    debug_info_ += "S " + std::to_string(id) + " " +
+                                   instruction->debug.file + std::string(1, '\0');
+                }
+                const auto label = ".Ldbg." + function.name + "." +
+                                   std::to_string(debug_label_counter++);
+                out += label + ":\n";
+                debug_info_ += "L " + label + " " +
+                               std::to_string(source->second) + " " +
+                               std::to_string(instruction->debug.line) + " " +
+                               std::to_string(instruction->debug.column) +
+                               std::string(1, '\0');
+            }
             switch (instruction->opcode) {
             case ir::Opcode::Alloca:
                 break;
@@ -722,6 +781,62 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             }
         }
     }
+    const auto& display_name =
+        function.debug_name.empty() ? function.name : function.debug_name;
+    debug_info_ += "F " + display_name + " " + function.name + " .L" +
+                   function.name + ".ret " + std::to_string(layout.frame_size) + " " +
+                   debug_type_name(function.type ? function.type->return_type : nullptr) +
+                   std::string(1, '\0');
+    debug_info_ += "K " + function.name + " " + function.name + " - " +
+                   function.name + " .L" + function.name + ".ret" +
+                   std::string(1, '\0');
+    const auto frame_offset = [&](std::uint32_t slot_offset) {
+        return layout.frame_size >= slot_offset ? layout.frame_size - slot_offset : 0u;
+    };
+    std::unordered_set<std::string> debug_variable_names;
+    std::unordered_set<std::string> parameter_names;
+    for (const auto& parameter : function.parameters) {
+        parameter_names.insert(parameter->name);
+        const auto found = layout.slots.find(parameter.get());
+        if (found == layout.slots.end() || !parameter->type) continue;
+        if (!debug_variable_names.insert(function.name + "." + parameter->name).second) {
+            continue;
+        }
+        add_debug_type(parameter->type);
+        debug_info_ += "V " + function.name + " " + parameter->name + " " +
+                       std::to_string(frame_offset(found->second)) + " " +
+                       debug_type_name(parameter->type) + " " +
+                       std::to_string(type_size(parameter->type)) +
+                       std::string(1, '\0');
+        debug_info_ += "W " + function.name + " " + parameter->name + " param " +
+                       function.name + " 0x0" + std::string(1, '\0');
+    }
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Alloca ||
+                !instruction->allocated_type) {
+                continue;
+            }
+            auto name = instruction->name;
+            if (name.size() <= 5 || name.compare(name.size() - 5, 5, ".addr") != 0) {
+                continue;
+            }
+            name.resize(name.size() - 5);
+            if (parameter_names.contains(name)) continue;
+            const auto found = layout.allocas.find(instruction.get());
+            if (found == layout.allocas.end()) continue;
+            if (!debug_variable_names.insert(function.name + "." + name).second) continue;
+            add_debug_type(instruction->allocated_type);
+            debug_info_ += "V " + function.name + " " + name + " " +
+                           std::to_string(frame_offset(found->second)) + " " +
+                           debug_type_name(instruction->allocated_type) + " " +
+                           std::to_string(type_size(instruction->allocated_type)) +
+                           std::string(1, '\0');
+            debug_info_ += "W " + function.name + " " + name + " local " +
+                           function.name + " 0x0" + std::string(1, '\0');
+        }
+    }
+
     out += ".L" + function.name + ".ret:\n";
     out += "    LEAVE #0\n";
     out += "    RET\n";
@@ -732,6 +847,9 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     static_cast<void>(level_);
     std::string out = "; KR216 assembly generated by krc\n";
     debug_info_.clear();
+    debug_sources_.clear();
+    debug_types_.clear();
+    next_debug_source_ = 0;
     out += ".text\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
@@ -793,6 +911,14 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
             continue;
         }
         for (std::uint32_t offset = 0; offset < size; offset += 2) out += "    .word 0\n";
+    }
+    for (const auto& global : module_.globals()) {
+        if (global->external) continue;
+        add_debug_type(global->element_type);
+        debug_info_ += "G " + global->name + " " + global->name + " " +
+                       debug_type_name(global->element_type) + " " +
+                       std::to_string(type_size(global->element_type)) +
+                       std::string(1, '\0');
     }
     return out;
 }

@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "backend/peephole.h"
 #include "ir/ir.h"
@@ -37,11 +38,15 @@ private:
                                               std::string& error) const;
     void emit_function(std::string& out, const ir::Function& function,
                        const FrameLayout& layout, std::string& error) const;
+    void add_debug_type(ir::TypePtr type) const;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;
     OptimizationLevel level_ = OptimizationLevel::O0;
     mutable std::string debug_info_;
+    mutable std::unordered_map<std::string, std::uint32_t> debug_sources_;
+    mutable std::unordered_set<std::string> debug_types_;
+    mutable std::uint32_t next_debug_source_ = 0;
 };
 
 }  // namespace krc::backend

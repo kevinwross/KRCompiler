@@ -963,7 +963,9 @@ bool find_kdbg_section(std::span<const std::uint8_t> image, KdbgSection& section
     const bool kr32 = image[0] == 'K' && image[1] == '3' && image[2] == '2';
     const bool kex = image[0] == 'K' && image[1] == 'R' && image[2] == '1' &&
                      image[3] == '6';
-    if (!kr32 && !kex) {
+    const bool k216 = image[0] == 'K' && image[1] == '2' && image[2] == '1' &&
+                      image[3] == '6';
+    if (!kr32 && !kex && !k216) {
         error = "unrecognised image container";
         return false;
     }
@@ -981,7 +983,7 @@ bool find_kdbg_section(std::span<const std::uint8_t> image, KdbgSection& section
         section_count = read_u32(image, 12);
         table_offset = kHeaderSize;
         string_offset = read_u32(image, 32);
-    } else {
+    } else if (kex) {
         section.container = "kex";
         section_count = read_u16(image, 20);
         table_offset = read_u32(image, 28);
@@ -994,6 +996,12 @@ bool find_kdbg_section(std::span<const std::uint8_t> image, KdbgSection& section
             }
             section.image_base = read_u16(image, first + 8);
         }
+    } else {
+        section.container = "k216";
+        section.image_base = read_u32(image, 24);
+        section_count = read_u16(image, 20);
+        table_offset = read_u32(image, 28);
+        string_offset = read_u32(image, 36);
     }
     if (string_offset > image.size()) {
         error = "image string table is out of bounds";
