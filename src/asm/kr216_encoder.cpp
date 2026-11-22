@@ -287,7 +287,7 @@ bool encode_f3(std::uint8_t opcode, std::uint8_t fd, std::uint8_t fs, Encoding& 
         error = "kr216 FP register must be f0-f3";
         return false;
     }
-    const bool unary = opcode >= 4 && opcode <= 6 || opcode == 9;  // FNEG FABS FSQRT FRND
+    const bool unary = (opcode >= 4 && opcode <= 6) || opcode == 9;  // FNEG FABS FSQRT FRND
     if (unary && fs != 0) {
         error = "kr216 unary FP instruction requires Fs = 0";
         return false;
