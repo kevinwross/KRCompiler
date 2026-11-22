@@ -704,10 +704,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         instruction->opcode == ir::Opcode::UDiv ||
                         instruction->opcode == ir::Opcode::SRem ||
                         instruction->opcode == ir::Opcode::URem) {
-                        const bool remainder =
-                            instruction->opcode == ir::Opcode::SRem ||
-                            instruction->opcode == ir::Opcode::URem;
-                        const char* helper = remainder ? "__krc_urem32" : "__krc_udiv32";
+                        const char* helper = "__krc_udiv32";
+                        if (instruction->opcode == ir::Opcode::SDiv) helper = "__krc_sdiv32";
+                        if (instruction->opcode == ir::Opcode::SRem) helper = "__krc_srem32";
+                        if (instruction->opcode == ir::Opcode::URem) helper = "__krc_urem32";
                         load_word(instruction->operands[0], "R2");
                         load_word(instruction->operands[0], "R3", true);
                         load_word(instruction->operands[1], "R4");
@@ -1470,6 +1470,8 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".text\n";
     out += ".extern __krc_udiv32\n";
     out += ".extern __krc_urem32\n";
+    out += ".extern __krc_sdiv32\n";
+    out += ".extern __krc_srem32\n";
 
     out += ".extern __krc_shl32\n";
     out += ".extern __krc_shr32\n";

@@ -196,6 +196,57 @@ unsigned long __krc_sar32(unsigned long value, unsigned int count) {
     return value;
 }
 
+unsigned long __krc_negate32(unsigned long value) {
+    unsigned int *words = (unsigned int *)&value;
+    unsigned int low = ~words[0];
+    unsigned int high = ~words[1];
+    low = low + 1;
+    high = high + (low == 0 ? 1 : 0);
+    words[0] = low;
+    words[1] = high;
+    return value;
+}
+
+long __krc_sdiv32(long numerator, long denominator) {
+    unsigned int *np = (unsigned int *)&numerator;
+    unsigned int *dp = (unsigned int *)&denominator;
+    const int nneg = np[1] >> 15;
+    const int dneg = dp[1] >> 15;
+    unsigned long left = (unsigned long)numerator;
+    unsigned long right = (unsigned long)denominator;
+    if (nneg != 0) {
+        left = __krc_negate32(left);
+    }
+    if (dneg != 0) {
+        right = __krc_negate32(right);
+    }
+    unsigned long quotient = __krc_udiv32(left, right);
+    if (nneg != dneg) {
+        quotient = __krc_negate32(quotient);
+    }
+    return (long)quotient;
+}
+
+long __krc_srem32(long numerator, long denominator) {
+    unsigned int *np = (unsigned int *)&numerator;
+    unsigned int *dp = (unsigned int *)&denominator;
+    const int nneg = np[1] >> 15;
+    const int dneg = dp[1] >> 15;
+    unsigned long left = (unsigned long)numerator;
+    unsigned long right = (unsigned long)denominator;
+    if (nneg != 0) {
+        left = __krc_negate32(left);
+    }
+    if (dneg != 0) {
+        right = __krc_negate32(right);
+    }
+    unsigned long remainder = __krc_urem32(left, right);
+    if (nneg != 0) {
+        remainder = __krc_negate32(remainder);
+    }
+    return (long)remainder;
+}
+
 void __krc_mul64(unsigned int *left, unsigned int *right, unsigned int *out) {
     unsigned long long a;
     unsigned long long b;
