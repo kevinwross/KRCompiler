@@ -39,6 +39,8 @@ target::TargetId to_target_id(Target target) {
         return target::TargetId::Kr16;
     case Target::Kr64:
         return target::TargetId::Kr64;
+    case Target::Kr216:
+        return target::TargetId::Kr216;
     case Target::Kr32:
         break;
     }
@@ -51,6 +53,8 @@ std::string target_name(Target target) {
         return "kr16";
     case Target::Kr64:
         return "kr64";
+    case Target::Kr216:
+        return "kr216";
     case Target::Kr32:
         break;
     }

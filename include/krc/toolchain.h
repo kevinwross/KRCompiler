@@ -38,6 +38,7 @@ enum class Target : std::uint8_t {
     Kr32,
     Kr16,
     Kr64,
+    Kr216,
 };
 
 // How far `compile` runs. `-fsyntax-only` must not reach the backend, because a

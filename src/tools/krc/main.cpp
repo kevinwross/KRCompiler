@@ -132,6 +132,8 @@ toolchain::Target to_target(krc::target::TargetId id) {
         return toolchain::Target::Kr16;
     case krc::target::TargetId::Kr64:
         return toolchain::Target::Kr64;
+    case krc::target::TargetId::Kr216:
+        return toolchain::Target::Kr216;
     case krc::target::TargetId::Kr32:
         break;
     }
