@@ -193,3 +193,19 @@ each link, but I did not trace it, so treat it as an unexplained slowdown rather
 `75aee3b` releases 0.2.0 and versions the package configs. The suite is back in its usual band at 270 s;
 the 386 s recorded for `d2be672` did not persist across this SHA, so that slowdown was not a lasting cost of
 the section-level GC and I am leaving it as an unexplained one-off rather than reopening it.
+
+## 2026-11-21T16:00:28-08:00 — master @ 69cb4dc
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: 6d638c4..69cb4dc, 51 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, 0 s (`CMakeLists.txt` and `cmake/` changed; VM paths retained)
+- Build: linux-gcc-debug — ok, 116 s, 48 targets
+- Test: linux-gcc-debug — 915/915 passed, 310 s
+- Skipped: nothing — executed VM rows registered
+- Next: nothing pending
+
+This is the first gate on the default branch after `adopt-krc` was merged into it: the merge brought the
+toolchain facade, `.kdbg` in `.kex`, KR16 directives, KR16 function sections and section-level GC, and the
+package install rules, and masters them all in one range. The suite is 915 tests, the same count the last
+`adopt-krc` gate ran, and the wall time (310 s) is back in the 265–310 s band.
