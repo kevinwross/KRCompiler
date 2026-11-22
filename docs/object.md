@@ -141,3 +141,20 @@ directive existed.
 A `.kex` carries the `.kdbg` payload beside its text and string table as an
 unallocated debug section; the payload records the image base at KDBG header
 offset 56 (docs/symbols.md).
+
+## kr216 executable images
+
+The kr216 loadable image is the `K216` container specified by
+[ADR 0054](decisions/0054-kr216-image-container.md): a 64-byte little-endian header carrying
+the magic, container version, kind, flags, entry, **target ID 4**, **ABI version 1**, image
+base, section-table and string-table offsets, file size and an optional CRC32; then 32-byte
+section records and a string table, in the same shape as `.kex`. Sections are `progbits` or
+`nobits`, flagged `alloc`/`write`/`exec`/`debug`, and carry absolute 16-bit addresses in the
+64 KiB space. `.text` is executable, `.rodata` and `.data` are allocated, `.bss` is nobits,
+and the KDBG payload travels in an unallocated `.kdbg` section selected by flag bit 0 of the
+header.
+
+The loader validates the header fields, the table and payload bounds, the target and ABI
+version, and rejects overlapping allocated sections before copying anything. It writes the
+entry into the word at `0x0100` — the ISA's reset vector — so the container and the reset
+rule agree, and it does not load the debug section into memory.

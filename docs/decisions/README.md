@@ -93,3 +93,4 @@ The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
 - [0048-kr16-aggregate-return-destination.md](0048-kr16-aggregate-return-destination.md) — accepted; an aggregate return on KR16 passes its destination as a hidden stack argument, because no general-purpose register is free.
 - [0052-kdbg-variable-scope-ranges.md](0052-kdbg-variable-scope-ranges.md) — proposed; a `Variable` record carries a half-open live range, so a debugger reports a reused slot as unavailable rather than reading whatever replaced it.
 - [0053-kr216-target-profile.md](0053-kr216-target-profile.md) — accepted; registers KR216 as a fourth target with the `Ip16Long32` data model, schema v2's `this_register` and `sret_register`, and `docs/abi-kr216.md`.
+- [0054-kr216-image-container.md](0054-kr216-image-container.md) — proposed; fixes the `K216` container header, section records and loader rules for the kr216 executable image.
