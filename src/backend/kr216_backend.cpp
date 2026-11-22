@@ -552,12 +552,12 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         const bool remainder =
                             instruction->opcode == ir::Opcode::SRem ||
                             instruction->opcode == ir::Opcode::URem;
+                        const char* helper = remainder ? "__krc_urem32" : "__krc_udiv32";
                         load_word(instruction->operands[0], "R2");
                         load_word(instruction->operands[0], "R3", true);
                         load_word(instruction->operands[1], "R4");
                         load_word(instruction->operands[1], "R5", true);
-                        out += remainder ? "    CALL __krc_urem32\n"
-                                         : "    CALL __krc_udiv32\n";
+                        out += "    CALL " + std::string(helper) + "\n";
                         store_word(*instruction, "R2");
                         store_word(*instruction, "R3", true);
                         break;
@@ -639,8 +639,16 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         return nullptr;
                     }();
                     if (!literal || literal->value < 0 || literal->value > 31) {
-                        error = "kr216 dynamic 32-bit shifts are not implemented";
-                        return;
+                        const char* helper = "__krc_shl32";
+                        if (instruction->opcode == ir::Opcode::LShr) helper = "__krc_shr32";
+                        if (instruction->opcode == ir::Opcode::AShr) helper = "__krc_sar32";
+                        load_word(instruction->operands[0], "R2");
+                        load_word(instruction->operands[0], "R3", true);
+                        load_word(instruction->operands[1], "R4");
+                        out += "    CALL " + std::string(helper) + "\n";
+                        store_word(*instruction, "R2");
+                        store_word(*instruction, "R3", true);
+                        break;
                     }
                     const auto count = static_cast<int>(literal->value);
                     load_word(instruction->operands[0], "R2");
@@ -1037,6 +1045,10 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".text\n";
     out += ".extern __krc_udiv32\n";
     out += ".extern __krc_urem32\n";
+
+    out += ".extern __krc_shl32\n";
+    out += ".extern __krc_shr32\n";
+    out += ".extern __krc_sar32\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";

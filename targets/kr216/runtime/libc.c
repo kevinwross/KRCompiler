@@ -163,6 +163,39 @@ unsigned long __krc_urem32(unsigned long numerator, unsigned long denominator) {
     return remainder;
 }
 
+unsigned long __krc_shl32(unsigned long value, unsigned int count) {
+    unsigned int *words = (unsigned int *)&value;
+    while (count != 0) {
+        const unsigned int carry = words[0] >> 15;
+        words[0] = words[0] << 1;
+        words[1] = (words[1] << 1) | carry;
+        count = count - 1;
+    }
+    return value;
+}
+
+unsigned long __krc_shr32(unsigned long value, unsigned int count) {
+    unsigned int *words = (unsigned int *)&value;
+    while (count != 0) {
+        const unsigned int carry = words[1] & 1;
+        words[1] = words[1] >> 1;
+        words[0] = (words[0] >> 1) | (carry << 15);
+        count = count - 1;
+    }
+    return value;
+}
+
+unsigned long __krc_sar32(unsigned long value, unsigned int count) {
+    unsigned int *words = (unsigned int *)&value;
+    while (count != 0) {
+        const unsigned int carry = words[1] & 1;
+        words[0] = (words[0] >> 1) | (carry << 15);
+        words[1] = (words[1] >> 1) | (words[1] & 0x8000);
+        count = count - 1;
+    }
+    return value;
+}
+
 int putchar(int c) {
     char byte = (char)c;
     __krc_write(1, &byte, 1);
