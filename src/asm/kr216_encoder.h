@@ -24,4 +24,13 @@ struct Encoding {
 [[nodiscard]] bool encode_st_absolute(std::uint8_t rd, std::uint16_t address, Encoding& out,
                                       std::string& error);
 
+// Section 4.1, the one-byte forms: PUSH/POP/INC/DEC/CALL Rd and the nine system encodings.
+[[nodiscard]] bool encode_push_register(std::uint8_t rd, Encoding& out, std::string& error);
+[[nodiscard]] bool encode_pop_register(std::uint8_t rd, Encoding& out, std::string& error);
+[[nodiscard]] bool encode_inc_register(std::uint8_t rd, Encoding& out, std::string& error);
+[[nodiscard]] bool encode_dec_register(std::uint8_t rd, Encoding& out, std::string& error);
+[[nodiscard]] bool encode_call_register(std::uint8_t rd, Encoding& out, std::string& error);
+// 0x70 RET, 0x71 NOP, 0x72 BRK, 0x73 SYS, 0x74 EI, 0x75 DI, 0x76 HALT, 0x77 IRET, 0x78 RDCYCLE.
+[[nodiscard]] bool encode_system(std::uint8_t opcode, Encoding& out, std::string& error);
+
 }  // namespace krc::asmkr216
