@@ -1693,6 +1693,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         }
         const auto layout = layout_function(*function, error);
         if (!error.empty()) return std::nullopt;
+        out += ".section .text." + function->name + "\n";
         emit_function(out, *function, layout, error);
         if (!error.empty()) return std::nullopt;
     }
@@ -1764,6 +1765,23 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
                        debug_type_name(global->element_type) + " " +
                        std::to_string(type_size(global->element_type)) +
                        std::string(1, '\0');
+    }
+    // The Register class carries a 16-bit immediate in three bytes, but R0/R1
+    // already hold 0/1. An immediate 0 or 1 is a two-byte MOV, and it is the
+    // most common constant in lowered address and condition code.
+    for (int reg = 2; reg <= 10; ++reg) {
+        const std::string name = "R" + std::to_string(reg);
+        const auto replace_all = [&](const std::string& from,
+                                     const std::string& to) {
+            std::size_t position = 0;
+            while ((position = out.find(from, position)) != std::string::npos) {
+                out.replace(position, from.size(), to);
+                position += to.size();
+            }
+        };
+        replace_all("    LD " + name + ", #0\n", "    MOV " + name + ", R0\n");
+        replace_all("    LD " + name + ", #1\n", "    MOV " + name + ", R1\n");
+        replace_all("    ADD " + name + ", #0\n", "");
     }
     return out;
 }
