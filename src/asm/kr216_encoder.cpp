@@ -739,11 +739,19 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             return false;
         }
         if (!second.empty() && second.front() == '#') {
-            std::uint16_t value = 0;
-            if (!parse_number(trim(second.substr(1)), value)) {
+            std::string_view immediate = trim(second.substr(1));
+            bool negative = false;
+            if (!immediate.empty() && immediate.front() == '-') {
+                negative = true;
+                immediate.remove_prefix(1);
+            }
+            std::uint16_t magnitude = 0;
+            if (!parse_number(immediate, magnitude)) {
                 error = "kr216: " + mnemonic + " immediate is not a number";
                 return false;
             }
+            const std::int32_t value = negative ? -static_cast<std::int32_t>(magnitude)
+                                                : static_cast<std::int32_t>(magnitude);
             if (mnemonic == "add") return encode_normal_add_imm8(rd, value, out, error);
             if (mnemonic == "sub") return encode_normal_sub_imm8(rd, value, out, error);
             if (mnemonic == "cmp") return encode_normal_cmp_imm8(rd, value, out, error);

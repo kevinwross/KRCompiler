@@ -2,6 +2,8 @@
 
 int __krc_write(int fd, const char *buffer, int count);
 
+void *__krc_dynamic_cast(unsigned char *object, unsigned char *target_type);
+
 unsigned long __krc_negate32(unsigned long value);
 void __krc_negate64(unsigned int *value);
 unsigned long __krc_f64_to_u32(double value);
@@ -9,6 +11,32 @@ unsigned long long __krc_f64_to_u64(double value);
 
 extern char __heap_start[];
 extern char __heap_end[];
+
+/*
+ * Single-inheritance RTTI: the object's vptr at offset 0 points at the first
+ * virtual slot, the typeinfo pointer sits one word below it, and each typeinfo
+ * links its base at +6. No address adjustment is needed for single
+ * inheritance.
+ */
+void *__krc_dynamic_cast(unsigned char *object, unsigned char *target_type) {
+    unsigned char *vptr;
+    unsigned char *typeinfo;
+    if (object == 0 || target_type == 0) {
+        return 0;
+    }
+    vptr = *(unsigned char **)object;
+    if (vptr == 0) {
+        return 0;
+    }
+    typeinfo = *(unsigned char **)(vptr - 2);
+    while (typeinfo != 0) {
+        if (typeinfo == target_type) {
+            return object;
+        }
+        typeinfo = *(unsigned char **)(typeinfo + 6);
+    }
+    return 0;
+}
 
 static char *heap_cursor;
 
