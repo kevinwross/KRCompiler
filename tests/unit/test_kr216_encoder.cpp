@@ -296,3 +296,15 @@ TEST_CASE("kr216 assembles the branches") {
     REQUIRE(assemble_line("bal +4", out, error));   CHECK(out.bytes[0] == 0xBC);
     CHECK_FALSE(assemble_line("beq +256", out, error));
 }
+TEST_CASE("kr216 assembles the FP mnemonics") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("fadd f0, f1", out, error));  CHECK(out.bytes[0] == 0xF3); CHECK(out.bytes[1] == 0x01);
+    REQUIRE(assemble_line("fcmp f0, f1", out, error));  CHECK(out.bytes[1] == 0x81);
+    REQUIRE(assemble_line("fmov f2, f3", out, error));  CHECK(out.bytes[1] == 0x7B);
+    REQUIRE(assemble_line("frnd f1", out, error));      CHECK(out.bytes[1] == 0x94);
+    REQUIRE(assemble_line("fpush f1", out, error));     CHECK(out.bytes[0] == 0xF6); CHECK(out.bytes[1] == 0x01);
+    REQUIRE(assemble_line("i2f f0, r2", out, error));   CHECK(out.bytes[0] == 0xF5); CHECK(out.bytes[2] == 0x20);
+    REQUIRE(assemble_line("f2i r2, f0", out, error));   CHECK(out.bytes[1] == 0x20);
+    CHECK_FALSE(assemble_line("fadd f0, f4", out, error));
+}

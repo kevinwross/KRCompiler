@@ -424,6 +424,13 @@ bool parse_register(std::string_view text, std::uint8_t& out) {
     return true;
 }
 
+bool parse_fp_register(std::string_view text, std::uint8_t& out) {
+    if (text.size() != 2 || (text[0] != 'f' && text[0] != 'F')) return false;
+    if (text[1] < '0' || text[1] > '3') return false;
+    out = static_cast<std::uint8_t>(text[1] - '0');
+    return true;
+}
+
 bool parse_number(std::string_view text, std::uint16_t& out) {
     if (text.empty()) return false;
     unsigned base = 10;
@@ -710,6 +717,58 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             return false;
         }
         return encode_normal_leave(mask, out, error);
+    }
+    static const struct {
+        const char* name;
+        std::uint8_t opcode;
+    } kFpBinary[] = {{"fadd", 0}, {"fsub", 1}, {"fmul", 2}, {"fdiv", 3}, {"fmov", 7}, {"fcmp", 8}};
+    for (const auto& entry : kFpBinary) {
+        if (mnemonic != entry.name) continue;
+        std::uint8_t fd = 0;
+        std::uint8_t fs = 0;
+        if (!parse_fp_register(first, fd) || !parse_fp_register(second, fs)) {
+            error = "kr216: " + mnemonic + " needs two FP registers";
+            return false;
+        }
+        return encode_f3(entry.opcode, fd, fs, out, error);
+    }
+    static const struct {
+        const char* name;
+        std::uint8_t opcode;
+    } kFpUnary[] = {{"fneg", 4}, {"fabs", 5}, {"fsqrt", 6}, {"frnd", 9}};
+    for (const auto& entry : kFpUnary) {
+        if (mnemonic != entry.name) continue;
+        std::uint8_t fd = 0;
+        if (!parse_fp_register(first, fd)) {
+            error = "kr216: " + mnemonic + " needs an FP register";
+            return false;
+        }
+        return encode_f3(entry.opcode, fd, 0, out, error);
+    }
+    if (mnemonic == "fpush" || mnemonic == "fpop") {
+        std::uint8_t fd = 0;
+        if (!parse_fp_register(first, fd)) {
+            error = "kr216: " + mnemonic + " needs an FP register";
+            return false;
+        }
+        return encode_f6(mnemonic == "fpush" ? 0 : 1, fd, out, error);
+    }
+    if (mnemonic == "i2f" || mnemonic == "u2f" || mnemonic == "f2i" || mnemonic == "f2u") {
+        std::uint8_t fd = 0;
+        std::uint8_t reg = 0;
+        if (mnemonic == "i2f" || mnemonic == "u2f") {
+            if (!parse_fp_register(first, fd) || !parse_register(second, reg)) {
+                error = "kr216: " + mnemonic + " needs an FP register and an integer register";
+                return false;
+            }
+        } else {
+            if (!parse_register(first, reg) || !parse_fp_register(second, fd)) {
+                error = "kr216: " + mnemonic + " needs an integer register and an FP register";
+                return false;
+            }
+        }
+        const std::uint8_t opcode = mnemonic == "i2f" ? 0 : (mnemonic == "u2f" ? 1 : (mnemonic == "f2i" ? 2 : 3));
+        return encode_f5(opcode, fd, reg, out, error);
     }
     static const struct {
         const char* name;
