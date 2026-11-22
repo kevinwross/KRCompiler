@@ -990,6 +990,27 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 store_word(*instruction, "R2");
                 break;
             }
+            case ir::Opcode::SIToFP:
+            case ir::Opcode::UIToFP: {
+                load_word(instruction->operands[0], "R2");
+                out += instruction->opcode == ir::Opcode::SIToFP ? "    I2F F0, R2\n"
+                                                                 : "    U2F F0, R2\n";
+                const auto width = type_size(instruction->type);
+                load_address(instruction.get(), "R2");
+                out += width == 8 ? "    FST F0, [R2]\n" : "    FSTS F0, [R2]\n";
+                break;
+            }
+            case ir::Opcode::FPTrunc:
+            case ir::Opcode::FPExt: {
+                const auto source_width = type_size(instruction->operands[0]->type);
+                load_address(instruction->operands[0], "R2");
+                out += source_width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
+                if (instruction->opcode == ir::Opcode::FPTrunc) out += "    FRND F0\n";
+                const auto width = type_size(instruction->type);
+                load_address(instruction.get(), "R2");
+                out += width == 8 ? "    FST F0, [R2]\n" : "    FSTS F0, [R2]\n";
+                break;
+            }
             case ir::Opcode::FPToSI:
             case ir::Opcode::FPToUI: {
                 const auto width = type_size(instruction->operands[0]->type);
