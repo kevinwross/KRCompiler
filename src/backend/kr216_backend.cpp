@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,6 +22,8 @@ std::uint32_t type_alignment(const ir::TypePtr& type) {
     switch (type->kind) {
     case ir::TypeKind::Integer:
         return type->bits <= 8 ? 1 : 2;
+    case ir::TypeKind::Float:
+        return type->bits <= 32 ? 4 : 8;
     case ir::TypeKind::Pointer:
         return 2;
     case ir::TypeKind::Array:
@@ -49,6 +52,8 @@ std::uint32_t type_size(const ir::TypePtr& type) {
         return 0;
     case ir::TypeKind::Integer:
         return static_cast<std::uint32_t>(std::max<std::uint64_t>(1, type->bits / 8));
+    case ir::TypeKind::Float:
+        return static_cast<std::uint32_t>(std::max<std::uint64_t>(4, type->bits / 8));
     case ir::TypeKind::Pointer:
         return 2;
     case ir::TypeKind::Array:
@@ -475,9 +480,13 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 } else {
                     out += "    LD R2, [R3]\n";
                     store_word(*instruction, "R2");
-                    if (is_wide(instruction->type)) {
-                        out += "    LD R2, [R3+2]\n";
-                        store_word(*instruction, "R2", true);
+                    for (std::uint32_t offset = 2; offset < size; offset += 2) {
+                        out += "    LD R2, [R3+" + std::to_string(offset) + "]\n";
+                        if (offset == 2) {
+                            store_word(*instruction, "R2", true);
+                        } else {
+                            frame_store(slot(instruction.get()) + offset, "R2");
+                        }
                     }
                 }
                 break;
@@ -486,6 +495,24 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 const auto size = type_size(
                     instruction->operands[0] ? instruction->operands[0]->type : nullptr);
                 load_word(instruction->operands[1], "R3");
+                if (const auto* floating =
+                        dynamic_cast<const ir::ConstantFloat*>(instruction->operands[0])) {
+                    std::uint64_t bits = 0;
+                    if (size == 4) {
+                        const float narrowed = static_cast<float>(floating->value);
+                        std::memcpy(&bits, &narrowed, sizeof(narrowed));
+                    } else {
+                        std::memcpy(&bits, &floating->value, sizeof(floating->value));
+                    }
+                    for (std::uint32_t offset = 0; offset < size; offset += 2) {
+                        out += "    LD R2, #" +
+                               std::to_string(static_cast<std::uint16_t>(
+                                   (bits >> (offset * 8)) & 0xFFFF)) +
+                               "\n";
+                        out += "    ST [R3+" + std::to_string(offset) + "], R2\n";
+                    }
+                    break;
+                }
                 if (is_aggregate(instruction->operands[0] ? instruction->operands[0]->type
                                                           : nullptr)) {
                     const auto source = slot(instruction->operands[0]);
@@ -495,16 +522,63 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     }
                     break;
                 }
-                load_word(instruction->operands[0], "R2");
                 if (size == 1) {
+                    load_word(instruction->operands[0], "R2");
                     out += "    STB [R3], R2\n";
+                    break;
+                }
+                const auto* source = instruction->operands[0];
+                if (size <= 2) {
+                    load_word(source, "R2");
+                    out += size == 1 ? "    STB [R3], R2\n" : "    ST [R3], R2\n";
+                    break;
+                }
+                const bool has_slot =
+                    source && (source->kind == ir::ValueKind::Instruction ||
+                               source->kind == ir::ValueKind::Parameter);
+                if (has_slot) {
+                    load_address(source, "R6");
+                    for (std::uint32_t offset = 0; offset < size; offset += 2) {
+                        out += "    LD R2, [R6+" + std::to_string(offset) + "]\n";
+                        out += "    ST [R3+" + std::to_string(offset) + "], R2\n";
+                    }
                 } else {
+                    load_word(source, "R2");
                     out += "    ST [R3], R2\n";
                     if (size > 2) {
-                        load_word(instruction->operands[0], "R2", true);
+                        load_word(source, "R2", true);
                         out += "    ST [R3+2], R2\n";
                     }
                 }
+                break;
+            }
+            case ir::Opcode::FAdd:
+            case ir::Opcode::FSub:
+            case ir::Opcode::FMul:
+            case ir::Opcode::FDiv: {
+                if (!instruction->type || !ir::is_float(instruction->type)) {
+                    error = "kr216 floating-point opcode has a non-floating type";
+                    return;
+                }
+                const auto width = type_size(instruction->type);
+                const auto load_fp = [&](const ir::Value* value, std::string_view reg) {
+                    load_address(value, "R2");
+                    out += width == 8 ? "    FLD " + std::string(reg) + ", [R2]\n"
+                                      : "    FLDS " + std::string(reg) + ", [R2]\n";
+                };
+                const auto mnemonic = instruction->opcode == ir::Opcode::FAdd
+                                          ? "FADD"
+                                          : instruction->opcode == ir::Opcode::FSub
+                                                ? "FSUB"
+                                                : instruction->opcode == ir::Opcode::FMul
+                                                      ? "FMUL"
+                                                      : "FDIV";
+                load_fp(instruction->operands[0], "F0");
+                load_fp(instruction->operands[1], "F1");
+                out += "    " + std::string(mnemonic) + " F0, F1\n";
+                if (width == 4) out += "    FRND F0\n";
+                load_address(instruction.get(), "R2");
+                out += width == 8 ? "    FST F0, [R2]\n" : "    FSTS F0, [R2]\n";
                 break;
             }
             case ir::Opcode::Add:
@@ -784,6 +858,16 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 out += true_label + ":\n";
                 out += "    LD R2, #1\n";
                 out += end_label + ":\n";
+                store_word(*instruction, "R2");
+                break;
+            }
+            case ir::Opcode::FPToSI:
+            case ir::Opcode::FPToUI: {
+                const auto width = type_size(instruction->operands[0]->type);
+                load_address(instruction->operands[0], "R2");
+                out += width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
+                out += instruction->opcode == ir::Opcode::FPToSI ? "    F2I R2, F0\n"
+                                                                 : "    F2U R2, F0\n";
                 store_word(*instruction, "R2");
                 break;
             }
