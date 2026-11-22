@@ -852,4 +852,85 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
     return false;
 }
 
+namespace {
+
+std::vector<std::string_view> split_lines(std::string_view source) {
+    std::vector<std::string_view> lines;
+    std::size_t start = 0;
+    while (start <= source.size()) {
+        const std::size_t end = source.find('\n', start);
+        const std::size_t stop = end == std::string_view::npos ? source.size() : end;
+        lines.push_back(source.substr(start, stop - start));
+        if (end == std::string_view::npos) break;
+        start = end + 1;
+    }
+    return lines;
+}
+
+// Splits `a, b, c` into trimmed pieces; an empty input yields no pieces.
+std::vector<std::string_view> split_commas(std::string_view text) {
+    std::vector<std::string_view> parts;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const std::size_t comma = text.find(',', start);
+        const std::size_t stop = comma == std::string_view::npos ? text.size() : comma;
+        const auto part = trim(text.substr(start, stop - start));
+        if (!part.empty()) parts.push_back(part);
+        if (comma == std::string_view::npos) break;
+        start = comma + 1;
+    }
+    return parts;
+}
+
+}  // namespace
+
+bool assemble_text(std::string_view source, AssembledProgram& out, std::string& error) {
+    out.bytes.clear();
+    out.labels.clear();
+    for (const std::string_view raw : split_lines(source)) {
+        std::string_view line = raw;
+        const std::size_t comment = line.find(';');
+        if (comment != std::string_view::npos) line = line.substr(0, comment);
+        line = trim(line);
+        if (line.empty()) continue;
+
+        if (line.back() == ':') {
+            const auto name = trim(line.substr(0, line.size() - 1));
+            if (name.empty()) {
+                error = "kr216: empty label";
+                return false;
+            }
+            out.labels.emplace_back(std::string(name), static_cast<std::uint16_t>(out.bytes.size()));
+            continue;
+        }
+
+        if (line.front() == '.') {
+            const std::size_t space = line.find_first_of(" \t");
+            const std::string directive(line.substr(0, space));
+            const std::string_view operands =
+                space == std::string_view::npos ? std::string_view{} : trim(line.substr(space));
+            const std::size_t width = directive == ".byte" ? 1 : (directive == ".word" ? 2 : 0);
+            if (width == 0) {
+                error = "kr216: unknown directive '" + directive + "'";
+                return false;
+            }
+            for (const std::string_view value : split_commas(operands)) {
+                std::uint16_t number = 0;
+                if (!parse_number(value, number)) {
+                    error = "kr216: " + directive + " value is not a number";
+                    return false;
+                }
+                out.bytes.push_back(static_cast<std::uint8_t>(number & 0xFF));
+                if (width == 2) out.bytes.push_back(static_cast<std::uint8_t>(number >> 8));
+            }
+            continue;
+        }
+
+        Encoding encoding;
+        if (!assemble_line(line, encoding, error)) return false;
+        out.bytes.insert(out.bytes.end(), encoding.bytes, encoding.bytes + encoding.size);
+    }
+    return true;
+}
+
 }  // namespace krc::asmkr216

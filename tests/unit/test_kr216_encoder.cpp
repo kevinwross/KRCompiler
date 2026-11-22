@@ -319,3 +319,28 @@ TEST_CASE("kr216 assembles the FP loads and stores") {
     REQUIRE(assemble_line("fsts f1, -[r3]", out, error));  CHECK(out.bytes[1] == 0x37);
     CHECK_FALSE(assemble_line("fld f4, [r2]", out, error));
 }
+TEST_CASE("kr216 assembles a multi-line source with labels and directives") {
+    AssembledProgram program;
+    std::string error;
+    const char* source =
+        "; a two-instruction program\n"
+        "start:\n"
+        "    ld r2, #42     ; exit status\n"
+        "    sys\n"
+        "table:\n"
+        "    .byte 1, 2\n"
+        "    .word 0x1234\n";
+    REQUIRE(assemble_text(source, program, error));
+    REQUIRE(program.bytes.size() == 3 + 1 + 2 + 2);
+    CHECK(program.bytes[0] == 0x52);
+    CHECK(program.bytes[3] == 0x73);
+    REQUIRE(program.labels.size() == 2);
+    CHECK(program.labels[0].first == "start");
+    CHECK(program.labels[0].second == 0);
+    CHECK(program.labels[1].first == "table");
+    CHECK(program.labels[1].second == 4);
+    CHECK(program.bytes[4] == 1);
+    CHECK(program.bytes[6] == 0x34);
+    CHECK(program.bytes[7] == 0x12);
+    CHECK_FALSE(assemble_text(".globl x", program, error));
+}

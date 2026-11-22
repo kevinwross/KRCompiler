@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace krc::asmkr216 {
 
@@ -105,5 +107,16 @@ struct Encoding {
 [[nodiscard]] bool parse_register(std::string_view text, std::uint8_t& out);
 [[nodiscard]] bool parse_number(std::string_view text, std::uint16_t& out);
 [[nodiscard]] bool assemble_line(std::string_view line, Encoding& out, std::string& error);
+
+// The multi-line layer: `;` comments, `name:` labels, `.byte`/`.word` directives and one
+// instruction per line. Labels are recorded with the offset they name; resolving a label in an
+// operand is the next step and is refused until then.
+struct AssembledProgram {
+    std::vector<std::uint8_t> bytes;
+    std::vector<std::pair<std::string, std::uint16_t>> labels;
+};
+
+[[nodiscard]] bool assemble_text(std::string_view source, AssembledProgram& out,
+                                 std::string& error);
 
 }  // namespace krc::asmkr216
