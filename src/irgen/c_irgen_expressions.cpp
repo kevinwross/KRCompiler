@@ -3606,7 +3606,7 @@ void CIRGen::throw_object(const frontend::RecordInfo& record,
     ir::Value* destructor = module_->constant_null(byte_pointer);
     auto* cleanup = ensure_member_destructor(info->record.get());
     if (cleanup) {
-        const auto slot_type = module_->types().int_type(16);
+        const auto slot_type = module_->types().int_type(profile_.pointer_bits);
         const auto table_type = module_->types().array_type(slot_type, 1);
         auto* table = module_->add_global(
             "__exception_dtor_" + std::to_string(static_local_counter_++),
@@ -3830,7 +3830,7 @@ void CIRGen::emit_throw(const frontend::AstNode& statement) {
     ir::Value* destructor = module_->constant_null(byte_pointer);
     auto* cleanup = ensure_member_destructor(record->second);
     if (cleanup) {
-        const auto slot_type = module_->types().int_type(16);
+        const auto slot_type = module_->types().int_type(profile_.pointer_bits);
         const auto table_type = module_->types().array_type(slot_type, 1);
         auto* table = module_->add_global(
             "__exception_dtor_" + std::to_string(static_local_counter_++),
@@ -4280,4 +4280,5 @@ ir::Value* CIRGen::constant_int(ir::TypePtr type, std::int64_t value) {
 }
 
 }  // namespace krc::irgen
+
 
