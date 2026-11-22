@@ -931,12 +931,63 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             }
             case ir::Opcode::ICmp: {
                 if (is_wide(instruction->operands[0]->type)) {
-                    // Equality is enough for the M3 literal check; the ordered
-                    // predicates need the high/low split and are refused loudly.
                     if (instruction->icmp_predicate != ir::ICmpPredicate::Eq &&
                         instruction->icmp_predicate != ir::ICmpPredicate::Ne) {
-                        error = "kr216 32-bit ordered comparison is not implemented";
-                        return;
+                        const auto words = word_count(instruction->operands[0]->type);
+                        const bool is_signed =
+                            instruction->icmp_predicate == ir::ICmpPredicate::Slt ||
+                            instruction->icmp_predicate == ir::ICmpPredicate::Sle ||
+                            instruction->icmp_predicate == ir::ICmpPredicate::Sgt ||
+                            instruction->icmp_predicate == ir::ICmpPredicate::Sge;
+                        const auto predicate = instruction->icmp_predicate;
+                        const auto suffix = "." + function.name + "." +
+                                            std::to_string(synthetic_label);
+                        ++synthetic_label;
+                        const auto greater_label = ".Lcmp.greater" + suffix;
+                        const auto less_label = ".Lcmp.less" + suffix;
+                        const auto done_label = ".Lcmp.ordered.done" + suffix;
+                        for (std::uint32_t word = words; word > 1; --word) {
+                            load_word_at(instruction->operands[0], "R2", word - 1);
+                            load_word_at(instruction->operands[1], "R3", word - 1);
+                            out += "    CMP R2, R3\n";
+                            const bool high_signed = is_signed && word == words;
+                            out += std::string(high_signed ? "    BGT " : "    BHI ") +
+                                   greater_label + "\n";
+                            out += std::string(high_signed ? "    BLT " : "    BCC ") +
+                                   less_label + "\n";
+                        }
+                        load_word_at(instruction->operands[0], "R2", 0);
+                        load_word_at(instruction->operands[1], "R3", 0);
+                        out += "    CMP R2, R3\n";
+                        out += "    BHI " + greater_label + "\n";
+                        out += "    BCC " + less_label + "\n";
+                        const bool equal_true =
+                            predicate == ir::ICmpPredicate::Uge ||
+                            predicate == ir::ICmpPredicate::Sge ||
+                            predicate == ir::ICmpPredicate::Ule ||
+                            predicate == ir::ICmpPredicate::Sle;
+                        const bool greater_true =
+                            predicate == ir::ICmpPredicate::Ugt ||
+                            predicate == ir::ICmpPredicate::Sgt ||
+                            predicate == ir::ICmpPredicate::Uge ||
+                            predicate == ir::ICmpPredicate::Sge;
+                        const bool less_true =
+                            predicate == ir::ICmpPredicate::Ult ||
+                            predicate == ir::ICmpPredicate::Slt ||
+                            predicate == ir::ICmpPredicate::Ule ||
+                            predicate == ir::ICmpPredicate::Sle;
+                        out += std::string("    LD R2, #") + (equal_true ? "1\n" : "0\n");
+                        out += "    JMP " + done_label + "\n";
+                        out += greater_label + ":\n";
+                        out += std::string("    LD R2, #") +
+                               (greater_true ? "1\n" : "0\n");
+                        out += "    JMP " + done_label + "\n";
+                        out += less_label + ":\n";
+                        out += std::string("    LD R2, #") +
+                               (less_true ? "1\n" : "0\n");
+                        out += done_label + ":\n";
+                        store_word(*instruction, "R2");
+                        break;
                     }
                     const bool equality =
                         instruction->icmp_predicate == ir::ICmpPredicate::Eq;
