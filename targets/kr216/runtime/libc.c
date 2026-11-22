@@ -247,6 +247,199 @@ long __krc_srem32(long numerator, long denominator) {
     return (long)remainder;
 }
 
+void __krc_udiv64(unsigned int *numerator, unsigned int *denominator, unsigned int *out) {
+    unsigned int n[4];
+    unsigned int d[4];
+    unsigned int q[4];
+    unsigned int r[4];
+    int i = 0;
+    while (i < 4) {
+        n[i] = numerator[i];
+        d[i] = denominator[i];
+        q[i] = 0;
+        r[i] = 0;
+        i++;
+    }
+    if ((d[0] | d[1] | d[2] | d[3]) != 0) {
+        int word = 3;
+        while (word >= 0) {
+            unsigned int mask = 0x8000;
+            int pos = 0;
+            while (pos < 16) {
+                r[3] = (r[3] << 1) | (r[2] >> 15);
+                r[2] = (r[2] << 1) | (r[1] >> 15);
+                r[1] = (r[1] << 1) | (r[0] >> 15);
+                r[0] = r[0] << 1;
+                r[0] = r[0] | (n[3] >> 15);
+                n[3] = (n[3] << 1) | (n[2] >> 15);
+                n[2] = (n[2] << 1) | (n[1] >> 15);
+                n[1] = (n[1] << 1) | (n[0] >> 15);
+                n[0] = n[0] << 1;
+                int ge = 1;
+                int j = 3;
+                while (j >= 0) {
+                    if (r[j] > d[j]) {
+                        ge = 1;
+                        break;
+                    }
+                    if (r[j] < d[j]) {
+                        ge = 0;
+                        break;
+                    }
+                    j--;
+                }
+                if (ge) {
+                    unsigned int borrow = 0;
+                    int k = 0;
+                    while (k < 4) {
+                        const unsigned int sub = d[k] + borrow;
+                        borrow = r[k] < sub;
+                        r[k] = r[k] - sub;
+                        k++;
+                    }
+                    q[word] = q[word] | mask;
+                }
+                mask = mask >> 1;
+                pos++;
+            }
+            word--;
+        }
+    }
+    i = 0;
+    while (i < 4) {
+        out[i] = q[i];
+        i++;
+    }
+}
+
+void __krc_urem64(unsigned int *numerator, unsigned int *denominator, unsigned int *out) {
+    unsigned int n[4];
+    unsigned int d[4];
+    unsigned int r[4];
+    int i = 0;
+    while (i < 4) {
+        n[i] = numerator[i];
+        d[i] = denominator[i];
+        r[i] = 0;
+        i++;
+    }
+    if ((d[0] | d[1] | d[2] | d[3]) != 0) {
+        int bit = 0;
+        while (bit < 64) {
+            r[3] = (r[3] << 1) | (r[2] >> 15);
+            r[2] = (r[2] << 1) | (r[1] >> 15);
+            r[1] = (r[1] << 1) | (r[0] >> 15);
+            r[0] = r[0] << 1;
+            r[0] = r[0] | (n[3] >> 15);
+            n[3] = (n[3] << 1) | (n[2] >> 15);
+            n[2] = (n[2] << 1) | (n[1] >> 15);
+            n[1] = (n[1] << 1) | (n[0] >> 15);
+            n[0] = n[0] << 1;
+            int ge = 1;
+            int j = 3;
+            while (j >= 0) {
+                if (r[j] > d[j]) {
+                    ge = 1;
+                    break;
+                }
+                if (r[j] < d[j]) {
+                    ge = 0;
+                    break;
+                }
+                j--;
+            }
+            if (ge) {
+                unsigned int borrow = 0;
+                int k = 0;
+                while (k < 4) {
+                    const unsigned int sub = d[k] + borrow;
+                    borrow = r[k] < sub;
+                    r[k] = r[k] - sub;
+                    k++;
+                }
+            }
+            bit++;
+        }
+    }
+    i = 0;
+    while (i < 4) {
+        out[i] = r[i];
+        i++;
+    }
+}
+
+void __krc_negate64(unsigned int *value) {
+    unsigned int carry = 1;
+    int i = 0;
+    while (i < 4) {
+        value[i] = ~value[i];
+        const unsigned int old = value[i];
+        value[i] = value[i] + carry;
+        carry = old > value[i];
+        i++;
+    }
+}
+
+void __krc_sdiv64(unsigned int *numerator, unsigned int *denominator, unsigned int *out) {
+    unsigned int n[4];
+    unsigned int d[4];
+    unsigned int q[4];
+    int i = 0;
+    while (i < 4) {
+        n[i] = numerator[i];
+        d[i] = denominator[i];
+        q[i] = 0;
+        i++;
+    }
+    const int nneg = n[3] >> 15;
+    const int dneg = d[3] >> 15;
+    if (nneg != 0) {
+        __krc_negate64(n);
+    }
+    if (dneg != 0) {
+        __krc_negate64(d);
+    }
+    __krc_udiv64(n, d, q);
+    if (nneg != dneg) {
+        __krc_negate64(q);
+    }
+    i = 0;
+    while (i < 4) {
+        out[i] = q[i];
+        i++;
+    }
+}
+
+void __krc_srem64(unsigned int *numerator, unsigned int *denominator, unsigned int *out) {
+    unsigned int n[4];
+    unsigned int d[4];
+    unsigned int r[4];
+    int i = 0;
+    while (i < 4) {
+        n[i] = numerator[i];
+        d[i] = denominator[i];
+        r[i] = 0;
+        i++;
+    }
+    const int nneg = n[3] >> 15;
+    const int dneg = d[3] >> 15;
+    if (nneg != 0) {
+        __krc_negate64(n);
+    }
+    if (dneg != 0) {
+        __krc_negate64(d);
+    }
+    __krc_urem64(n, d, r);
+    if (nneg != 0) {
+        __krc_negate64(r);
+    }
+    i = 0;
+    while (i < 4) {
+        out[i] = r[i];
+        i++;
+    }
+}
+
 void __krc_mul64(unsigned int *left, unsigned int *right, unsigned int *out) {
     unsigned long long a;
     unsigned long long b;

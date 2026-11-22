@@ -678,10 +678,6 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::URem: {
                 if (is_wide(instruction->type)) {
                     if (word_count(instruction->type) > 2) {
-                        if (instruction->opcode != ir::Opcode::Mul) {
-                            error = "kr216 64-bit division and remainder are not implemented";
-                            return;
-                        }
                         std::uint32_t pushed = 0;
                         const auto push_value = [&](const ir::Value* value) {
                             for (std::uint32_t word = 4; word > 0; --word) {
@@ -696,7 +692,17 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         out += "    ADD R2, #8\n";
                         out += "    MOV R3, SP\n";
                         load_address(instruction.get(), "R4", 16);
-                        out += "    CALL __krc_mul64\n";
+                        const char* helper = "__krc_mul64";
+                        if (instruction->opcode == ir::Opcode::UDiv) {
+                            helper = "__krc_udiv64";
+                        } else if (instruction->opcode == ir::Opcode::SDiv) {
+                            helper = "__krc_sdiv64";
+                        } else if (instruction->opcode == ir::Opcode::URem) {
+                            helper = "__krc_urem64";
+                        } else if (instruction->opcode == ir::Opcode::SRem) {
+                            helper = "__krc_srem64";
+                        }
+                        out += "    CALL " + std::string(helper) + "\n";
                         out += "    ADD SP, #16\n";
                         break;
                     }
@@ -1480,6 +1486,10 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".extern __krc_shr64\n";
     out += ".extern __krc_sar64\n";
     out += ".extern __krc_mul64\n";
+    out += ".extern __krc_udiv64\n";
+    out += ".extern __krc_urem64\n";
+    out += ".extern __krc_sdiv64\n";
+    out += ".extern __krc_srem64\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";
