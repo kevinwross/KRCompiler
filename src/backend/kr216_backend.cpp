@@ -770,6 +770,56 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         }
                         return nullptr;
                     }();
+                    if (word_count(instruction->type) > 2) {
+                        if (!literal || literal->value < 0 || literal->value > 63) {
+                            error = "kr216 dynamic 64-bit shifts are not implemented";
+                            return;
+                        }
+                        const auto count = static_cast<std::uint32_t>(literal->value);
+                        const auto word_shift = count / 16;
+                        const auto bit_shift = count % 16;
+                        const bool left = instruction->opcode == ir::Opcode::Shl;
+                        const bool arithmetic = instruction->opcode == ir::Opcode::AShr;
+                        if (arithmetic) {
+                            load_word_at(instruction->operands[0], "R4", 3);
+                            out += "    SAR R4, #15\n";
+                        }
+                        for (std::uint32_t word = 0; word < 4; ++word) {
+                            const auto source = left ? static_cast<int>(word) -
+                                                           static_cast<int>(word_shift)
+                                                     : static_cast<int>(word) +
+                                                           static_cast<int>(word_shift);
+                            if (source < 0 || source >= 4) {
+                                if (arithmetic) {
+                                    out += "    MOV R2, R4\n";
+                                } else {
+                                    out += "    LD R2, #0\n";
+                                }
+                                store_word_at(*instruction, "R2", word);
+                                continue;
+                            }
+                            load_word_at(instruction->operands[0], "R2",
+                                         static_cast<std::uint32_t>(source));
+                            if (bit_shift != 0) {
+                                out += std::string(left ? "    SHL R2, #" : "    SHR R2, #") +
+                                       std::to_string(bit_shift) + "\n";
+                                const auto next = left ? source - 1 : source + 1;
+                                if (next >= 0 && next < 4) {
+                                    load_word_at(instruction->operands[0], "R3",
+                                                 static_cast<std::uint32_t>(next));
+                                } else if (arithmetic) {
+                                    out += "    MOV R3, R4\n";
+                                } else {
+                                    out += "    LD R3, #0\n";
+                                }
+                                out += std::string(left ? "    SHR R3, #" : "    SHL R3, #") +
+                                       std::to_string(16 - bit_shift) + "\n";
+                                out += "    OR R2, R3\n";
+                            }
+                            store_word_at(*instruction, "R2", word);
+                        }
+                        break;
+                    }
                     if (!literal || literal->value < 0 || literal->value > 31) {
                         const char* helper = "__krc_shl32";
                         if (instruction->opcode == ir::Opcode::LShr) helper = "__krc_shr32";
@@ -1078,17 +1128,30 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::ZExt:
             case ir::Opcode::SExt:
             case ir::Opcode::Trunc: {
+                if (instruction->opcode == ir::Opcode::SExt ||
+                    instruction->opcode == ir::Opcode::ZExt) {
+                    const auto source_words = word_count(instruction->operands[0]->type);
+                    const auto target_words = word_count(instruction->type);
+                    if (instruction->opcode == ir::Opcode::SExt) {
+                        load_word_at(instruction->operands[0], "R3", source_words - 1);
+                        out += "    SAR R3, #15\n";
+                    } else {
+                        out += "    LD R3, #0\n";
+                    }
+                    for (std::uint32_t word = 0; word < target_words; ++word) {
+                        if (word < source_words) {
+                            load_word_at(instruction->operands[0], "R2", word);
+                        } else {
+                            out += "    MOV R2, R3\n";
+                        }
+                        store_word_at(*instruction, "R2", word);
+                    }
+                    break;
+                }
                 load_word(instruction->operands[0], "R2");
                 store_word(*instruction, "R2");
                 if (is_wide(instruction->type)) {
-                    if (instruction->opcode == ir::Opcode::SExt) {
-                        out += "    MOV R3, R2\n";
-                        out += "    SAR R3, #15\n";
-                    } else if (instruction->opcode == ir::Opcode::ZExt) {
-                        out += "    LD R3, #0\n";
-                    } else {
-                        load_word(instruction->operands[0], "R3", true);
-                    }
+                    load_word(instruction->operands[0], "R3", true);
                     store_word(*instruction, "R3", true);
                 }
                 break;
