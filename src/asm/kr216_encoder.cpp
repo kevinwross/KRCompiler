@@ -330,4 +330,37 @@ bool encode_f1(std::uint8_t opcode, std::uint8_t reg, std::uint16_t field, Encod
     return true;
 }
 
+bool encode_f6(std::uint8_t opcode, std::uint8_t fd, Encoding& out, std::string& error) {
+    if (opcode > 1) {
+        error = "kr216 F6 opcode must be 0 (FPUSH) or 1 (FPOP)";
+        return false;
+    }
+    if (fd > 3) {
+        error = "kr216 FP register must be f0-f3";
+        return false;
+    }
+    out.bytes[0] = 0xF6;
+    out.bytes[1] = static_cast<std::uint8_t>((opcode << 2) | fd);
+    out.size = 2;
+    return true;
+}
+
+bool encode_f8_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std::string& error) {
+    if ((frame & 1u) != 0) {
+        error = "kr216 ENTER frame must be even";
+        return false;
+    }
+    if (mask == 0) {
+        error = "kr216 ENTER mask may not be empty";
+        return false;
+    }
+    out.bytes[0] = 0xF8;
+    out.bytes[1] = static_cast<std::uint8_t>(frame & 0xFF);
+    out.bytes[2] = static_cast<std::uint8_t>(frame >> 8);
+    out.bytes[3] = static_cast<std::uint8_t>(mask & 0xFF);
+    out.bytes[4] = static_cast<std::uint8_t>(mask >> 8);
+    out.size = 5;
+    return true;
+}
+
 }  // namespace krc::asmkr216

@@ -82,4 +82,10 @@ struct Encoding {
 [[nodiscard]] bool encode_f1(std::uint8_t opcode, std::uint8_t reg, std::uint16_t field,
                              Encoding& out, std::string& error);
 
+// Section 8.6, `F6`: `OOOOOO Fd` (0 FPUSH, 1 FPOP) and `F8`: `ENTER #frame16, #mask16`.
+[[nodiscard]] bool encode_f6(std::uint8_t opcode, std::uint8_t fd, Encoding& out,
+                             std::string& error);
+[[nodiscard]] bool encode_f8_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out,
+                                   std::string& error);
+
 }  // namespace krc::asmkr216

@@ -155,3 +155,18 @@ TEST_CASE("kr216 F1 long-integer forms") {
     CHECK_FALSE(encode_f1(5, 0, 0, out, error));
     CHECK_FALSE(encode_f1(0, 16, 0, out, error));
 }
+TEST_CASE("kr216 F6 FP stack and F8 wide ENTER") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_f6(0, 1, out, error));  // fpush f1
+    CHECK(out.size == 2); CHECK(out.bytes[0] == 0xF6); CHECK(out.bytes[1] == 0x01);
+    REQUIRE(encode_f6(1, 1, out, error));  // fpop f1
+    CHECK(out.bytes[1] == 0x05);
+    CHECK_FALSE(encode_f6(2, 0, out, error));
+    CHECK_FALSE(encode_f6(0, 4, out, error));
+
+    REQUIRE(encode_f8_enter(0x0102, 0x0300, out, error));
+    CHECK(out.size == 5); CHECK(out.bytes[0] == 0xF8); CHECK(out.bytes[1] == 0x02);
+    CHECK(out.bytes[2] == 0x01); CHECK(out.bytes[3] == 0x00); CHECK(out.bytes[4] == 0x03);
+    CHECK_FALSE(encode_f8_enter(3, 0x0300, out, error));
+}
