@@ -220,7 +220,7 @@ TEST_CASE("kr216 assembles add, st and control transfer") {
     REQUIRE(assemble_line("jmp 0x0300", out, error));       CHECK(out.bytes[0] == 0xCF); CHECK(out.bytes[2] == 0x03);
     REQUIRE(assemble_line("call 0x0300", out, error));      CHECK(out.bytes[0] == 0xD0);
     CHECK_FALSE(assemble_line("st 0x4000, r2", out, error));
-    CHECK_FALSE(assemble_line("jmp r2", out, error));
+    CHECK_FALSE(assemble_line("jmp #5", out, error));
 }
 TEST_CASE("kr216 parser refuses operand shapes it does not implement") {
     Encoding out;
@@ -275,4 +275,15 @@ TEST_CASE("kr216 assembles mask pushes, neg/not and shifts") {
     REQUIRE(assemble_line("shl r2, #1", out, error));    CHECK(out.bytes[0] == 0xD4); CHECK(out.bytes[2] == 0x01);
     REQUIRE(assemble_line("sar r2, #2", out, error));    CHECK(out.bytes[0] == 0xD6); CHECK(out.bytes[2] == 0x02);
     CHECK_FALSE(assemble_line("shl r2, r3", out, error));
+}
+TEST_CASE("kr216 assembles enter/leave and the register jumps") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("enter #8, #0x0300", out, error));
+    CHECK(out.size == 4); CHECK(out.bytes[0] == 0xF7); CHECK(out.bytes[1] == 8); CHECK(out.bytes[3] == 0x03);
+    REQUIRE(assemble_line("leave #0x0300", out, error));
+    CHECK(out.bytes[0] == 0xDC); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x03);
+    REQUIRE(assemble_line("jmp r3", out, error));   CHECK(out.bytes[0] == 0x9F); CHECK(out.bytes[1] == 0x30);
+    REQUIRE(assemble_line("call r5", out, error));  CHECK(out.bytes[0] == 0x45);
+    CHECK_FALSE(assemble_line("enter #7, #0x0300", out, error));
 }

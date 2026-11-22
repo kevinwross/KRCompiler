@@ -685,7 +685,38 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         }
         return encode_st_absolute(rs, address, out, error);
     }
+    if (mnemonic == "enter") {
+        if (first.empty() || first.front() != '#' || second.empty() || second.front() != '#') {
+            error = "kr216: enter needs #frame, #mask";
+            return false;
+        }
+        std::uint16_t frame = 0;
+        std::uint16_t mask = 0;
+        if (!parse_number(trim(first.substr(1)), frame) ||
+            !parse_number(trim(second.substr(1)), mask)) {
+            error = "kr216: enter operands are not numbers";
+            return false;
+        }
+        return encode_f7_enter(frame, mask, out, error);
+    }
+    if (mnemonic == "leave") {
+        if (first.empty() || first.front() != '#') {
+            error = "kr216: leave needs #mask";
+            return false;
+        }
+        std::uint16_t mask = 0;
+        if (!parse_number(trim(first.substr(1)), mask)) {
+            error = "kr216: leave mask is not a number";
+            return false;
+        }
+        return encode_normal_leave(mask, out, error);
+    }
     if (mnemonic == "jmp" || mnemonic == "call") {
+        std::uint8_t target = 0;
+        if (parse_register(first, target)) {
+            if (mnemonic == "jmp") return encode_compact(31, target, 0, out, error);
+            return encode_call_register(target, out, error);
+        }
         std::uint16_t address = 0;
         if (!parse_number(first, address)) {
             error = "kr216: " + mnemonic + " needs an address";
