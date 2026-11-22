@@ -535,6 +535,45 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         if (bracketed) return encode_ld_absolute(rd, value, out, error);
         return encode_ld_immediate(rd, value, out, error);
     }
+    if (mnemonic == "add") {
+        if (!parse_register(first, rd)) {
+            error = "kr216: add needs a destination register";
+            return false;
+        }
+        std::uint8_t rs = 0;
+        if (!parse_register(second, rs)) {
+            error = "kr216: add needs a source register";
+            return false;
+        }
+        return encode_compact(1, rd, rs, out, error);
+    }
+    if (mnemonic == "st") {
+        const bool bracketed = first.size() > 2 && first.front() == '[' && first.back() == ']';
+        if (!bracketed) {
+            error = "kr216: st needs a bracketed address";
+            return false;
+        }
+        std::uint16_t address = 0;
+        if (!parse_number(trim(first.substr(1, first.size() - 2)), address)) {
+            error = "kr216: st address is not a number";
+            return false;
+        }
+        std::uint8_t rs = 0;
+        if (!parse_register(second, rs)) {
+            error = "kr216: st needs a source register";
+            return false;
+        }
+        return encode_st_absolute(rs, address, out, error);
+    }
+    if (mnemonic == "jmp" || mnemonic == "call") {
+        std::uint16_t address = 0;
+        if (!parse_number(first, address)) {
+            error = "kr216: " + mnemonic + " needs an address";
+            return false;
+        }
+        if (mnemonic == "jmp") return encode_normal_jmp_absolute(address, out);
+        return encode_normal_call_absolute(address, out);
+    }
     error = "kr216: unknown mnemonic '" + mnemonic + "'";
     return false;
 }

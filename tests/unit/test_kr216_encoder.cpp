@@ -212,3 +212,13 @@ TEST_CASE("kr216 assembles the first forms") {
     CHECK_FALSE(assemble_line("push r16", out, error));
     CHECK_FALSE(assemble_line("ld r2, #70000", out, error));
 }
+TEST_CASE("kr216 assembles add, st and control transfer") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("add r2, r3", out, error));       CHECK(out.bytes[0] == 0x81); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("st [0x4000], r2", out, error));  CHECK(out.bytes[0] == 0xE2); CHECK(out.bytes[2] == 0x40);
+    REQUIRE(assemble_line("jmp 0x0300", out, error));       CHECK(out.bytes[0] == 0xCF); CHECK(out.bytes[2] == 0x03);
+    REQUIRE(assemble_line("call 0x0300", out, error));      CHECK(out.bytes[0] == 0xD0);
+    CHECK_FALSE(assemble_line("st 0x4000, r2", out, error));
+    CHECK_FALSE(assemble_line("jmp r2", out, error));
+}
