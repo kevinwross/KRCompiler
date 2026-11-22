@@ -5,8 +5,9 @@ argument and result slots. The data model, register roles, calling convention, f
 layout and aggregate rules are fixed by `../../kr216/kr216-plan.md` v0.11
 (sections 7, 11, 12) and recorded in
 [ADR 0053](decisions/0053-kr216-target-profile.md), accepted 2026-11-21. The
-appendix freezes at M3. Exception descriptors are not part of this version: the
-profile's `has_eh` is false until the 16-bit descriptor has its own ADR.
+appendix freezes at M3. ADR 0055 fixes the 16-bit exception descriptor and the
+landing-pad entry state; the profile's `has_eh` turns on when the exception
+runtime lands.
 
 ## Data model
 
@@ -230,10 +231,9 @@ Default memory map (the linker may place sections elsewhere):
 
 ## Deferred
 
-- Exception descriptors: 16-bit fields, an FP-chain walk, the exception object
-  in R2 and its typeinfo in R3 at a landing pad, an eight-byte exception header,
-  and descriptors only for functions with protected regions. `has_eh` turns on
-  when that ADR and the runtime land.
+- The exception runtime and cleanup pads: the ADR 0055 descriptor is fixed, but
+  `has_eh` turns on only when `invoke`/`landingpad`/`resume` and the unwinder
+  land.
 - Multiple inheritance, virtual bases, and `dynamic_cast` between sibling types.
 - RTTI across library boundaries and `-fno-rtti`.
 - Threads, atomics and TLS.
