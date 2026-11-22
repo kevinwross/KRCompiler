@@ -90,6 +90,79 @@ void free(void *pointer) {
     (void)pointer;
 }
 
+unsigned long __krc_udiv32(unsigned long numerator, unsigned long denominator) {
+    unsigned int *n = (unsigned int *)&numerator;
+    unsigned int *d = (unsigned int *)&denominator;
+    unsigned int nlow = n[0];
+    unsigned int nhigh = n[1];
+    const unsigned int dlow = d[0];
+    const unsigned int dhigh = d[1];
+    if (dlow == 0 && dhigh == 0) {
+        return 0;
+    }
+    unsigned int qlow = 0;
+    unsigned int qhigh = 0;
+    unsigned int rlow = 0;
+    unsigned int rhigh = 0;
+    int bit = 0;
+    while (bit < 32) {
+        qhigh = (qhigh << 1) | (qlow >> 15);
+        qlow = qlow << 1;
+        rhigh = (rhigh << 1) | (rlow >> 15);
+        rlow = rlow << 1;
+        rlow = rlow | ((nhigh >> 15) & 1);
+        nhigh = (nhigh << 1) | (nlow >> 15);
+        nlow = nlow << 1;
+        if (rhigh > dhigh || (rhigh == dhigh && rlow >= dlow)) {
+            const unsigned int old = rlow;
+            rlow = rlow - dlow;
+            const unsigned int borrow = rlow > old ? 1 : 0;
+            rhigh = rhigh - dhigh - borrow;
+            qlow = qlow | 1;
+        }
+        bit++;
+    }
+    unsigned long quotient;
+    unsigned int *q = (unsigned int *)&quotient;
+    q[0] = qlow;
+    q[1] = qhigh;
+    return quotient;
+}
+
+unsigned long __krc_urem32(unsigned long numerator, unsigned long denominator) {
+    unsigned int *n = (unsigned int *)&numerator;
+    unsigned int *d = (unsigned int *)&denominator;
+    unsigned int nlow = n[0];
+    unsigned int nhigh = n[1];
+    const unsigned int dlow = d[0];
+    const unsigned int dhigh = d[1];
+    if (dlow == 0 && dhigh == 0) {
+        return 0;
+    }
+    unsigned int rlow = 0;
+    unsigned int rhigh = 0;
+    int bit = 0;
+    while (bit < 32) {
+        rhigh = (rhigh << 1) | (rlow >> 15);
+        rlow = rlow << 1;
+        rlow = rlow | ((nhigh >> 15) & 1);
+        nhigh = (nhigh << 1) | (nlow >> 15);
+        nlow = nlow << 1;
+        if (rhigh > dhigh || (rhigh == dhigh && rlow >= dlow)) {
+            const unsigned int old = rlow;
+            rlow = rlow - dlow;
+            const unsigned int borrow = rlow > old ? 1 : 0;
+            rhigh = rhigh - dhigh - borrow;
+        }
+        bit++;
+    }
+    unsigned long remainder;
+    unsigned int *r = (unsigned int *)&remainder;
+    r[0] = rlow;
+    r[1] = rhigh;
+    return remainder;
+}
+
 int putchar(int c) {
     char byte = (char)c;
     __krc_write(1, &byte, 1);

@@ -290,10 +290,12 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             out += "    ST [SP+" + std::to_string(offset) + "], " + std::string(reg) +
                    "\n";
         } else {
-            const std::string scratch = reg == "R6" ? "R7" : "R6";
-            out += "    MOV " + scratch + ", SP\n";
-            out += "    LD R5, #" + std::to_string(offset) + "\n";
-            out += "    ADD " + scratch + ", R5\n";
+            // Use R7 as the address scratch so a parameter in R2-R5 is not
+            // clobbered before the prologue stores it. Storing R7 itself uses
+            // R6, which is free once the aggregate destination has been saved.
+            const std::string scratch = reg == "R7" ? "R6" : "R7";
+            out += "    LD " + scratch + ", #" + std::to_string(offset) + "\n";
+            out += "    ADD " + scratch + ", SP\n";
             out += "    ST [" + scratch + "], " + std::string(reg) + "\n";
         }
     };
@@ -543,8 +545,25 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::SRem:
             case ir::Opcode::URem: {
                 if (is_wide(instruction->type)) {
+                    if (instruction->opcode == ir::Opcode::SDiv ||
+                        instruction->opcode == ir::Opcode::UDiv ||
+                        instruction->opcode == ir::Opcode::SRem ||
+                        instruction->opcode == ir::Opcode::URem) {
+                        const bool remainder =
+                            instruction->opcode == ir::Opcode::SRem ||
+                            instruction->opcode == ir::Opcode::URem;
+                        load_word(instruction->operands[0], "R2");
+                        load_word(instruction->operands[0], "R3", true);
+                        load_word(instruction->operands[1], "R4");
+                        load_word(instruction->operands[1], "R5", true);
+                        out += remainder ? "    CALL __krc_urem32\n"
+                                         : "    CALL __krc_udiv32\n";
+                        store_word(*instruction, "R2");
+                        store_word(*instruction, "R3", true);
+                        break;
+                    }
                     if (instruction->opcode != ir::Opcode::Mul) {
-                        error = "kr216 32-bit division and remainder are not implemented";
+                        error = "kr216 32-bit arithmetic is not implemented";
                         return;
                     }
                     load_word(instruction->operands[0], "R2");
@@ -1016,6 +1035,8 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     debug_types_.clear();
     next_debug_source_ = 0;
     out += ".text\n";
+    out += ".extern __krc_udiv32\n";
+    out += ".extern __krc_urem32\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";
