@@ -204,25 +204,25 @@ The full decision log is in Appendix A. The architecture-defining decisions are:
 
 ### 4.1 Target matrix
 
-| Property | KR32 | KR16 | KR64 (placeholder) |
-|---|---|---|---|
-| Status | v1 reference | v1 C-only | later |
-| Word/pointer width | 32 | 16 | 64 |
-| Endianness | little | little | little |
-| Data model | ILP32 | IP16 embedded profile | LP64 |
-| `char` | 8, signed | 8, unsigned | TBD |
-| `short` / `int` / `long` / `long long` | 16 / 32 / 32 / 64 | 16 / 16 / 16 / none | 16 / 32 / 64 / 64 |
-| Pointer | 32 | 16 | 64 |
-| `float` / `double` / `long double` | 32 / 64 / 64 (alias) | none | 32 / 64 / 64 (alias) |
-| `size_t` / `ptrdiff_t` | 32 | 16 | 64 |
-| `intmax_t` | 64 | 16 (profile) | 64 |
-| Registers | R0–R15; F0–F15; T0–T15; R7 FP; R11 TP | R0–R4; SP/SR/PC; R4 FP | TBD |
-| FPU / matrix | yes / yes | no / no | TBD |
-| Atomics / guest threads | LL/SC; cluster threads | no | TBD |
-| EH / RTTI | v1.1 / v1.1 | no | TBD |
-| TLS | static; TP = R11; dynamic v1.1 | no | TBD |
-| OS services | `kr32os` host services | BIOS `SYS` | TBD |
-| Image | KR32 native/new | KR16 native/new | TBD |
+| Property | KR32 | KR16 | KR216 | KR64 (placeholder) |
+|---|---|---|---|---|
+| Status | v1 reference | v1 C-only | plan approved; backend after KR16 | later |
+| Word/pointer width | 32 | 16 | 16 | 64 |
+| Endianness | little | little | little | little |
+| Data model | ILP32 | IP16 embedded profile | IP16 with 32-bit `long` | LP64 |
+| `char` | 8, signed | 8, unsigned | 8, signed | TBD |
+| `short` / `int` / `long` / `long long` | 16 / 32 / 32 / 64 | 16 / 16 / 16 / none | 16 / 16 / 32 / 64 | 16 / 32 / 64 / 64 |
+| Pointer | 32 | 16 | 16 | 64 |
+| `float` / `double` / `long double` | 32 / 64 / 64 (alias) | none | 32 / 64 / 64 (alias) | 32 / 64 / 64 (alias) |
+| `size_t` / `ptrdiff_t` | 32 | 16 | 16 | 64 |
+| `intmax_t` | 64 | 16 (profile) | 64 | 64 |
+| Registers | R0–R15; F0–F15; T0–T15; R7 FP; R11 TP | R0–R4; SP/SR/PC; R4 FP | R0–R15; F0–F3; R10 `this`; R13 FP | TBD |
+| FPU / matrix | yes / yes | no / no | yes / no | TBD |
+| Atomics / guest threads | LL/SC; cluster threads | no | no | TBD |
+| EH / RTTI | v1.1 / v1.1 | no | v1.1 (16-bit format) / v1.1 | TBD |
+| TLS | static; TP = R11; dynamic v1.1 | no | no | TBD |
+| OS services | `kr32os` host services | BIOS `SYS` | `SYS` hypercalls | TBD |
+| Image | KR32 native/new | KR16 native/new | KRCompiler container (D33) | TBD |
 
 ### 4.2 Target descriptor
 
@@ -781,6 +781,25 @@ Stack machines and 8-bit accumulators need a different lowering model (stack-dep
 
 The KR16 profile is non-conforming by design. It exists to keep the 16-bit target practical; it is not a claim of C11 or C++11 conformance. Every diagnostic that depends on the profile MUST say so.
 
+**KR216 (IP16 with a 32-bit `long`)**
+
+| Type | Size | Align | Notes |
+|---|---:|---:|---|
+| `char` | 1 | 1 | plain `char` is signed; `signed char`/`unsigned char` explicit |
+| `short` | 2 | 2 | |
+| `int` | 2 | 2 | `INT_MAX` is 32767 |
+| `long` | 4 | 2 | two words; 32-bit values are register pairs |
+| `long long` | 8 | 2 | 64-bit division is a runtime libcall |
+| pointer | 2 | 2 | function pointers included |
+| `float` | 4 | 2 | IEEE binary32; strict binary32 arithmetic on the binary64 datapath |
+| `double` | 8 | 2 | IEEE binary64 |
+| `long double` | 8 | 2 | alias for `double` |
+| `size_t`/`ptrdiff_t` | 2 | 2 | |
+| `intmax_t` | 8 | 2 | |
+| `wchar_t` | 2 | 2 | |
+
+The model is a new profile value (`Ip16Long32`), not `Ip16`: KR16's `long` is 16 bits and it has no `long long`. [ADR 0053](decisions/0053-kr216-target-profile.md) adds the value, and `docs/abi-kr216.md` is the target's appendix.
+
 **KR64 (placeholder, LP64)**
 
 `int` 32, `long` 64, `long long` 64, pointer 64, `short` 16, `char` 8, `float` 32, `double` 64, `long double` alias 64. To be confirmed with the 64-bit VM specification.
@@ -810,6 +829,17 @@ The KR16 profile is non-conforming by design. It exists to keep the 16-bit targe
 - No FP/aggregate-register conventions.
 - `this` is passed as the first integer argument.
 - The exact rules MUST be documented in `docs/abi-kr16.md` and tested with a calling-convention suite.
+
+**KR216** (new appendix, frozen at M3):
+
+- `this` in R10, caller-saved; integer and pointer arguments in R2–R5; further arguments on the stack in two-byte slots.
+- Floating-point arguments in F0/F1, further ones on the stack in eight-byte slots; FP return in F0.
+- Integer return in R2 (`R2:R3` for 32-bit values); a memory-class aggregate returns through a destination the caller loads into R6.
+- R13 is the frame pointer, R12 the hardware exception frame pointer, R15 the stack pointer; R8/R9 are callee-saved.
+- `ENTER #frame, #mask` and `LEAVE #mask` create and destroy the frame; FP is maintained in every function.
+- Aggregates are memory class: an argument is a hidden pointer to a caller-owned copy, and a return uses the R6 destination.
+- A variadic call passes every argument on the stack, floating point included.
+- The exact rules are in `docs/abi-kr216.md` ([ADR 0053](decisions/0053-kr216-target-profile.md)) and tested with the same calling-convention suite as KR16.
 
 **KR64** (placeholder): LP64, first six integer args in R0–R5, first eight FP args in F0–F7; to be confirmed.
 
@@ -1258,6 +1288,7 @@ cmake/
 docs/
   abi.md
   abi-kr16.md
+  abi-kr216.md
   attributes.md
   ir.md
   object.md
@@ -1564,6 +1595,8 @@ Survey decision IDs use the `S-G` prefix to avoid collision with acceptance gate
 
 | D-049 | Optimisation contract | `-O0` is straightforward lowering and gains no pass; **selection quality is not an optimisation level** — S1–S5-shaped improvements apply at every level, because emitting a literal operand or a direct conditional branch is lower quality lowering, not optimisation. `-O1` is §8.8's list and additionally permits global CSE and two text-level peepholes. Named locals **are** promoted at `-O1`, and the debug-info cost is documented rather than avoided. No optimiser pass lands before `--dump-stats` exists to measure it. | The review of `docs/optimize.md` found the proposal exceeded §8.8 by five selection passes, global CSE and two text passes, and that its Q3 recommendation (do not promote named locals) contradicted its own E6 pass. This row settles all three, and makes measurement the precondition rather than a later step. | — |
 
+| D-050 | KR216 target | KR216 is a fourth VM target, extending D-002's list: `DataModel::Ip16Long32` (`int` 16, `long` 32, `long long` 64, pointer 16, `char` signed, alignment 2), `TargetId::Kr216` with KRO and KDBG target ID 4, descriptor schema v2 with `this_register` and `sret_register`, `has_fpu` and `has_cpp` on with `has_eh`/`has_rtti` off until the 16-bit EH descriptor exists, and `docs/abi-kr216.md` as its ABI appendix (ADR 0053). | KR16's IP16 profile has a 16-bit `long` and no floating point, so reusing it would truncate every 32-bit value; reusing ILP32 would double every pointer and spill on a 64 KiB machine. R10 for `this` and R6 for the aggregate destination are the target plan's Q13 and Q25 resolutions. | [ADR 0053](docs/decisions/0053-kr216-target-profile.md) |
+
 Changing a `D-xxx` decision requires editing its row here and adding an ADR under `docs/decisions/` when the change touches ABI, object format, symbol format, target description, or IR.
 
 ---
@@ -1607,26 +1640,26 @@ Each fixture gets a feature tag, source file:line provenance, and expected outpu
 
 ## Appendix C — Target profile summary
 
-| Property | KR32 | KR16 | KR64 |
-|---|---|---|---|
-| Family | register | register | register |
-| Pointer width | 32 | 16 | 64 |
-| Data model | ILP32 | IP16 profile | LP64 |
-| Endianness | little | little | little |
-| `char` | signed | unsigned | TBD |
-| `long` | 32 | 16 (profile) | 64 |
-| `long long` | 64 | none | 64 |
-| `double` | 64 | none | 64 |
-| Registers | R0–R15, F0–F15, T0–T15 | R0–R4, SP/SR/PC | TBD |
-| FPU | yes | no | TBD |
-| Matrix | yes | no | TBD |
-| Atomics | LL/SC | no | TBD |
-| Threads | cluster | no | TBD |
-| EH/RTTI | v1.1 | no | TBD |
-| TLS | static v1.0; dynamic v1.1 | no | TBD |
-| OS | kr32os | BIOS SYS | TBD |
-| Debug | yes | C | TBD |
-| C++ | yes | no (v1) | TBD |
+| Property | KR32 | KR16 | KR216 | KR64 |
+|---|---|---|---|---|
+| Family | register | register | register | register |
+| Pointer width | 32 | 16 | 16 | 64 |
+| Data model | ILP32 | IP16 profile | IP16 + `long` 32 | LP64 |
+| Endianness | little | little | little | little |
+| `char` | signed | unsigned | signed | TBD |
+| `long` | 32 | 16 (profile) | 32 | 64 |
+| `long long` | 64 | none | 64 | 64 |
+| `double` | 64 | none | 64 | 64 |
+| Registers | R0–R15, F0–F15, T0–T15 | R0–R4, SP/SR/PC | R0–R15, F0–F3, R10 `this` | TBD |
+| FPU | yes | no | yes | TBD |
+| Matrix | yes | no | no | TBD |
+| Atomics | LL/SC | no | no | TBD |
+| Threads | cluster | no | no | TBD |
+| EH/RTTI | v1.1 | no | v1.1 (16-bit) | TBD |
+| TLS | static v1.0; dynamic v1.1 | no | no | TBD |
+| OS | kr32os | BIOS SYS | `SYS` | TBD |
+| Debug | yes | C | yes (KDBG 4) | TBD |
+| C++ | yes | no (v1) | yes | TBD |
 
 ---
 

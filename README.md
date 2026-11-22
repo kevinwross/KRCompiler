@@ -66,6 +66,7 @@ krld path/to/file.kro ... -o path/to/image.k32
 - [docs/tree.md](docs/tree.md)
 - [docs/abi.md](docs/abi.md)
 - [docs/abi-kr16.md](docs/abi-kr16.md)
+- [docs/abi-kr216.md](docs/abi-kr216.md)
 - [docs/host-services.md](docs/host-services.md)
 - [docs/object.md](docs/object.md)
 - [docs/symbols.md](docs/symbols.md)

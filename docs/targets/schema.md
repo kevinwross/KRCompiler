@@ -1,8 +1,8 @@
 # Target descriptor schema (v1)
 
-**Status:** Frozen — 2026-11-09 ([ADR 0002](../decisions/0002-target-descriptor-schema-freeze.md)).
+**Status:** Frozen — schema v1 on 2026-11-09 ([ADR 0002](../decisions/0002-target-descriptor-schema-freeze.md)); v2 adds the `this_register` and `sret_register` ABI fields ([ADR 0053](../decisions/0053-kr216-target-profile.md)).
 
-**Schema version:** 1
+**Schema version:** 2
 
 **Scope:** the shape of the C++ `constexpr` target descriptor. Target-specific values live in the target profile documents and the per-target descriptor tables.
 
@@ -60,6 +60,8 @@ A target descriptor has six sections. Every field is `constexpr`-representable; 
 |---|---|---|
 | `integer_argument_registers`, `fp_argument_registers` | index spans | Argument locations in order. |
 | `integer_return_registers`, `fp_return_registers` | index spans | Return locations. |
+| `this_register` | register index | Register carrying C++ `this` at member-call entry; an invalid index means `this` travels as an ordinary first argument. |
+| `sret_register` | register index | Register the caller loads with a memory-class aggregate's destination before a call; an invalid index means a hidden stack argument. |
 | `stack_alignment` | `uint32_t` | Public call-boundary alignment in bytes. |
 | `sret_threshold` | `uint32_t` | Aggregate size above which `sret` is used. |
 | `stack_argument_slot` | `uint32_t` | Stack argument slot size in bytes. |
@@ -80,4 +82,4 @@ Boolean feature flags: `has_fpu`, `has_matrix`, `has_atomics`, `has_threads`, `h
 4. The descriptor is data, not policy: target-specific selection choices belong in `patterns`, `addressing_modes`, and the ABI record.
 5. Object headers store the stable `id`, `abi_version`, and `pointer_bits`; the linker rejects mismatches.
 
-The KR32/KR16 values are in [kr32.md](kr32.md), [kr16.md](kr16.md), and [kr64.md](kr64.md). Register and instruction tables are filled when the M2 backend is implemented; the schema above is frozen now.
+The KR32/KR16 values are in [kr32.md](kr32.md), [kr16.md](kr16.md) and [kr64.md](kr64.md); KR216's are in [../abi-kr216.md](../abi-kr216.md). Register and instruction tables are filled when the M2 backend is implemented; the schema above is frozen now.
