@@ -1279,6 +1279,13 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     }
                     break;
                 }
+                if (instruction->opcode == ir::Opcode::BitCast &&
+                    (instruction->operands[0]->kind == ir::ValueKind::Function ||
+                     instruction->operands[0]->kind == ir::ValueKind::Global)) {
+                    out += "    LD R2, #" + instruction->operands[0]->name + "\n";
+                    store_word(*instruction, "R2");
+                    break;
+                }
                 const auto source_words = word_count(instruction->operands[0]->type);
                 const auto target_words = word_count(instruction->type);
                 for (std::uint32_t word = 0; word < target_words; ++word) {

@@ -3603,8 +3603,26 @@ void CIRGen::throw_object(const frontend::RecordInfo& record,
     emit_vtable_init(object, type);
     auto* typeinfo = builder_.create(ir::Opcode::BitCast, byte_pointer,
                                      {ensure_typeinfo(record)}, "exception.type");
+    ir::Value* destructor = module_->constant_null(byte_pointer);
+    auto* cleanup = ensure_member_destructor(info->record.get());
+    if (cleanup) {
+        const auto slot_type = module_->types().int_type(16);
+        const auto table_type = module_->types().array_type(slot_type, 1);
+        auto* table = module_->add_global(
+            "__exception_dtor_" + std::to_string(static_local_counter_++),
+            table_type, true, 2);
+        table->initializer =
+            module_->constant_address_array(table_type, {cleanup});
+        auto* zero = module_->constant_int(int_type(), 0);
+        auto* slot = builder_.create_gep(table_type, table, {zero, zero}, false,
+                                         "dtor.slot");
+        slot->type = module_->types().pointer_type(slot_type);
+        auto* bits = builder_.create_load(slot_type, slot, false, 0, "dtor.value");
+        destructor = builder_.create(ir::Opcode::IntToPtr, byte_pointer, {bits},
+                                     "exception.dtor");
+    }
     create_call_instruction(throw_function,
-                            {memory, typeinfo, module_->constant_null(byte_pointer)},
+                            {memory, typeinfo, destructor},
                             void_type, "throw.exception");
     builder_.create_unreachable();
 }
@@ -3809,8 +3827,26 @@ void CIRGen::emit_throw(const frontend::AstNode& statement) {
     // The throw unwinds through the objects that are live here, so its call site
     // needs a pad holding them (ADR 0027).
     note_scope_cleanup();
+    ir::Value* destructor = module_->constant_null(byte_pointer);
+    auto* cleanup = ensure_member_destructor(record->second);
+    if (cleanup) {
+        const auto slot_type = module_->types().int_type(16);
+        const auto table_type = module_->types().array_type(slot_type, 1);
+        auto* table = module_->add_global(
+            "__exception_dtor_" + std::to_string(static_local_counter_++),
+            table_type, true, 2);
+        table->initializer =
+            module_->constant_address_array(table_type, {cleanup});
+        auto* zero = module_->constant_int(int_type(), 0);
+        auto* slot = builder_.create_gep(table_type, table, {zero, zero}, false,
+                                         "dtor.slot");
+        slot->type = module_->types().pointer_type(slot_type);
+        auto* bits = builder_.create_load(slot_type, slot, false, 0, "dtor.value");
+        destructor = builder_.create(ir::Opcode::IntToPtr, byte_pointer, {bits},
+                                     "exception.dtor");
+    }
     create_call_instruction(throw_function,
-                            {object, typeinfo, module_->constant_null(byte_pointer)},
+                            {object, typeinfo, destructor},
                             void_type, "throw");
     builder_.create_unreachable();
 }

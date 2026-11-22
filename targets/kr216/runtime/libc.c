@@ -75,7 +75,12 @@ void *__cxa_begin_catch(void *object) {
 
 void __cxa_end_catch(void) {
     if (__krc_catch_object != 0) {
-        free(__krc_catch_object - 8);
+        unsigned char *header = __krc_catch_object - 8;
+        void (*destructor)(void *) = *(void (**)(void *))(header + 2);
+        if (destructor != 0) {
+            destructor(__krc_catch_object);
+        }
+        free(header);
         __krc_catch_object = 0;
     }
 }
