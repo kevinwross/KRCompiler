@@ -1,0 +1,165 @@
+#pragma once
+
+// std::string for the supported subset: a heap-owned, NUL-terminated byte
+// sequence with the observers, element access, append and comparison that the
+// corpus uses. There is no small-string buffer, so every string owns its bytes.
+
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+
+namespace std {
+
+class string {
+public:
+    string() : data_(alloc(1)), size_(0), capacity_(0) { data_[0] = 0; }
+
+    string(const char* text) : data_(alloc(1)), size_(0), capacity_(0) {
+        data_[0] = 0;
+        assign(text, text == 0 ? 0 : strlen(text));
+    }
+
+    string(const string& other) : data_(alloc(1)), size_(0), capacity_(0) {
+        data_[0] = 0;
+        assign(other.data_, other.size_);
+    }
+
+    string(string&& other)
+        : data_(other.data_), size_(other.size_), capacity_(other.capacity_) {
+        other.data_ = 0;
+        other.size_ = 0;
+        other.capacity_ = 0;
+    }
+
+    ~string() { free(data_); }
+
+    string& operator=(const string& other) {
+        if (this != &other) {
+            assign(other.data_, other.size_);
+        }
+        return *this;
+    }
+
+    string& operator=(const char* text) {
+        assign(text, text == 0 ? 0 : strlen(text));
+        return *this;
+    }
+
+    string& operator=(string&& other) {
+        if (this != &other) {
+            free(data_);
+            data_ = other.data_;
+            size_ = other.size_;
+            capacity_ = other.capacity_;
+            other.data_ = 0;
+            other.size_ = 0;
+            other.capacity_ = 0;
+        }
+        return *this;
+    }
+
+    const char* c_str() const { return data_ == 0 ? "" : data_; }
+    const char* data() const { return c_str(); }
+    char* data() { return data_; }
+    size_t size() const { return size_; }
+    size_t length() const { return size_; }
+    bool empty() const { return size_ == 0; }
+
+    char& operator[](size_t index) { return data_[index]; }
+    const char& operator[](size_t index) const { return data_[index]; }
+
+    void clear() {
+        size_ = 0;
+        if (data_ != 0) {
+            data_[0] = 0;
+        }
+    }
+
+    void reserve(size_t wanted) {
+        if (wanted <= capacity_) {
+            return;
+        }
+        size_t next = capacity_ == 0 ? 8 : capacity_;
+        while (next < wanted) {
+            next = next * 2;
+        }
+        char* buffer = alloc(next + 1);
+        size_t index = 0;
+        while (index < size_) {
+            buffer[index] = data_[index];
+            ++index;
+        }
+        buffer[size_] = 0;
+        free(data_);
+        data_ = buffer;
+        capacity_ = next;
+    }
+
+    string& append(const char* text) {
+        if (text == 0) {
+            return *this;
+        }
+        const size_t count = strlen(text);
+        reserve(size_ + count);
+        size_t index = 0;
+        while (index < count) {
+            data_[size_ + index] = text[index];
+            ++index;
+        }
+        size_ += count;
+        data_[size_] = 0;
+        return *this;
+    }
+
+    string& append(const char* text, size_t count) {
+        if (text == 0 || count == 0) {
+            return *this;
+        }
+        reserve(size_ + count);
+        size_t index = 0;
+        while (index < count) {
+            data_[size_ + index] = text[index];
+            ++index;
+        }
+        size_ += count;
+        data_[size_] = 0;
+        return *this;
+    }
+
+    string& append(const string& other) {
+        reserve(size_ + other.size_);
+        size_t index = 0;
+        while (index < other.size_) {
+            data_[size_ + index] = other.data_[index];
+            ++index;
+        }
+        size_ += other.size_;
+        data_[size_] = 0;
+        return *this;
+    }
+
+    string& operator+=(const char* text) { return append(text); }
+    string& operator+=(const string& other) { return append(other); }
+
+private:
+    static char* alloc(size_t bytes) { return static_cast<char*>(malloc(bytes)); }
+
+    void assign(const char* text, size_t count) {
+        reserve(count);
+        size_t index = 0;
+        while (index < count && text != 0) {
+            data_[index] = text[index];
+            ++index;
+        }
+        size_ = index;
+        data_[size_] = 0;
+    }
+
+    char* data_;
+    size_t size_;
+    size_t capacity_;
+};
+
+
+
+} // namespace std
