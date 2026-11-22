@@ -196,6 +196,37 @@ unsigned long __krc_sar32(unsigned long value, unsigned int count) {
     return value;
 }
 
+void __krc_shl64(unsigned int *words, unsigned int count) {
+    while (count != 0) {
+        words[3] = (words[3] << 1) | (words[2] >> 15);
+        words[2] = (words[2] << 1) | (words[1] >> 15);
+        words[1] = (words[1] << 1) | (words[0] >> 15);
+        words[0] = words[0] << 1;
+        count = count - 1;
+    }
+}
+
+void __krc_shr64(unsigned int *words, unsigned int count) {
+    while (count != 0) {
+        words[0] = (words[0] >> 1) | (words[1] << 15);
+        words[1] = (words[1] >> 1) | (words[2] << 15);
+        words[2] = (words[2] >> 1) | (words[3] << 15);
+        words[3] = words[3] >> 1;
+        count = count - 1;
+    }
+}
+
+void __krc_sar64(unsigned int *words, unsigned int count) {
+    while (count != 0) {
+        const unsigned int sign = words[3] & 0x8000;
+        words[0] = (words[0] >> 1) | (words[1] << 15);
+        words[1] = (words[1] >> 1) | (words[2] << 15);
+        words[2] = (words[2] >> 1) | (words[3] << 15);
+        words[3] = (words[3] >> 1) | sign;
+        count = count - 1;
+    }
+}
+
 int putchar(int c) {
     char byte = (char)c;
     __krc_write(1, &byte, 1);

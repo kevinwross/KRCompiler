@@ -772,8 +772,17 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     }();
                     if (word_count(instruction->type) > 2) {
                         if (!literal || literal->value < 0 || literal->value > 63) {
-                            error = "kr216 dynamic 64-bit shifts are not implemented";
-                            return;
+                            for (std::uint32_t word = 0; word < 4; ++word) {
+                                load_word_at(instruction->operands[0], "R2", word);
+                                store_word_at(*instruction, "R2", word);
+                            }
+                            const char* helper = "__krc_shl64";
+                            if (instruction->opcode == ir::Opcode::LShr) helper = "__krc_shr64";
+                            if (instruction->opcode == ir::Opcode::AShr) helper = "__krc_sar64";
+                            load_address(instruction.get(), "R2");
+                            load_word(instruction->operands[1], "R3");
+                            out += "    CALL " + std::string(helper) + "\n";
+                            break;
                         }
                         const auto count = static_cast<std::uint32_t>(literal->value);
                         const auto word_shift = count / 16;
@@ -1442,6 +1451,9 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".extern __krc_shl32\n";
     out += ".extern __krc_shr32\n";
     out += ".extern __krc_sar32\n";
+    out += ".extern __krc_shl64\n";
+    out += ".extern __krc_shr64\n";
+    out += ".extern __krc_sar64\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";
