@@ -63,3 +63,17 @@ TEST_CASE("kr216 Compact class emits the ISA bytes") {
     CHECK(out.bytes[0] == 0xBC);
     CHECK_FALSE(encode_branch(0, 256, out, error));
 }
+TEST_CASE("kr216 Normal class emits the ISA bytes") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_normal_ld_d8(2, 3, 2, out, error));   // ld r2, [r3+2]
+    CHECK(out.size == 3); CHECK(out.bytes[0] == 0xC0); CHECK(out.bytes[1] == 0x23); CHECK(out.bytes[2] == 0x02);
+    REQUIRE(encode_normal_st_d8(2, 3, 2, out, error));   // st [r3+2], r2
+    CHECK(out.bytes[0] == 0xC1); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(encode_normal_push_mask(0x0300, out, error)); // push #0x0300
+    CHECK(out.bytes[0] == 0xD7); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x03);
+    REQUIRE(encode_normal_pop_mask(0x0006, out, error));  // pop #0x0006
+    CHECK(out.bytes[0] == 0xD8); CHECK(out.bytes[1] == 0x06);
+    CHECK_FALSE(encode_normal_ld_d8(2, 3, 128, out, error));
+    CHECK_FALSE(encode_normal_push_mask(0, out, error));
+}

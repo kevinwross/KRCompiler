@@ -40,4 +40,13 @@ struct Encoding {
 [[nodiscard]] bool encode_branch(std::uint8_t condition, std::int32_t displacement,
                                  Encoding& out, std::string& error);
 
+// Section 7, Normal class: three bytes, `110 OOOOO RRRR BBBB` then an optional byte payload.
+// Opcodes 0xC0 LD, 0xC1 ST (disp8 forms), 0xD7 PUSH #mask, 0xD8 POP #mask.
+[[nodiscard]] bool encode_normal_ld_d8(std::uint8_t rd, std::uint8_t base, std::int32_t displacement,
+                                       Encoding& out, std::string& error);
+[[nodiscard]] bool encode_normal_st_d8(std::uint8_t rs, std::uint8_t base, std::int32_t displacement,
+                                       Encoding& out, std::string& error);
+[[nodiscard]] bool encode_normal_push_mask(std::uint16_t mask, Encoding& out, std::string& error);
+[[nodiscard]] bool encode_normal_pop_mask(std::uint16_t mask, Encoding& out, std::string& error);
+
 }  // namespace krc::asmkr216

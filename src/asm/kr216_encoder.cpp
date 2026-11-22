@@ -108,4 +108,57 @@ bool encode_branch(std::uint8_t condition, std::int32_t displacement, Encoding& 
     return true;
 }
 
+bool encode_normal_ld_d8(std::uint8_t rd, std::uint8_t base, std::int32_t displacement,
+                         Encoding& out, std::string& error) {
+    if (!check_register(rd, error) || !check_register(base, error)) return false;
+    if (displacement < -128 || displacement > 127) {
+        error = "kr216 disp8 out of range";
+        return false;
+    }
+    out.bytes[0] = 0xC0;
+    out.bytes[1] = static_cast<std::uint8_t>((rd << 4) | base);
+    out.bytes[2] = static_cast<std::uint8_t>(displacement & 0xFF);
+    out.size = 3;
+    return true;
+}
+
+bool encode_normal_st_d8(std::uint8_t rs, std::uint8_t base, std::int32_t displacement,
+                         Encoding& out, std::string& error) {
+    if (!check_register(rs, error) || !check_register(base, error)) return false;
+    if (displacement < -128 || displacement > 127) {
+        error = "kr216 disp8 out of range";
+        return false;
+    }
+    // The store names the data register in specifier 1 and the base in specifier 2.
+    out.bytes[0] = 0xC1;
+    out.bytes[1] = static_cast<std::uint8_t>((rs << 4) | base);
+    out.bytes[2] = static_cast<std::uint8_t>(displacement & 0xFF);
+    out.size = 3;
+    return true;
+}
+
+bool encode_normal_push_mask(std::uint16_t mask, Encoding& out, std::string& error) {
+    if (mask == 0) {
+        error = "kr216 PUSH mask may not be empty";
+        return false;
+    }
+    out.bytes[0] = 0xD7;
+    out.bytes[1] = static_cast<std::uint8_t>(mask & 0xFF);
+    out.bytes[2] = static_cast<std::uint8_t>(mask >> 8);
+    out.size = 3;
+    return true;
+}
+
+bool encode_normal_pop_mask(std::uint16_t mask, Encoding& out, std::string& error) {
+    if (mask == 0) {
+        error = "kr216 POP mask may not be empty";
+        return false;
+    }
+    out.bytes[0] = 0xD8;
+    out.bytes[1] = static_cast<std::uint8_t>(mask & 0xFF);
+    out.bytes[2] = static_cast<std::uint8_t>(mask >> 8);
+    out.size = 3;
+    return true;
+}
+
 }  // namespace krc::asmkr216
