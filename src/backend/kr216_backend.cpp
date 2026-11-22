@@ -570,8 +570,81 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::LShr:
             case ir::Opcode::AShr: {
                 if (is_wide(instruction->type)) {
-                    error = "kr216 32-bit shifts are not implemented";
-                    return;
+                    const auto* literal = [&]() -> const ir::ConstantInt* {
+                        const auto* value = instruction->operands[1];
+                        if (value && value->kind == ir::ValueKind::ConstantInt) {
+                            return static_cast<const ir::ConstantInt*>(value);
+                        }
+                        if (value && value->kind == ir::ValueKind::Instruction) {
+                            const auto* cast = static_cast<const ir::Instruction*>(value);
+                            if (!cast->operands.empty() && cast->operands[0] &&
+                                cast->operands[0]->kind == ir::ValueKind::ConstantInt) {
+                                return static_cast<const ir::ConstantInt*>(cast->operands[0]);
+                            }
+                        }
+                        return nullptr;
+                    }();
+                    if (!literal || literal->value < 0 || literal->value > 31) {
+                        error = "kr216 dynamic 32-bit shifts are not implemented";
+                        return;
+                    }
+                    const auto count = static_cast<int>(literal->value);
+                    load_word(instruction->operands[0], "R2");
+                    load_word(instruction->operands[0], "R3", true);
+                    if (count == 0) {
+                        store_word(*instruction, "R2");
+                        store_word(*instruction, "R3", true);
+                        break;
+                    }
+                    if (instruction->opcode == ir::Opcode::Shl) {
+                        if (count < 16) {
+                            out += "    MOV R4, R2\n";
+                            out += "    SHL R2, #" + std::to_string(count) + "\n";
+                            out += "    SHL R3, #" + std::to_string(count) + "\n";
+                            out += "    SHR R4, #" + std::to_string(16 - count) + "\n";
+                            out += "    OR R3, R4\n";
+                        } else if (count == 16) {
+                            out += "    MOV R3, R2\n";
+                            out += "    LD R2, #0\n";
+                        } else {
+                            out += "    SHL R2, #" + std::to_string(count - 16) + "\n";
+                            out += "    MOV R3, R2\n";
+                            out += "    LD R2, #0\n";
+                        }
+                    } else if (instruction->opcode == ir::Opcode::LShr) {
+                        if (count < 16) {
+                            out += "    MOV R4, R2\n";
+                            out += "    SHR R2, #" + std::to_string(count) + "\n";
+                            out += "    SHL R4, #" + std::to_string(16 - count) + "\n";
+                            out += "    OR R2, R4\n";
+                            out += "    SHR R3, #" + std::to_string(count) + "\n";
+                        } else if (count == 16) {
+                            out += "    MOV R2, R3\n";
+                            out += "    LD R3, #0\n";
+                        } else {
+                            out += "    MOV R2, R3\n";
+                            out += "    SHR R2, #" + std::to_string(count - 16) + "\n";
+                            out += "    LD R3, #0\n";
+                        }
+                    } else {
+                        if (count < 16) {
+                            out += "    MOV R4, R2\n";
+                            out += "    SHR R2, #" + std::to_string(count) + "\n";
+                            out += "    SHL R4, #" + std::to_string(16 - count) + "\n";
+                            out += "    OR R2, R4\n";
+                            out += "    SAR R3, #" + std::to_string(count) + "\n";
+                        } else if (count == 16) {
+                            out += "    MOV R2, R3\n";
+                            out += "    SAR R3, #15\n";
+                        } else {
+                            out += "    MOV R2, R3\n";
+                            out += "    SAR R2, #" + std::to_string(count - 16) + "\n";
+                            out += "    SAR R3, #15\n";
+                        }
+                    }
+                    store_word(*instruction, "R2");
+                    store_word(*instruction, "R3", true);
+                    break;
                 }
                 const auto mnemonic = instruction->opcode == ir::Opcode::Shl
                                           ? "SHL"
