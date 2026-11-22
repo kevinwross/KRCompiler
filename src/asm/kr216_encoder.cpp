@@ -461,6 +461,20 @@ std::string_view trim(std::string_view text) {
     return text;
 }
 
+// Parses `[rB+d8]` into its base register and displacement. Returns false for anything else, so
+// an unimplemented operand shape is refused rather than mis-assembled.
+bool parse_bracketed_displacement(std::string_view text, std::uint8_t& base, std::int32_t& disp) {
+    if (text.size() < 5 || text.front() != '[' || text.back() != ']') return false;
+    const auto inner = trim(text.substr(1, text.size() - 2));
+    const std::size_t plus = inner.find('+');
+    if (plus == std::string_view::npos) return false;
+    if (!parse_register(trim(inner.substr(0, plus)), base)) return false;
+    std::uint16_t offset = 0;
+    if (!parse_number(trim(inner.substr(plus + 1)), offset)) return false;
+    disp = static_cast<std::int32_t>(offset);
+    return true;
+}
+
 }  // namespace
 
 bool assemble_line(std::string_view line, Encoding& out, std::string& error) {

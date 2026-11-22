@@ -222,3 +222,11 @@ TEST_CASE("kr216 assembles add, st and control transfer") {
     CHECK_FALSE(assemble_line("st 0x4000, r2", out, error));
     CHECK_FALSE(assemble_line("jmp r2", out, error));
 }
+TEST_CASE("kr216 parser refuses operand shapes it does not implement") {
+    Encoding out;
+    std::string error;
+    CHECK_FALSE(assemble_line("ld r2, [r3+2]", out, error));  // address-mode operands come next
+    CHECK_FALSE(assemble_line("ld r2, [r3]", out, error));
+    CHECK_FALSE(assemble_line("add r2, #5", out, error));
+    CHECK_FALSE(assemble_line("", out, error));
+}
