@@ -185,3 +185,18 @@ TEST_CASE("kr216 F5 conversions") {
     CHECK_FALSE(encode_f5(0, 4, 2, out, error));
     CHECK_FALSE(encode_f5(0, 0, 16, out, error));
 }
+TEST_CASE("kr216 F4 FP load and store") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_f4(0, 0, 0, 2, 0, out, error));   // fld f0, [r2]
+    CHECK(out.size == 3); CHECK(out.bytes[0] == 0xF4); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x20);
+    REQUIRE(encode_f4(1, 0, 1, 2, 4, out, error));   // fst f0, [r2+4]
+    CHECK(out.size == 4); CHECK(out.bytes[1] == 0x11); CHECK(out.bytes[2] == 0x20); CHECK(out.bytes[3] == 0x04);
+    REQUIRE(encode_f4(2, 1, 2, 3, 0, out, error));   // flds f1, [r3]+
+    CHECK(out.size == 3); CHECK(out.bytes[1] == 0x26); CHECK(out.bytes[2] == 0x30);
+    CHECK_FALSE(encode_f4(4, 0, 0, 2, 0, out, error));
+    CHECK_FALSE(encode_f4(0, 4, 0, 2, 0, out, error));
+    CHECK_FALSE(encode_f4(0, 0, 4, 2, 0, out, error));
+    CHECK_FALSE(encode_f4(0, 0, 1, 2, 200, out, error));
+    CHECK_FALSE(encode_f7_enter(8, 0x2000, out, error));
+}

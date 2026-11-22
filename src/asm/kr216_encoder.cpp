@@ -303,8 +303,8 @@ bool encode_f7_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std
         error = "kr216 ENTER frame must be even and at most 254";
         return false;
     }
-    if (mask == 0) {
-        error = "kr216 ENTER mask may not be empty";
+    if (mask == 0 || (mask & 0xE000) != 0) {
+        error = "kr216 ENTER mask must be non-empty and have bits 13-15 clear";
         return false;
     }
     out.bytes[0] = 0xF7;
@@ -350,8 +350,8 @@ bool encode_f8_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std
         error = "kr216 ENTER frame must be even";
         return false;
     }
-    if (mask == 0) {
-        error = "kr216 ENTER mask may not be empty";
+    if (mask == 0 || (mask & 0xE000) != 0) {
+        error = "kr216 ENTER mask must be non-empty and have bits 13-15 clear";
         return false;
     }
     out.bytes[0] = 0xF8;
@@ -378,6 +378,36 @@ bool encode_f5(std::uint8_t opcode, std::uint8_t fd, std::uint8_t reg, Encoding&
     out.bytes[1] = static_cast<std::uint8_t>((opcode << 4) | (fd << 2));
     out.bytes[2] = static_cast<std::uint8_t>(reg << 4);
     out.size = 3;
+    return true;
+}
+
+bool encode_f4(std::uint8_t opcode, std::uint8_t fd, std::uint8_t mode, std::uint8_t base,
+               std::int32_t displacement, Encoding& out, std::string& error) {
+    if (opcode > 3) {
+        error = "kr216 F4 opcode must be 0-3";
+        return false;
+    }
+    if (fd > 3) {
+        error = "kr216 FP register must be f0-f3";
+        return false;
+    }
+    if (mode > 3) {
+        error = "kr216 F4 address mode must be 0-3";
+        return false;
+    }
+    if (!check_register(base, error)) return false;
+    if (mode == 1 && (displacement < -128 || displacement > 127)) {
+        error = "kr216 disp8 out of range";
+        return false;
+    }
+    out.bytes[0] = 0xF4;
+    out.bytes[1] = static_cast<std::uint8_t>((opcode << 4) | (fd << 2) | mode);
+    out.bytes[2] = static_cast<std::uint8_t>(base << 4);
+    out.size = 3;
+    if (mode == 1) {
+        out.bytes[3] = static_cast<std::uint8_t>(displacement & 0xFF);
+        out.size = 4;
+    }
     return true;
 }
 

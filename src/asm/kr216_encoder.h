@@ -92,4 +92,10 @@ struct Encoding {
 [[nodiscard]] bool encode_f5(std::uint8_t opcode, std::uint8_t fd, std::uint8_t reg,
                              Encoding& out, std::string& error);
 
+// Section 8.4, `F4`: `F4 | OOOO Fd MM | BBBB 0000 | [d8]`. Op 0 FLD, 1 FST, 2 FLDS, 3 FSTS;
+// mode 0 [Rb], 1 [Rb+d8], 2 [Rb]+, 3 -[Rb]. The d8 byte appears only for mode 1.
+[[nodiscard]] bool encode_f4(std::uint8_t opcode, std::uint8_t fd, std::uint8_t mode,
+                             std::uint8_t base, std::int32_t displacement, Encoding& out,
+                             std::string& error);
+
 }  // namespace krc::asmkr216
