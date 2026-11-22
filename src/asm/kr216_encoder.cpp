@@ -537,7 +537,7 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             error = "kr216: ld needs a destination register";
             return false;
         }
-        if (second.size() > 2 && second.front() == '[' && second.find("+") != std::string_view::npos) {
+        if (second.size() > 2 && second.front() == '[' && second.back() == ']' && second.find("+") != std::string_view::npos) {
             std::uint8_t base = 0;
             std::int32_t displacement = 0;
             if (!parse_bracketed_displacement(second, base, displacement)) {
@@ -546,6 +546,20 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             }
             return encode_normal_ld_d8(rd, base, displacement, out, error);
         }
+        const auto indirect = [&second](std::string_view text, std::uint8_t& base) {
+            if (text.size() < 3 || text.front() != '[' || text.back() != ']') return false;
+            return parse_register(trim(text.substr(1, text.size() - 2)), base);
+        };
+        std::uint8_t base = 0;
+        if (second.size() > 3 && second.back() == '+' &&
+            indirect(second.substr(0, second.size() - 1), base)) {
+            return encode_compact(19, rd, base, out, error);  // LD Rd, [Rb]+
+        }
+        if (second.size() > 3 && second.front() == '-' &&
+            indirect(second.substr(1), base)) {
+            return encode_compact(24, rd, base, out, error);  // LD Rd, -[Rb]
+        }
+        if (indirect(second, base)) return encode_compact(14, rd, base, out, error);  // LD Rd,[Rb]
         const bool bracketed = second.size() > 2 && second.front() == '[' && second.back() == ']';
         std::string_view number =
             bracketed ? trim(second.substr(1, second.size() - 2)) : second;
@@ -571,7 +585,7 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         return encode_compact(1, rd, rs, out, error);
     }
     if (mnemonic == "st") {
-        if (first.size() > 2 && first.front() == '[' && first.find("+") != std::string_view::npos) {
+        if (first.size() > 2 && first.front() == '[' && first.back() == ']' && first.find("+") != std::string_view::npos) {
             std::uint8_t base = 0;
             std::int32_t displacement = 0;
             if (!parse_bracketed_displacement(first, base, displacement)) {
