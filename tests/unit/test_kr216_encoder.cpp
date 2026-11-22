@@ -225,7 +225,7 @@ TEST_CASE("kr216 assembles add, st and control transfer") {
 TEST_CASE("kr216 parser refuses operand shapes it does not implement") {
     Encoding out;
     std::string error;
-    CHECK_FALSE(assemble_line("add r2, #5", out, error));
+    CHECK_FALSE(assemble_line("and r2, #5", out, error));
     CHECK_FALSE(assemble_line("", out, error));
 }
 TEST_CASE("kr216 assembles the displacement operands") {
@@ -252,4 +252,16 @@ TEST_CASE("kr216 assembles the indirect and auto-indexed stores") {
     REQUIRE(assemble_line("st [r3]+, r2", out, error));  CHECK(out.bytes[0] == 0x94); CHECK(out.bytes[1] == 0x23);
     REQUIRE(assemble_line("st -[r3], r2", out, error));  CHECK(out.bytes[0] == 0x99); CHECK(out.bytes[1] == 0x23);
     CHECK_FALSE(assemble_line("st [r3], r16", out, error));
+}
+TEST_CASE("kr216 assembles the ALU register and immediate forms") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("add r2, #5", out, error));    CHECK(out.bytes[0] == 0xC7); CHECK(out.bytes[2] == 0x05);
+    REQUIRE(assemble_line("cmp r2, #5", out, error));    CHECK(out.bytes[0] == 0xCA);
+    REQUIRE(assemble_line("sub r2, r3", out, error));    CHECK(out.bytes[0] == 0x83);
+    REQUIRE(assemble_line("and r2, r3", out, error));    CHECK(out.bytes[0] == 0x85);
+    REQUIRE(assemble_line("or r2, r3", out, error));     CHECK(out.bytes[0] == 0x86);
+    REQUIRE(assemble_line("xor r2, r3", out, error));    CHECK(out.bytes[0] == 0x87);
+    REQUIRE(assemble_line("cmp r2, r3", out, error));    CHECK(out.bytes[0] == 0x88);
+    CHECK_FALSE(assemble_line("and r2, #5", out, error));
 }

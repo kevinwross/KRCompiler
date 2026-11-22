@@ -572,17 +572,33 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         if (bracketed) return encode_ld_absolute(rd, value, out, error);
         return encode_ld_immediate(rd, value, out, error);
     }
-    if (mnemonic == "add") {
+    static const struct {
+        const char* name;
+        std::uint8_t opcode;
+    } kCompactAlu[] = {{"add", 1}, {"sub", 3}, {"and", 5}, {"or", 6}, {"xor", 7}, {"cmp", 8}};
+    for (const auto& entry : kCompactAlu) {
+        if (mnemonic != entry.name) continue;
         if (!parse_register(first, rd)) {
-            error = "kr216: add needs a destination register";
+            error = "kr216: " + mnemonic + " needs a destination register";
+            return false;
+        }
+        if (!second.empty() && second.front() == '#') {
+            std::uint16_t value = 0;
+            if (!parse_number(trim(second.substr(1)), value)) {
+                error = "kr216: " + mnemonic + " immediate is not a number";
+                return false;
+            }
+            if (mnemonic == "add") return encode_normal_add_imm8(rd, value, out, error);
+            if (mnemonic == "cmp") return encode_normal_cmp_imm8(rd, value, out, error);
+            error = "kr216: " + mnemonic + " has no immediate form yet";
             return false;
         }
         std::uint8_t rs = 0;
         if (!parse_register(second, rs)) {
-            error = "kr216: add needs a source register";
+            error = "kr216: " + mnemonic + " needs a source register";
             return false;
         }
-        return encode_compact(1, rd, rs, out, error);
+        return encode_compact(entry.opcode, rd, rs, out, error);
     }
     if (mnemonic == "st") {
         if (first.size() > 2 && first.front() == '[' && first.back() == ']' && first.find("+") != std::string_view::npos) {
