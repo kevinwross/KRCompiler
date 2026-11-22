@@ -152,8 +152,10 @@ struct ArgClass {
     std::uint32_t words = 1;
     std::uint32_t first_register = 0;
     std::uint32_t first_stack_word = 0;
+    std::uint32_t fp_register = 0;
     bool on_stack = false;
     bool aggregate = false;
+    bool floating = false;
 };
 
 std::vector<ArgClass> classify_arguments(const std::vector<const ir::Value*>& values,
@@ -162,12 +164,19 @@ std::vector<ArgClass> classify_arguments(const std::vector<const ir::Value*>& va
     result.reserve(values.size());
     std::uint32_t registers = 0;
     std::uint32_t stack_words = 0;
+    std::uint32_t fp_registers = 0;
     bool spilled = variadic;
     for (const auto* value : values) {
         ArgClass argument;
         argument.value = value;
         argument.aggregate = value && is_aggregate(value->type);
         argument.words = value ? word_count(value->type) : 1;
+        if (value && ir::is_float(value->type) && fp_registers < 2) {
+            argument.floating = true;
+            argument.fp_register = fp_registers++;
+            result.push_back(argument);
+            continue;
+        }
         if (!spilled && registers + argument.words <= 4) {
             argument.first_register = registers;
             registers += argument.words;
@@ -404,6 +413,15 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
     const auto parameters = classify_arguments(parameter_values, variadic);
     for (const auto& argument : parameters) {
         const auto destination = slot(argument.value);
+        if (argument.floating) {
+            const auto width = type_size(argument.value->type);
+            out += "    MOV R7, SP\n";
+            add_immediate("R7", static_cast<std::int32_t>(destination));
+            out += width == 8
+                       ? "    FST F" + std::to_string(argument.fp_register) + ", [R7]\n"
+                       : "    FSTS F" + std::to_string(argument.fp_register) + ", [R7]\n";
+            continue;
+        }
         if (argument.on_stack) {
             const auto base = 4u + 2u * argument.first_stack_word;
             out += "    LD R7, [FP+" + std::to_string(base) + "]\n";
@@ -965,6 +983,41 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 const auto arguments = classify_arguments(values, variadic_call);
                 for (const auto& argument : arguments) {
                     if (argument.on_stack) continue;
+                    if (argument.floating) {
+                        const auto width = type_size(argument.value->type);
+                        const bool constant =
+                            argument.value->kind == ir::ValueKind::ConstantFloat;
+                        if (constant) {
+                            const auto* floating =
+                                static_cast<const ir::ConstantFloat*>(argument.value);
+                            std::uint64_t bits = 0;
+                            if (width == 4) {
+                                const float narrowed = static_cast<float>(floating->value);
+                                std::memcpy(&bits, &narrowed, sizeof(narrowed));
+                            } else {
+                                std::memcpy(&bits, &floating->value, sizeof(floating->value));
+                            }
+                            for (std::uint32_t offset = width; offset > 0; offset -= 2) {
+                                out += "    LD R2, #" +
+                                       std::to_string(static_cast<std::uint16_t>(
+                                           (bits >> ((offset - 2) * 8)) & 0xFFFF)) +
+                                       "\n";
+                                out += "    PUSH R2\n";
+                            }
+                            out += "    MOV R2, SP\n";
+                        } else {
+                            load_address(argument.value, "R2");
+                        }
+                        out += width == 8
+                                   ? "    FLD F" +
+                                         std::to_string(argument.fp_register) + ", [R2]\n"
+                                   : "    FLDS F" +
+                                         std::to_string(argument.fp_register) + ", [R2]\n";
+                        if (constant) {
+                            out += "    ADD SP, #" + std::to_string(width) + "\n";
+                        }
+                        continue;
+                    }
                     const auto first = static_cast<std::uint32_t>(2 + argument.first_register);
                     if (argument.aggregate) {
                         load_address(argument.value, "R" + std::to_string(first));
@@ -1018,9 +1071,15 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 }
                 if (pushed_words > 0) add_immediate("SP", static_cast<std::int32_t>(pushed_words * 2));
                 if (!aggregate_return && instruction->type && !ir::is_void(instruction->type)) {
-                    store_word(*instruction, "R2");
-                    if (is_wide(instruction->type)) {
-                        store_word(*instruction, "R3", true);
+                    if (ir::is_float(instruction->type)) {
+                        const auto width = type_size(instruction->type);
+                        load_address(instruction.get(), "R2");
+                        out += width == 8 ? "    FST F0, [R2]\n" : "    FSTS F0, [R2]\n";
+                    } else {
+                        store_word(*instruction, "R2");
+                        if (is_wide(instruction->type)) {
+                            store_word(*instruction, "R3", true);
+                        }
                     }
                 }
                 break;
@@ -1040,6 +1099,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                             out += "    LD R6, [SP+" + std::to_string(source + offset) + "]\n";
                             out += "    ST [R7+" + std::to_string(offset) + "], R6\n";
                         }
+                    } else if (ir::is_float(value->type)) {
+                        const auto width = type_size(value->type);
+                        load_address(value, "R2");
+                        out += width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
                     } else {
                         load_word(value, "R2");
                         if (is_wide(value->type)) load_word(value, "R3", true);
@@ -1140,10 +1203,9 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         }
         for (const auto& parameter : function->parameters) {
             if (!parameter->type) continue;
-            if (ir::is_float(parameter->type) ||
-                (parameter->type->kind == ir::TypeKind::Integer &&
-                 parameter->type->bits > 32)) {
-                error = "kr216 floating-point and 64-bit parameters are not implemented";
+            if (parameter->type->kind == ir::TypeKind::Integer &&
+                parameter->type->bits > 32) {
+                error = "kr216 64-bit parameters are not implemented";
                 return std::nullopt;
             }
         }
