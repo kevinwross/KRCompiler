@@ -543,8 +543,43 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::SRem:
             case ir::Opcode::URem: {
                 if (is_wide(instruction->type)) {
-                    error = "kr216 32-bit multiply and division are not implemented";
-                    return;
+                    if (instruction->opcode != ir::Opcode::Mul) {
+                        error = "kr216 32-bit division and remainder are not implemented";
+                        return;
+                    }
+                    load_word(instruction->operands[0], "R2");
+                    load_word(instruction->operands[0], "R3", true);
+                    load_word(instruction->operands[1], "R4");
+                    load_word(instruction->operands[1], "R5", true);
+                    // Low 32 bits of a 32x32 signed product from 16-bit limbs:
+                    // p00 + ((a0*b1 + a1*b0) << 16). Only the low words of the
+                    // cross terms reach the high result. MULH is signed, so the
+                    // unsigned high word of a0*b0 needs the ISA 10.2 correction.
+                    out += "    MOV R6, R2\n";
+                    out += "    MUL R6, R5\n";
+                    out += "    MUL R3, R4\n";
+                    out += "    MOV R5, R2\n";
+                    out += "    MUL R2, R4\n";
+                    out += "    MOV R7, R5\n";
+                    out += "    MULH R7, R4\n";
+                    const auto skip_a = ".Lmul.a." + function.name + "." +
+                                        std::to_string(synthetic_label);
+                    const auto skip_b = ".Lmul.b." + function.name + "." +
+                                        std::to_string(synthetic_label);
+                    ++synthetic_label;
+                    out += "    CMP R5, #0\n";
+                    out += "    BGE " + skip_a + "\n";
+                    out += "    ADD R7, R4\n";
+                    out += skip_a + ":\n";
+                    out += "    CMP R4, #0\n";
+                    out += "    BGE " + skip_b + "\n";
+                    out += "    ADD R7, R5\n";
+                    out += skip_b + ":\n";
+                    out += "    ADD R7, R6\n";
+                    out += "    ADD R7, R3\n";
+                    store_word(*instruction, "R2");
+                    store_word(*instruction, "R7", true);
+                    break;
                 }
                 load_word(instruction->operands[0], "R2");
                 load_word(instruction->operands[1], "R3");
