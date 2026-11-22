@@ -1051,14 +1051,99 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
     out.globals.clear();
     out.externals.clear();
     out.relocations.clear();
+    out.data_sections.clear();
+
     struct Fixup {
         std::size_t offset = 0;
         std::string label;
         std::uint8_t width = 2;
         bool relative = false;
         std::uint8_t condition = 0;
+        std::uint32_t section = 0;
     };
     std::vector<Fixup> fixups;
+    std::uint32_t current_section = 0;
+
+    const auto section_bytes = [&]() -> std::vector<std::uint8_t>& {
+        return current_section == 0 ? out.bytes
+                                    : out.data_sections[current_section - 1].bytes;
+    };
+    const auto section_size = [&]() -> std::uint32_t {
+        if (current_section == 0) return static_cast<std::uint32_t>(out.bytes.size());
+        const auto& section = out.data_sections[current_section - 1];
+        return section.type == 4 ? section.size
+                                 : static_cast<std::uint32_t>(section.bytes.size());
+    };
+    const auto set_section_size = [&](std::uint32_t size) {
+        if (current_section != 0) out.data_sections[current_section - 1].size = size;
+    };
+    const auto add_label = [&](std::string_view name, std::uint32_t offset) {
+        if (current_section == 0) {
+            out.labels.emplace_back(std::string(name), static_cast<std::uint16_t>(offset));
+        } else {
+            out.data_sections[current_section - 1].labels.emplace_back(std::string(name), offset);
+        }
+    };
+    const auto label_exists = [&](std::string_view name, std::uint32_t& section,
+                                  std::uint32_t& offset) {
+        for (const auto& label : out.labels) {
+            if (label.first == name) {
+                section = 0;
+                offset = label.second;
+                return true;
+            }
+        }
+        for (std::size_t index = 0; index < out.data_sections.size(); ++index) {
+            for (const auto& label : out.data_sections[index].labels) {
+                if (label.first == name) {
+                    section = static_cast<std::uint32_t>(index + 1);
+                    offset = label.second;
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    const auto switch_section = [&](std::string_view name, std::uint16_t type,
+                                    std::uint16_t flags, std::uint32_t alignment) {
+        if (name == ".text") {
+            current_section = 0;
+            return;
+        }
+        for (std::size_t index = 0; index < out.data_sections.size(); ++index) {
+            if (out.data_sections[index].name == name) {
+                current_section = static_cast<std::uint32_t>(index + 1);
+                return;
+            }
+        }
+        DataSection section;
+        section.name = std::string(name);
+        section.type = type;
+        section.flags = flags;
+        section.alignment = alignment;
+        out.data_sections.push_back(std::move(section));
+        current_section = static_cast<std::uint32_t>(out.data_sections.size());
+    };
+    const auto section_directive = [&](std::string_view name) {
+        if (name == ".text") {
+            switch_section(name, 1, 0x1 | 0x4, 2);
+        } else if (name == ".data") {
+            switch_section(name, 2, 0x1 | 0x2, 2);
+        } else if (name == ".rodata") {
+            switch_section(name, 3, 0x1, 2);
+        } else if (name == ".bss") {
+            switch_section(name, 4, 0x1 | 0x2, 2);
+        } else if (name == ".init_array") {
+            switch_section(name, 5, 0x1 | 0x2, 2);
+        } else if (name == ".fini_array") {
+            switch_section(name, 6, 0x1 | 0x2, 2);
+        } else if (name.starts_with(".text.")) {
+            switch_section(".text", 1, 0x1 | 0x4, 2);
+        } else {
+            error = "kr216: unknown section '" + std::string(name) + "'";
+        }
+    };
+
     for (const std::string_view raw : split_lines(source)) {
         std::string_view line = raw;
         const std::size_t comment = line.find(';');
@@ -1072,13 +1157,13 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
                 error = "kr216: empty label";
                 return false;
             }
-            for (const auto& existing : out.labels) {
-                if (existing.first == name) {
-                    error = "kr216: duplicate label '" + std::string(name) + "'";
-                    return false;
-                }
+            std::uint32_t found_section = 0;
+            std::uint32_t found_offset = 0;
+            if (label_exists(name, found_section, found_offset)) {
+                error = "kr216: duplicate label '" + std::string(name) + "'";
+                return false;
             }
-            out.labels.emplace_back(std::string(name), static_cast<std::uint16_t>(out.bytes.size()));
+            add_label(name, section_size());
             continue;
         }
 
@@ -1087,11 +1172,24 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             const std::string directive(line.substr(0, space));
             const std::string_view operands =
                 space == std::string_view::npos ? std::string_view{} : trim(line.substr(space));
-            if (directive == ".text") {
+            if (directive == ".text" || directive == ".data" || directive == ".rodata" ||
+                directive == ".bss" || directive == ".init_array" ||
+                directive == ".fini_array") {
                 if (!operands.empty()) {
-                    error = "kr216: .text takes no operands";
+                    error = "kr216: " + directive + " takes no operands";
                     return false;
                 }
+                section_directive(directive);
+                if (!error.empty()) return false;
+                continue;
+            }
+            if (directive == ".section") {
+                if (operands.empty() || operands.find_first_of(" \t") != std::string_view::npos) {
+                    error = "kr216: .section needs one section name";
+                    return false;
+                }
+                section_directive(operands);
+                if (!error.empty()) return false;
                 continue;
             }
             if (directive == ".global" || directive == ".globl") {
@@ -1138,6 +1236,48 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
                 }
                 continue;
             }
+            if (directive == ".align") {
+                std::uint16_t boundary = 0;
+                if (!parse_number(operands, boundary) || boundary == 0) {
+                    error = "kr216: .align needs a positive boundary";
+                    return false;
+                }
+                std::uint32_t alignment = 1;
+                while (alignment < boundary) alignment <<= 1;
+                if (alignment != boundary) {
+                    error = "kr216: .align boundary must be a power of two";
+                    return false;
+                }
+                if (current_section == 0) {
+                    while (out.bytes.size() % alignment != 0) out.bytes.push_back(0);
+                } else {
+                    auto& section = out.data_sections[current_section - 1];
+                    if (section.type == 4) {
+                        section.size = (section.size + alignment - 1) / alignment * alignment;
+                    } else {
+                        while (section.bytes.size() % alignment != 0) section.bytes.push_back(0);
+                    }
+                }
+                continue;
+            }
+            if (directive == ".space") {
+                std::uint16_t count = 0;
+                if (!parse_number(operands, count)) {
+                    error = "kr216: .space needs a byte count";
+                    return false;
+                }
+                if (current_section == 0) {
+                    out.bytes.insert(out.bytes.end(), count, 0);
+                } else {
+                    auto& section = out.data_sections[current_section - 1];
+                    if (section.type == 4) {
+                        section.size += count;
+                    } else {
+                        section.bytes.insert(section.bytes.end(), count, 0);
+                    }
+                }
+                continue;
+            }
             const std::size_t width = directive == ".byte" ? 1 : (directive == ".word" ? 2 : 0);
             if (width == 0) {
                 error = "kr216: unknown directive '" + directive + "'";
@@ -1146,14 +1286,29 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             for (const std::string_view value : split_commas(operands)) {
                 std::uint16_t number = 0;
                 if (parse_number(value, number)) {
-                    out.bytes.push_back(static_cast<std::uint8_t>(number & 0xFF));
-                    if (width == 2) out.bytes.push_back(static_cast<std::uint8_t>(number >> 8));
+                    if (current_section != 0 &&
+                        out.data_sections[current_section - 1].type == 4) {
+                        set_section_size(section_size() + static_cast<std::uint32_t>(width));
+                    } else {
+                        auto& bytes = section_bytes();
+                        bytes.push_back(static_cast<std::uint8_t>(number & 0xFF));
+                        if (width == 2) {
+                            bytes.push_back(static_cast<std::uint8_t>(number >> 8));
+                        }
+                    }
                     continue;
                 }
                 if (width == 2 && is_label_name(value)) {
-                    fixups.push_back({out.bytes.size(), std::string(value), 2});
-                    out.bytes.push_back(0);
-                    out.bytes.push_back(0);
+                    if (current_section != 0 &&
+                        out.data_sections[current_section - 1].type == 4) {
+                        error = "kr216: cannot place a relocation in .bss";
+                        return false;
+                    }
+                    auto& bytes = section_bytes();
+                    fixups.push_back({bytes.size(), std::string(value), 2, false, 0,
+                                      current_section});
+                    bytes.push_back(0);
+                    bytes.push_back(0);
                     continue;
                 }
                 error = "kr216: " + directive + " value is not a number";
@@ -1167,30 +1322,22 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         if (!encoding.label.empty()) {
             if (encoding.relative) {
                 fixups.push_back({out.bytes.size(), std::move(encoding.label), 2, true,
-                                  encoding.condition});
+                                  encoding.condition, 0});
             } else {
-                fixups.push_back({out.bytes.size() + 1, std::move(encoding.label), 2, false, 0});
+                fixups.push_back({out.bytes.size() + 1, std::move(encoding.label), 2, false, 0,
+                                  0});
             }
         }
         out.bytes.insert(out.bytes.end(), encoding.bytes, encoding.bytes + encoding.size);
     }
 
-    // The address field was emitted as zero. Patch it only after every label has been recorded,
-    // so a forward reference resolves; a name declared `.extern` becomes a relocation and any
-    // other missing label is an error rather than a silent address zero.
     for (const auto& fixup : fixups) {
-        bool found = false;
-        std::uint16_t address = 0;
-        for (const auto& label : out.labels) {
-            if (label.first == fixup.label) {
-                address = label.second;
-                found = true;
-                break;
-            }
-        }
+        std::uint32_t label_section = 0;
+        std::uint32_t address = 0;
+        const bool found = label_exists(fixup.label, label_section, address);
         if (fixup.relative) {
-            if (!found) {
-                error = "kr216: undefined label '" + fixup.label + "'";
+            if (!found || label_section != 0) {
+                error = "kr216: undefined text label '" + fixup.label + "'";
                 return false;
             }
             const auto displacement =
@@ -1206,15 +1353,15 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             out.bytes[fixup.offset + 1] = branch.bytes[1];
             continue;
         }
+        auto& bytes = fixup.section == 0 ? out.bytes
+                                         : out.data_sections[fixup.section - 1].bytes;
         if (found) {
-            // The section-relative value is useful to `assemble_text`'s callers, but the
-            // linker still has to add the section's final base. Keep both: the checked
-            // bytes for a standalone listing, and a relocation for the linked image.
-            out.bytes[fixup.offset] = static_cast<std::uint8_t>(address & 0xFF);
+            bytes[fixup.offset] = static_cast<std::uint8_t>(address & 0xFF);
             if (fixup.width == 2) {
-                out.bytes[fixup.offset + 1] = static_cast<std::uint8_t>(address >> 8);
+                bytes[fixup.offset + 1] = static_cast<std::uint8_t>(address >> 8);
             }
-            out.relocations.push_back({static_cast<std::uint32_t>(fixup.offset),
+            out.relocations.push_back({fixup.section,
+                                       static_cast<std::uint32_t>(fixup.offset),
                                        fixup.label, fixup.width});
             continue;
         }
@@ -1226,7 +1373,8 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             }
         }
         if (external) {
-            out.relocations.push_back({static_cast<std::uint32_t>(fixup.offset),
+            out.relocations.push_back({fixup.section,
+                                       static_cast<std::uint32_t>(fixup.offset),
                                        fixup.label, fixup.width});
             continue;
         }

@@ -91,6 +91,99 @@ _start:
           std::numeric_limits<std::uint32_t>::max());
 }
 
+TEST_CASE("kr216 object writer carries data and bss sections") {
+    const std::string source = R"(
+.data
+.global value
+value:
+    .word 0x1234
+.bss
+buffer:
+    .space 8
+.text
+.global _start
+_start:
+    ld r2, #value
+    ret
+)";
+    krc::asmkr216::AssembledProgram assembly;
+    std::string error;
+    REQUIRE_MESSAGE(krc::asmkr216::assemble_text(source, assembly, error), error);
+    REQUIRE(assembly.data_sections.size() == 2);
+    CHECK(assembly.data_sections[0].name == ".data");
+    CHECK(assembly.data_sections[1].name == ".bss");
+    REQUIRE(assembly.data_sections[0].labels.size() == 1);
+    CHECK(assembly.data_sections[0].labels[0].first == "value");
+    REQUIRE(assembly.data_sections[1].labels.size() == 1);
+    CHECK(assembly.data_sections[1].labels[0].first == "buffer");
+    CHECK(assembly.data_sections[1].size == 8);
+
+    krc::linker::KroObject object;
+    REQUIRE_MESSAGE(krc::asmkr216::make_object(
+                        assembly,
+                        krc::target::get_target(krc::target::TargetId::Kr216), object,
+                        error),
+                    error);
+    REQUIRE(object.sections.size() == 3);
+    CHECK(object.sections[0].type == krc::linker::KroSectionType::Text);
+    CHECK(object.sections[1].type == krc::linker::KroSectionType::Data);
+    CHECK(object.sections[2].type == krc::linker::KroSectionType::Bss);
+    CHECK(object.sections[2].size == 8);
+    bool saw_value = false;
+    bool saw_buffer = false;
+    for (const auto& symbol : object.symbols) {
+        if (symbol.name == "value") {
+            saw_value = true;
+            CHECK(symbol.section == 1);
+        }
+        if (symbol.name == "buffer") {
+            saw_buffer = true;
+            CHECK(symbol.section == 2);
+        }
+    }
+    CHECK(saw_value);
+    CHECK(saw_buffer);
+    REQUIRE(object.relocations.size() == 1);
+    CHECK(object.relocations[0].section == 0);
+    CHECK(object.symbols[object.relocations[0].symbol].name == "value");
+}
+
+TEST_CASE("kr216 object writer carries rodata and init/fini arrays") {
+    const std::string source = R"(
+.rodata
+.word 0x1234
+.init_array
+.word _start
+.fini_array
+.word _start
+.text
+.global _start
+_start:
+    ret
+)";
+    krc::asmkr216::AssembledProgram assembly;
+    std::string error;
+    REQUIRE_MESSAGE(krc::asmkr216::assemble_text(source, assembly, error), error);
+    REQUIRE(assembly.data_sections.size() == 3);
+    CHECK(assembly.data_sections[0].type == 3);
+    CHECK(assembly.data_sections[1].type == 5);
+    CHECK(assembly.data_sections[2].type == 6);
+
+    krc::linker::KroObject object;
+    REQUIRE_MESSAGE(krc::asmkr216::make_object(
+                        assembly,
+                        krc::target::get_target(krc::target::TargetId::Kr216), object,
+                        error),
+                    error);
+    REQUIRE(object.sections.size() == 4);
+    CHECK(object.sections[1].type == krc::linker::KroSectionType::Rodata);
+    CHECK(object.sections[2].type == krc::linker::KroSectionType::InitArray);
+    CHECK(object.sections[3].type == krc::linker::KroSectionType::FiniArray);
+    REQUIRE(object.relocations.size() == 2);
+    CHECK(object.relocations[0].section == 2);
+    CHECK(object.relocations[1].section == 3);
+}
+
 TEST_CASE("kr216 object writer rejects a global symbol with no definition") {
     krc::asmkr216::AssembledProgram assembly;
     std::string error;

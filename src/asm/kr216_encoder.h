@@ -130,18 +130,34 @@ struct Encoding {
 [[nodiscard]] bool parse_number(std::string_view text, std::uint16_t& out);
 [[nodiscard]] bool assemble_line(std::string_view line, Encoding& out, std::string& error);
 
-// The multi-line layer: `;` comments, `.text`, `.global`, `name:` labels, `.byte`/`.word`
-// directives and one instruction per line. Labels are recorded with the offset they name; an
-// absolute `jmp`/`call` label operand is patched in a second pass after the whole source has been
-// read, so a forward reference resolves and an undefined label is an error. `.global` names are
-// recorded for the object writer; a global with no matching label is an error there.
+// The multi-line layer: `;` comments, `.text`/`.data`/`.rodata`/`.bss`/`.init_array`/
+// `.fini_array` (or `.section NAME`), `.align`, `.space`, `.global`, `.extern`, `name:` labels,
+// `.byte`/`.word` directives and one instruction per line. Labels and relocations remember their
+// section; an absolute `jmp`/`call` label operand is patched in a second pass after the whole
+// source has been read, so a forward reference resolves and an undefined label is an error.
+// `.global` names are recorded for the object writer; a global with no matching label is an
+// error there.
 // A two-byte absolute reference the linker fills: a direct call/jump target, a
 // `ld Rd, #symbol` address, or a `.word symbol` data word. `offset` is the
 // payload byte the linker patches.
 struct Relocation {
+    // 0 is `.text`; 1.. are entries in `AssembledProgram::data_sections`.
+    std::uint32_t section = 0;
     std::uint32_t offset = 0;
     std::string symbol;
     std::uint8_t width = 2;
+};
+
+// A non-text section and the labels that live in it. `.bss` has a size but no
+// bytes; every other section carries its payload in `bytes`.
+struct DataSection {
+    std::string name;
+    std::uint16_t type = 2;  // 1 text, 2 data, 3 rodata, 4 bss, 5 init, 6 fini
+    std::uint16_t flags = 0x1 | 0x2;
+    std::uint32_t alignment = 2;
+    std::vector<std::uint8_t> bytes;
+    std::uint32_t size = 0;
+    std::vector<std::pair<std::string, std::uint32_t>> labels;
 };
 
 struct AssembledProgram {
@@ -150,6 +166,7 @@ struct AssembledProgram {
     std::vector<std::string> globals;
     std::vector<std::string> externals;
     std::vector<Relocation> relocations;
+    std::vector<DataSection> data_sections;
 };
 
 [[nodiscard]] bool assemble_text(std::string_view source, AssembledProgram& out,

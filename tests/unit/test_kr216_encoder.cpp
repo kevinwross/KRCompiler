@@ -377,7 +377,7 @@ TEST_CASE("kr216 assembles a multi-line source with labels and directives") {
     CHECK(program.bytes[4] == 1);
     CHECK(program.bytes[6] == 0x34);
     CHECK(program.bytes[7] == 0x12);
-    CHECK_FALSE(assemble_text(".section .data", program, error));
+    CHECK_FALSE(assemble_text(".section .bogus", program, error));
 }
 TEST_CASE("kr216 refuses a duplicate label") {
     AssembledProgram program;

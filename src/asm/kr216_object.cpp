@@ -3,10 +3,49 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
 namespace krc::asmkr216 {
+
+namespace {
+
+bool label_defined(const AssembledProgram& assembly, std::string_view name) {
+    for (const auto& label : assembly.labels) {
+        if (label.first == name) return true;
+    }
+    for (const auto& section : assembly.data_sections) {
+        for (const auto& label : section.labels) {
+            if (label.first == name) return true;
+        }
+    }
+    return false;
+}
+
+bool label_global(const AssembledProgram& assembly, std::string_view name) {
+    for (const auto& global : assembly.globals) {
+        if (global == name) return true;
+    }
+    return false;
+}
+
+linker::KroSectionType section_type(std::uint16_t type) {
+    switch (type) {
+    case 3:
+        return linker::KroSectionType::Rodata;
+    case 4:
+        return linker::KroSectionType::Bss;
+    case 5:
+        return linker::KroSectionType::InitArray;
+    case 6:
+        return linker::KroSectionType::FiniArray;
+    default:
+        return linker::KroSectionType::Data;
+    }
+}
+
+}  // namespace
 
 bool make_object(const AssembledProgram& assembly,
                  const target::TargetProfile& profile,
@@ -16,14 +55,7 @@ bool make_object(const AssembledProgram& assembly,
         return false;
     }
     for (const auto& name : assembly.globals) {
-        bool defined = false;
-        for (const auto& label : assembly.labels) {
-            if (label.first == name) {
-                defined = true;
-                break;
-            }
-        }
-        if (!defined) {
+        if (!label_defined(assembly, name)) {
             error = "kr216 global symbol '" + name + "' is not defined";
             return false;
         }
@@ -45,29 +77,54 @@ bool make_object(const AssembledProgram& assembly,
     text.data = assembly.bytes;
     object.sections.push_back(std::move(text));
 
-    std::unordered_map<std::string, std::uint32_t> symbol_indices;
-    for (const auto& label : assembly.labels) {
-        bool global = false;
-        for (const auto& name : assembly.globals) {
-            if (name == label.first) {
-                global = true;
-                break;
-            }
+    for (const auto& section : assembly.data_sections) {
+        linker::KroSection output;
+        output.name = section.name;
+        output.type = section_type(section.type);
+        output.flags = section.flags;
+        output.alignment = section.alignment;
+        if (section.type == 4) {
+            output.size = section.size;
+        } else {
+            output.size = section.bytes.size();
+            output.data = section.bytes;
         }
+        object.sections.push_back(std::move(output));
+    }
+
+    std::unordered_map<std::string, std::uint32_t> symbol_indices;
+    const auto add_symbol = [&](std::string_view name, std::uint32_t section,
+                                std::uint32_t value, linker::KroSymbolType type) {
+        if (symbol_indices.contains(std::string(name))) return;
         linker::KroSymbol symbol;
-        symbol.name = label.first;
-        symbol.binding = global ? linker::KroSymbolBinding::Global
-                                : linker::KroSymbolBinding::Local;
-        symbol.type = linker::KroSymbolType::Function;
-        symbol.section = 0;
-        symbol.value = label.second;
+        symbol.name = std::string(name);
+        symbol.binding = label_global(assembly, name)
+                             ? linker::KroSymbolBinding::Global
+                             : linker::KroSymbolBinding::Local;
+        symbol.type = type;
+        symbol.section = section;
+        symbol.value = value;
         symbol_indices.emplace(symbol.name,
                                static_cast<std::uint32_t>(object.symbols.size()));
         object.symbols.push_back(std::move(symbol));
+    };
+    for (const auto& label : assembly.labels) {
+        add_symbol(label.first, 0, label.second, linker::KroSymbolType::Function);
     }
+    for (std::size_t index = 0; index < assembly.data_sections.size(); ++index) {
+        for (const auto& label : assembly.data_sections[index].labels) {
+            add_symbol(label.first, static_cast<std::uint32_t>(index + 1), label.second,
+                       linker::KroSymbolType::Object);
+        }
+    }
+
     for (const auto& relocation : assembly.relocations) {
         if (relocation.width != 2) {
             error = "kr216 relocation width must be two bytes";
+            return false;
+        }
+        if (relocation.section >= object.sections.size()) {
+            error = "kr216 relocation has an invalid section";
             return false;
         }
         auto found = symbol_indices.find(relocation.symbol);
@@ -84,7 +141,7 @@ bool make_object(const AssembledProgram& assembly,
             object.symbols.push_back(std::move(external));
         }
         linker::KroRelocation output;
-        output.section = 0;
+        output.section = relocation.section;
         output.type = linker::KroRelocationType::Abs16;
         output.width = 2;
         output.offset = relocation.offset;

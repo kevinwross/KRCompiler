@@ -913,8 +913,28 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
             out += ".extern " + global->name + "\n";
             continue;
         }
+        const auto size = type_size(global->element_type);
+        const auto* data =
+            dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
+        const auto* constant =
+            dynamic_cast<const ir::ConstantInt*>(global->initializer);
+        const bool zero_initialized =
+            global->initializer == nullptr ||
+            (constant != nullptr && constant->value == 0) ||
+            (data != nullptr &&
+             std::all_of(data->bytes.begin(), data->bytes.end(),
+                         [](std::uint8_t byte) { return byte == 0; }));
+        if (global->name.starts_with(".str.")) {
+            out += ".rodata\n";
+        } else {
+            out += zero_initialized ? ".bss\n" : ".data\n";
+        }
         if (!global->internal) out += ".global " + global->name + "\n";
         out += global->name + ":\n";
+        if (zero_initialized) {
+            out += "    .space " + std::to_string(size) + "\n";
+            continue;
+        }
         if (const auto* addresses =
                 dynamic_cast<const ir::ConstantAddressArray*>(global->initializer)) {
             for (const auto* element : addresses->elements) {
@@ -927,7 +947,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
             }
             continue;
         }
-        if (const auto* data = dynamic_cast<const ir::ConstantDataArray*>(global->initializer)) {
+        if (data != nullptr) {
             out += "    .byte ";
             for (std::size_t index = 0; index < data->bytes.size(); ++index) {
                 if (index != 0) out += ", ";
@@ -937,8 +957,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
             if (data->bytes.size() % 2 != 0) out += "    .byte 0\n";
             continue;
         }
-        const auto size = type_size(global->element_type);
-        if (const auto* constant = dynamic_cast<const ir::ConstantInt*>(global->initializer)) {
+        if (constant != nullptr) {
             for (std::uint32_t offset = 0; offset < size; offset += 2) {
                 out += "    .word " +
                        std::to_string(static_cast<std::uint16_t>(

@@ -139,6 +139,8 @@ bool write_kr216_image(const LinkedImage& image, std::vector<std::uint8_t>& byte
             out.flags = kFlagAlloc;
             break;
         case KroSectionType::Data:
+        case KroSectionType::InitArray:
+        case KroSectionType::FiniArray:
             out.type = kTypeProgbits;
             out.flags = kFlagAlloc | kFlagWrite;
             break;

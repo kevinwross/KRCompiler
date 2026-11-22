@@ -540,10 +540,22 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     }
     std::uint64_t eh_start = 0;
     std::uint64_t eh_end = 0;
+    std::uint64_t init_start = 0;
+    std::uint64_t init_end = 0;
+    std::uint64_t fini_start = 0;
+    std::uint64_t fini_end = 0;
     for (const auto& section : image.sections) {
         if (section.name == ".cpp_except") {
             eh_start = section.address;
             eh_end = section.address + section.size;
+        }
+        if (section.name == ".init_array") {
+            init_start = section.address;
+            init_end = section.address + section.size;
+        }
+        if (section.name == ".fini_array") {
+            fini_start = section.address;
+            fini_end = section.address + section.size;
         }
     }
     const bool narrow = objects.front().target_id ==
@@ -571,6 +583,10 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
         {"__stack_limit", stack_limit},
         {"__krc_eh_start", eh_start},
         {"__krc_eh_end", eh_end},
+        {"__init_array_start", init_start},
+        {"__init_array_end", init_end},
+        {"__fini_array_start", fini_start},
+        {"__fini_array_end", fini_end},
     };
     for (const auto& [name, address] : synthetic) {
         if (definitions.find(name) != definitions.end()) {
