@@ -43,3 +43,23 @@ TEST_CASE("kr216 Register class rejects a register outside 0-15") {
     CHECK_FALSE(encode_system(0x79, out, error));
     CHECK_FALSE(encode_push_register(16, out, error));
 }
+TEST_CASE("kr216 Compact class emits the ISA bytes") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_compact(0, 2, 3, out, error));  // MOV r2, r3
+    CHECK(out.size == 2); CHECK(out.bytes[0] == 0x80); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(encode_compact(1, 2, 3, out, error)); CHECK(out.bytes[0] == 0x81);
+    REQUIRE(encode_compact(19, 2, 3, out, error)); CHECK(out.bytes[0] == 0x93);  // LD [r3]+
+    REQUIRE(encode_compact(29, 2, 0, out, error)); CHECK(out.bytes[0] == 0x9D);  // NEG r2
+    REQUIRE(encode_compact(31, 3, 0, out, error)); CHECK(out.bytes[0] == 0x9F);  // JMP r3
+    CHECK_FALSE(encode_compact(32, 0, 0, out, error));
+    CHECK_FALSE(encode_compact(0, 16, 0, out, error));
+
+    REQUIRE(encode_branch(0, 6, out, error));  // BEQ +6
+    CHECK(out.bytes[0] == 0xA0); CHECK(out.bytes[1] == 0x06);
+    REQUIRE(encode_branch(15, -9, out, error));  // BRA -9
+    CHECK(out.bytes[0] == 0xBF); CHECK(out.bytes[1] == 0xF7);
+    REQUIRE(encode_branch(14, 0, out, error));  // AL
+    CHECK(out.bytes[0] == 0xBC);
+    CHECK_FALSE(encode_branch(0, 256, out, error));
+}

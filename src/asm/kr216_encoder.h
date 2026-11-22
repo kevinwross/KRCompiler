@@ -33,4 +33,11 @@ struct Encoding {
 // 0x70 RET, 0x71 NOP, 0x72 BRK, 0x73 SYS, 0x74 EI, 0x75 DI, 0x76 HALT, 0x77 IRET, 0x78 RDCYCLE.
 [[nodiscard]] bool encode_system(std::uint8_t opcode, Encoding& out, std::string& error);
 
+// Section 6, Compact class: `100 OOOOO Ra Rb` (0x80-0x9F, op 0-31) and the branch form
+// `101 CCCC ddddddddd` (0xA0-0xBF), whose displacement is relative to the next instruction.
+[[nodiscard]] bool encode_compact(std::uint8_t opcode, std::uint8_t ra, std::uint8_t rb,
+                                  Encoding& out, std::string& error);
+[[nodiscard]] bool encode_branch(std::uint8_t condition, std::int32_t displacement,
+                                 Encoding& out, std::string& error);
+
 }  // namespace krc::asmkr216

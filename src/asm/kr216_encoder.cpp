@@ -76,4 +76,36 @@ bool encode_system(std::uint8_t opcode, Encoding& out, std::string& error) {
     return true;
 }
 
+bool encode_compact(std::uint8_t opcode, std::uint8_t ra, std::uint8_t rb, Encoding& out,
+                    std::string& error) {
+    if (opcode > 0x1F) {
+        error = "kr216 compact opcode out of range";
+        return false;
+    }
+    if (!check_register(ra, error) || !check_register(rb, error)) return false;
+    out.bytes[0] = static_cast<std::uint8_t>(0x80 | opcode);
+    out.bytes[1] = static_cast<std::uint8_t>((ra << 4) | rb);
+    out.size = 2;
+    return true;
+}
+
+bool encode_branch(std::uint8_t condition, std::int32_t displacement, Encoding& out,
+                   std::string& error) {
+    if (condition > 15) {
+        error = "kr216 branch condition must be 0-15 (14 is AL, 15 is BRA)";
+        return false;
+    }
+    if (displacement < -256 || displacement > 255) {
+        error = "kr216 branch displacement out of the disp9 range";
+        return false;
+    }
+    // The 16-bit value packs from the most significant bit, so the bytes are big-endian.
+    const auto packed = static_cast<std::uint16_t>(0xA000 | (condition << 9) |
+                                                   (static_cast<std::uint16_t>(displacement) & 0x1FF));
+    out.bytes[0] = static_cast<std::uint8_t>(packed >> 8);
+    out.bytes[1] = static_cast<std::uint8_t>(packed & 0xFF);
+    out.size = 2;
+    return true;
+}
+
 }  // namespace krc::asmkr216
