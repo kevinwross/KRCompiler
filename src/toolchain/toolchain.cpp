@@ -18,6 +18,7 @@
 #include "asm/kr32_assembler.h"
 #include "asm/kro_writer.h"
 #include "backend/kr16_backend.h"
+#include "backend/kr216_backend.h"
 #include "backend/kr32_backend.h"
 #include "ir/ir.h"
 #include "ir/passes.h"
@@ -131,6 +132,8 @@ std::string format_stats(const ir::Module& module, const target::TargetProfile& 
         std::uint32_t frame = 0;
         if (profile.id == target::TargetId::Kr16) {
             frame = backend::Kr16Backend(module, profile, level).frame_bytes(*function);
+        } else if (profile.id == target::TargetId::Kr216) {
+            frame = backend::Kr216Backend(module, profile, level).frame_bytes(*function);
         } else {
             frame = backend::Kr32Backend(module, profile, level).frame_bytes(*function);
         }
@@ -544,6 +547,18 @@ CompileResult compile(const Source& source, const Options& options) {
         if (!assembly) {
             diagnostics.report(frontend::Severity::Error,
                                "KR16 backend: " + backend_error);
+        } else {
+            result.assembly = std::move(*assembly);
+            if (options.debug) {
+                result.debug_info = backend.debug_info();
+            }
+        }
+    } else if (id == target::TargetId::Kr216) {
+        backend::Kr216Backend backend(*module, profile, level);
+        auto assembly = backend.emit(backend_error);
+        if (!assembly) {
+            diagnostics.report(frontend::Severity::Error,
+                               "KR216 backend: " + backend_error);
         } else {
             result.assembly = std::move(*assembly);
             if (options.debug) {

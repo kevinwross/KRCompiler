@@ -560,6 +560,22 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        if ((emit_object || emit_object_container) &&
+            target_id == krc::target::TargetId::Kr216) {
+            const auto assembled =
+                toolchain::assemble(compiled.assembly, compiled.debug_info, options);
+            if (!assembled.ok) {
+                diagnostics.push_back(error_diagnostic(assembled.error));
+                failed = true;
+                continue;
+            }
+            if (!write_binary_file(emit_path(".kro"), assembled.object, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
+            }
+            continue;
+        }
+
         if (emit_object && target_id == krc::target::TargetId::Kr32) {
             const auto assembled =
                 toolchain::assemble(compiled.assembly, compiled.debug_info, options);

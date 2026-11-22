@@ -65,7 +65,7 @@ TEST_CASE("KR216 profile matches the approved data model") {
     CHECK(profile.has_fpu);
     CHECK(profile.has_cpp);
     CHECK_FALSE(profile.has_eh);
-    CHECK_FALSE(profile.backend_available);
+    CHECK(profile.backend_available);
 }
 
 TEST_CASE("target names parse and enumerate") {

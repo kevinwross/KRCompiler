@@ -86,8 +86,9 @@ TEST_CASE("kr216 Normal class immediate, absolute jump and LEAVE") {
     CHECK(out.bytes[0] == 0xCF); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x02);
     REQUIRE(encode_normal_leave(0x0300, out, error));
     CHECK(out.bytes[0] == 0xDC); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x03);
+    REQUIRE(encode_normal_leave(0, out, error));
+    CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x00);
     CHECK_FALSE(encode_normal_add_imm8(2, 128, out, error));
-    CHECK_FALSE(encode_normal_leave(0, out, error));
 }
 TEST_CASE("kr216 Normal class compare, SXTB, absolute CALL and shifts") {
     Encoding out;
@@ -139,8 +140,9 @@ TEST_CASE("kr216 F3 FP register ops and F7 ENTER") {
     REQUIRE(encode_f7_enter(8, 0x0300, out, error));
     CHECK(out.size == 4); CHECK(out.bytes[0] == 0xF7); CHECK(out.bytes[1] == 8);
     CHECK(out.bytes[2] == 0x00); CHECK(out.bytes[3] == 0x03);
+    REQUIRE(encode_f7_enter(8, 0, out, error));
+    CHECK(out.bytes[2] == 0x00); CHECK(out.bytes[3] == 0x00);
     CHECK_FALSE(encode_f7_enter(7, 0x0300, out, error));
-    CHECK_FALSE(encode_f7_enter(8, 0, out, error));
 }
 TEST_CASE("kr216 F1 long-integer forms") {
     Encoding out;
@@ -274,15 +276,21 @@ TEST_CASE("kr216 assembles mask pushes, neg/not and shifts") {
     REQUIRE(assemble_line("not r2", out, error));        CHECK(out.bytes[0] == 0x9E);
     REQUIRE(assemble_line("shl r2, #1", out, error));    CHECK(out.bytes[0] == 0xD4); CHECK(out.bytes[2] == 0x01);
     REQUIRE(assemble_line("sar r2, #2", out, error));    CHECK(out.bytes[0] == 0xD6); CHECK(out.bytes[2] == 0x02);
-    CHECK_FALSE(assemble_line("shl r2, r3", out, error));
+    CHECK_FALSE(assemble_line("shl r2, #16", out, error));
 }
 TEST_CASE("kr216 assembles enter/leave and the register jumps") {
     Encoding out;
     std::string error;
     REQUIRE(assemble_line("enter #8, #0x0300", out, error));
     CHECK(out.size == 4); CHECK(out.bytes[0] == 0xF7); CHECK(out.bytes[1] == 8); CHECK(out.bytes[3] == 0x03);
+    REQUIRE(assemble_line("enter #8, #0", out, error));
+    CHECK(out.size == 4); CHECK(out.bytes[2] == 0x00); CHECK(out.bytes[3] == 0x00);
+    REQUIRE(assemble_line("enter #300, #0", out, error));
+    CHECK(out.size == 5); CHECK(out.bytes[0] == 0xF8);
     REQUIRE(assemble_line("leave #0x0300", out, error));
     CHECK(out.bytes[0] == 0xDC); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x03);
+    REQUIRE(assemble_line("leave #0", out, error));
+    CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x00);
     REQUIRE(assemble_line("jmp r3", out, error));   CHECK(out.bytes[0] == 0x9F); CHECK(out.bytes[1] == 0x30);
     REQUIRE(assemble_line("call r5", out, error));  CHECK(out.bytes[0] == 0x45);
     CHECK_FALSE(assemble_line("enter #7, #0x0300", out, error));
@@ -296,6 +304,33 @@ TEST_CASE("kr216 assembles the branches") {
     REQUIRE(assemble_line("bal +4", out, error));   CHECK(out.bytes[0] == 0xBC);
     CHECK_FALSE(assemble_line("beq +256", out, error));
 }
+TEST_CASE("kr216 assembles byte accesses, carry arithmetic and division") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("ldbu r2, [r3]", out, error));
+    CHECK(out.bytes[0] == 0x90); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("ldbs r2, [r3]", out, error));
+    CHECK(out.bytes[0] == 0x91);
+    REQUIRE(assemble_line("stb [r3], r2", out, error));
+    CHECK(out.bytes[0] == 0x92); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("ldbu r2, [r3+1]", out, error));
+    CHECK(out.bytes[0] == 0xC2); CHECK(out.bytes[1] == 0x23); CHECK(out.bytes[2] == 0x01);
+    REQUIRE(assemble_line("stb [r3+1], r2", out, error));
+    CHECK(out.bytes[0] == 0xC4);
+    REQUIRE(assemble_line("addc r2, r3", out, error));
+    CHECK(out.bytes[0] == 0x82);
+    REQUIRE(assemble_line("subb r2, r3", out, error));
+    CHECK(out.bytes[0] == 0x84);
+    REQUIRE(assemble_line("mul r2, r3", out, error));
+    CHECK(out.bytes[0] == 0x89); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("div r2, r3", out, error));
+    CHECK(out.size == 2); CHECK(out.bytes[0] == 0xD9); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("divs r2, r3", out, error));
+    CHECK(out.bytes[0] == 0xDA);
+    REQUIRE(assemble_line("shl r2, r3", out, error));
+    CHECK(out.bytes[0] == 0x8B);
+}
+
 TEST_CASE("kr216 assembles the FP mnemonics") {
     Encoding out;
     std::string error;
@@ -375,6 +410,26 @@ TEST_CASE("kr216 resolves a forward call label") {
     CHECK(program.bytes[1] == 0x04);
     CHECK(program.bytes[2] == 0x00);
     CHECK(program.bytes[3] == 0x71);
+}
+
+TEST_CASE("kr216 resolves a local call label after other code") {
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text("_start:\ncall helper\nnop\nhelper:\nret\n", program, error));
+    REQUIRE(program.bytes.size() == 5);
+    CHECK(program.bytes[0] == 0xD0);
+    CHECK(program.bytes[1] == 0x04);
+    CHECK(program.bytes[2] == 0x00);
+}
+
+TEST_CASE("kr216 resolves a branch label relative to the next instruction") {
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text("bra done\nnop\ndone:\nret\n", program, error));
+    REQUIRE(program.bytes.size() == 4);
+    CHECK(program.bytes[0] == 0xBE);
+    CHECK(program.bytes[1] == 0x01);
+    CHECK(program.bytes[2] == 0x71);
 }
 
 TEST_CASE("kr216 records global labels and accepts the text section") {

@@ -137,6 +137,48 @@ bool encode_normal_st_d8(std::uint8_t rs, std::uint8_t base, std::int32_t displa
     return true;
 }
 
+bool encode_normal_byte_d8(std::uint8_t opcode, std::uint8_t rd, std::uint8_t base,
+                           std::int32_t displacement, Encoding& out, std::string& error) {
+    if (!check_register(rd, error) || !check_register(base, error)) return false;
+    if (displacement < -128 || displacement > 127) {
+        error = "kr216 disp8 out of range";
+        return false;
+    }
+    out.bytes[0] = static_cast<std::uint8_t>(0xC0 | opcode);
+    out.bytes[1] = static_cast<std::uint8_t>((rd << 4) | base);
+    out.bytes[2] = static_cast<std::uint8_t>(displacement & 0xFF);
+    out.size = 3;
+    return true;
+}
+
+bool encode_normal_ldbu_d8(std::uint8_t rd, std::uint8_t base, std::int32_t displacement,
+                           Encoding& out, std::string& error) {
+    return encode_normal_byte_d8(2, rd, base, displacement, out, error);
+}
+
+bool encode_normal_ldbs_d8(std::uint8_t rd, std::uint8_t base, std::int32_t displacement,
+                           Encoding& out, std::string& error) {
+    return encode_normal_byte_d8(3, rd, base, displacement, out, error);
+}
+
+bool encode_normal_stb_d8(std::uint8_t rs, std::uint8_t base, std::int32_t displacement,
+                          Encoding& out, std::string& error) {
+    return encode_normal_byte_d8(4, rs, base, displacement, out, error);
+}
+
+bool encode_normal_div(std::uint8_t opcode, std::uint8_t rd, std::uint8_t rs, Encoding& out,
+                       std::string& error) {
+    if (opcode > 1) {
+        error = "kr216 division opcode must be 0 (DIV) or 1 (DIVS)";
+        return false;
+    }
+    if (!check_register(rd, error) || !check_register(rs, error)) return false;
+    out.bytes[0] = static_cast<std::uint8_t>(0xD9 + opcode);
+    out.bytes[1] = static_cast<std::uint8_t>((rd << 4) | rs);
+    out.size = 2;
+    return true;
+}
+
 bool encode_normal_push_mask(std::uint16_t mask, Encoding& out, std::string& error) {
     if (mask == 0) {
         error = "kr216 PUSH mask may not be empty";
@@ -184,8 +226,8 @@ bool encode_normal_jmp_absolute(std::uint16_t address, Encoding& out) {
 }
 
 bool encode_normal_leave(std::uint16_t mask, Encoding& out, std::string& error) {
-    if (mask == 0) {
-        error = "kr216 LEAVE mask may not be empty";
+    if ((mask & 0xE000) != 0) {
+        error = "kr216 LEAVE mask must have bits 13-15 clear";
         return false;
     }
     out.bytes[0] = 0xDC;
@@ -234,8 +276,8 @@ bool encode_normal_shift_imm(std::uint8_t kind, std::uint8_t rd, std::uint8_t co
         return false;
     }
     if (!check_register(rd, error)) return false;
-    if (count > 31) {
-        error = "kr216 shift count out of range";
+    if (count > 15) {
+        error = "kr216 shift count out of range (0-15)";
         return false;
     }
     out.bytes[0] = static_cast<std::uint8_t>(0xD4 + kind);
@@ -303,8 +345,8 @@ bool encode_f7_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std
         error = "kr216 ENTER frame must be even and at most 254";
         return false;
     }
-    if (mask == 0 || (mask & 0xE000) != 0) {
-        error = "kr216 ENTER mask must be non-empty and have bits 13-15 clear";
+    if ((mask & 0xE000) != 0) {
+        error = "kr216 ENTER mask must have bits 13-15 clear";
         return false;
     }
     out.bytes[0] = 0xF7;
@@ -350,8 +392,8 @@ bool encode_f8_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std
         error = "kr216 ENTER frame must be even";
         return false;
     }
-    if (mask == 0 || (mask & 0xE000) != 0) {
-        error = "kr216 ENTER mask must be non-empty and have bits 13-15 clear";
+    if ((mask & 0xE000) != 0) {
+        error = "kr216 ENTER mask must have bits 13-15 clear";
         return false;
     }
     out.bytes[0] = 0xF8;
@@ -412,6 +454,18 @@ bool encode_f4(std::uint8_t opcode, std::uint8_t fd, std::uint8_t mode, std::uin
 }
 
 bool parse_register(std::string_view text, std::uint8_t& out) {
+    if (text == "sp" || text == "SP") {
+        out = 15;
+        return true;
+    }
+    if (text == "fp" || text == "FP") {
+        out = 13;
+        return true;
+    }
+    if (text == "pc" || text == "PC") {
+        out = 14;
+        return true;
+    }
     if (text.size() < 2 || (text[0] != 'r' && text[0] != 'R')) return false;
     unsigned value = 0;
     for (std::size_t index = 1; index < text.size(); ++index) {
@@ -566,16 +620,24 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             error = "kr216: " + mnemonic + " needs a register";
             return false;
         }
-        if (second.empty() || second.front() != '#') {
-            error = "kr216: " + mnemonic + " needs an immediate count";
+        const std::uint8_t kind = mnemonic == "shl" ? 0 : (mnemonic == "shr" ? 1 : 2);
+        if (second.empty()) {
+            error = "kr216: " + mnemonic + " needs a count";
             return false;
+        }
+        if (second.front() != '#') {
+            std::uint8_t rs = 0;
+            if (!parse_register(second, rs)) {
+                error = "kr216: " + mnemonic + " needs a register or an immediate count";
+                return false;
+            }
+            return encode_compact(static_cast<std::uint8_t>(11 + kind), rd, rs, out, error);
         }
         std::uint16_t count = 0;
         if (!parse_number(trim(second.substr(1)), count)) {
             error = "kr216: shift count is not a number";
             return false;
         }
-        const std::uint8_t kind = mnemonic == "shl" ? 0 : (mnemonic == "shr" ? 1 : 2);
         return encode_normal_shift_imm(kind, rd, static_cast<std::uint8_t>(count), out, error);
     }
     if (mnemonic == "push" || mnemonic == "pop" || mnemonic == "inc" || mnemonic == "dec") {
@@ -634,6 +696,10 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         if (!bracketed && !number.empty() && number.front() == '#') number.remove_prefix(1);
         std::uint16_t value = 0;
         if (!parse_number(number, value)) {
+            if (!bracketed && is_label_name(number)) {
+                out.label = std::string(number);
+                return encode_ld_immediate(rd, 0, out, error);
+            }
             error = "kr216: ld needs an immediate or an address";
             return false;
         }
@@ -643,7 +709,9 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
     static const struct {
         const char* name;
         std::uint8_t opcode;
-    } kCompactAlu[] = {{"add", 1}, {"sub", 3}, {"and", 5}, {"or", 6}, {"xor", 7}, {"cmp", 8}};
+    } kCompactAlu[] = {{"add", 1},  {"addc", 2}, {"sub", 3},  {"subb", 4},
+                       {"and", 5},  {"or", 6},   {"xor", 7},  {"cmp", 8},
+                       {"mul", 9},  {"mulh", 10}};
     for (const auto& entry : kCompactAlu) {
         if (mnemonic != entry.name) continue;
         if (!parse_register(first, rd)) {
@@ -667,6 +735,53 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             return false;
         }
         return encode_compact(entry.opcode, rd, rs, out, error);
+    }
+    if (mnemonic == "div" || mnemonic == "divs") {
+        std::uint8_t rs = 0;
+        if (!parse_register(first, rd) || !parse_register(second, rs)) {
+            error = "kr216: " + mnemonic + " needs two registers";
+            return false;
+        }
+        return encode_normal_div(mnemonic == "div" ? 0 : 1, rd, rs, out, error);
+    }
+    if (mnemonic == "ldbu" || mnemonic == "ldbs") {
+        if (!parse_register(first, rd)) {
+            error = "kr216: " + mnemonic + " needs a destination register";
+            return false;
+        }
+        std::uint8_t base = 0;
+        std::int32_t displacement = 0;
+        if (parse_bracketed_displacement(second, base, displacement)) {
+            return mnemonic == "ldbu"
+                       ? encode_normal_ldbu_d8(rd, base, displacement, out, error)
+                       : encode_normal_ldbs_d8(rd, base, displacement, out, error);
+        }
+        if (parse_bracketed_register(second, base)) {
+            return encode_compact(mnemonic == "ldbu" ? 16 : 17, rd, base, out, error);
+        }
+        error = "kr216: " + mnemonic + " needs an [rB] or [rB+d8] address";
+        return false;
+    }
+    if (mnemonic == "stb") {
+        std::uint8_t base = 0;
+        std::uint8_t rs = 0;
+        std::int32_t displacement = 0;
+        if (parse_bracketed_displacement(first, base, displacement)) {
+            if (!parse_register(second, rs)) {
+                error = "kr216: stb needs a source register";
+                return false;
+            }
+            return encode_normal_stb_d8(rs, base, displacement, out, error);
+        }
+        if (parse_bracketed_register(first, base)) {
+            if (!parse_register(second, rs)) {
+                error = "kr216: stb needs a source register";
+                return false;
+            }
+            return encode_compact(18, rs, base, out, error);
+        }
+        error = "kr216: stb needs an [rB] or [rB+d8] address";
+        return false;
     }
     if (mnemonic == "st") {
         if (first.size() > 2 && first.front() == '[' && first.back() == ']' && first.find("+") != std::string_view::npos) {
@@ -732,7 +847,8 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             error = "kr216: enter operands are not numbers";
             return false;
         }
-        return encode_f7_enter(frame, mask, out, error);
+        if (frame <= 254) return encode_f7_enter(frame, mask, out, error);
+        return encode_f8_enter(frame, mask, out, error);
     }
     if (mnemonic == "leave") {
         if (first.empty() || first.front() != '#') {
@@ -851,6 +967,12 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         }
         std::uint16_t magnitude = 0;
         if (!parse_number(digits, magnitude)) {
+            if (sign == 1 && is_label_name(first)) {
+                out.label = std::string(first);
+                out.relative = true;
+                out.condition = entry.condition;
+                return encode_branch(entry.condition, 0, out, error);
+            }
             error = "kr216: " + mnemonic + " displacement is not a number";
             return false;
         }
@@ -921,7 +1043,16 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
     out.bytes.clear();
     out.labels.clear();
     out.globals.clear();
-    std::vector<std::pair<std::size_t, std::string>> fixups;
+    out.externals.clear();
+    out.relocations.clear();
+    struct Fixup {
+        std::size_t offset = 0;
+        std::string label;
+        std::uint8_t width = 2;
+        bool relative = false;
+        std::uint8_t condition = 0;
+    };
+    std::vector<Fixup> fixups;
     for (const std::string_view raw : split_lines(source)) {
         std::string_view line = raw;
         const std::size_t comment = line.find(';');
@@ -979,6 +1110,28 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
                 }
                 continue;
             }
+            if (directive == ".extern") {
+                if (operands.empty()) {
+                    error = "kr216: .extern needs a label name";
+                    return false;
+                }
+                for (const std::string_view name : split_commas(operands)) {
+                    if (!is_label_name(name)) {
+                        error = "kr216: .extern name '" + std::string(name) +
+                                "' is not a label";
+                        return false;
+                    }
+                    bool duplicate = false;
+                    for (const auto& existing : out.externals) {
+                        if (existing == name) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!duplicate) out.externals.emplace_back(name);
+                }
+                continue;
+            }
             const std::size_t width = directive == ".byte" ? 1 : (directive == ".word" ? 2 : 0);
             if (width == 0) {
                 error = "kr216: unknown directive '" + directive + "'";
@@ -986,12 +1139,19 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             }
             for (const std::string_view value : split_commas(operands)) {
                 std::uint16_t number = 0;
-                if (!parse_number(value, number)) {
-                    error = "kr216: " + directive + " value is not a number";
-                    return false;
+                if (parse_number(value, number)) {
+                    out.bytes.push_back(static_cast<std::uint8_t>(number & 0xFF));
+                    if (width == 2) out.bytes.push_back(static_cast<std::uint8_t>(number >> 8));
+                    continue;
                 }
-                out.bytes.push_back(static_cast<std::uint8_t>(number & 0xFF));
-                if (width == 2) out.bytes.push_back(static_cast<std::uint8_t>(number >> 8));
+                if (width == 2 && is_label_name(value)) {
+                    fixups.push_back({out.bytes.size(), std::string(value), 2});
+                    out.bytes.push_back(0);
+                    out.bytes.push_back(0);
+                    continue;
+                }
+                error = "kr216: " + directive + " value is not a number";
+                return false;
             }
             continue;
         }
@@ -999,29 +1159,73 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         Encoding encoding;
         if (!assemble_line(line, encoding, error)) return false;
         if (!encoding.label.empty()) {
-            fixups.emplace_back(out.bytes.size(), std::move(encoding.label));
+            if (encoding.relative) {
+                fixups.push_back({out.bytes.size(), std::move(encoding.label), 2, true,
+                                  encoding.condition});
+            } else {
+                fixups.push_back({out.bytes.size() + 1, std::move(encoding.label), 2, false, 0});
+            }
         }
         out.bytes.insert(out.bytes.end(), encoding.bytes, encoding.bytes + encoding.size);
     }
 
     // The address field was emitted as zero. Patch it only after every label has been recorded,
-    // so a forward reference resolves and a missing label cannot silently become address zero.
+    // so a forward reference resolves; a name declared `.extern` becomes a relocation and any
+    // other missing label is an error rather than a silent address zero.
     for (const auto& fixup : fixups) {
         bool found = false;
         std::uint16_t address = 0;
         for (const auto& label : out.labels) {
-            if (label.first == fixup.second) {
+            if (label.first == fixup.label) {
                 address = label.second;
                 found = true;
                 break;
             }
         }
-        if (!found) {
-            error = "kr216: undefined label '" + fixup.second + "'";
-            return false;
+        if (fixup.relative) {
+            if (!found) {
+                error = "kr216: undefined label '" + fixup.label + "'";
+                return false;
+            }
+            const auto displacement =
+                static_cast<std::int32_t>(address) -
+                static_cast<std::int32_t>(fixup.offset + 2);
+            Encoding branch;
+            std::string branch_error;
+            if (!encode_branch(fixup.condition, displacement, branch, branch_error)) {
+                error = "kr216: branch to '" + fixup.label + "': " + branch_error;
+                return false;
+            }
+            out.bytes[fixup.offset] = branch.bytes[0];
+            out.bytes[fixup.offset + 1] = branch.bytes[1];
+            continue;
         }
-        out.bytes[fixup.first + 1] = static_cast<std::uint8_t>(address & 0xFF);
-        out.bytes[fixup.first + 2] = static_cast<std::uint8_t>(address >> 8);
+        if (found) {
+            // The section-relative value is useful to `assemble_text`'s callers, but the
+            // linker still has to add the section's final base. Keep both: the checked
+            // bytes for a standalone listing, and a relocation for the linked image.
+            out.bytes[fixup.offset] = static_cast<std::uint8_t>(address & 0xFF);
+            if (fixup.width == 2) {
+                out.bytes[fixup.offset + 1] = static_cast<std::uint8_t>(address >> 8);
+            }
+            out.relocations.push_back({static_cast<std::uint32_t>(fixup.offset),
+                                       fixup.label, fixup.width});
+            continue;
+        }
+        bool external = false;
+        for (const auto& name : out.externals) {
+            if (name == fixup.label) {
+                external = true;
+                break;
+            }
+        }
+        if (external) {
+            out.relocations.push_back({static_cast<std::uint32_t>(fixup.offset),
+                                       fixup.label, fixup.width});
+            continue;
+        }
+        error = "kr216: undefined label '" + fixup.label + "'";
+        return false;
     }
     return true;
 }

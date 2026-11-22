@@ -3,6 +3,7 @@
 #include "linker/kro_object.h"
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -55,6 +56,39 @@ helper:
     CHECK(decoded.pointer_width == 16);
     REQUIRE(decoded.sections.size() == 1);
     CHECK(decoded.sections[0].data == assembly.bytes);
+}
+
+TEST_CASE("kr216 object writer records external absolute relocations") {
+    const std::string source = R"(
+.extern target
+_start:
+    call target
+    ld r2, #target
+.word target
+)";
+    krc::asmkr216::AssembledProgram assembly;
+    std::string error;
+    REQUIRE_MESSAGE(krc::asmkr216::assemble_text(source, assembly, error), error);
+    REQUIRE(assembly.relocations.size() == 3);
+    CHECK(assembly.relocations[0].offset == 1);
+    CHECK(assembly.relocations[0].symbol == "target");
+    CHECK(assembly.relocations[1].offset == 4);
+    CHECK(assembly.relocations[1].symbol == "target");
+    CHECK(assembly.relocations[2].offset == 6);
+    CHECK(assembly.relocations[2].symbol == "target");
+
+    krc::linker::KroObject object;
+    REQUIRE_MESSAGE(krc::asmkr216::make_object(
+                        assembly,
+                        krc::target::get_target(krc::target::TargetId::Kr216), object,
+                        error),
+                    error);
+    REQUIRE(object.relocations.size() == 3);
+    CHECK(object.relocations[0].type == krc::linker::KroRelocationType::Abs16);
+    CHECK(object.relocations[0].width == 2);
+    CHECK(object.symbols[object.relocations[0].symbol].name == "target");
+    CHECK(object.symbols[object.relocations[0].symbol].section ==
+          std::numeric_limits<std::uint32_t>::max());
 }
 
 TEST_CASE("kr216 object writer rejects a global symbol with no definition") {

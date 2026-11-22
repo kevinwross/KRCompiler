@@ -136,7 +136,7 @@ constexpr TargetProfile kKr216{
     true,
     false,
     true,
-    false,
+    true,
     AggregateRules::RegistersOrMemory,
 };
 

@@ -20,6 +20,10 @@ struct Encoding {
     // emitted as zero and `assemble_text` patches it after the whole source has been read, so a
     // forward reference resolves without a second pass over the line assembler.
     std::string label;
+    // A branch label is relative to the next instruction, so it is resolved differently from
+    // an absolute address and re-encoded once the label offsets are known.
+    bool relative = false;
+    std::uint8_t condition = 0;
 };
 
 // Section 5, Register class: `LD Rd, #imm16` (0x50+R), `LD Rd, [addr16]` (0x60+R),
@@ -55,6 +59,20 @@ struct Encoding {
                                        Encoding& out, std::string& error);
 [[nodiscard]] bool encode_normal_push_mask(std::uint16_t mask, Encoding& out, std::string& error);
 [[nodiscard]] bool encode_normal_pop_mask(std::uint16_t mask, Encoding& out, std::string& error);
+
+// Normal-class byte forms: 0xC2 LDBU, 0xC3 LDBS, 0xC4 STB with a signed d8.
+[[nodiscard]] bool encode_normal_ldbu_d8(std::uint8_t rd, std::uint8_t base,
+                                          std::int32_t displacement, Encoding& out,
+                                          std::string& error);
+[[nodiscard]] bool encode_normal_ldbs_d8(std::uint8_t rd, std::uint8_t base,
+                                          std::int32_t displacement, Encoding& out,
+                                          std::string& error);
+[[nodiscard]] bool encode_normal_stb_d8(std::uint8_t rs, std::uint8_t base,
+                                         std::int32_t displacement, Encoding& out,
+                                         std::string& error);
+// Normal-class division: 0xD9 DIV, 0xDA DIVS, two bytes (`RRRR BBBB`).
+[[nodiscard]] bool encode_normal_div(std::uint8_t opcode, std::uint8_t rd, std::uint8_t rs,
+                                     Encoding& out, std::string& error);
 
 // Further Normal-class forms: 0xC7 ADD imm8, 0xCF JMP absolute, 0xDC LEAVE #mask.
 [[nodiscard]] bool encode_normal_add_imm8(std::uint8_t rd, std::int32_t value, Encoding& out,
@@ -117,10 +135,21 @@ struct Encoding {
 // absolute `jmp`/`call` label operand is patched in a second pass after the whole source has been
 // read, so a forward reference resolves and an undefined label is an error. `.global` names are
 // recorded for the object writer; a global with no matching label is an error there.
+// A two-byte absolute reference the linker fills: a direct call/jump target, a
+// `ld Rd, #symbol` address, or a `.word symbol` data word. `offset` is the
+// payload byte the linker patches.
+struct Relocation {
+    std::uint32_t offset = 0;
+    std::string symbol;
+    std::uint8_t width = 2;
+};
+
 struct AssembledProgram {
     std::vector<std::uint8_t> bytes;
     std::vector<std::pair<std::string, std::uint16_t>> labels;
     std::vector<std::string> globals;
+    std::vector<std::string> externals;
+    std::vector<Relocation> relocations;
 };
 
 [[nodiscard]] bool assemble_text(std::string_view source, AssembledProgram& out,

@@ -100,6 +100,7 @@ add_library(krc_impl OBJECT
     src/asm/kr216_object.cpp
     src/backend/kr32_backend.cpp
     src/backend/kr16_backend.cpp
+    src/backend/kr216_backend.cpp
     src/backend/machine_ir.cpp
     src/backend/machine_liveness.cpp
     src/backend/kr32_descriptor.cpp
