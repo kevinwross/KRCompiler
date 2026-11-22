@@ -1539,13 +1539,13 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             continue;
         }
         add_debug_type(parameter->type);
-        debug_info_ += "V " + function.name + " " + parameter->name + " " +
+        debug_info_ += "V " + display_name + " " + parameter->name + " " +
                        std::to_string(frame_offset(found->second)) + " " +
                        debug_type_name(parameter->type) + " " +
                        std::to_string(type_size(parameter->type)) +
                        std::string(1, '\0');
-        debug_info_ += "W " + function.name + " " + parameter->name + " param " +
-                       function.name + " 0x0" + std::string(1, '\0');
+        debug_info_ += "W " + display_name + " " + parameter->name + " param " +
+                       display_name + " 0x0" + std::string(1, '\0');
     }
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
@@ -1563,13 +1563,13 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             if (found == layout.allocas.end()) continue;
             if (!debug_variable_names.insert(function.name + "." + name).second) continue;
             add_debug_type(instruction->allocated_type);
-            debug_info_ += "V " + function.name + " " + name + " " +
+            debug_info_ += "V " + display_name + " " + name + " " +
                            std::to_string(frame_offset(found->second)) + " " +
                            debug_type_name(instruction->allocated_type) + " " +
                            std::to_string(type_size(instruction->allocated_type)) +
                            std::string(1, '\0');
-            debug_info_ += "W " + function.name + " " + name + " local " +
-                           function.name + " 0x0" + std::string(1, '\0');
+            debug_info_ += "W " + display_name + " " + name + " local " +
+                           display_name + " 0x0" + std::string(1, '\0');
         }
     }
 
