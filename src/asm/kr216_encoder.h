@@ -70,4 +70,11 @@ struct Encoding {
                              const std::uint8_t* extension, std::uint8_t extension_size,
                              Encoding& out, std::string& error);
 
+// Section 8.3, `F3`: `OOOO Fd Fs`, the FP register-register and unary forms (unary requires
+// Fs = 0). Section 8.6, `F7`: `ENTER #frame8, #mask16`.
+[[nodiscard]] bool encode_f3(std::uint8_t opcode, std::uint8_t fd, std::uint8_t fs, Encoding& out,
+                             std::string& error);
+[[nodiscard]] bool encode_f7_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out,
+                                   std::string& error);
+
 }  // namespace krc::asmkr216

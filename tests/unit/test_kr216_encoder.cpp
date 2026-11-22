@@ -124,3 +124,21 @@ TEST_CASE("kr216 F0 emits the canonical form") {
     CHECK_FALSE(encode_f0(0x1B, 0x00, 0x00, nullptr, 0, out, error));
     CHECK_FALSE(encode_f0(0x00, 0x70, 0x00, nullptr, 0, out, error));
 }
+TEST_CASE("kr216 F3 FP register ops and F7 ENTER") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_f3(0, 0, 1, out, error));   // fadd f0, f1 (FADD is opcode 0)
+    CHECK(out.size == 2); CHECK(out.bytes[0] == 0xF3); CHECK(out.bytes[1] == 0x01);
+    REQUIRE(encode_f3(8, 0, 1, out, error));   // fcmp f0, f1
+    CHECK(out.bytes[1] == 0x81);
+    REQUIRE(encode_f3(9, 1, 0, out, error));   // frnd f1
+    CHECK(out.bytes[1] == 0x94);
+    CHECK_FALSE(encode_f3(4, 0, 1, out, error));  // FNEG with Fs set
+    CHECK_FALSE(encode_f3(1, 4, 0, out, error));  // f4
+
+    REQUIRE(encode_f7_enter(8, 0x0300, out, error));
+    CHECK(out.size == 4); CHECK(out.bytes[0] == 0xF7); CHECK(out.bytes[1] == 8);
+    CHECK(out.bytes[2] == 0x00); CHECK(out.bytes[3] == 0x03);
+    CHECK_FALSE(encode_f7_enter(7, 0x0300, out, error));
+    CHECK_FALSE(encode_f7_enter(8, 0, out, error));
+}

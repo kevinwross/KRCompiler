@@ -277,4 +277,42 @@ bool encode_f0(std::uint8_t opcode, std::uint8_t spec1, std::uint8_t spec2,
     return true;
 }
 
+bool encode_f3(std::uint8_t opcode, std::uint8_t fd, std::uint8_t fs, Encoding& out,
+               std::string& error) {
+    if (opcode > 9) {
+        error = "kr216 F3 opcode out of range";
+        return false;
+    }
+    if (fd > 3 || fs > 3) {
+        error = "kr216 FP register must be f0-f3";
+        return false;
+    }
+    const bool unary = opcode >= 4 && opcode <= 6 || opcode == 9;  // FNEG FABS FSQRT FRND
+    if (unary && fs != 0) {
+        error = "kr216 unary FP instruction requires Fs = 0";
+        return false;
+    }
+    out.bytes[0] = 0xF3;
+    out.bytes[1] = static_cast<std::uint8_t>((opcode << 4) | (fd << 2) | fs);
+    out.size = 2;
+    return true;
+}
+
+bool encode_f7_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std::string& error) {
+    if ((frame & 1u) != 0 || frame > 254) {
+        error = "kr216 ENTER frame must be even and at most 254";
+        return false;
+    }
+    if (mask == 0) {
+        error = "kr216 ENTER mask may not be empty";
+        return false;
+    }
+    out.bytes[0] = 0xF7;
+    out.bytes[1] = static_cast<std::uint8_t>(frame);
+    out.bytes[2] = static_cast<std::uint8_t>(mask & 0xFF);
+    out.bytes[3] = static_cast<std::uint8_t>(mask >> 8);
+    out.size = 4;
+    return true;
+}
+
 }  // namespace krc::asmkr216
