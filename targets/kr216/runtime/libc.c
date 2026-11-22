@@ -2,6 +2,11 @@
 
 int __krc_write(int fd, const char *buffer, int count);
 
+unsigned long __krc_negate32(unsigned long value);
+void __krc_negate64(unsigned int *value);
+unsigned long __krc_f64_to_u32(double value);
+unsigned long long __krc_f64_to_u64(double value);
+
 extern char __heap_start[];
 extern char __heap_end[];
 
@@ -245,6 +250,107 @@ long __krc_srem32(long numerator, long denominator) {
         remainder = __krc_negate32(remainder);
     }
     return (long)remainder;
+}
+
+double __krc_i32_to_f64(long value) {
+    unsigned int *words = (unsigned int *)&value;
+    const int negative = words[1] >> 15;
+    if (negative != 0) {
+        value = (long)__krc_negate32((unsigned long)value);
+        words = (unsigned int *)&value;
+    }
+    double result = 0.0;
+    int i = 1;
+    while (i >= 0) {
+        result = result * 65536.0 + (double)words[i];
+        i--;
+    }
+    if (negative != 0) {
+        result = 0.0 - result;
+    }
+    return result;
+}
+
+double __krc_u32_to_f64(unsigned long value) {
+    unsigned int *words = (unsigned int *)&value;
+    double result = 0.0;
+    int i = 1;
+    while (i >= 0) {
+        result = result * 65536.0 + (double)words[i];
+        i--;
+    }
+    return result;
+}
+
+double __krc_i64_to_f64(long long value) {
+    unsigned int *words = (unsigned int *)&value;
+    const int negative = words[3] >> 15;
+    if (negative != 0) {
+        __krc_negate64(words);
+    }
+    double result = 0.0;
+    int i = 3;
+    while (i >= 0) {
+        result = result * 65536.0 + (double)words[i];
+        i--;
+    }
+    if (negative != 0) {
+        result = 0.0 - result;
+    }
+    return result;
+}
+
+double __krc_u64_to_f64(unsigned long long value) {
+    unsigned int *words = (unsigned int *)&value;
+    double result = 0.0;
+    int i = 3;
+    while (i >= 0) {
+        result = result * 65536.0 + (double)words[i];
+        i--;
+    }
+    return result;
+}
+
+long __krc_f64_to_i32(double value) {
+    if (value < 0.0) {
+        double t = 0.0 - value;
+        return (long)__krc_negate32(__krc_f64_to_u32(t));
+    }
+    return (long)__krc_f64_to_u32(value);
+}
+
+unsigned long __krc_f64_to_u32(double value) {
+    unsigned long result = 0;
+    unsigned int *words = (unsigned int *)&result;
+    double t = value;
+    words[1] = (unsigned int)(t / 65536.0);
+    t = t - (double)words[1] * 65536.0;
+    words[0] = (unsigned int)t;
+    return result;
+}
+
+long long __krc_f64_to_i64(double value) {
+    if (value < 0.0) {
+        double t = 0.0 - value;
+        unsigned long long result = __krc_f64_to_u64(t);
+        __krc_negate64((unsigned int *)&result);
+        return (long long)result;
+    }
+    return (long long)__krc_f64_to_u64(value);
+}
+
+unsigned long long __krc_f64_to_u64(double value) {
+    unsigned long long result = 0;
+    unsigned int *words = (unsigned int *)&result;
+    double t = value;
+    words[3] = (unsigned int)(t / 281474976710656.0);
+    t = t - (double)words[3] * 281474976710656.0;
+    words[2] = (unsigned int)(t / 4294967296.0);
+    t = t - (double)words[2] * 4294967296.0;
+    words[1] = (unsigned int)(t / 65536.0);
+    t = t - (double)words[1] * 65536.0;
+    words[0] = (unsigned int)t;
+    return result;
 }
 
 void __krc_udiv64(unsigned int *numerator, unsigned int *denominator, unsigned int *out) {

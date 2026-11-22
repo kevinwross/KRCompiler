@@ -1,6 +1,7 @@
 # KR216 ABI
 
-**Status:** Accepted 2026-11-22, frozen at the M3 close. The data model, register roles, calling convention, frame
+**Status:** Accepted 2026-11-22, frozen at the M3 close; ADR 0056 adds the 64-bit
+argument and result slots. The data model, register roles, calling convention, frame
 layout and aggregate rules are fixed by `../../kr216/kr216-plan.md` v0.11
 (sections 7, 11, 12) and recorded in
 [ADR 0053](decisions/0053-kr216-target-profile.md), accepted 2026-11-21. The
@@ -73,7 +74,9 @@ saves F0–F3 itself.
 1. The caller sets `this` in R10 for a member-function call.
 2. Integer and pointer arguments go in R2, R3, R4, R5 in order. An argument
    that does not fit is pushed, and the pushed area is ordered so that argument
-   4 sits at `FP + 4` and each later argument at the next higher address.
+   4 sits at `FP + 4` and each later argument at the next higher address. A
+   32-bit value occupies two slots and a 64-bit value four slots; a 64-bit value
+   that does not fit is pushed as an eight-byte little-endian area (ADR 0056).
 3. Floating-point arguments go in F0 and F1. A further floating-point argument
    is pushed in an eight-byte slot; the two argument files are independent, so a
    function may take four integers and two doubles without conflict.
@@ -84,8 +87,9 @@ saves F0–F3 itself.
    followed by `RET`. A leaf function with no locals and no saved registers uses
    `push fp; mov fp, sp` and `pop fp; ret` instead.
 6. The result is returned in R2 for 16-bit scalars and pointers, in R2:R3 for
-   32-bit values, in F0 for floating point, and for a memory-class aggregate
-   through the destination the caller loaded into R6.
+   32-bit values, in R2–R5 for 64-bit values (ADR 0056), in F0 for floating
+   point, and for a memory-class aggregate through the destination the caller
+   loaded into R6.
 7. Caller-saved: R2–R7, R10 and F0–F3. Callee-saved: R8, R9, FP and SP. Flags
    and EFP are not preserved.
 
@@ -232,7 +236,6 @@ Default memory map (the linker may place sections elsewhere):
   when that ADR and the runtime land.
 - Multiple inheritance, virtual bases, and `dynamic_cast` between sibling types.
 - RTTI across library boundaries and `-fno-rtti`.
-- 64-bit division and the rest of the `long long` helper set.
 - Threads, atomics and TLS.
 
 ## Diagnostics

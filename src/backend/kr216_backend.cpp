@@ -325,6 +325,34 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             out += "    ADD " + std::string(reg) + ", " + scratch + "\n";
         }
     };
+    const auto load_fp = [&](const ir::Value* value, std::string_view reg,
+                             std::uint32_t width) {
+        if (value && value->kind == ir::ValueKind::ConstantFloat) {
+            const auto* floating = static_cast<const ir::ConstantFloat*>(value);
+            std::uint64_t bits = 0;
+            if (width == 4) {
+                const float narrowed = static_cast<float>(floating->value);
+                std::memcpy(&bits, &narrowed, sizeof(narrowed));
+            } else {
+                std::memcpy(&bits, &floating->value, sizeof(floating->value));
+            }
+            for (std::uint32_t offset = width; offset > 0; offset -= 2) {
+                out += "    LD R2, #" +
+                       std::to_string(static_cast<std::uint16_t>(
+                           (bits >> ((offset - 2) * 8)) & 0xFFFF)) +
+                       "\n";
+                out += "    PUSH R2\n";
+            }
+            out += "    MOV R2, SP\n";
+            out += width == 8 ? "    FLD " + std::string(reg) + ", [R2]\n"
+                              : "    FLDS " + std::string(reg) + ", [R2]\n";
+            out += "    ADD SP, #" + std::to_string(width) + "\n";
+            return;
+        }
+        load_address(value, "R2");
+        out += width == 8 ? "    FLD " + std::string(reg) + ", [R2]\n"
+                          : "    FLDS " + std::string(reg) + ", [R2]\n";
+    };
     const auto load_word_at = [&](const ir::Value* value, std::string_view reg,
                                   std::uint32_t word_index, std::uint32_t adjust = 0) {
         if (!value) {
@@ -437,10 +465,9 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             if (argument.aggregate) {
                 copy_from_pointer("R7", destination, type_size(argument.value->type));
             } else {
-                frame_store(destination, "R7");
-                if (argument.words == 2) {
-                    out += "    LD R7, [FP+" + std::to_string(base + 2) + "]\n";
-                    frame_store(destination + 2, "R7");
+                for (std::uint32_t word = 0; word < argument.words; ++word) {
+                    out += "    LD R7, [FP+" + std::to_string(base + 2 * word) + "]\n";
+                    frame_store(destination + 2 * word, "R7");
                 }
             }
         } else {
@@ -449,9 +476,9 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 out += "    MOV R7, R" + std::to_string(first) + "\n";
                 copy_from_pointer("R7", destination, type_size(argument.value->type));
             } else {
-                frame_store(destination, "R" + std::to_string(first));
-                if (argument.words == 2) {
-                    frame_store(destination + 2, "R" + std::to_string(first + 1));
+                for (std::uint32_t word = 0; word < argument.words; ++word) {
+                    frame_store(destination + 2 * word,
+                                "R" + std::to_string(first + word));
                 }
             }
         }
@@ -601,11 +628,6 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     return;
                 }
                 const auto width = type_size(instruction->type);
-                const auto load_fp = [&](const ir::Value* value, std::string_view reg) {
-                    load_address(value, "R2");
-                    out += width == 8 ? "    FLD " + std::string(reg) + ", [R2]\n"
-                                      : "    FLDS " + std::string(reg) + ", [R2]\n";
-                };
                 const auto mnemonic = instruction->opcode == ir::Opcode::FAdd
                                           ? "FADD"
                                           : instruction->opcode == ir::Opcode::FSub
@@ -613,8 +635,8 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                                 : instruction->opcode == ir::Opcode::FMul
                                                       ? "FMUL"
                                                       : "FDIV";
-                load_fp(instruction->operands[0], "F0");
-                load_fp(instruction->operands[1], "F1");
+                load_fp(instruction->operands[0], "F0", width);
+                load_fp(instruction->operands[1], "F1", width);
                 out += "    " + std::string(mnemonic) + " F0, F1\n";
                 if (width == 4) out += "    FRND F0\n";
                 load_address(instruction.get(), "R2");
@@ -947,10 +969,8 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             }
             case ir::Opcode::FCmp: {
                 const auto width = type_size(instruction->operands[0]->type);
-                load_address(instruction->operands[0], "R2");
-                out += width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
-                load_address(instruction->operands[1], "R2");
-                out += width == 8 ? "    FLD F1, [R2]\n" : "    FLDS F1, [R2]\n";
+                load_fp(instruction->operands[0], "F0", width);
+                load_fp(instruction->operands[1], "F1", width);
                 out += "    FCMP F0, F1\n";
                 const auto suffix = "." + function.name + "." + std::to_string(synthetic_label);
                 ++synthetic_label;
@@ -1131,10 +1151,26 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             }
             case ir::Opcode::SIToFP:
             case ir::Opcode::UIToFP: {
-                load_word(instruction->operands[0], "R2");
-                out += instruction->opcode == ir::Opcode::SIToFP ? "    I2F F0, R2\n"
-                                                                 : "    U2F F0, R2\n";
+                const auto source_bits = instruction->operands[0]->type->bits;
+                const bool signed_source = instruction->opcode == ir::Opcode::SIToFP;
+                if (source_bits <= 16) {
+                    load_word(instruction->operands[0], "R2");
+                    out += signed_source ? "    I2F F0, R2\n" : "    U2F F0, R2\n";
+                } else if (source_bits == 32) {
+                    load_word(instruction->operands[0], "R2");
+                    load_word(instruction->operands[0], "R3", true);
+                    out += std::string("    CALL ") +
+                           (signed_source ? "__krc_i32_to_f64\n" : "__krc_u32_to_f64\n");
+                } else {
+                    for (std::uint32_t word = 0; word < 4; ++word) {
+                        load_word_at(instruction->operands[0],
+                                     "R" + std::to_string(2 + word), word);
+                    }
+                    out += std::string("    CALL ") +
+                           (signed_source ? "__krc_i64_to_f64\n" : "__krc_u64_to_f64\n");
+                }
                 const auto width = type_size(instruction->type);
+                if (width == 4) out += "    FRND F0\n";
                 load_address(instruction.get(), "R2");
                 out += width == 8 ? "    FST F0, [R2]\n" : "    FSTS F0, [R2]\n";
                 break;
@@ -1155,9 +1191,28 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 const auto width = type_size(instruction->operands[0]->type);
                 load_address(instruction->operands[0], "R2");
                 out += width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
-                out += instruction->opcode == ir::Opcode::FPToSI ? "    F2I R2, F0\n"
-                                                                 : "    F2U R2, F0\n";
-                store_word(*instruction, "R2");
+                const auto target_bits = instruction->type->bits;
+                const bool signed_target = instruction->opcode == ir::Opcode::FPToSI;
+                if (target_bits <= 16) {
+                    out += instruction->opcode == ir::Opcode::FPToSI
+                               ? "    F2I R2, F0\n"
+                               : "    F2U R2, F0\n";
+                    store_word(*instruction, "R2");
+                } else if (target_bits == 32) {
+                    out += std::string("    CALL ") +
+                           (signed_target ? "__krc_f64_to_i32\n"
+                                          : "__krc_f64_to_u32\n");
+                    store_word(*instruction, "R2");
+                    store_word(*instruction, "R3", true);
+                } else {
+                    out += std::string("    CALL ") +
+                           (signed_target ? "__krc_f64_to_i64\n"
+                                          : "__krc_f64_to_u64\n");
+                    for (std::uint32_t word = 0; word < 4; ++word) {
+                        store_word_at(*instruction, "R" + std::to_string(2 + word),
+                                      word);
+                    }
+                }
                 break;
             }
             case ir::Opcode::BitCast:
@@ -1186,11 +1241,15 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     }
                     break;
                 }
-                load_word(instruction->operands[0], "R2");
-                store_word(*instruction, "R2");
-                if (is_wide(instruction->type)) {
-                    load_word(instruction->operands[0], "R3", true);
-                    store_word(*instruction, "R3", true);
+                const auto source_words = word_count(instruction->operands[0]->type);
+                const auto target_words = word_count(instruction->type);
+                for (std::uint32_t word = 0; word < target_words; ++word) {
+                    if (word < source_words) {
+                        load_word_at(instruction->operands[0], "R2", word);
+                    } else {
+                        out += "    LD R2, #0\n";
+                    }
+                    store_word_at(*instruction, "R2", word);
                 }
                 break;
             }
@@ -1306,9 +1365,9 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     if (argument.aggregate) {
                         load_address(argument.value, "R" + std::to_string(first));
                     } else {
-                        load_word(argument.value, "R" + std::to_string(first));
-                        if (argument.words == 2) {
-                            load_word(argument.value, "R" + std::to_string(first + 1), true);
+                        for (std::uint32_t word = 0; word < argument.words; ++word) {
+                            load_word_at(argument.value,
+                                         "R" + std::to_string(first + word), word);
                         }
                     }
                 }
@@ -1326,16 +1385,12 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         ++pushed_words;
                         continue;
                     }
-                    if (argument.words == 2) {
-                        load_word(argument.value, "R7", true,
-                                  static_cast<std::uint32_t>(2 * pushed_words));
+                    for (std::uint32_t word = argument.words; word > 0; --word) {
+                        load_word_at(argument.value, "R7", word - 1,
+                                     static_cast<std::uint32_t>(2 * pushed_words));
                         out += "    PUSH R7\n";
                         ++pushed_words;
                     }
-                    load_word(argument.value, "R7", false,
-                              static_cast<std::uint32_t>(2 * pushed_words));
-                    out += "    PUSH R7\n";
-                    ++pushed_words;
                 }
                 const bool aggregate_return = is_aggregate(instruction->type);
                 if (aggregate_return) {
@@ -1360,9 +1415,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         load_address(instruction.get(), "R2");
                         out += width == 8 ? "    FST F0, [R2]\n" : "    FSTS F0, [R2]\n";
                     } else {
-                        store_word(*instruction, "R2");
-                        if (is_wide(instruction->type)) {
-                            store_word(*instruction, "R3", true);
+                        const auto words = word_count(instruction->type);
+                        for (std::uint32_t word = 0; word < words; ++word) {
+                            store_word_at(*instruction, "R" + std::to_string(2 + word),
+                                          word);
                         }
                     }
                 }
@@ -1388,8 +1444,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         load_address(value, "R2");
                         out += width == 8 ? "    FLD F0, [R2]\n" : "    FLDS F0, [R2]\n";
                     } else {
-                        load_word(value, "R2");
-                        if (is_wide(value->type)) load_word(value, "R3", true);
+                        const auto words = word_count(value->type);
+                        for (std::uint32_t word = 0; word < words; ++word) {
+                            load_word_at(value, "R" + std::to_string(2 + word), word);
+                        }
                     }
                 }
                 out += "    JMP .L" + function.name + ".ret\n";
@@ -1490,6 +1548,14 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".extern __krc_urem64\n";
     out += ".extern __krc_sdiv64\n";
     out += ".extern __krc_srem64\n";
+    out += ".extern __krc_i32_to_f64\n";
+    out += ".extern __krc_u32_to_f64\n";
+    out += ".extern __krc_i64_to_f64\n";
+    out += ".extern __krc_u64_to_f64\n";
+    out += ".extern __krc_f64_to_i32\n";
+    out += ".extern __krc_f64_to_u32\n";
+    out += ".extern __krc_f64_to_i64\n";
+    out += ".extern __krc_f64_to_u64\n";
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";
@@ -1497,11 +1563,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         }
         for (const auto& parameter : function->parameters) {
             if (!parameter->type) continue;
-            if (parameter->type->kind == ir::TypeKind::Integer &&
-                parameter->type->bits > 32) {
-                error = "kr216 64-bit parameters are not implemented";
-                return std::nullopt;
-            }
+
         }
         const auto layout = layout_function(*function, error);
         if (!error.empty()) return std::nullopt;
