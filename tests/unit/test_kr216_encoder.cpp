@@ -245,3 +245,11 @@ TEST_CASE("kr216 assembles the indirect and auto-indexed loads") {
     REQUIRE(assemble_line("ld r2, -[r3]", out, error));  CHECK(out.bytes[0] == 0x98); CHECK(out.bytes[1] == 0x23);
     CHECK_FALSE(assemble_line("ld r2, [r16]", out, error));
 }
+TEST_CASE("kr216 assembles the indirect and auto-indexed stores") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("st [r3], r2", out, error));   CHECK(out.bytes[0] == 0x8F); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("st [r3]+, r2", out, error));  CHECK(out.bytes[0] == 0x94); CHECK(out.bytes[1] == 0x23);
+    REQUIRE(assemble_line("st -[r3], r2", out, error));  CHECK(out.bytes[0] == 0x99); CHECK(out.bytes[1] == 0x23);
+    CHECK_FALSE(assemble_line("st [r3], r16", out, error));
+}

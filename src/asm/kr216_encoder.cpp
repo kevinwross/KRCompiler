@@ -599,6 +599,26 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             }
             return encode_normal_st_d8(rs, base, displacement, out, error);
         }
+        const auto store_data = [&](std::uint8_t& rs) {
+            return parse_register(second, rs);
+        };
+        const auto store_indirect = [&first](std::string_view text, std::uint8_t& base) {
+            if (text.size() < 3 || text.front() != '[' || text.back() != ']') return false;
+            return parse_register(trim(text.substr(1, text.size() - 2)), base);
+        };
+        std::uint8_t store_base = 0;
+        std::uint8_t store_rs = 0;
+        if (first.size() > 3 && first.back() == '+' &&
+            store_indirect(first.substr(0, first.size() - 1), store_base) && store_data(store_rs)) {
+            return encode_compact(20, store_rs, store_base, out, error);  // ST [Rb]+, Rs
+        }
+        if (first.size() > 3 && first.front() == '-' && store_indirect(first.substr(1), store_base) &&
+            store_data(store_rs)) {
+            return encode_compact(25, store_rs, store_base, out, error);  // ST -[Rb], Rs
+        }
+        if (store_indirect(first, store_base) && store_data(store_rs)) {
+            return encode_compact(15, store_rs, store_base, out, error);  // ST [Rb], Rs
+        }
         const bool bracketed = first.size() > 2 && first.front() == '[' && first.back() == ']';
         if (!bracketed) {
             error = "kr216: st needs a bracketed address";
