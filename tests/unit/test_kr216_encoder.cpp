@@ -225,8 +225,16 @@ TEST_CASE("kr216 assembles add, st and control transfer") {
 TEST_CASE("kr216 parser refuses operand shapes it does not implement") {
     Encoding out;
     std::string error;
-    CHECK_FALSE(assemble_line("ld r2, [r3+2]", out, error));  // address-mode operands come next
-    CHECK_FALSE(assemble_line("ld r2, [r3]", out, error));
+    CHECK_FALSE(assemble_line("ld r2, [r3]", out, error));  // plain indirect comes next
     CHECK_FALSE(assemble_line("add r2, #5", out, error));
     CHECK_FALSE(assemble_line("", out, error));
+}
+TEST_CASE("kr216 assembles the displacement operands") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("ld r2, [r3+2]", out, error));
+    CHECK(out.size == 3); CHECK(out.bytes[0] == 0xC0); CHECK(out.bytes[1] == 0x23); CHECK(out.bytes[2] == 0x02);
+    REQUIRE(assemble_line("st [r3+2], r2", out, error));
+    CHECK(out.bytes[0] == 0xC1); CHECK(out.bytes[1] == 0x23); CHECK(out.bytes[2] == 0x02);
+    CHECK_FALSE(assemble_line("ld r2, [r3+300]", out, error));
 }

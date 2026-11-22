@@ -537,6 +537,15 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             error = "kr216: ld needs a destination register";
             return false;
         }
+        if (second.size() > 2 && second.front() == '[' && second.find("+") != std::string_view::npos) {
+            std::uint8_t base = 0;
+            std::int32_t displacement = 0;
+            if (!parse_bracketed_displacement(second, base, displacement)) {
+                error = "kr216: ld address is not [rB+d8]";
+                return false;
+            }
+            return encode_normal_ld_d8(rd, base, displacement, out, error);
+        }
         const bool bracketed = second.size() > 2 && second.front() == '[' && second.back() == ']';
         std::string_view number =
             bracketed ? trim(second.substr(1, second.size() - 2)) : second;
@@ -562,6 +571,20 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         return encode_compact(1, rd, rs, out, error);
     }
     if (mnemonic == "st") {
+        if (first.size() > 2 && first.front() == '[' && first.find("+") != std::string_view::npos) {
+            std::uint8_t base = 0;
+            std::int32_t displacement = 0;
+            if (!parse_bracketed_displacement(first, base, displacement)) {
+                error = "kr216: st address is not [rB+d8]";
+                return false;
+            }
+            std::uint8_t rs = 0;
+            if (!parse_register(second, rs)) {
+                error = "kr216: st needs a source register";
+                return false;
+            }
+            return encode_normal_st_d8(rs, base, displacement, out, error);
+        }
         const bool bracketed = first.size() > 2 && first.front() == '[' && first.back() == ']';
         if (!bracketed) {
             error = "kr216: st needs a bracketed address";
