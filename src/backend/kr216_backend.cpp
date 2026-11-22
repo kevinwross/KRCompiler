@@ -297,6 +297,18 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             out += "    ST [" + scratch + "], " + std::string(reg) + "\n";
         }
     };
+    const auto load_address = [&](const ir::Value* value, std::string_view reg,
+                                  std::uint32_t adjust = 0) {
+        const auto offset = slot(value) + adjust;
+        out += "    MOV " + std::string(reg) + ", SP\n";
+        if (offset <= 127) {
+            add_immediate(reg, static_cast<std::int32_t>(offset));
+        } else {
+            const std::string scratch = reg == "R7" ? "R6" : "R7";
+            out += "    LD " + scratch + ", #" + std::to_string(offset) + "\n";
+            out += "    ADD " + std::string(reg) + ", " + scratch + "\n";
+        }
+    };
     const auto load_word = [&](const ir::Value* value, std::string_view reg,
                                bool high = false, std::uint32_t adjust = 0) {
         if (!value) {
@@ -736,7 +748,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     if (argument.on_stack) continue;
                     const auto first = static_cast<std::uint32_t>(2 + argument.first_register);
                     if (argument.aggregate) {
-                        load_word(argument.value, "R" + std::to_string(first));
+                        load_address(argument.value, "R" + std::to_string(first));
                     } else {
                         load_word(argument.value, "R" + std::to_string(first));
                         if (argument.words == 2) {
@@ -751,6 +763,13 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     // Stage through R7, not R2: the register arguments already
                     // occupy R2-R5 and loading a stack argument into R2 would
                     // destroy argument 0 before the call.
+                    if (argument.aggregate) {
+                        load_address(argument.value, "R7",
+                                     static_cast<std::uint32_t>(2 * pushed_words));
+                        out += "    PUSH R7\n";
+                        ++pushed_words;
+                        continue;
+                    }
                     if (argument.words == 2) {
                         load_word(argument.value, "R7", true,
                                   static_cast<std::uint32_t>(2 * pushed_words));
