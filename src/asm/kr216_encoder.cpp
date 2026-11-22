@@ -510,6 +510,39 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         comma == std::string_view::npos ? std::string_view{} : trim(operands.substr(comma + 1));
 
     std::uint8_t rd = 0;
+    if ((mnemonic == "push" || mnemonic == "pop") && !first.empty() && first.front() == '#') {
+        std::uint16_t mask = 0;
+        if (!parse_number(trim(first.substr(1)), mask)) {
+            error = "kr216: " + mnemonic + " mask is not a number";
+            return false;
+        }
+        if (mnemonic == "push") return encode_normal_push_mask(mask, out, error);
+        return encode_normal_pop_mask(mask, out, error);
+    }
+    if (mnemonic == "neg" || mnemonic == "not") {
+        if (!parse_register(first, rd)) {
+            error = "kr216: " + mnemonic + " needs a register";
+            return false;
+        }
+        return encode_compact(mnemonic == "neg" ? 29 : 30, rd, 0, out, error);
+    }
+    if (mnemonic == "shl" || mnemonic == "shr" || mnemonic == "sar") {
+        if (!parse_register(first, rd)) {
+            error = "kr216: " + mnemonic + " needs a register";
+            return false;
+        }
+        if (second.empty() || second.front() != '#') {
+            error = "kr216: " + mnemonic + " needs an immediate count";
+            return false;
+        }
+        std::uint16_t count = 0;
+        if (!parse_number(trim(second.substr(1)), count)) {
+            error = "kr216: shift count is not a number";
+            return false;
+        }
+        const std::uint8_t kind = mnemonic == "shl" ? 0 : (mnemonic == "shr" ? 1 : 2);
+        return encode_normal_shift_imm(kind, rd, static_cast<std::uint8_t>(count), out, error);
+    }
     if (mnemonic == "push" || mnemonic == "pop" || mnemonic == "inc" || mnemonic == "dec") {
         if (!parse_register(first, rd)) {
             error = "kr216: " + mnemonic + " needs a register";

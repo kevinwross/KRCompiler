@@ -265,3 +265,14 @@ TEST_CASE("kr216 assembles the ALU register and immediate forms") {
     REQUIRE(assemble_line("cmp r2, r3", out, error));    CHECK(out.bytes[0] == 0x88);
     CHECK_FALSE(assemble_line("and r2, #5", out, error));
 }
+TEST_CASE("kr216 assembles mask pushes, neg/not and shifts") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("push #0x0300", out, error));  CHECK(out.bytes[0] == 0xD7); CHECK(out.bytes[2] == 0x03);
+    REQUIRE(assemble_line("pop #0x0006", out, error));   CHECK(out.bytes[0] == 0xD8); CHECK(out.bytes[1] == 0x06);
+    REQUIRE(assemble_line("neg r2", out, error));        CHECK(out.bytes[0] == 0x9D); CHECK(out.bytes[1] == 0x20);
+    REQUIRE(assemble_line("not r2", out, error));        CHECK(out.bytes[0] == 0x9E);
+    REQUIRE(assemble_line("shl r2, #1", out, error));    CHECK(out.bytes[0] == 0xD4); CHECK(out.bytes[2] == 0x01);
+    REQUIRE(assemble_line("sar r2, #2", out, error));    CHECK(out.bytes[0] == 0xD6); CHECK(out.bytes[2] == 0x02);
+    CHECK_FALSE(assemble_line("shl r2, r3", out, error));
+}
