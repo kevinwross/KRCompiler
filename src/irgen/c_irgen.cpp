@@ -1040,6 +1040,15 @@ void CIRGen::note_scope_cleanup() {
     if (!profile_.has_eh) {
         return;
     }
+    // A pad already in force that covers every live cleanup needs no successor:
+    // creating one would leave the call unwinding through an empty pad that
+    // resumes into the real pad.
+    for (const auto& existing : cleanup_pads_) {
+        if (existing.block == current_landing_pad_ &&
+            existing.covered >= local_cleanups_.size()) {
+            return;
+        }
+    }
     // The pad covers the objects that exist now, not the ones the scope will
     // declare later: a construction point can unwind before they exist.
     CleanupPad pad;
@@ -1633,9 +1642,9 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 }
                 auto* destructor = ensure_member_destructor(record->second);
                 if (destructor) {
-                    note_scope_cleanup();
                     local_cleanups_.push_back(
                         {address, destructor, type->count, type->element});
+                    note_scope_cleanup();
                 }
             }
         }
@@ -1791,9 +1800,9 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                                 record != ir_records_.end() && record->second) {
                                 if (ir::Function* cleanup =
                                         ensure_member_destructor(record->second)) {
-                                    note_scope_cleanup();
                                     local_cleanups_.push_back(
                                         {address, cleanup, 1, nullptr});
+                                    note_scope_cleanup();
                                 }
                             }
                             continue;
@@ -2115,8 +2124,8 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
                 ir::Function* cleanup =
                     ensure_member_destructor(record->second);
                 if (cleanup) {
-                    note_scope_cleanup();
                     local_cleanups_.push_back({address, cleanup, 1, nullptr});
+                    note_scope_cleanup();
                 }
             }
         }
