@@ -13,6 +13,8 @@
 
 #include "asm/kr16_assembler.h"
 #include "asm/kr16_object.h"
+#include "asm/kr216_encoder.h"
+#include "asm/kr216_object.h"
 #include "asm/kr32_assembler.h"
 #include "asm/kro_writer.h"
 #include "backend/kr16_backend.h"
@@ -179,6 +181,17 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
         }
         append_debug_info(object, debug_info);
         result.listing = std::move(assembled.listing);
+    } else if (id == target::TargetId::Kr216) {
+        asmkr216::AssembledProgram assembled;
+        if (!asmkr216::assemble_text(assembly, assembled, error)) {
+            result.error = "KR216 assembler: " + error;
+            return result;
+        }
+        if (!asmkr216::make_object(assembled, profile, object, error)) {
+            result.error = "KR216 object: " + error;
+            return result;
+        }
+        append_debug_info(object, debug_info);
     } else if (id == target::TargetId::Kr32) {
         asmkr32::AssemblyResult assembled;
         if (!asmkr32::assemble(assembly, assembled, error)) {

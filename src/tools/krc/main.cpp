@@ -390,7 +390,8 @@ int main(int argc, char** argv) {
     options.dump_stats = dump_stats;
 
     toolchain::Options link_options = options;
-    if (target_id == krc::target::TargetId::Kr16) {
+    if (target_id == krc::target::TargetId::Kr16 ||
+        target_id == krc::target::TargetId::Kr216) {
         link_options.base = 0x100;
         link_options.entry = "_start";
     }
@@ -400,7 +401,15 @@ int main(int argc, char** argv) {
 
     for (const auto& input : inputs) {
         const auto input_extension = std::filesystem::path(input).extension().string();
-        if (emit_object_container && input_extension == ".s") {
+        if ((emit_object_container || emit_object) && input_extension == ".s") {
+            if (target_id != krc::target::TargetId::Kr16 &&
+                target_id != krc::target::TargetId::Kr216) {
+                diagnostics.push_back(error_diagnostic(
+                    "target '" + std::string(profile.name) +
+                    "' does not accept assembly input for -c"));
+                failed = true;
+                continue;
+            }
             std::string text;
             std::string error;
             if (!read_text_file(input, text, error)) {
@@ -409,7 +418,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             toolchain::Options assemble_options = options;
-            assemble_options.target = toolchain::Target::Kr16;
+            assemble_options.target = to_target(*target_id);
             const auto assembled =
                 toolchain::assemble(text, assemble_options);
             if (!assembled.ok) {

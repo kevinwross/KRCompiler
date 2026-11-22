@@ -342,7 +342,7 @@ TEST_CASE("kr216 assembles a multi-line source with labels and directives") {
     CHECK(program.bytes[4] == 1);
     CHECK(program.bytes[6] == 0x34);
     CHECK(program.bytes[7] == 0x12);
-    CHECK_FALSE(assemble_text(".globl x", program, error));
+    CHECK_FALSE(assemble_text(".section .data", program, error));
 }
 TEST_CASE("kr216 refuses a duplicate label") {
     AssembledProgram program;
@@ -375,4 +375,24 @@ TEST_CASE("kr216 resolves a forward call label") {
     CHECK(program.bytes[1] == 0x04);
     CHECK(program.bytes[2] == 0x00);
     CHECK(program.bytes[3] == 0x71);
+}
+
+TEST_CASE("kr216 records global labels and accepts the text section") {
+    AssembledProgram program;
+    std::string error;
+    const char* source =
+        ".text\n"
+        ".global _start\n"
+        "_start:\n"
+        "    call helper\n"
+        "    nop\n"
+        "helper:\n"
+        "    ret\n";
+    REQUIRE(assemble_text(source, program, error));
+    REQUIRE(program.globals.size() == 1);
+    CHECK(program.globals[0] == "_start");
+    REQUIRE(program.labels.size() == 2);
+    CHECK(program.labels[0].first == "_start");
+    CHECK(program.labels[1].first == "helper");
+    CHECK(program.labels[1].second == 4);
 }

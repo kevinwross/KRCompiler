@@ -112,13 +112,15 @@ struct Encoding {
 [[nodiscard]] bool parse_number(std::string_view text, std::uint16_t& out);
 [[nodiscard]] bool assemble_line(std::string_view line, Encoding& out, std::string& error);
 
-// The multi-line layer: `;` comments, `name:` labels, `.byte`/`.word` directives and one
-// instruction per line. Labels are recorded with the offset they name; an absolute `jmp`/`call`
-// label operand is patched in a second pass after the whole source has been read, so a forward
-// reference resolves and an undefined label is an error.
+// The multi-line layer: `;` comments, `.text`, `.global`, `name:` labels, `.byte`/`.word`
+// directives and one instruction per line. Labels are recorded with the offset they name; an
+// absolute `jmp`/`call` label operand is patched in a second pass after the whole source has been
+// read, so a forward reference resolves and an undefined label is an error. `.global` names are
+// recorded for the object writer; a global with no matching label is an error there.
 struct AssembledProgram {
     std::vector<std::uint8_t> bytes;
     std::vector<std::pair<std::string, std::uint16_t>> labels;
+    std::vector<std::string> globals;
 };
 
 [[nodiscard]] bool assemble_text(std::string_view source, AssembledProgram& out,

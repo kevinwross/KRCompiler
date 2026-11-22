@@ -920,6 +920,7 @@ std::vector<std::string_view> split_commas(std::string_view text) {
 bool assemble_text(std::string_view source, AssembledProgram& out, std::string& error) {
     out.bytes.clear();
     out.labels.clear();
+    out.globals.clear();
     std::vector<std::pair<std::size_t, std::string>> fixups;
     for (const std::string_view raw : split_lines(source)) {
         std::string_view line = raw;
@@ -949,6 +950,35 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             const std::string directive(line.substr(0, space));
             const std::string_view operands =
                 space == std::string_view::npos ? std::string_view{} : trim(line.substr(space));
+            if (directive == ".text") {
+                if (!operands.empty()) {
+                    error = "kr216: .text takes no operands";
+                    return false;
+                }
+                continue;
+            }
+            if (directive == ".global" || directive == ".globl") {
+                if (operands.empty()) {
+                    error = "kr216: " + directive + " needs a label name";
+                    return false;
+                }
+                for (const std::string_view name : split_commas(operands)) {
+                    if (!is_label_name(name)) {
+                        error = "kr216: " + directive + " name '" + std::string(name) +
+                                "' is not a label";
+                        return false;
+                    }
+                    bool duplicate = false;
+                    for (const auto& existing : out.globals) {
+                        if (existing == name) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!duplicate) out.globals.emplace_back(name);
+                }
+                continue;
+            }
             const std::size_t width = directive == ".byte" ? 1 : (directive == ".word" ? 2 : 0);
             if (width == 0) {
                 error = "kr216: unknown directive '" + directive + "'";
