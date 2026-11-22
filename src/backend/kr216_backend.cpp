@@ -325,8 +325,8 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             out += "    ADD " + std::string(reg) + ", " + scratch + "\n";
         }
     };
-    const auto load_word = [&](const ir::Value* value, std::string_view reg,
-                               bool high = false, std::uint32_t adjust = 0) {
+    const auto load_word_at = [&](const ir::Value* value, std::string_view reg,
+                                  std::uint32_t word_index, std::uint32_t adjust = 0) {
         if (!value) {
             out += "    LD " + std::string(reg) + ", #0\n";
             return;
@@ -334,7 +334,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         if (value->kind == ir::ValueKind::ConstantInt) {
             const auto constant = static_cast<const ir::ConstantInt*>(value)->value;
             const auto word = static_cast<std::uint16_t>(
-                high ? ((constant >> 16) & 0xFFFF) : (constant & 0xFFFF));
+                (static_cast<std::uint64_t>(constant) >> (word_index * 16)) & 0xFFFF);
             out += "    LD " + std::string(reg) + ", #" + std::to_string(word) + "\n";
             return;
         }
@@ -363,7 +363,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 return;
             }
         }
-        const auto offset = slot(value) + (high ? 2u : 0u) + adjust;
+        const auto offset = slot(value) + word_index * 2 + adjust;
         if (offset <= 127) {
             out += "    LD " + std::string(reg) + ", [SP+" + std::to_string(offset) +
                    "]\n";
@@ -374,9 +374,14 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             out += "    LD " + std::string(reg) + ", [" + scratch + "]\n";
         }
     };
-    const auto store_word = [&](const ir::Instruction& instruction, std::string_view reg,
-                                bool high = false, std::uint32_t adjust = 0) {
-        const auto offset = slot(&instruction) + (high ? 2u : 0u) + adjust;
+    const auto load_word = [&](const ir::Value* value, std::string_view reg,
+                               bool high = false, std::uint32_t adjust = 0) {
+        load_word_at(value, reg, high ? 1u : 0u, adjust);
+    };
+    const auto store_word_at = [&](const ir::Instruction& instruction, std::string_view reg,
+                                   std::uint32_t word_index,
+                                   std::uint32_t adjust = 0) {
+        const auto offset = slot(&instruction) + word_index * 2 + adjust;
         if (offset <= 127) {
             out += "    ST [SP+" + std::to_string(offset) + "], " + std::string(reg) +
                    "\n";
@@ -385,6 +390,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             add_immediate("R7", static_cast<std::int32_t>(offset));
             out += "    ST [R7], " + std::string(reg) + "\n";
         }
+    };
+    const auto store_word = [&](const ir::Instruction& instruction, std::string_view reg,
+                                bool high = false, std::uint32_t adjust = 0) {
+        store_word_at(instruction, reg, high ? 1u : 0u, adjust);
     };
     const auto copy_from_pointer = [&](std::string_view pointer, std::uint32_t destination,
                                        std::uint32_t size) {
@@ -531,6 +540,19 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     }
                     break;
                 }
+                if (const auto* integer =
+                        dynamic_cast<const ir::ConstantInt*>(instruction->operands[0]);
+                    integer && size > 2) {
+                    const auto bits = static_cast<std::uint64_t>(integer->value);
+                    for (std::uint32_t offset = 0; offset < size; offset += 2) {
+                        out += "    LD R2, #" +
+                               std::to_string(static_cast<std::uint16_t>(
+                                   (bits >> (offset * 8)) & 0xFFFF)) +
+                               "\n";
+                        out += "    ST [R3+" + std::to_string(offset) + "], R2\n";
+                    }
+                    break;
+                }
                 if (is_aggregate(instruction->operands[0] ? instruction->operands[0]->type
                                                           : nullptr)) {
                     const auto source = slot(instruction->operands[0]);
@@ -604,7 +626,11 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::And:
             case ir::Opcode::Or:
             case ir::Opcode::Xor: {
-                const bool wide = is_wide(instruction->type);
+                const auto words = word_count(instruction->type);
+                if (instruction->opcode == ir::Opcode::Sub && words > 2) {
+                    error = "kr216 64-bit subtraction is not implemented";
+                    return;
+                }
                 const auto mnemonic = instruction->opcode == ir::Opcode::Add
                                           ? "ADD"
                                           : instruction->opcode == ir::Opcode::Sub
@@ -614,20 +640,17 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                                       : instruction->opcode == ir::Opcode::Or
                                                             ? "OR"
                                                             : "XOR";
-                load_word(instruction->operands[0], "R2");
-                load_word(instruction->operands[1], "R3");
-                out += "    " + std::string(mnemonic) + " R2, R3\n";
-                store_word(*instruction, "R2");
-                if (wide) {
-                    const auto carry = instruction->opcode == ir::Opcode::Add
-                                           ? "ADDC"
-                                           : instruction->opcode == ir::Opcode::Sub
-                                                 ? "SUBB"
-                                                 : mnemonic;
-                    load_word(instruction->operands[0], "R2", true);
-                    load_word(instruction->operands[1], "R3", true);
-                    out += "    " + std::string(carry) + " R2, R3\n";
-                    store_word(*instruction, "R2", true);
+                const auto carry = instruction->opcode == ir::Opcode::Add
+                                       ? "ADDC"
+                                       : instruction->opcode == ir::Opcode::Sub
+                                             ? "SUBB"
+                                             : mnemonic;
+                for (std::uint32_t word = 0; word < words; ++word) {
+                    load_word_at(instruction->operands[0], "R2", word);
+                    load_word_at(instruction->operands[1], "R3", word);
+                    out += "    " + std::string(word == 0 ? mnemonic : carry) +
+                           " R2, R3\n";
+                    store_word_at(*instruction, "R2", word);
                 }
                 break;
             }
@@ -905,14 +928,13 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     const auto done_label = ".Lcmp.done." + function.name + "." +
                                             std::to_string(synthetic_label);
                     ++synthetic_label;
-                    load_word(instruction->operands[0], "R2", true);
-                    load_word(instruction->operands[1], "R3", true);
-                    out += "    CMP R2, R3\n";
-                    out += "    BNE " + branch_label + "\n";
-                    load_word(instruction->operands[0], "R2");
-                    load_word(instruction->operands[1], "R3");
-                    out += "    CMP R2, R3\n";
-                    out += "    BNE " + branch_label + "\n";
+                    const auto words = word_count(instruction->operands[0]->type);
+                    for (std::uint32_t word = 0; word < words; ++word) {
+                        load_word_at(instruction->operands[0], "R2", word);
+                        load_word_at(instruction->operands[1], "R3", word);
+                        out += "    CMP R2, R3\n";
+                        out += "    BNE " + branch_label + "\n";
+                    }
                     out += std::string("    LD R2, #") + (equality ? "1\n" : "0\n");
                     out += "    JMP " + done_label + "\n";
                     out += branch_label + ":\n";
