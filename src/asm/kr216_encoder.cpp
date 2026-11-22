@@ -424,6 +424,11 @@ bool parse_register(std::string_view text, std::uint8_t& out) {
     return true;
 }
 
+bool parse_bracketed_register(std::string_view text, std::uint8_t& base) {
+    if (text.size() < 3 || text.front() != '[' || text.back() != ']') return false;
+    return parse_register(text.substr(1, text.size() - 2), base);
+}
+
 bool parse_fp_register(std::string_view text, std::uint8_t& out) {
     if (text.size() != 2 || (text[0] != 'f' && text[0] != 'F')) return false;
     if (text[1] < '0' || text[1] > '3') return false;
@@ -752,6 +757,36 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             return false;
         }
         return encode_f6(mnemonic == "fpush" ? 0 : 1, fd, out, error);
+    }
+    static const struct {
+        const char* name;
+        std::uint8_t opcode;
+    } kFpMemory[] = {{"fld", 0}, {"fst", 1}, {"flds", 2}, {"fsts", 3}};
+    for (const auto& entry : kFpMemory) {
+        if (mnemonic != entry.name) continue;
+        std::uint8_t fd = 0;
+        if (!parse_fp_register(first, fd)) {
+            error = "kr216: " + mnemonic + " needs an FP register";
+            return false;
+        }
+        std::uint8_t base = 0;
+        std::int32_t displacement = 0;
+        std::uint8_t mode = 0;
+        if (second.size() > 3 && second.back() == '+' &&
+            parse_bracketed_register(second.substr(0, second.size() - 1), base)) {
+            mode = 2;  // [Rb]+
+        } else if (second.size() > 3 && second.front() == '-' &&
+                   parse_bracketed_register(second.substr(1), base)) {
+            mode = 3;  // -[Rb]
+        } else if (parse_bracketed_displacement(second, base, displacement)) {
+            mode = 1;  // [Rb+d8]
+        } else if (parse_bracketed_register(second, base)) {
+            mode = 0;  // [Rb]
+        } else {
+            error = "kr216: " + mnemonic + " needs an [rB] operand";
+            return false;
+        }
+        return encode_f4(entry.opcode, fd, mode, base, displacement, out, error);
     }
     if (mnemonic == "i2f" || mnemonic == "u2f" || mnemonic == "f2i" || mnemonic == "f2u") {
         std::uint8_t fd = 0;

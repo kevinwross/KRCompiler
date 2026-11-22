@@ -308,3 +308,14 @@ TEST_CASE("kr216 assembles the FP mnemonics") {
     REQUIRE(assemble_line("f2i r2, f0", out, error));   CHECK(out.bytes[1] == 0x20);
     CHECK_FALSE(assemble_line("fadd f0, f4", out, error));
 }
+TEST_CASE("kr216 assembles the FP loads and stores") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("fld f0, [r2]", out, error));
+    CHECK(out.size == 3); CHECK(out.bytes[0] == 0xF4); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x20);
+    REQUIRE(assemble_line("fst f0, [r2+4]", out, error));
+    CHECK(out.size == 4); CHECK(out.bytes[1] == 0x11); CHECK(out.bytes[3] == 0x04);
+    REQUIRE(assemble_line("flds f1, [r3]+", out, error));  CHECK(out.bytes[1] == 0x26); CHECK(out.bytes[2] == 0x30);
+    REQUIRE(assemble_line("fsts f1, -[r3]", out, error));  CHECK(out.bytes[1] == 0x37);
+    CHECK_FALSE(assemble_line("fld f4, [r2]", out, error));
+}
