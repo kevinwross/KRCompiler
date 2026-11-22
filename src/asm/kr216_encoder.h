@@ -49,4 +49,10 @@ struct Encoding {
 [[nodiscard]] bool encode_normal_push_mask(std::uint16_t mask, Encoding& out, std::string& error);
 [[nodiscard]] bool encode_normal_pop_mask(std::uint16_t mask, Encoding& out, std::string& error);
 
+// Further Normal-class forms: 0xC7 ADD imm8, 0xCF JMP absolute, 0xDC LEAVE #mask.
+[[nodiscard]] bool encode_normal_add_imm8(std::uint8_t rd, std::int32_t value, Encoding& out,
+                                          std::string& error);
+[[nodiscard]] bool encode_normal_jmp_absolute(std::uint16_t address, Encoding& out);
+[[nodiscard]] bool encode_normal_leave(std::uint16_t mask, Encoding& out, std::string& error);
+
 }  // namespace krc::asmkr216

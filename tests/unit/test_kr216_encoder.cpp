@@ -77,3 +77,15 @@ TEST_CASE("kr216 Normal class emits the ISA bytes") {
     CHECK_FALSE(encode_normal_ld_d8(2, 3, 128, out, error));
     CHECK_FALSE(encode_normal_push_mask(0, out, error));
 }
+TEST_CASE("kr216 Normal class immediate, absolute jump and LEAVE") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_normal_add_imm8(2, 5, out, error));   // add r2, #5
+    CHECK(out.size == 3); CHECK(out.bytes[0] == 0xC7); CHECK(out.bytes[1] == 0x20); CHECK(out.bytes[2] == 0x05);
+    REQUIRE(encode_normal_jmp_absolute(0x0200, out));
+    CHECK(out.bytes[0] == 0xCF); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x02);
+    REQUIRE(encode_normal_leave(0x0300, out, error));
+    CHECK(out.bytes[0] == 0xDC); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x03);
+    CHECK_FALSE(encode_normal_add_imm8(2, 128, out, error));
+    CHECK_FALSE(encode_normal_leave(0, out, error));
+}

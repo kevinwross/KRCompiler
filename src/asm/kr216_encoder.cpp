@@ -161,4 +161,38 @@ bool encode_normal_pop_mask(std::uint16_t mask, Encoding& out, std::string& erro
     return true;
 }
 
+bool encode_normal_add_imm8(std::uint8_t rd, std::int32_t value, Encoding& out,
+                            std::string& error) {
+    if (!check_register(rd, error)) return false;
+    if (value < -128 || value > 127) {
+        error = "kr216 imm8 out of range";
+        return false;
+    }
+    out.bytes[0] = 0xC7;
+    out.bytes[1] = static_cast<std::uint8_t>((rd << 4) | 0);
+    out.bytes[2] = static_cast<std::uint8_t>(value & 0xFF);
+    out.size = 3;
+    return true;
+}
+
+bool encode_normal_jmp_absolute(std::uint16_t address, Encoding& out) {
+    out.bytes[0] = 0xCF;
+    out.bytes[1] = static_cast<std::uint8_t>(address & 0xFF);
+    out.bytes[2] = static_cast<std::uint8_t>(address >> 8);
+    out.size = 3;
+    return true;
+}
+
+bool encode_normal_leave(std::uint16_t mask, Encoding& out, std::string& error) {
+    if (mask == 0) {
+        error = "kr216 LEAVE mask may not be empty";
+        return false;
+    }
+    out.bytes[0] = 0xDC;
+    out.bytes[1] = static_cast<std::uint8_t>(mask & 0xFF);
+    out.bytes[2] = static_cast<std::uint8_t>(mask >> 8);
+    out.size = 3;
+    return true;
+}
+
 }  // namespace krc::asmkr216
