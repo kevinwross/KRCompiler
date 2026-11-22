@@ -10,6 +10,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+void __krc_destroy(void* object);
+
 namespace std {
 
 template <typename T>
@@ -132,7 +134,7 @@ public:
     }
 
 private:
-    static void destroy(T* value) { delete value; }
+    static void destroy(T* value) { __krc_destroy(value); }
 
     void destroy_all() {
         while (size_ > 0) {

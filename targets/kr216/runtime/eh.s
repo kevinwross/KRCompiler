@@ -17,6 +17,9 @@ __cxa_throw:
         ST [R6], R2
         LD R6, #__krc_current_type
         ST [R6], R3
+        MOV R6, R2
+        SUB R6, #6
+        ST [R6], R4              ; exception header: destructor
         LD R9, [SP]
         MOV R8, R13
         JMP __krc_eh_walk
@@ -68,13 +71,13 @@ __krc_eh_lookup:
         LD R5, #__krc_eh_end
 __krc_eh_block_loop:
         CMP R4, R5
-        BGE __krc_eh_no_block
+        BCS __krc_eh_no_block
         LD R6, [R4+2]          ; function_start
         CMP R2, R6
-        BLT __krc_eh_block_next
+        BCC __krc_eh_block_next
         LD R6, [R4+4]          ; function_end
         CMP R2, R6
-        BGE __krc_eh_block_next
+        BCS __krc_eh_block_next
         LD R3, [R4+6]          ; frame_size
         LD R7, [R4+8]          ; region_count
         ADD R4, #10
@@ -83,10 +86,10 @@ __krc_eh_region_loop:
         BEQ __krc_eh_no_region
         LD R6, [R4]
         CMP R2, R6
-        BLT __krc_eh_region_next
+        BCC __krc_eh_region_next
         LD R6, [R4+2]
         CMP R2, R6
-        BGT __krc_eh_region_next
+        BHI __krc_eh_region_next
         LD R2, [R4+4]
         RET
 __krc_eh_region_next:

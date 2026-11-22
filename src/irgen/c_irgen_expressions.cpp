@@ -1669,6 +1669,28 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         return {nullptr, module_->types().void_type()};
     }
     if (expression.children[0]->kind == frontend::AstKind::Identifier &&
+        expression.children[0]->text == "__krc_destroy") {
+        const auto& arguments = expression.children[1]->children;
+        if (arguments.size() != 1 || !arguments.front()) {
+            return {};
+        }
+        auto argument = emit_expression(*arguments.front());
+        if (!argument.value || !argument.type ||
+            argument.type->kind != ir::TypeKind::Pointer ||
+            !argument.type->element ||
+            argument.type->element->kind != ir::TypeKind::Struct) {
+            return {};
+        }
+        const auto record = ir_records_.find(argument.type->element);
+        if (record != ir_records_.end() && record->second) {
+            if (auto* cleanup = ensure_member_destructor(record->second)) {
+                create_call_instruction(cleanup, {argument.value}, nullptr,
+                                        "destroy");
+            }
+        }
+        return {nullptr, module_->types().void_type()};
+    }
+    if (expression.children[0]->kind == frontend::AstKind::Identifier &&
         (expression.children[0]->text == "std::move" ||
          expression.children[0]->text == "std::forward")) {
         const auto& arguments = expression.children[1]->children;
