@@ -287,3 +287,12 @@ TEST_CASE("kr216 assembles enter/leave and the register jumps") {
     REQUIRE(assemble_line("call r5", out, error));  CHECK(out.bytes[0] == 0x45);
     CHECK_FALSE(assemble_line("enter #7, #0x0300", out, error));
 }
+TEST_CASE("kr216 assembles the branches") {
+    Encoding out;
+    std::string error;
+    REQUIRE(assemble_line("beq +6", out, error));   CHECK(out.bytes[0] == 0xA0); CHECK(out.bytes[1] == 0x06);
+    REQUIRE(assemble_line("bra -9", out, error));   CHECK(out.bytes[0] == 0xBF); CHECK(out.bytes[1] == 0xF7);
+    REQUIRE(assemble_line("bne -2", out, error));   CHECK(out.bytes[0] == 0xA3); CHECK(out.bytes[1] == 0xFE);  // disp bit 8 sets byte 0 bit 0
+    REQUIRE(assemble_line("bal +4", out, error));   CHECK(out.bytes[0] == 0xBC);
+    CHECK_FALSE(assemble_line("beq +256", out, error));
+}

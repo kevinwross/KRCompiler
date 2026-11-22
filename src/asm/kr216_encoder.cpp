@@ -711,6 +711,35 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         }
         return encode_normal_leave(mask, out, error);
     }
+    static const struct {
+        const char* name;
+        std::uint8_t condition;
+    } kBranches[] = {{"beq", 0},  {"bne", 1},  {"bcs", 2},  {"bcc", 3},  {"bmi", 4},
+                     {"bpl", 5},  {"bvs", 6},  {"bvc", 7},  {"bhi", 8},  {"bls", 9},
+                     {"bge", 10}, {"blt", 11}, {"bgt", 12}, {"ble", 13}, {"bal", 14},
+                     {"bra", 15}};
+    for (const auto& entry : kBranches) {
+        if (mnemonic != entry.name) continue;
+        if (first.empty()) {
+            error = "kr216: " + mnemonic + " needs a displacement";
+            return false;
+        }
+        int sign = 1;
+        std::string_view digits = first;
+        if (digits.front() == '+') {
+            digits.remove_prefix(1);
+        } else if (digits.front() == '-') {
+            sign = -1;
+            digits.remove_prefix(1);
+        }
+        std::uint16_t magnitude = 0;
+        if (!parse_number(digits, magnitude)) {
+            error = "kr216: " + mnemonic + " displacement is not a number";
+            return false;
+        }
+        return encode_branch(entry.condition, sign * static_cast<std::int32_t>(magnitude), out,
+                             error);
+    }
     if (mnemonic == "jmp" || mnemonic == "call") {
         std::uint8_t target = 0;
         if (parse_register(first, target)) {
