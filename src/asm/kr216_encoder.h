@@ -63,4 +63,11 @@ struct Encoding {
 [[nodiscard]] bool encode_normal_shift_imm(std::uint8_t kind, std::uint8_t rd, std::uint8_t count,
                                            Encoding& out, std::string& error);
 
+// Section 8.1, the canonical `F0` form: `F0 op spec1 spec2 [ext]`, spec = `0 MMM RRRR`.
+// The caller supplies the extension bytes the two modes require, so the encoder never guesses
+// an operand's size.
+[[nodiscard]] bool encode_f0(std::uint8_t opcode, std::uint8_t spec1, std::uint8_t spec2,
+                             const std::uint8_t* extension, std::uint8_t extension_size,
+                             Encoding& out, std::string& error);
+
 }  // namespace krc::asmkr216

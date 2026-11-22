@@ -105,3 +105,22 @@ TEST_CASE("kr216 Normal class compare, SXTB, absolute CALL and shifts") {
     CHECK_FALSE(encode_normal_shift_imm(3, 2, 1, out, error));
     CHECK_FALSE(encode_normal_shift_imm(0, 2, 32, out, error));
 }
+TEST_CASE("kr216 F0 emits the canonical form") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_f0(0x00, 0x02, 0x03, nullptr, 0, out, error));  // mov r2, r3
+    CHECK(out.size == 4); CHECK(out.bytes[0] == 0xF0); CHECK(out.bytes[1] == 0x00);
+    CHECK(out.bytes[2] == 0x02); CHECK(out.bytes[3] == 0x03);
+
+    const std::uint8_t imm[] = {0x05, 0x00};
+    REQUIRE(encode_f0(0x01, 0x02, 0x10, imm, 2, out, error));      // add r2, #5
+    CHECK(out.size == 6); CHECK(out.bytes[3] == 0x10); CHECK(out.bytes[4] == 0x05);
+
+    const std::uint8_t disp[] = {0x02};
+    REQUIRE(encode_f0(0x0E, 0x02, 0x53, disp, 1, out, error));     // ld r2, [r3+2]
+    CHECK(out.size == 5); CHECK(out.bytes[2] == 0x02); CHECK(out.bytes[3] == 0x53);
+    CHECK(out.bytes[4] == 0x02);
+
+    CHECK_FALSE(encode_f0(0x1B, 0x00, 0x00, nullptr, 0, out, error));
+    CHECK_FALSE(encode_f0(0x00, 0x70, 0x00, nullptr, 0, out, error));
+}

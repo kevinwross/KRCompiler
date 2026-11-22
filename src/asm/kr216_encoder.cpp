@@ -245,4 +245,36 @@ bool encode_normal_shift_imm(std::uint8_t kind, std::uint8_t rd, std::uint8_t co
     return true;
 }
 
+bool encode_f0(std::uint8_t opcode, std::uint8_t spec1, std::uint8_t spec2,
+               const std::uint8_t* extension, std::uint8_t extension_size, Encoding& out,
+               std::string& error) {
+    if (opcode > 0x1A) {
+        error = "kr216 F0 opcode out of range";
+        return false;
+    }
+    const auto check_spec = [&error](std::uint8_t spec, const char* which) {
+        const std::uint8_t mode = static_cast<std::uint8_t>(spec >> 4);
+        if (mode > 6) {
+            error = std::string("kr216 F0 ") + which + " mode out of range";
+            return false;
+        }
+        return true;
+    };
+    if (!check_spec(spec1, "operand 1") || !check_spec(spec2, "operand 2")) return false;
+    if (extension_size > 2) {
+        error = "kr216 F0 extension must be at most two bytes";
+        return false;
+    }
+    out.bytes[0] = 0xF0;
+    out.bytes[1] = opcode;
+    out.bytes[2] = spec1;
+    out.bytes[3] = spec2;
+    std::uint8_t size = 4;
+    for (std::uint8_t index = 0; index < extension_size; ++index) {
+        out.bytes[size++] = extension[index];
+    }
+    out.size = size;
+    return true;
+}
+
 }  // namespace krc::asmkr216
