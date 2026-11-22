@@ -55,4 +55,12 @@ struct Encoding {
 [[nodiscard]] bool encode_normal_jmp_absolute(std::uint16_t address, Encoding& out);
 [[nodiscard]] bool encode_normal_leave(std::uint16_t mask, Encoding& out, std::string& error);
 
+// Remaining Normal forms: 0xCA CMP imm8, 0xDB SXTB, 0xD0 CALL absolute, 0xD4-0xD6 shifts.
+[[nodiscard]] bool encode_normal_cmp_imm8(std::uint8_t rd, std::int32_t value, Encoding& out,
+                                          std::string& error);
+[[nodiscard]] bool encode_normal_sxtb(std::uint8_t rd, Encoding& out, std::string& error);
+[[nodiscard]] bool encode_normal_call_absolute(std::uint16_t address, Encoding& out);
+[[nodiscard]] bool encode_normal_shift_imm(std::uint8_t kind, std::uint8_t rd, std::uint8_t count,
+                                           Encoding& out, std::string& error);
+
 }  // namespace krc::asmkr216

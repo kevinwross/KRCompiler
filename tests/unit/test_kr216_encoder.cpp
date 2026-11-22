@@ -89,3 +89,19 @@ TEST_CASE("kr216 Normal class immediate, absolute jump and LEAVE") {
     CHECK_FALSE(encode_normal_add_imm8(2, 128, out, error));
     CHECK_FALSE(encode_normal_leave(0, out, error));
 }
+TEST_CASE("kr216 Normal class compare, SXTB, absolute CALL and shifts") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_normal_cmp_imm8(2, 5, out, error));   // cmp r2, #5
+    CHECK(out.bytes[0] == 0xCA); CHECK(out.bytes[1] == 0x20); CHECK(out.bytes[2] == 0x05);
+    REQUIRE(encode_normal_sxtb(2, out, error));          // sxtb r2
+    CHECK(out.bytes[0] == 0xDB); CHECK(out.bytes[1] == 0x20); CHECK(out.bytes[2] == 0x00);
+    REQUIRE(encode_normal_call_absolute(0x0300, out));   // call 0x0300
+    CHECK(out.bytes[0] == 0xD0); CHECK(out.bytes[1] == 0x00); CHECK(out.bytes[2] == 0x03);
+    REQUIRE(encode_normal_shift_imm(0, 2, 1, out, error));  // shl r2, #1
+    CHECK(out.bytes[0] == 0xD4); CHECK(out.bytes[1] == 0x20); CHECK(out.bytes[2] == 0x01);
+    REQUIRE(encode_normal_shift_imm(2, 2, 1, out, error));
+    CHECK(out.bytes[0] == 0xD6);
+    CHECK_FALSE(encode_normal_shift_imm(3, 2, 1, out, error));
+    CHECK_FALSE(encode_normal_shift_imm(0, 2, 32, out, error));
+}
