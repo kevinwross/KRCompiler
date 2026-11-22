@@ -1494,9 +1494,19 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     out += region_end + ":\n";
                     if (instruction->successors.size() >= 2 &&
                         instruction->successors[1]) {
-                        eh_regions_.push_back(
-                            {region_start, region_end,
-                             label_for(*instruction->successors[1])});
+                        // A cleanup pad that resumes into itself must not be a
+                        // protected region: the unwinder would re-enter the pad
+                        // instead of continuing in the caller.
+                        const bool self_resume =
+                            callee != nullptr &&
+                            callee->kind == ir::ValueKind::Function &&
+                            callee->name == "_Unwind_Resume" &&
+                            instruction->successors[1] == block.get();
+                        if (!self_resume) {
+                            eh_regions_.push_back(
+                                {region_start, region_end,
+                                 label_for(*instruction->successors[1])});
+                        }
                     }
                 }
                 if (pushed_words > 0) add_immediate("SP", static_cast<std::int32_t>(pushed_words * 2));

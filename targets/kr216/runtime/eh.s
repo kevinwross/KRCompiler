@@ -22,6 +22,9 @@ __cxa_throw:
         JMP __krc_eh_walk
 
 ; void _Unwind_Resume(void *exception)
+; Continue at the resume call site: a cleanup pad that resumes into itself is
+; not a descriptor region, so the lookup steps past it to the caller, while a
+; pad that resumes toward a catch in the same frame finds that region.
         .global _Unwind_Resume
 _Unwind_Resume:
         LD R9, [SP]
