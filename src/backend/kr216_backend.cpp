@@ -627,10 +627,6 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::Or:
             case ir::Opcode::Xor: {
                 const auto words = word_count(instruction->type);
-                if (instruction->opcode == ir::Opcode::Sub && words > 2) {
-                    error = "kr216 64-bit subtraction is not implemented";
-                    return;
-                }
                 const auto mnemonic = instruction->opcode == ir::Opcode::Add
                                           ? "ADD"
                                           : instruction->opcode == ir::Opcode::Sub
@@ -646,10 +642,31 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                              ? "SUBB"
                                              : mnemonic;
                 for (std::uint32_t word = 0; word < words; ++word) {
-                    load_word_at(instruction->operands[0], "R2", word);
-                    load_word_at(instruction->operands[1], "R3", word);
-                    out += "    " + std::string(word == 0 ? mnemonic : carry) +
-                           " R2, R3\n";
+                    if (instruction->opcode == ir::Opcode::Sub && word != 0) {
+                        const auto suffix = "." + function.name + "." +
+                                            std::to_string(synthetic_label) + "." +
+                                            std::to_string(word);
+                        const auto borrow_label = ".Lsub.borrow" + suffix;
+                        const auto done_label = ".Lsub.done" + suffix;
+                        ++synthetic_label;
+                        out += "    BCC " + borrow_label + "\n";
+                        load_word_at(instruction->operands[0], "R2", word);
+                        load_word_at(instruction->operands[1], "R3", word);
+                        out += "    SUB R2, R3\n";
+                        out += "    JMP " + done_label + "\n";
+                        out += borrow_label + ":\n";
+                        load_word_at(instruction->operands[0], "R2", word);
+                        load_word_at(instruction->operands[1], "R3", word);
+                        out += "    SUB R2, R3\n";
+                        out += "    LD R3, #1\n";
+                        out += "    SUB R2, R3\n";
+                        out += done_label + ":\n";
+                    } else {
+                        load_word_at(instruction->operands[0], "R2", word);
+                        load_word_at(instruction->operands[1], "R3", word);
+                        out += "    " + std::string(word == 0 ? mnemonic : carry) +
+                               " R2, R3\n";
+                    }
                     store_word_at(*instruction, "R2", word);
                 }
                 break;
