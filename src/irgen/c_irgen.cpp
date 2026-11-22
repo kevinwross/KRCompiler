@@ -3629,11 +3629,11 @@ CIRGen::Expression CIRGen::emit_integer_literal(const frontend::AstNode& express
         error(expression.location, "invalid integer literal");
         return {};
     }
-    const auto type = type_for_integer_literal(expression.text);
+    const auto type = type_for_integer_literal(expression.text, value);
     return {module_->constant_int(type, value), type};
 }
 
-ir::TypePtr CIRGen::type_for_integer_literal(std::string_view text) {
+ir::TypePtr CIRGen::type_for_integer_literal(std::string_view text, std::int64_t value) {
     bool is_unsigned = false;
     int long_count = 0;
     for (auto index = text.size(); index > 0; --index) {
@@ -3646,13 +3646,56 @@ ir::TypePtr CIRGen::type_for_integer_literal(std::string_view text) {
             break;
         }
     }
+    const auto width = [&](frontend::TypeKind kind) -> std::uint32_t {
+        switch (kind) {
+        case frontend::TypeKind::Int:
+            return profile_.int_bits;
+        case frontend::TypeKind::Long:
+            return profile_.long_bits;
+        case frontend::TypeKind::LongLong:
+            return profile_.long_long_bits;
+        default:
+            return 0;
+        }
+    };
+    const auto magnitude = static_cast<std::uint64_t>(value);
+    const auto fits = [&](frontend::TypeKind kind, bool candidate_unsigned) {
+        const auto bits = width(kind);
+        if (bits == 0) return false;
+        if (bits >= 64) return true;
+        const auto maximum =
+            candidate_unsigned
+                ? (static_cast<std::uint64_t>(1) << bits) - 1
+                : (static_cast<std::uint64_t>(1) << (bits - 1)) - 1;
+        return magnitude <= maximum;
+    };
+    frontend::TypeKind chosen = frontend::TypeKind::Int;
     if (long_count >= 2) {
-        return module_->types().int_type(profile_.long_long_bits, !is_unsigned);
+        chosen = frontend::TypeKind::LongLong;
+    } else if (long_count == 1) {
+        chosen = frontend::TypeKind::Long;
+        // C11 6.4.4.1: an `L` suffix names `long`, but the literal may still be
+        // represented by `long long` when `long` cannot hold it.
+        if (!fits(chosen, is_unsigned) &&
+            fits(frontend::TypeKind::LongLong, is_unsigned)) {
+            chosen = frontend::TypeKind::LongLong;
+        }
+    } else {
+        // C11 6.4.4.1: an unsuffixed decimal literal takes the first of
+        // `int`, `long`, `long long` that can represent it. Choosing `int`
+        // unconditionally made `long x = 32768;` an i16 constant on kr216,
+        // contradicting the target's own 32-bit `long`.
+        chosen = frontend::TypeKind::LongLong;
+        for (const auto candidate :
+             {frontend::TypeKind::Int, frontend::TypeKind::Long,
+              frontend::TypeKind::LongLong}) {
+            if (fits(candidate, false)) {
+                chosen = candidate;
+                break;
+            }
+        }
     }
-    if (long_count == 1) {
-        return module_->types().int_type(profile_.long_bits, !is_unsigned);
-    }
-    return module_->types().int_type(profile_.int_bits, !is_unsigned);
+    return module_->types().int_type(width(chosen), !is_unsigned);
 }
 
 CIRGen::Expression CIRGen::emit_string_literal(const frontend::AstNode& expression) {

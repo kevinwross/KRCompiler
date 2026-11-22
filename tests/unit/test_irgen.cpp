@@ -35,11 +35,11 @@ struct Generated {
 // The language comes from the declaration site rather than a bool at each call,
 // because the front end selects it from the input extension: `generate` is the C
 // path, `generate_cxx` the C++ one.
-Generated generate_in(std::string source, bool cxx) {
+Generated generate_for(std::string source, krc::target::TargetId target, bool cxx) {
     SourceManager sources;
     DiagnosticEngine diagnostics(sources);
     const auto file = sources.add_buffer(cxx ? "test.cpp" : "test.c", std::move(source));
-    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr32);
+    const auto& profile = krc::target::get_target(target);
     Preprocessor preprocessor(sources, diagnostics, profile);
     auto tokens = preprocessor.preprocess(file);
     Parser parser(std::move(tokens), diagnostics, sources, cxx);
@@ -64,6 +64,10 @@ Generated generate_in(std::string source, bool cxx) {
     return Generated{std::move(module), diagnostics.has_errors(), std::move(verifier_error)};
 }
 
+Generated generate_in(std::string source, bool cxx) {
+    return generate_for(std::move(source), krc::target::TargetId::Kr32, cxx);
+}
+
 Generated generate(std::string source) {
     return generate_in(std::move(source), false);
 }
@@ -72,7 +76,26 @@ Generated generate_cxx(std::string source) {
     return generate_in(std::move(source), true);
 }
 
+Generated generate_kr216(std::string source) {
+    return generate_for(std::move(source), krc::target::TargetId::Kr216, false);
+}
+
 }  // namespace
+
+TEST_CASE("KR216 IRGen types an unsuffixed integer literal by its value") {
+    const auto generated = generate_kr216(R"SRC(
+long f(void) {
+    long x = 32768;
+    return x;
+}
+)SRC");
+    REQUIRE(generated.module);
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto printed = out.str();
+    CHECK(printed.find("store i32 32768") != std::string::npos);
+    CHECK(printed.find("sext i16 32768") == std::string::npos);
+}
 
 TEST_CASE("C IRGen lowers a scalar function") {
     const auto generated = generate(R"SRC(

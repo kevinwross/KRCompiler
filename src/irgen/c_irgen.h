@@ -248,7 +248,8 @@ private:
 
     [[nodiscard]] ir::Value* promote(ir::Value* value, ir::TypePtr from, ir::TypePtr to);
     [[nodiscard]] ir::Value* constant_int(ir::TypePtr type, std::int64_t value);
-    [[nodiscard]] ir::TypePtr type_for_integer_literal(std::string_view text);
+    [[nodiscard]] ir::TypePtr type_for_integer_literal(std::string_view text,
+                                                       std::int64_t value);
     [[nodiscard]] std::string decode_string(std::string_view text) const;
     [[nodiscard]] std::string declarator_name(const frontend::AstNode& declarator) const;
     [[nodiscard]] const frontend::AstNode* find_function_declarator(
