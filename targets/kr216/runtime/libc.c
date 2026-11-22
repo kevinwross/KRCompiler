@@ -634,6 +634,93 @@ static int print_unsigned(unsigned int value, unsigned int base) {
     return length;
 }
 
+static int print_unsigned_long(unsigned long value, unsigned int base) {
+    char buffer[24];
+    int length = 0;
+    do {
+        const unsigned int digit = (unsigned int)(value % base);
+        buffer[length++] = (char)(digit < 10 ? '0' + digit : 'a' + digit - 10);
+        value /= base;
+    } while (value != 0);
+    for (int index = length - 1; index >= 0; index--) {
+        putchar(buffer[index]);
+    }
+    return length;
+}
+
+static int print_unsigned_long_long(unsigned long long value, unsigned int base) {
+    unsigned int words[4];
+    unsigned int *source = (unsigned int *)&value;
+    int i = 0;
+    while (i < 4) {
+        words[i] = source[i];
+        i++;
+    }
+    if (base == 16) {
+        int written = 0;
+        int started = 0;
+        int word = 3;
+        while (word >= 0) {
+            int shift = 12;
+            while (shift >= 0) {
+                const unsigned int digit = (words[word] >> shift) & 0xF;
+                if (digit != 0 || started != 0 || (word == 0 && shift == 0)) {
+                    putchar((char)(digit < 10 ? '0' + digit : 'a' + digit - 10));
+                    written++;
+                    started = 1;
+                }
+                shift -= 4;
+            }
+            word--;
+        }
+        return written;
+    }
+    unsigned int digits[8];
+    i = 0;
+    while (i < 8) {
+        digits[i] = 0;
+        i++;
+    }
+    i = 0;
+    while (i < 8) {
+        digits[i] = (words[i / 2] >> ((i % 2) * 8)) & 0xFF;
+        i++;
+    }
+    char buffer[24];
+    int length = 0;
+    int non_zero = 0;
+    i = 7;
+    while (i >= 0) {
+        if (digits[i] != 0) non_zero = 1;
+        i--;
+    }
+    if (non_zero == 0) {
+        putchar('0');
+        return 1;
+    }
+    while (non_zero != 0) {
+        unsigned int remainder = 0;
+        int byte = 7;
+        while (byte >= 0) {
+            const unsigned int current = remainder * 256 + digits[byte];
+            digits[byte] = current / 10;
+            remainder = current % 10;
+            byte--;
+        }
+        buffer[length++] = (char)('0' + remainder);
+        non_zero = 0;
+        byte = 7;
+        while (byte >= 0) {
+            if (digits[byte] != 0) non_zero = 1;
+            byte--;
+        }
+    }
+    for (i = length - 1; i >= 0; i--) {
+        putchar(buffer[i]);
+    }
+    return length;
+}
+
 int printf(const char *format, ...) {
     va_list arguments;
     va_start(arguments, format);
@@ -652,6 +739,11 @@ int printf(const char *format, ...) {
             written++;
             continue;
         }
+        int long_count = 0;
+        while (format[index] == 'l') {
+            long_count++;
+            index++;
+        }
         if (format[index] == 'c') {
             putchar(va_arg(arguments, int));
             index++;
@@ -667,23 +759,55 @@ int printf(const char *format, ...) {
             continue;
         }
         if (format[index] == 'd' || format[index] == 'i') {
-            int value = va_arg(arguments, int);
-            if (value < 0) {
-                putchar('-');
-                written++;
-                value = -value;
+            if (long_count >= 2) {
+                long long value = va_arg(arguments, long long);
+                unsigned long long magnitude = (unsigned long long)value;
+                if (value < 0) {
+                    __krc_negate64((unsigned int *)&magnitude);
+                    putchar('-');
+                    written++;
+                }
+                written += print_unsigned_long_long(magnitude, 10);
+            } else if (long_count == 1) {
+                long value = va_arg(arguments, long);
+                unsigned long magnitude = (unsigned long)value;
+                if (value < 0) {
+                    magnitude = __krc_negate32(magnitude);
+                    putchar('-');
+                    written++;
+                }
+                written += print_unsigned_long(magnitude, 10);
+            } else {
+                int value = va_arg(arguments, int);
+                if (value < 0) {
+                    putchar('-');
+                    written++;
+                    value = -value;
+                }
+                written += print_unsigned((unsigned int)value, 10);
             }
-            written += print_unsigned((unsigned int)value, 10);
             index++;
             continue;
         }
         if (format[index] == 'u') {
-            written += print_unsigned(va_arg(arguments, unsigned int), 10);
+            if (long_count >= 2) {
+                written += print_unsigned_long_long(va_arg(arguments, unsigned long long), 10);
+            } else if (long_count == 1) {
+                written += print_unsigned_long(va_arg(arguments, unsigned long), 10);
+            } else {
+                written += print_unsigned(va_arg(arguments, unsigned int), 10);
+            }
             index++;
             continue;
         }
         if (format[index] == 'x') {
-            written += print_unsigned(va_arg(arguments, unsigned int), 16);
+            if (long_count >= 2) {
+                written += print_unsigned_long_long(va_arg(arguments, unsigned long long), 16);
+            } else if (long_count == 1) {
+                written += print_unsigned_long(va_arg(arguments, unsigned long), 16);
+            } else {
+                written += print_unsigned(va_arg(arguments, unsigned int), 16);
+            }
             index++;
             continue;
         }
