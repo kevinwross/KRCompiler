@@ -29,6 +29,7 @@
 #include "krc/frontend/source_manager.h"
 #include "krc/target/target.h"
 #include "linker/kr16_image.h"
+#include "linker/kr216_image.h"
 #include "linker/kro_object.h"
 #include "linker/linker.h"
 
@@ -274,8 +275,9 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
     }
 
     const auto target_id = parsed.front().target_id;
-    const auto default_base = target_id == 2 ? std::uint64_t{0x100}
-                                             : std::uint64_t{0x00010000};
+    const auto default_base = target_id == 2   ? std::uint64_t{0x100}
+                              : target_id == 4 ? std::uint64_t{0x200}
+                                               : std::uint64_t{0x00010000};
 
     linker::LinkedImage image;
     std::string error;
@@ -323,6 +325,26 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
                                       static_cast<std::uint16_t>(image.base),
                                       static_cast<std::uint16_t>(image.entry), extra,
                                       result.image, error)) {
+            result.error = error;
+            return output;
+        }
+    } else if (target_id == 4) {
+        linker::LinkedImage filtered = image;
+        filtered.sections.clear();
+        for (const auto& section : image.sections) {
+            // `.debug_info` is the bridge `attach_kdbg` consumed; the image
+            // carries the converted `.kdbg` and every allocated section.
+            if (section.type == linker::KroSectionType::Debug &&
+                section.name != ".kdbg") {
+                continue;
+            }
+            filtered.sections.push_back(section);
+        }
+        if (image.base > 0xFFFF || image.entry > 0xFFFF) {
+            result.error = "KR216 address exceeds 16 bits";
+            return output;
+        }
+        if (!linker::write_kr216_image(filtered, result.image, error)) {
             result.error = error;
             return output;
         }

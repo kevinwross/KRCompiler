@@ -32,6 +32,7 @@ add_executable(krc_tests
     unit/test_target.cpp
     unit/test_kr216_encoder.cpp
     unit/test_kr216_object.cpp
+    unit/test_kr216_image.cpp
     unit/test_fixture_extractor.cpp
     unit/test_toolchain.cpp
 )
@@ -184,6 +185,22 @@ if(TARGET krc)
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckKroHeader.cmake)
     set_tests_properties(krc_kr216_object_header PROPERTIES
         DEPENDS krc_kr216_asm_object)
+
+    add_test(NAME krc_kr216_link_image
+        COMMAND $<TARGET_FILE:krld>
+                "${KRC_TEST_OUTPUT_DIR}/kr216_hello.kro"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr216_hello.k216")
+    set_tests_properties(krc_kr216_link_image PROPERTIES
+        DEPENDS krc_kr216_asm_object)
+    add_test(NAME krc_kr216_image_header
+        COMMAND ${CMAKE_COMMAND}
+                -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr216_hello.k216
+                -DENTRY=0x0200
+                -DENTRY_HEX=0002
+                -DSECTION_COUNT=2
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckK216Header.cmake)
+    set_tests_properties(krc_kr216_image_header PROPERTIES
+        DEPENDS krc_kr216_link_image)
 
     add_test(NAME krc_kr16_crt0_object
         COMMAND $<TARGET_FILE:krc> -c --target=kr16 --emit-object
