@@ -142,3 +142,16 @@ TEST_CASE("kr216 F3 FP register ops and F7 ENTER") {
     CHECK_FALSE(encode_f7_enter(7, 0x0300, out, error));
     CHECK_FALSE(encode_f7_enter(8, 0, out, error));
 }
+TEST_CASE("kr216 F1 long-integer forms") {
+    Encoding out;
+    std::string error;
+    REQUIRE(encode_f1(0, 2, 0x4000, out, error));  // ldbu r2, [0x4000]
+    CHECK(out.size == 4); CHECK(out.bytes[0] == 0xF1); CHECK(out.bytes[1] == 0x02);
+    CHECK(out.bytes[2] == 0x00); CHECK(out.bytes[3] == 0x40);
+    REQUIRE(encode_f1(2, 3, 0xFF00, out, error));  // stb [0xFF00], r3
+    CHECK(out.bytes[1] == 0x23); CHECK(out.bytes[3] == 0xFF);
+    REQUIRE(encode_f1(4, 2, 6, out, error));       // lea r2, [sp+6]
+    CHECK(out.bytes[1] == 0x42); CHECK(out.bytes[2] == 0x06); CHECK(out.bytes[3] == 0x00);
+    CHECK_FALSE(encode_f1(5, 0, 0, out, error));
+    CHECK_FALSE(encode_f1(0, 16, 0, out, error));
+}

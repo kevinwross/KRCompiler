@@ -77,4 +77,9 @@ struct Encoding {
 [[nodiscard]] bool encode_f7_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out,
                                    std::string& error);
 
+// Section 8.2, `F1`: `F1 | OOOO RRRR | addr16`, four bytes. Op 0 LDBU, 1 LDBS, 2 STB (R is the
+// data register); op 3 LEA Rd,[PC+d16], op 4 LEA Rd,[SP+d16] (R is the destination).
+[[nodiscard]] bool encode_f1(std::uint8_t opcode, std::uint8_t reg, std::uint16_t field,
+                             Encoding& out, std::string& error);
+
 }  // namespace krc::asmkr216

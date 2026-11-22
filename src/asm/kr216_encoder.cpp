@@ -315,4 +315,19 @@ bool encode_f7_enter(std::uint16_t frame, std::uint16_t mask, Encoding& out, std
     return true;
 }
 
+bool encode_f1(std::uint8_t opcode, std::uint8_t reg, std::uint16_t field, Encoding& out,
+               std::string& error) {
+    if (opcode > 4) {
+        error = "kr216 F1 opcode must be 0-4";
+        return false;
+    }
+    if (!check_register(reg, error)) return false;
+    out.bytes[0] = 0xF1;
+    out.bytes[1] = static_cast<std::uint8_t>((opcode << 4) | reg);
+    out.bytes[2] = static_cast<std::uint8_t>(field & 0xFF);
+    out.bytes[3] = static_cast<std::uint8_t>(field >> 8);
+    out.size = 4;
+    return true;
+}
+
 }  // namespace krc::asmkr216
