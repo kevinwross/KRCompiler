@@ -42,6 +42,20 @@ target_include_directories(krc_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/third_p
 target_compile_definitions(krc_tests PRIVATE KRC_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_features(krc_tests PRIVATE cxx_std_20)
 krc_apply_warnings(krc_tests)
+
+# The VM file-service tests need a writable host directory. The default is a
+# dedicated directory under the test output; a sandboxed runner can point this
+# at a writable location instead of weakening the test.
+set(KRC_TEST_FS_ROOT "" CACHE PATH "Writable root for VM filesystem tests")
+function(krc_configure_fs_root name)
+    if(KRC_TEST_FS_ROOT)
+        set(root "${KRC_TEST_FS_ROOT}/${name}")
+    else()
+        set(root "${KRC_TEST_OUTPUT_DIR}/${name}")
+    endif()
+    file(MAKE_DIRECTORY "${root}")
+    set(KRC_FS_ROOT "${root}" PARENT_SCOPE)
+endfunction()
 # doctest 2.4.11 unconditionally includes <ciso646> when the compiler is Clang
 # (doctest.h:498), to detect libc++ through _LIBCPP_VERSION. libstdc++ 15 answers that
 # include with a #warning -- "<ciso646> is not a standard header since C++20" -- and
@@ -351,11 +365,12 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
         set_tests_properties(krc_run_kr16_pack_expansion PROPERTIES
             DEPENDS krc_link_kr16_pack_expansion)
+        krc_configure_fs_root(kr16_file_layer)
         add_test(NAME krc_run_kr16_file_layer
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR16_VM}
                     -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_file_layer.kex
-                    -DFS_ROOT=${KRC_TEST_OUTPUT_DIR}
+                    -DFS_ROOT=${KRC_FS_ROOT}
                     -DFS_QUOTA=1G
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
@@ -557,14 +572,13 @@ if(TARGET krc)
                         -DSYSROOT=${KRC_STAGE_SYSROOT}
                         -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio.kex
                         -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr16ShippedFileio.cmake)
-            file(MAKE_DIRECTORY
-                "${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio_root")
+            krc_configure_fs_root(kr16_shipped_fileio)
             add_test(NAME krc_run_kr16_shipped_fileio
                 COMMAND ${CMAKE_COMMAND}
                         -DVM=${KRC_KR16_VM}
                         -DIMAGE=${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio.kex
                         -DEXPECT_EXIT=0
-                        -DFS_ROOT=${KRC_TEST_OUTPUT_DIR}/kr16_shipped_fileio_root
+                        -DFS_ROOT=${KRC_FS_ROOT}
                         -P ${CMAKE_SOURCE_DIR}/cmake/RunKr16Image.cmake)
             set_tests_properties(krc_run_kr16_shipped_fileio PROPERTIES
                 DEPENDS krc_kr16_link_shipped_fileio)
@@ -2037,12 +2051,12 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_debug_names PROPERTIES
             DEPENDS krc_link_debug_names)
-        file(MAKE_DIRECTORY "${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_root")
+        krc_configure_fs_root(div_and_vsprintf)
         add_test(NAME krc_run_div_and_vsprintf
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}
                     -DIMAGE=${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_linked.k32
-                    -DFS_ROOT=${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_root
+                    -DFS_ROOT=${KRC_FS_ROOT}
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_div_and_vsprintf PROPERTIES
