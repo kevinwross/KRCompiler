@@ -344,3 +344,9 @@ TEST_CASE("kr216 assembles a multi-line source with labels and directives") {
     CHECK(program.bytes[7] == 0x12);
     CHECK_FALSE(assemble_text(".globl x", program, error));
 }
+TEST_CASE("kr216 refuses a duplicate label") {
+    AssembledProgram program;
+    std::string error;
+    CHECK_FALSE(assemble_text("a:\n a:\n nop\n", program, error));
+    CHECK(error.find("duplicate") != std::string::npos);
+}

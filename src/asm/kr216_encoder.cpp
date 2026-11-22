@@ -900,6 +900,12 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
                 error = "kr216: empty label";
                 return false;
             }
+            for (const auto& existing : out.labels) {
+                if (existing.first == name) {
+                    error = "kr216: duplicate label '" + std::string(name) + "'";
+                    return false;
+                }
+            }
             out.labels.emplace_back(std::string(name), static_cast<std::uint16_t>(out.bytes.size()));
             continue;
         }
