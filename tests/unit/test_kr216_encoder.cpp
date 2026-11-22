@@ -350,3 +350,29 @@ TEST_CASE("kr216 refuses a duplicate label") {
     CHECK_FALSE(assemble_text("a:\n a:\n nop\n", program, error));
     CHECK(error.find("duplicate") != std::string::npos);
 }
+
+TEST_CASE("kr216 refuses an immediate operand on absolute jmp") {
+    Encoding out;
+    std::string error;
+    CHECK_FALSE(assemble_line("jmp #5", out, error));
+    CHECK(error.find("malformed") != std::string::npos);
+    CHECK(error.find("label") != std::string::npos);
+}
+
+TEST_CASE("kr216 reports an undefined label in an absolute jump") {
+    AssembledProgram program;
+    std::string error;
+    CHECK_FALSE(assemble_text("jmp missing\n", program, error));
+    CHECK(error.find("undefined label 'missing'") != std::string::npos);
+}
+
+TEST_CASE("kr216 resolves a forward call label") {
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text("call done\nnop\ndone:\n", program, error));
+    REQUIRE(program.bytes.size() == 4);
+    CHECK(program.bytes[0] == 0xD0);
+    CHECK(program.bytes[1] == 0x04);
+    CHECK(program.bytes[2] == 0x00);
+    CHECK(program.bytes[3] == 0x71);
+}

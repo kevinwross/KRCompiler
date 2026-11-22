@@ -473,6 +473,29 @@ std::string_view trim(std::string_view text) {
     return text;
 }
 
+bool unknown_mnemonic(std::string_view mnemonic, std::string& error) {
+    error = "kr216: unknown mnemonic '" + std::string(mnemonic) + "'";
+    return false;
+}
+
+// A label is a name the multi-line layer records before a `:`; the first character cannot be a
+// digit or a sign, so an absolute operand that starts that way is refused as malformed rather
+// than accepted as a label.
+bool is_label_name(std::string_view text) {
+    if (text.empty()) return false;
+    const auto first = [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '.';
+    };
+    const auto rest = [&first](char c) {
+        return first(c) || (c >= '0' && c <= '9');
+    };
+    if (!first(text.front())) return false;
+    for (const char c : text.substr(1)) {
+        if (!rest(c)) return false;
+    }
+    return true;
+}
+
 // Parses `[rB+d8]` into its base register and displacement. Returns false for anything else, so
 // an unimplemented operand shape is refused rather than mis-assembled.
 bool parse_bracketed_displacement(std::string_view text, std::uint8_t& base, std::int32_t& disp) {
@@ -490,6 +513,7 @@ bool parse_bracketed_displacement(std::string_view text, std::uint8_t& base, std
 }  // namespace
 
 bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
+    out = Encoding{};
     line = trim(line);
     if (line.empty()) {
         error = "kr216: empty line";
@@ -511,8 +535,7 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         for (const auto& entry : kSystem) {
             if (mnemonic == entry.name) return encode_system(entry.opcode, out, error);
         }
-        error = "kr216: unknown mnemonic '" + mnemonic + "'";
-        return false;
+        return unknown_mnemonic(mnemonic, error);
     }
 
     const std::size_t comma = operands.find(',');
@@ -835,21 +858,31 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
                              error);
     }
     if (mnemonic == "jmp" || mnemonic == "call") {
+        const bool is_jump = mnemonic == "jmp";
         std::uint8_t target = 0;
         if (parse_register(first, target)) {
-            if (mnemonic == "jmp") return encode_compact(31, target, 0, out, error);
-            return encode_call_register(target, out, error);
+            return is_jump ? encode_compact(31, target, 0, out, error)
+                           : encode_call_register(target, out, error);
         }
-        std::uint16_t address = 0;
-        if (!parse_number(first, address)) {
-            error = "kr216: " + mnemonic + " needs an address";
+        if (!first.empty() && first.front() == '#') {
+            error = "kr216: " + mnemonic +
+                    " operand is malformed: '#' introduces an immediate, not a label";
             return false;
         }
-        if (mnemonic == "jmp") return encode_normal_jmp_absolute(address, out);
-        return encode_normal_call_absolute(address, out);
+        std::uint16_t address = 0;
+        if (parse_number(first, address)) {
+            return is_jump ? encode_normal_jmp_absolute(address, out)
+                           : encode_normal_call_absolute(address, out);
+        }
+        if (!is_label_name(first)) {
+            error = "kr216: " + mnemonic + " needs an address or a label";
+            return false;
+        }
+        out.label = std::string(first);
+        return is_jump ? encode_normal_jmp_absolute(0, out)
+                       : encode_normal_call_absolute(0, out);
     }
-    error = "kr216: unknown mnemonic '" + mnemonic + "'";
-    return false;
+    return unknown_mnemonic(mnemonic, error);
 }
 
 namespace {
@@ -887,6 +920,7 @@ std::vector<std::string_view> split_commas(std::string_view text) {
 bool assemble_text(std::string_view source, AssembledProgram& out, std::string& error) {
     out.bytes.clear();
     out.labels.clear();
+    std::vector<std::pair<std::size_t, std::string>> fixups;
     for (const std::string_view raw : split_lines(source)) {
         std::string_view line = raw;
         const std::size_t comment = line.find(';');
@@ -934,7 +968,30 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
 
         Encoding encoding;
         if (!assemble_line(line, encoding, error)) return false;
+        if (!encoding.label.empty()) {
+            fixups.emplace_back(out.bytes.size(), std::move(encoding.label));
+        }
         out.bytes.insert(out.bytes.end(), encoding.bytes, encoding.bytes + encoding.size);
+    }
+
+    // The address field was emitted as zero. Patch it only after every label has been recorded,
+    // so a forward reference resolves and a missing label cannot silently become address zero.
+    for (const auto& fixup : fixups) {
+        bool found = false;
+        std::uint16_t address = 0;
+        for (const auto& label : out.labels) {
+            if (label.first == fixup.second) {
+                address = label.second;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            error = "kr216: undefined label '" + fixup.second + "'";
+            return false;
+        }
+        out.bytes[fixup.first + 1] = static_cast<std::uint8_t>(address & 0xFF);
+        out.bytes[fixup.first + 2] = static_cast<std::uint8_t>(address >> 8);
     }
     return true;
 }

@@ -16,6 +16,10 @@ inline constexpr std::uint8_t kStackPointer = 15;
 struct Encoding {
     std::uint8_t bytes[6] = {};
     std::uint8_t size = 0;
+    // Set when an absolute `jmp`/`call` names a label instead of a number. The address field is
+    // emitted as zero and `assemble_text` patches it after the whole source has been read, so a
+    // forward reference resolves without a second pass over the line assembler.
+    std::string label;
 };
 
 // Section 5, Register class: `LD Rd, #imm16` (0x50+R), `LD Rd, [addr16]` (0x60+R),
@@ -109,8 +113,9 @@ struct Encoding {
 [[nodiscard]] bool assemble_line(std::string_view line, Encoding& out, std::string& error);
 
 // The multi-line layer: `;` comments, `name:` labels, `.byte`/`.word` directives and one
-// instruction per line. Labels are recorded with the offset they name; resolving a label in an
-// operand is the next step and is refused until then.
+// instruction per line. Labels are recorded with the offset they name; an absolute `jmp`/`call`
+// label operand is patched in a second pass after the whole source has been read, so a forward
+// reference resolves and an undefined label is an error.
 struct AssembledProgram {
     std::vector<std::uint8_t> bytes;
     std::vector<std::pair<std::string, std::uint16_t>> labels;
