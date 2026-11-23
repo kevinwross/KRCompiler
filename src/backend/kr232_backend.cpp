@@ -1,8 +1,10 @@
 #include "kr232_backend.h"
 
 #include <algorithm>
+#include <cstring>
 #include <sstream>
 #include <unordered_map>
+#include <vector>
 
 namespace krc::backend {
 namespace {
@@ -139,6 +141,37 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     debug_info_.clear();
     std::ostringstream out;
     out << "; kr232 backend, optimization level " << static_cast<int>(level_) << "\n";
+    // The floating-point constants this module uses, each one an eight-byte entry
+    // in `.data`; a constant is loaded with `fld` from its address.
+    std::vector<double> fp_constants;
+    for (const auto& function : module_.functions()) {
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                for (const ir::Value* operand : instruction->operands) {
+                    const auto* constant = dynamic_cast<const ir::ConstantFloat*>(operand);
+                    if (constant == nullptr) {
+                        continue;
+                    }
+                    if (std::find(fp_constants.begin(), fp_constants.end(), constant->value) ==
+                        fp_constants.end()) {
+                        fp_constants.push_back(constant->value);
+                    }
+                }
+            }
+        }
+    }
+    if (!fp_constants.empty()) {
+        out << ".data\n";
+        for (const double value : fp_constants) {
+            std::ostringstream label;
+            label << ".Lfp" << std::hex << std::hash<double>{}(value);
+            out << label.str() << ":\n";
+            std::uint64_t bits = 0;
+            std::memcpy(&bits, &value, sizeof bits);
+            out << "  .word " << (bits & 0xFFFFFFFFu) << "\n";
+            out << "  .word " << ((bits >> 32) & 0xFFFFFFFFu) << "\n";
+        }
+    }
     if (!module_.globals().empty()) {
         out << ".data\n";
         for (const auto& global : module_.globals()) {
@@ -460,6 +493,21 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: load without an address";
                             return std::nullopt;
                         }
+                        // A floating-point value is two words: frame traffic uses
+                        // `fld`/`fst` through a computed address, because the FP
+                        // forms take a base register rather than a frame offset.
+                        if (instruction->type != nullptr &&
+                            instruction->type->kind == ir::TypeKind::Float) {
+                            materialize(instruction->operands[0], kAddressReg);
+                            out << "  fld f0, [r8]\n";
+                            const auto slot = slot_of.find(instruction.get());
+                            if (slot != slot_of.end()) {
+                                out << "  mov r8, r13\n";
+                                out << "  sub r8, #" << (4u + 4u * slot->second) << "\n";
+                                out << "  fst f0, [r8]\n";
+                            }
+                            break;
+                        }
                         // A record value is its address: loading one names where it
                         // lives rather than copying its bytes.
                         if (instruction->type != nullptr &&
@@ -490,6 +538,15 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: store without an address";
                             return std::nullopt;
+                        }
+                        // A floating-point store moves the value through f0 and
+                        // writes eight bytes at the computed address.
+                        if (instruction->operands[0]->type != nullptr &&
+                            instruction->operands[0]->type->kind == ir::TypeKind::Float) {
+                            materialize_float(instruction->operands[0], 0);
+                            materialize(instruction->operands[1], kAddressReg);
+                            out << "  fst f0, [r8]\n";
+                            break;
                         }
                         // A record store copies its bytes: the value is an address
                         // and so is the destination.
@@ -555,7 +612,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         materialize_float(instruction->operands[0], 0);
                         out << "  " << (instruction->opcode == ir::Opcode::FPToSI ? "f2i" : "f2u")
-                            << " f6, r6\n";
+                            << " r6, f0\n";
                         store_result(instruction.get(), kValueReg);
                         break;
                     }
@@ -567,8 +624,12 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         materialize(instruction->operands[0], kValueReg);
                         out << "  " << (instruction->opcode == ir::Opcode::SIToFP ? "i2f" : "u2f")
-                            << " r6, f0\n";
-                        out << "  fst f0, " << slot_address(slot_of.at(instruction.get())) << "\n";
+                            << " f0, r6\n";
+                        // The FP store forms take a base register, not a frame offset.
+                        out << "  mov r8, r13\n";
+                        out << "  sub r8, #" << (4u + 4u * slot_of.at(instruction.get()))
+                            << "\n";
+                        out << "  fst f0, [r8]\n";
                         break;
                     }
                     case ir::Opcode::Add:
