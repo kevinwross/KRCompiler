@@ -235,7 +235,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                        : 1u;
         };
         std::unordered_map<const ir::Value*, std::uint32_t> slot_of;
-        std::uint32_t next_slot = 0;
+        // Slot 0 is left unused when the function holds an eight-byte value: a
+        // double stored at FP-4 would cover FP+3 and overwrite the saved frame
+        // pointer that ENTER writes at [FP]. Starting at one puts the first slot
+        // at FP-8, so such a value spans FP-8..FP-1 and never reaches it. A
+        // function with only four-byte values keeps frame 0 for an empty body.
+        bool holds_eight_bytes = false;
+        for (const auto& parameter : function->parameters) {
+            holds_eight_bytes = holds_eight_bytes || type_bytes(parameter->type) > 4u;
+        }
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode == ir::Opcode::Alloca &&
+                    type_bytes(instruction->allocated_type) > 4u) {
+                    holds_eight_bytes = true;
+                }
+            }
+        }
+        std::uint32_t next_slot = holds_eight_bytes ? 1u : 0u;
         for (const auto& block : function->blocks) {
             for (const auto& instruction : block->instructions) {
                 if (instruction->opcode == ir::Opcode::Alloca) {
