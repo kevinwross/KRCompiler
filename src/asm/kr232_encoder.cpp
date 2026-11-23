@@ -145,4 +145,127 @@ std::optional<EncodedInstruction> encode_compact_register(unsigned op, unsigned 
     return out;
 }
 
+std::optional<EncodedInstruction> encode_normal(unsigned op, unsigned rd, unsigned rb,
+                                                std::int32_t immediate, std::string& error) {
+    if (op > 31) {
+        error = "normal op out of range";
+        return std::nullopt;
+    }
+    if (!check_register(rd, error)) {
+        return std::nullopt;
+    }
+    if (!check_register(rb, error)) {
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = static_cast<std::uint8_t>(0xC0u | op);
+    out.length = 3;
+
+    const auto payload = static_cast<std::uint8_t>((rd << 4) | rb);
+    const auto d8 = [&](std::int32_t value) {
+        if (value < -128 || value > 127) {
+            error = "displacement out of the signed byte range";
+            return false;
+        }
+        out.bytes[2] = static_cast<std::uint8_t>(static_cast<std::int8_t>(value));
+        return true;
+    };
+    const auto imm8 = [&](std::int32_t value, std::int32_t low, std::int32_t high) {
+        if (value < low || value > high) {
+            error = "immediate out of range for this opcode";
+            return false;
+        }
+        out.bytes[2] = static_cast<std::uint8_t>(value & 0xFF);
+        return true;
+    };
+    const auto word16 = [&](std::int32_t value, std::int32_t low, std::int32_t high) {
+        if (value < low || value > high) {
+            error = "16-bit operand out of range for this opcode";
+            return false;
+        }
+        const auto bits = static_cast<std::uint16_t>(value & 0xFFFF);
+        out.bytes[1] = static_cast<std::uint8_t>(bits & 0xFF);
+        out.bytes[2] = static_cast<std::uint8_t>((bits >> 8) & 0xFF);
+        return true;
+    };
+
+    switch (op) {
+        case 0:  // LD Rd, [Rb+d8]
+        case 1:  // ST [Rb+d8], Rs
+        case 2:  // LDBU
+        case 3:  // LDBS
+        case 4:  // STB
+        case 14:  // LEA
+        case 29:  // LDHU
+        case 30:  // STH
+        case 31:  // LDHS
+            out.bytes[1] = payload;
+            if (!d8(immediate)) {
+                return std::nullopt;
+            }
+            return out;
+        case 5:  // LD Rd, #s8
+        case 7:  // ADD
+        case 8:  // SUB
+        case 9:  // CMP
+            out.bytes[1] = static_cast<std::uint8_t>(rd << 4);
+            if (!imm8(immediate, -128, 127)) {
+                return std::nullopt;
+            }
+            return out;
+        case 6:   // LD Rd, #u8
+        case 10:  // CMP Rd, #u8
+        case 11:  // AND
+        case 12:  // OR
+        case 13:  // XOR
+            out.bytes[1] = static_cast<std::uint8_t>(rd << 4);
+            if (!imm8(immediate, 0, 255)) {
+                return std::nullopt;
+            }
+            return out;
+        case 20:  // SHL
+        case 21:  // SHR
+        case 22:  // SAR
+            out.bytes[1] = static_cast<std::uint8_t>(rd << 4);
+            if (!imm8(immediate, 0, 31)) {
+                return std::nullopt;
+            }
+            return out;
+        case 15:  // JMP rel16
+        case 16:  // CALL rel16
+            out.bytes[1] = 0;
+            return word16(immediate, -32768, 32767) ? std::optional<EncodedInstruction>(out)
+                                                    : std::nullopt;
+        case 19:  // SETcc Rd
+            if (rb > 13) {
+                error = "setcc condition 14 or 15 is illegal";
+                return std::nullopt;
+            }
+            out.bytes[1] = payload;
+            out.bytes[2] = 0;
+            return out;
+        case 23:  // PUSH #mask16
+        case 24:  // POP #mask16
+        case 28:  // LEAVE #mask16
+            out.bytes[1] = 0;
+            return word16(immediate, 0, 0xFFFF) ? std::optional<EncodedInstruction>(out)
+                                                : std::nullopt;
+        case 25:  // DIV Rd, Rb
+        case 26:  // DIVS Rd, Rb
+            out.bytes[1] = payload;
+            out.bytes[2] = 0;
+            return out;
+        case 17:  // LDBU Rd, [PC+d8]
+        case 18:  // LDBS Rd, [PC+d8]
+        case 27:  // SXTB Rd
+            out.bytes[1] = static_cast<std::uint8_t>(rd << 4);
+            if (!d8(op == 27 ? 0 : immediate)) {
+                return std::nullopt;
+            }
+            return out;
+    }
+    error = "unknown normal opcode";
+    return std::nullopt;
+}
+
 }  // namespace krc::asm_kr232

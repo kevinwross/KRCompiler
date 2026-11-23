@@ -61,4 +61,13 @@ enum class ShortOp : std::uint8_t {
                                                                         unsigned rb,
                                                                         std::string& error);
 
+// Normal class of ISA §7: three bytes, opcode then a payload whose layout depends
+// on the opcode. `rd` is the data register (for stores, the stored register), `rb`
+// the base or second register, and `immediate` the d8, imm8, rel16 or mask16 that
+// the opcode calls for. Fields an opcode does not use are ignored.
+[[nodiscard]] std::optional<EncodedInstruction> encode_normal(unsigned op, unsigned rd,
+                                                              unsigned rb,
+                                                              std::int32_t immediate,
+                                                              std::string& error);
+
 }  // namespace krc::asm_kr232

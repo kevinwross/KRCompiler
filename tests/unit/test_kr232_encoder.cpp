@@ -9,6 +9,7 @@ using krc::asm_kr232::encode_compact_branch;
 using krc::asm_kr232::encode_compact_register;
 using krc::asm_kr232::encode_ld_absolute;
 using krc::asm_kr232::encode_ld_immediate;
+using krc::asm_kr232::encode_normal;
 using krc::asm_kr232::encode_short;
 using krc::asm_kr232::encode_st_absolute;
 using krc::asm_kr232::EncodedInstruction;
@@ -73,6 +74,33 @@ TEST_CASE("KR232 encoders reject out-of-range operands") {
     CHECK(!encode_compact_branch(16, 0, error).has_value());
     CHECK(!encode_compact_branch(0, 256, error).has_value());
     CHECK(!encode_compact_branch(0, -257, error).has_value());
+}
+
+TEST_CASE("KR232 normal forms encode as Appendix A shows") {
+    std::string error;
+    expect_bytes(encode_normal(0, 2, 3, 8, error), {0xC0, 0x23, 0x08});   // ld r2,[r3+8]
+    expect_bytes(encode_normal(1, 2, 3, 8, error), {0xC1, 0x23, 0x08});   // st [r3+8],r2
+    expect_bytes(encode_normal(5, 2, 0, 5, error), {0xC5, 0x20, 0x05});   // ld r2,#5
+    expect_bytes(encode_normal(6, 2, 0, 0x80, error), {0xC6, 0x20, 0x80});  // ld r2,#0x80
+    expect_bytes(encode_normal(7, 2, 0, 7, error), {0xC7, 0x20, 0x07});   // add r2,#7
+    expect_bytes(encode_normal(14, 2, 3, 8, error), {0xCE, 0x23, 0x08});  // lea r2,[r3+8]
+    expect_bytes(encode_normal(15, 0, 0, 6, error), {0xCF, 0x06, 0x00});  // jmp +6
+    expect_bytes(encode_normal(16, 0, 0, 6, error), {0xD0, 0x06, 0x00});  // call +6
+    expect_bytes(encode_normal(19, 2, 11, 0, error), {0xD3, 0x2B, 0x00});  // setlt r2
+    expect_bytes(encode_normal(20, 2, 0, 3, error), {0xD4, 0x20, 0x03});  // shl r2,#3
+    expect_bytes(encode_normal(23, 0, 0, 0x0300, error), {0xD7, 0x00, 0x03});  // push #0x0300
+    expect_bytes(encode_normal(25, 2, 3, 0, error), {0xD9, 0x23, 0x00});  // div r2,r3
+    expect_bytes(encode_normal(27, 2, 0, 0, error), {0xDB, 0x20, 0x00});  // sxtb r2
+    expect_bytes(encode_normal(28, 0, 0, 0, error), {0xDC, 0x00, 0x00});  // leave #0
+    expect_bytes(encode_normal(29, 2, 3, 8, error), {0xDD, 0x23, 0x08});  // ldhu r2,[r3+8]
+
+    // Each per-opcode range is enforced.
+    CHECK(!encode_normal(0, 2, 3, 200, error).has_value());    // d8 above 127
+    CHECK(!encode_normal(11, 2, 0, 256, error).has_value());   // u8 above 255
+    CHECK(!encode_normal(20, 2, 0, 32, error).has_value());    // shift count 32
+    CHECK(!encode_normal(19, 2, 14, 0, error).has_value());    // setcc 14 is call
+    CHECK(!encode_normal(15, 0, 0, 40000, error).has_value()); // rel16 above range
+    CHECK(!encode_normal(23, 0, 0, 0x10000, error).has_value());  // mask above 16 bits
 }
 
 TEST_CASE("KR232 compact register forms encode as Appendix A shows") {
