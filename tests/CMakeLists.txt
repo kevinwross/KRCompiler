@@ -238,6 +238,18 @@ if(TARGET krc)
         else()
             set(KR232_EXIT300_PROCESS_ARG)
         endif()
+        # A status above 2^31: the machine keeps the whole word, and only the
+        # printed status can carry it because a POSIX process status cannot.
+        add_test(NAME krc_kr232_status_high
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/status-high.s
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_STATUS=2147483653
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         # An array global must not overlap the globals after it.
         add_test(NAME krc_kr232_globals
             COMMAND ${CMAKE_COMMAND}

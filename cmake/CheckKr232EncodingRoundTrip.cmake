@@ -1,13 +1,11 @@
-# Assembles a list of address spellings, disassembles the image with the same
-# disassembler a reader uses, and requires each spelling to come back verbatim.
+# Assembles address spellings, disassembles the image with the same disassembler
+# a reader uses, and requires each spelling to come back as the form the table
+# names.
 #
-# This is the test the silent encoding defects asked for: `[sp]` assembled to
-# base r0 for a whole milestone, and no unit test could see it because the
-# instruction was legal and the address was simply wrong.
-#
-# `[sp+0]` and `[rN+0]` are not listed: they canonicalise to the compact form
-# without a displacement, which is why a verbatim check would fail them; `[sp]`
-# is the entry that covers them.
+# A spelling with a zero displacement canonicalises: `[sp+0]` assembles to the
+# compact form and disassembles as `[sp]`. That is a rule, not an accident, so it
+# is written in the table rather than left to a comment -- the earlier version
+# simply omitted those rows and a reader could not tell whether they were tested.
 #
 # Required: KRC, KRLD, DIS, WORK
 
@@ -20,25 +18,35 @@ foreach(path IN ITEMS "${KRC}" "${KRLD}" "${DIS}")
     endif()
 endforeach()
 
+# source|expected
 set(spellings
-    "ld r2, [r3]"
-    "ld r2, [r3+8]"
-    "st [r3], r2"
-    "st [r3+8], r2"
-    "ld r2, [sp]"
-    "ld r2, [sp+8]"
-    "ld r2, [sp-8]"
-    "st [sp], r2"
-    "st [sp+8], r2"
-    "st [sp-8], r2"
-    "ld r2, [pc+8]")
+    "ld r2, [r3]|ld r2, [r3]"
+    "ld r2, [r3+0]|ld r2, [r3]"
+    "ld r2, [r3+8]|ld r2, [r3+8]"
+    "st [r3], r2|st [r3], r2"
+    "st [r3+8], r2|st [r3+8], r2"
+    "ld r2, [sp]|ld r2, [sp]"
+    "ld r2, [sp+0]|ld r2, [sp]"
+    "ld r2, [sp+4]|ld r2, [sp+4]"
+    "ld r2, [sp-4]|ld r2, [sp-4]"
+    "ld r2, [sp+8]|ld r2, [sp+8]"
+    "ld r2, [sp-8]|ld r2, [sp-8]"
+    "st [sp], r2|st [sp], r2"
+    "st [sp+0], r2|st [sp], r2"
+    "st [sp+4], r2|st [sp+4], r2"
+    "st [sp-4], r2|st [sp-4], r2"
+    "st [sp+8], r2|st [sp+8], r2"
+    "st [sp-8], r2|st [sp-8], r2"
+    "ld r2, [pc+8]|ld r2, [pc+8]")
 
 list(LENGTH spellings spelling_count)
 file(MAKE_DIRECTORY "${WORK}")
 
 set(body "")
-foreach(spelling IN LISTS spellings)
-    string(APPEND body "  ${spelling}\n")
+foreach(entry IN LISTS spellings)
+    string(REPLACE "|" ";" fields "${entry}")
+    list(GET fields 0 source)
+    string(APPEND body "  ${source}\n")
 endforeach()
 file(WRITE "${WORK}/roundtrip.s"
      ".globl _start\n.text\n_start:\n${body}  ld r7, #0\n  sys\n")
@@ -63,10 +71,13 @@ if(NOT disassembled EQUAL 0)
 endif()
 
 set(failures "")
-foreach(spelling IN LISTS spellings)
-    string(FIND "${disassembly}" "${spelling}" at)
+foreach(entry IN LISTS spellings)
+    string(REPLACE "|" ";" fields "${entry}")
+    list(GET fields 0 source)
+    list(GET fields 1 expected)
+    string(FIND "${disassembly}" "${expected}" at)
     if(at EQUAL -1)
-        string(APPEND failures "  '${spelling}' did not come back verbatim\n")
+        string(APPEND failures "  '${source}' should come back as '${expected}'\n")
     endif()
 endforeach()
 if(NOT failures STREQUAL "")
@@ -74,4 +85,4 @@ if(NOT failures STREQUAL "")
         "these spellings do not survive assemble -> disassemble:\n${failures}"
         "disassembly was:\n${disassembly}")
 endif()
-message(STATUS "all ${spelling_count} spellings round-trip")
+message(STATUS "all ${spelling_count} spellings come back as the table says")
