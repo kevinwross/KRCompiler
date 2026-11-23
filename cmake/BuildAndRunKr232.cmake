@@ -7,6 +7,11 @@
 #
 # Required: KRC, KRLD, VM, CRT0, SOURCE, WORK, EXPECT_EXIT
 
+set(include_args)
+if(DEFINED INCLUDE AND NOT INCLUDE STREQUAL "")
+    set(include_args -I "${INCLUDE}")
+endif()
+
 foreach(required KRC KRLD VM CRT0 SOURCE WORK EXPECT_EXIT)
     if(NOT DEFINED ${required})
         message(FATAL_ERROR "${required} is required")
@@ -20,7 +25,7 @@ if(NOT result EQUAL 0)
     message(FATAL_ERROR "assembling crt0 failed: ${output}${error}")
 endif()
 
-execute_process(COMMAND "${KRC}" -c --target kr232 "${SOURCE}"
+execute_process(COMMAND "${KRC}" -c --target kr232 ${include_args} "${SOURCE}"
                         -o "${WORK}/kr232_program.o"
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
@@ -29,7 +34,7 @@ endif()
 
 set(link_inputs "${WORK}/kr232_crt0.o" "${WORK}/kr232_program.o")
 if(DEFINED LIBC AND NOT LIBC STREQUAL "")
-    execute_process(COMMAND "${KRC}" -c --target kr232 "${LIBC}"
+    execute_process(COMMAND "${KRC}" -c --target kr232 ${include_args} "${LIBC}"
                             -o "${WORK}/kr232_libc.o"
                     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
     if(NOT result EQUAL 0)
@@ -51,12 +56,20 @@ set(run_args)
 if(DEFINED EXPECT_TRANSCRIPT AND NOT EXPECT_TRANSCRIPT STREQUAL "")
     list(APPEND run_args --transcript)
 endif()
+if(DEFINED EXPECT_FRAME AND NOT EXPECT_FRAME STREQUAL "")
+    list(APPEND run_args --frame-hash)
+endif()
 
 execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.k232" --max-steps 200000
                         ${run_args}
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL EXPECT_EXIT)
     message(FATAL_ERROR "expected exit ${EXPECT_EXIT}, got ${result}\n${output}${error}")
+endif()
+if(DEFINED EXPECT_FRAME AND NOT EXPECT_FRAME STREQUAL "")
+    if(NOT output MATCHES "frame ${EXPECT_FRAME}")
+        message(FATAL_ERROR "expected frame ${EXPECT_FRAME}, got:\n${output}${error}")
+    endif()
 endif()
 if(DEFINED EXPECT_TRANSCRIPT AND NOT EXPECT_TRANSCRIPT STREQUAL "")
     if(NOT output MATCHES "${EXPECT_TRANSCRIPT}")

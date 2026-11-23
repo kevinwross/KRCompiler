@@ -271,6 +271,23 @@ if(TARGET krc)
                     -DEXPECT_TRANSCRIPT=Hi!
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
+        # The drawing packages: gfx_fill_rect into the back surface, then a flip.
+        # The hash differs from a flip-only program's, which is what makes this
+        # evidence that the pixels land rather than that the program halted.
+        add_test(NAME krc_kr232_run_gfx_draw
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/gfx.c
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_draw.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DINCLUDE=${CMAKE_SOURCE_DIR}/sysroot/kr232/include
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_FRAME=b93590ec9d504765
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
         # Two builds of one program must be byte-identical: a frame hash or an
         # image hash is only meaningful if the image is reproducible.
         add_test(NAME krc_kr232_determinism

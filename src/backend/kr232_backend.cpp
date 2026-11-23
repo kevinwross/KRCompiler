@@ -41,9 +41,12 @@ std::uint32_t type_bytes(const ir::Type* type) {
     return 0;
 }
 
-// The registers this first pass uses: R6 and R7 are caller-saved scratch, and R2
-// is the return value.
-constexpr unsigned kScratch[] = {6, 7};
+// R6 is the value scratch and R8 the address scratch. They are separate on
+// purpose: materialising an address is `ld`, which overwrites its register, and a
+// shared pool let that overwrite a value four times.
+constexpr unsigned kValueReg = 6;
+constexpr unsigned kSecondReg = 7;
+constexpr unsigned kAddressReg = 8;
 
 }  // namespace
 
@@ -52,22 +55,28 @@ Kr232Backend::Kr232Backend(const ir::Module& module, const target::TargetProfile
     : module_(module), profile_(profile), level_(level) {}
 
 std::uint32_t Kr232Backend::frame_bytes(const ir::Function& function) const {
-    std::uint32_t bytes = 0;
+    // Every local and every value that must survive to a later instruction gets a
+    // slot. Spilling everything is slower than a register allocator and it is
+    // correct, which is the trade this backend makes until one exists.
+    std::uint32_t slots = 0;
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
             if (instruction->opcode == ir::Opcode::Alloca) {
-                bytes += align_frame(type_bytes(instruction->allocated_type));
+                slots += type_bytes(instruction->allocated_type);
+            } else if (instruction->type != nullptr &&
+                       instruction->type->kind != ir::TypeKind::Void) {
+                slots += 4;
             }
         }
     }
-    return align_frame(bytes);
+    slots += static_cast<std::uint32_t>(function.parameters.size()) * 4u;
+    return align_frame(slots);
 }
 
 std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     debug_info_.clear();
     std::ostringstream out;
     out << "; kr232 backend, optimization level " << static_cast<int>(level_) << "\n";
-    // Globals live in `.data`; each is one word unless it holds an array of bytes.
     if (!module_.globals().empty()) {
         out << ".data\n";
         for (const auto& global : module_.globals()) {
@@ -85,103 +94,121 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             }
         }
     }
+
     for (const auto& function : module_.functions()) {
-        // A declaration names a function defined elsewhere; emitting a body for
-        // it would define a duplicate symbol.
         if (function->declaration) {
             continue;
         }
-        const std::uint32_t frame = align_frame(frame_bytes(*function));
         const std::string name = function->name;
         out << ".globl " << name << "\n";
         out << ".text\n";
         out << name << ":\n";
-        // ENTER saves FP, pushes the mask and reserves the frame; reset SP is
-        // 0x08000000, so nothing sets the stack up.
-        out << "  enter #" << frame << ", #0\n";
 
+        // Slots: allocas first (their address is FP-relative), then one slot per
+        // value, then one per parameter.
         std::unordered_map<const ir::Value*, std::uint32_t> slot_of;
-        std::unordered_map<const ir::Value*, unsigned> reg_of;
         std::uint32_t next_slot = 0;
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode == ir::Opcode::Alloca) {
+                    slot_of.emplace(instruction.get(), next_slot);
+                    next_slot += align_frame(type_bytes(instruction->allocated_type)) / 4u;
+                }
+            }
+        }
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode != ir::Opcode::Alloca && instruction->type != nullptr &&
+                    instruction->type->kind != ir::TypeKind::Void) {
+                    slot_of.emplace(instruction.get(), next_slot++);
+                }
+            }
+        }
+        for (const auto& parameter : function->parameters) {
+            slot_of.emplace(parameter.get(), next_slot++);
+        }
+        const std::uint32_t frame = align_frame(next_slot * 4u);
+
+        out << "  enter #" << frame << ", #0\n";
+        for (std::size_t i = 0; i < function->parameters.size(); ++i) {
+            const auto slot = slot_of.at(function->parameters[i].get());
+            out << "  st [r13-" << (4u + 4u * slot) << "], r"
+                << (2u + static_cast<unsigned>(i)) << "\n";
+        }
+
         std::uint32_t next_compare = 0;
-        unsigned next_scratch = 0;
-        bool returned = false;
-        // Branch targets are block labels, numbered in function order.
         std::unordered_map<const ir::BasicBlock*, std::size_t> block_index;
         for (std::size_t i = 0; i < function->blocks.size(); ++i) {
             block_index.emplace(function->blocks[i].get(), i);
         }
-        // Arguments arrive in R2-R5 (kr232 ABI), so a parameter's home register is
-        // the one the caller put it in. More than four needs the stack form the ABI
-        // also defines, which this pass does not emit yet.
-        {
-            if (function->parameters.size() > 4) {
-                error = "kr232 backend: more than four arguments needs the stack form";
-                return std::nullopt;
-            }
-            for (std::size_t i = 0; i < function->parameters.size(); ++i) {
-                reg_of.emplace(function->parameters[i].get(), 2u + static_cast<unsigned>(i));
-            }
-        }
-
-        // A value's home register. Constants get one too: materialising them is
-        // the caller's job, and a constant that is never materialised is how a
-        // `mov r6, r6` appears in the output.
-        const auto register_for = [&](const ir::Value* value) -> unsigned {
-            const auto found = reg_of.find(value);
-            if (found != reg_of.end()) {
-                return found->second;
-            }
-            const unsigned reg = kScratch[next_scratch % 2];
-            ++next_scratch;
-            reg_of.emplace(value, reg);
-            return reg;
+        const auto slot_address = [](std::uint32_t slot) {
+            return "[r13-" + std::to_string(4 + 4 * slot) + "]";
         };
         const auto materialize = [&](const ir::Value* value, unsigned reg) {
+            if (value == nullptr) {
+                out << "  ld r" << reg << ", #0\n";
+                return;
+            }
             if (const auto* constant = dynamic_cast<const ir::ConstantInt*>(value)) {
                 out << "  ld r" << reg << ", #" << constant->value << "\n";
                 return;
             }
-            // A global is addressed by its symbol: the store or load that follows
-            // uses the register the linker filled with the symbol's address.
             if (const auto* global = dynamic_cast<const ir::GlobalVariable*>(value)) {
                 out << "  ld r" << reg << ", #" << global->name << "\n";
                 return;
             }
-            const unsigned source = register_for(value);
-            if (source != reg) {
-                out << "  mov r" << reg << ", r" << source << "\n";
+            const auto slot = slot_of.find(value);
+            if (slot == slot_of.end()) {
+                out << "  ld r" << reg << ", #0\n";
+                return;
             }
+            out << "  ld r" << reg << ", " << slot_address(slot->second) << "\n";
         };
-        // A frame slot's address, as an assembler operand.
-        const auto slot_address = [&](std::uint32_t slot) {
-            return "[r13-" + std::to_string(4 + 4 * slot) + "]";
+        // A load or store address: FP-relative for an alloca, R8 for a computed
+        // pointer. Naming R8 keeps the address out of the value register.
+        const auto address_of = [&](const ir::Value* value) -> std::string {
+            if (const auto* instruction = dynamic_cast<const ir::Instruction*>(value)) {
+                if (instruction->opcode == ir::Opcode::Alloca) {
+                    const auto slot = slot_of.find(value);
+                    if (slot != slot_of.end()) {
+                        return slot_address(slot->second);
+                    }
+                }
+            }
+            materialize(value, kAddressReg);
+            return "[r8]";
+        };
+        const auto store_result = [&](const ir::Instruction* instruction, unsigned reg) {
+            if (instruction->type != nullptr && instruction->type->kind != ir::TypeKind::Void) {
+                const auto slot = slot_of.find(instruction);
+                if (slot != slot_of.end()) {
+                    out << "  st " << slot_address(slot->second) << ", r" << reg << "\n";
+                }
+            }
         };
 
         for (const auto& block : function->blocks) {
             out << ".Lbb" << block_index[block.get()] << ":\n";
             for (const auto& instruction : block->instructions) {
+                const auto operand = [&](std::size_t index, unsigned reg) {
+                    materialize(index < instruction->operands.size()
+                                    ? instruction->operands[index]
+                                    : nullptr,
+                                reg);
+                };
                 switch (instruction->opcode) {
-                    case ir::Opcode::Alloca: {
-                        slot_of.emplace(instruction.get(), next_slot++);
+                    case ir::Opcode::Alloca:
                         break;
-                    }
                     case ir::Opcode::Trunc:
                     case ir::Opcode::ZExt:
                     case ir::Opcode::SExt:
                     case ir::Opcode::BitCast:
                     case ir::Opcode::PtrToInt:
                     case ir::Opcode::IntToPtr: {
-                        // A cast changes nothing in a register: the store writes the
-                        // low bytes and the load sign- or zero-extends. The pointer
-                        // casts are the same: an address is a 32-bit value.
-                        if (instruction->operands.empty()) {
-                            error = "kr232 backend: cast without an operand";
-                            return std::nullopt;
+                        if (!instruction->operands.empty()) {
+                            operand(0, kValueReg);
+                            store_result(instruction.get(), kValueReg);
                         }
-                        const unsigned reg = register_for(instruction->operands[0]);
-                        materialize(instruction->operands[0], reg);
-                        reg_of[instruction.get()] = reg;
                         break;
                     }
                     case ir::Opcode::GetElementPtr: {
@@ -189,67 +216,46 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: getelementptr without a base";
                             return std::nullopt;
                         }
-                        // A constant index folds to one displacement: `&p[i]` where
-                        // i is known is the base plus i times the element size. A
-                        // variable index is scaled and added at run time.
-                        std::int64_t offset = 0;
-                        const auto* base_type =
-                            instruction->operands[0]->type != nullptr
-                                ? instruction->operands[0]->type->element
-                                : nullptr;
+                        const auto* base_type = instruction->operands[0]->type != nullptr
+                                                    ? instruction->operands[0]->type->element
+                                                    : nullptr;
                         const std::uint32_t element = type_bytes(base_type);
-                        const unsigned reg = register_for(instruction.get());
-                        materialize(instruction->operands[0], reg);
+                        const auto* base_instruction =
+                            dynamic_cast<const ir::Instruction*>(instruction->operands[0]);
+                        if (base_instruction != nullptr &&
+                            base_instruction->opcode == ir::Opcode::Alloca) {
+                            const auto slot = slot_of.find(base_instruction);
+                            out << "  ld r" << kValueReg << ", r13\n";
+                            out << "  sub r" << kValueReg << ", #" << (4u + 4u * slot->second)
+                                << "\n";
+                        } else {
+                            operand(0, kValueReg);
+                        }
                         for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
                             const auto* index =
                                 dynamic_cast<const ir::ConstantInt*>(instruction->operands[i]);
                             if (index != nullptr) {
-                                offset += index->value * static_cast<std::int64_t>(element);
+                                const std::int64_t constant =
+                                    index->value * static_cast<std::int64_t>(element);
+                                if (constant != 0) {
+                                    out << "  add r" << kValueReg << ", #" << constant << "\n";
+                                }
                                 continue;
                             }
-                            const unsigned other = reg == 6 ? 7 : 6;
-                            materialize(instruction->operands[i], other);
+                            operand(i, kSecondReg);
                             if (element == 2) {
-                                out << "  shl r" << other << ", #1\n";
+                                out << "  shl r" << kSecondReg << ", #1\n";
                             } else if (element == 4) {
-                                out << "  shl r" << other << ", #2\n";
+                                out << "  shl r" << kSecondReg << ", #2\n";
                             } else if (element == 8) {
-                                out << "  shl r" << other << ", #3\n";
+                                out << "  shl r" << kSecondReg << ", #3\n";
                             } else if (element != 1) {
                                 error = "kr232 backend: an element size that is not a power of two";
                                 return std::nullopt;
                             }
-                            out << "  add r" << reg << ", r" << other << "\n";
+                            out << "  add r" << kValueReg << ", r" << kSecondReg << "\n";
                         }
-                        if (offset != 0) {
-                            out << "  add r" << reg << ", #" << offset << "\n";
-                        }
-                        break;
-                    }
-                    case ir::Opcode::Store: {
-                        if (instruction->operands.size() < 2) {
-                            error = "kr232 backend: store without an address";
-                            return std::nullopt;
-                        }
-                        const auto slot = slot_of.find(instruction->operands[1]);
-                        const unsigned reg = register_for(instruction->operands[0]);
-                        materialize(instruction->operands[0], reg);
-                        const auto bytes = type_bytes(instruction->operands[0]->type);
-                        const bool in_frame = slot != slot_of.end();
-                        const unsigned addr_reg = in_frame ? 13u : (reg == 7 ? 6 : 7);
-                        if (!in_frame) {
-                            materialize(instruction->operands[1], addr_reg);
-                        }
-                        const std::string address = in_frame
-                                                        ? slot_address(slot->second)
-                                                        : "[r" + std::to_string(addr_reg) + "]";
-                        if (bytes == 1) {
-                            out << "  stb " << address << ", r" << reg << "\n";
-                        } else if (bytes == 2) {
-                            out << "  sth " << address << ", r" << reg << "\n";
-                        } else {
-                            out << "  st " << address << ", r" << reg << "\n";
-                        }
+                        store_result(instruction.get(), kValueReg);
                         break;
                     }
                     case ir::Opcode::Load: {
@@ -257,26 +263,39 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: load without an address";
                             return std::nullopt;
                         }
-                        const auto slot = slot_of.find(instruction->operands[0]);
-                        const unsigned reg = register_for(instruction.get());
                         const auto bytes = type_bytes(instruction->type);
-                        const bool in_frame = slot != slot_of.end();
-                        const unsigned load_addr = reg == 7 ? 6 : 7;
-                        if (!in_frame) {
-                            materialize(instruction->operands[0], load_addr);
-                        }
                         const bool is_signed =
                             instruction->type != nullptr && instruction->type->is_signed;
-                        const std::string address = in_frame ? slot_address(slot->second)
-                                                              : "[r" + std::to_string(load_addr) + "]";
+                        const std::string address = address_of(instruction->operands[0]);
                         if (bytes == 1) {
-                            out << (is_signed ? "  ldbs r" : "  ldbu r") << reg << ", " << address
-                                << "\n";
+                            out << (is_signed ? "  ldbs r" : "  ldbu r") << kValueReg << ", "
+                                << address << "\n";
                         } else if (bytes == 2) {
-                            out << (is_signed ? "  ldhs r" : "  ldhu r") << reg << ", " << address
-                                << "\n";
+                            out << (is_signed ? "  ldhs r" : "  ldhu r") << kValueReg << ", "
+                                << address << "\n";
                         } else {
-                            out << "  ld r" << reg << ", " << address << "\n";
+                            out << "  ld r" << kValueReg << ", " << address << "\n";
+                        }
+                        store_result(instruction.get(), kValueReg);
+                        break;
+                    }
+                    case ir::Opcode::Store: {
+                        if (instruction->operands.size() < 2) {
+                            error = "kr232 backend: store without an address";
+                            return std::nullopt;
+                        }
+                        const auto bytes = type_bytes(instruction->operands[0]->type);
+                        // The value first, then the address into R8: a global's
+                        // address is an `ld`, and loading it first would overwrite
+                        // the value.
+                        materialize(instruction->operands[0], kValueReg);
+                        const std::string address = address_of(instruction->operands[1]);
+                        if (bytes == 1) {
+                            out << "  stb " << address << ", r" << kValueReg << "\n";
+                        } else if (bytes == 2) {
+                            out << "  sth " << address << ", r" << kValueReg << "\n";
+                        } else {
+                            out << "  st " << address << ", r" << kValueReg << "\n";
                         }
                         break;
                     }
@@ -290,28 +309,14 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     case ir::Opcode::LShr:
                     case ir::Opcode::AShr:
                     case ir::Opcode::UDiv:
-                    case ir::Opcode::SDiv:
-                    case ir::Opcode::URem:
-                    case ir::Opcode::SRem: {
+                    case ir::Opcode::SDiv: {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: binary operation without two operands";
                             return std::nullopt;
                         }
-                        const ir::Value* left = instruction->operands[0];
-                        const ir::Value* right = instruction->operands[1];
-                        // Neither division has a remainder form and the two-register
-                        // model has no third scratch for quotient, product and
-                        // result; a remainder is refused by name rather than emitted
-                        // as a division.
-                        if (instruction->opcode == ir::Opcode::URem ||
-                            instruction->opcode == ir::Opcode::SRem) {
-                            error = "kr232 backend: remainder is not implemented";
-                            return std::nullopt;
-                        }
-                        const unsigned reg = register_for(instruction.get());
-                        materialize(left, reg);
-                        const auto* constant = dynamic_cast<const ir::ConstantInt*>(right);
-                        const char* op_name = nullptr;
+                        operand(0, kValueReg);
+                        operand(1, kSecondReg);
+                        const char* op_name = "add";
                         switch (instruction->opcode) {
                             case ir::Opcode::Add: op_name = "add"; break;
                             case ir::Opcode::Sub: op_name = "sub"; break;
@@ -321,38 +326,25 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             case ir::Opcode::Xor: op_name = "xor"; break;
                             case ir::Opcode::Shl: op_name = "shl"; break;
                             case ir::Opcode::LShr: op_name = "shr"; break;
+                            case ir::Opcode::AShr: op_name = "sar"; break;
                             case ir::Opcode::UDiv: op_name = "div"; break;
-                            case ir::Opcode::SDiv: op_name = "divs"; break;
-                            case ir::Opcode::URem: op_name = "srem"; break;
-                            case ir::Opcode::SRem: op_name = "srem"; break;
-                            default: op_name = "sar"; break;
+                            default: op_name = "divs"; break;
                         }
-                        const bool register_form = constant == nullptr ||
-                                                   instruction->opcode == ir::Opcode::UDiv ||
-                                                   instruction->opcode == ir::Opcode::SDiv ||
-                                                   instruction->opcode == ir::Opcode::URem ||
-                                                   instruction->opcode == ir::Opcode::SRem;
-                        if (!register_form) {
-                            out << "  " << op_name << " r" << reg << ", #" << constant->value << "\n";
-                        } else {
-                            const unsigned divisor = reg == 6 ? 7 : 6;
-                            materialize(right, divisor);
-                            out << "  " << op_name << " r" << reg << ", r" << divisor << "\n";
-                        }
+                        out << "  " << op_name << " r" << kValueReg << ", r" << kSecondReg << "\n";
+                        store_result(instruction.get(), kValueReg);
                         break;
                     }
+                    case ir::Opcode::URem:
+                    case ir::Opcode::SRem:
+                        error = "kr232 backend: remainder is not implemented";
+                        return std::nullopt;
                     case ir::Opcode::ICmp: {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: comparison without two operands";
                             return std::nullopt;
                         }
-                        const unsigned reg = register_for(instruction.get());
-                        const unsigned other = reg == 6 ? 7 : 6;
-                        materialize(instruction->operands[0], reg);
-                        materialize(instruction->operands[1], other);
-                        // A nested SETcc has no one-operand form in the assembler
-                        // yet, so the boolean is materialised through a branch: the
-                        // value starts at zero and the taken path loads one.
+                        operand(0, kValueReg);
+                        operand(1, kSecondReg);
                         const std::string tail = ".Lcmp" + std::to_string(next_compare++);
                         const char* branch = "beq";
                         switch (instruction->icmp_predicate) {
@@ -367,13 +359,14 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             case ir::ICmpPredicate::Slt: branch = "blt"; break;
                             case ir::ICmpPredicate::Sle: branch = "ble"; break;
                         }
-                        out << "  cmp r" << reg << ", r" << other << "\n";
-                        out << "  ld r" << reg << ", #0\n";
+                        out << "  cmp r" << kValueReg << ", r" << kSecondReg << "\n";
+                        out << "  ld r" << kValueReg << ", #0\n";
                         out << "  " << branch << " " << tail << "\n";
                         out << "  bra " << tail << "end\n";
                         out << tail << ":\n";
-                        out << "  ld r" << reg << ", #1\n";
+                        out << "  ld r" << kValueReg << ", #1\n";
                         out << tail << "end:\n";
+                        store_result(instruction.get(), kValueReg);
                         break;
                     }
                     case ir::Opcode::Br: {
@@ -389,11 +382,9 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: conditional branch without a condition";
                             return std::nullopt;
                         }
-                        const unsigned reg = register_for(instruction->operands[0]);
-                        materialize(instruction->operands[0], reg);
-                        const unsigned zero = reg == 6 ? 7 : 6;
-                        out << "  ld r" << zero << ", #0\n";
-                        out << "  cmp r" << reg << ", r" << zero << "\n";
+                        operand(0, kValueReg);
+                        out << "  ld r" << kSecondReg << ", #0\n";
+                        out << "  cmp r" << kValueReg << ", r" << kSecondReg << "\n";
                         out << "  bne .Lbb" << block_index[instruction->successors[0]] << "\n";
                         out << "  bra .Lbb" << block_index[instruction->successors[1]] << "\n";
                         break;
@@ -403,38 +394,36 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: call without a callee";
                             return std::nullopt;
                         }
-                        const auto* callee = dynamic_cast<const ir::Function*>(instruction->operands[0]);
+                        const auto* callee =
+                            dynamic_cast<const ir::Function*>(instruction->operands[0]);
                         if (callee == nullptr) {
-                            error = "kr232 backend: only a direct call to a function is implemented";
+                            error = "kr232 backend: only a direct call is implemented";
                             return std::nullopt;
                         }
-                        // Arguments go in R2-R5 before the call; the result comes
-                        // back in R2, so it moves into this value's register.
+                        if (instruction->operands.size() > 5) {
+                            error = "kr232 backend: more than four arguments needs the stack form";
+                            return std::nullopt;
+                        }
                         for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
-                            materialize(instruction->operands[i], 2u + static_cast<unsigned>(i - 1));
+                            materialize(instruction->operands[i],
+                                        2u + static_cast<unsigned>(i - 1));
                         }
                         out << "  call " << callee->name << "\n";
-                        const bool returns_value =
-                            instruction->type != nullptr && instruction->type->kind != ir::TypeKind::Void;
-                        if (returns_value) {
-                            const unsigned reg = register_for(instruction.get());
-                            if (reg != 2) {
-                                out << "  mov r" << reg << ", r2\n";
-                            }
+                        if (instruction->type != nullptr &&
+                            instruction->type->kind != ir::TypeKind::Void) {
+                            out << "  mov r" << kValueReg << ", r2\n";
+                            store_result(instruction.get(), kValueReg);
                         }
                         break;
                     }
                     case ir::Opcode::Ret: {
-                        const ir::Value* value =
-                            instruction->operands.empty() ? nullptr : instruction->operands[0];
-                        if (value == nullptr) {
+                        if (instruction->operands.empty()) {
                             out << "  ld r2, #0\n";
                         } else {
-                            materialize(value, 2);
+                            materialize(instruction->operands[0], 2);
                         }
                         out << "  leave #0\n";
                         out << "  ret\n";
-                        returned = true;
                         break;
                     }
                     default:
@@ -444,11 +433,6 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         return std::nullopt;
                 }
             }
-        }
-        if (!returned) {
-            out << "  ld r2, #0\n";
-            out << "  leave #0\n";
-            out << "  ret\n";
         }
     }
     return out.str();
