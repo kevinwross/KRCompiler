@@ -85,3 +85,32 @@ jobs:
         run: cmake --build --preset windows-msvc-release --parallel
       - name: Test
         run: ctest --preset windows-msvc-release --output-on-failure
+  # The executed kr232 rows need the emulator, and the emulator is a sibling
+  # repository, so the suite above never registers them. This job builds the
+  # emulator and points the compiler at it.
+  kr232-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out the compiler
+        uses: actions/checkout@v4
+        with:
+          path: krcompiler
+      - name: Check out the emulator
+        uses: actions/checkout@v4
+        with:
+          repository: kevinwross/kr232
+          path: kr232
+      - name: Build the emulator
+        run: |
+          cmake -S kr232 -B kr232/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build kr232/build --parallel
+      - name: Configure the compiler with the emulator
+        run: |
+          cmake -S krcompiler -B krcompiler/build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DKRC_KR232_VM="$PWD/kr232/build/kr232-emu" \
+            -DKRC_KR232_BLANK_IMAGE="$PWD/kr232/tests/fixtures/blank-flip.k232"
+      - name: Build
+        run: cmake --build krcompiler/build/ci --parallel
+      - name: kr232 rows
+        run: ctest --test-dir krcompiler/build/ci -R kr232 --output-on-failure
