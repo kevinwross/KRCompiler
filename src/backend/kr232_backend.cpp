@@ -832,9 +832,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         break;
                     }
                     case ir::Opcode::URem:
-                    case ir::Opcode::SRem:
-                        error = "kr232 backend: remainder is not implemented";
-                        return std::nullopt;
+                    case ir::Opcode::SRem: {
+                        // DIV writes the quotient only (ISA §12), so the remainder
+                        // is synthesised as a - (a / b) * b. R8 is the address
+                        // register and carries no live value inside this block.
+                        if (instruction->operands.size() < 2) {
+                            error = "kr232 backend: binary operation without two operands";
+                            return std::nullopt;
+                        }
+                        operand(0, kValueReg);
+                        operand(1, kSecondReg);
+                        out << "  mov r" << kAddressReg << ", r" << kValueReg << "\n";
+                        out << "  " << (instruction->opcode == ir::Opcode::URem ? "div" : "divs")
+                            << " r" << kAddressReg << ", r" << kSecondReg << "\n";
+                        out << "  mul r" << kAddressReg << ", r" << kSecondReg << "\n";
+                        out << "  sub r" << kValueReg << ", r" << kAddressReg << "\n";
+                        store_result(instruction.get(), kValueReg);
+                        break;
+                    }
                     case ir::Opcode::ICmp: {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: comparison without two operands";

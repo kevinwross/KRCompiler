@@ -36,22 +36,30 @@ typedef struct ldiv_t {
     long rem;
 } ldiv_t;
 
+#if KRC_HAS_LONG_LONG
 typedef struct lldiv_t {
     long long quot;
     long long rem;
 } lldiv_t;
+#endif
 
 div_t div(int numerator, int denominator);
 ldiv_t ldiv(long numerator, long denominator);
+#if KRC_HAS_LONG_LONG
 lldiv_t lldiv(long long numerator, long long denominator);
+#endif
 #endif
 
 /* The IP16 profile has no 64-bit integer or floating-point type, so those
- * declarations are absent there and using the type is diagnosed. */
+ * declarations are absent there and using the type is diagnosed. A profile with
+ * floating point but no 64-bit integer -- kr232 -- keeps double and loses the
+ * long-long entries. */
 #ifndef __kr16__
 double atof(const char *text);
 double strtod(const char *text, char **end);
 long double strtold(const char *text, char **end);
+#endif
+#if KRC_HAS_LONG_LONG
 long long atoll(const char *text);
 long long strtoll(const char *text, char **end, int base);
 unsigned long long strtoull(const char *text, char **end, int base);

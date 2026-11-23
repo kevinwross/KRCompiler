@@ -70,6 +70,11 @@ std::string generate_bits_types(const TargetProfile& profile) {
         << "typedef " << ptrdiff_type_spelling(profile) << " ptrdiff_t;\n"
         << "typedef int wchar_t;\n"
         << "\n"
+        // A header that declares a 64-bit API can test this instead of spelling
+        // `long long` and failing on a profile that has none.
+        << "#define KRC_HAS_LONG_LONG " << (profile.long_long_bits >= 64 ? 1 : 0)
+        << "\n"
+        << "\n"
         << "#endif\n";
     return out.str();
 }
