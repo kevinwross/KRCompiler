@@ -15,3 +15,22 @@ int puts_(const char* text) {
     }
     return 0;
 }
+
+/* Byte loops for now. The blitter-backed versions are the kernel's to provide:
+   a user program reaches the blitter only through a SYSCALL. */
+void* memcpy(void* destination, const void* source, unsigned count) {
+    unsigned char* to = (unsigned char*)destination;
+    const unsigned char* from = (const unsigned char*)source;
+    for (unsigned i = 0; i < count; ++i) {
+        to[i] = from[i];
+    }
+    return destination;
+}
+
+void* memset(void* destination, int value, unsigned count) {
+    unsigned char* to = (unsigned char*)destination;
+    for (unsigned i = 0; i < count; ++i) {
+        to[i] = (unsigned char)value;
+    }
+    return destination;
+}
