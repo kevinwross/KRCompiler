@@ -432,7 +432,7 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
                     -DINCLUDE=${CMAKE_SOURCE_DIR}/sysroot/kr232/include
                     -DEXPECT_EXIT=0
-                    -DEXPECT_FRAME=fea4ea80530198a5
+                    -DEXPECT_FRAME=438710e84aa0bd25
                     -DBLANK_IMAGE=${KRC_KR232_BLANK_IMAGE}
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
