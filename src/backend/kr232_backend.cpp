@@ -319,8 +319,38 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         for (std::size_t i = 0; i < function->blocks.size(); ++i) {
             block_index.emplace(function->blocks[i].get(), i);
         }
-        const auto slot_address = [](std::uint32_t slot) {
-            return "[r13-" + std::to_string(4 + 4 * slot) + "]";
+        const auto slot_address = [&](std::uint32_t slot) -> std::string {
+            // A d8 displacement is a signed byte; a deeper slot is reached through R8.
+            const std::uint32_t frame_offset = 4u + 4u * slot;
+            // A d8 displacement is a signed byte, so a frame deeper than that
+            // cannot be expressed yet; the assembler will refuse it by name
+            // rather than the backend emitting code it cannot encode.
+
+            return "[r13-" + std::to_string(frame_offset) + "]";
+        };
+        // A frame access that names its operand after any prologue it needs, so a
+        // deep slot is reached through R8 instead of an unencodable displacement.
+        const auto frame_load = [&](const char* opcode, std::uint32_t slot,
+                                    const std::string& target) {
+            const std::uint32_t offset = 4u + 4u * slot;
+            if (offset > 128u) {
+                out << "  mov r8, r13\n";
+                out << "  sub r8, #" << offset << "\n";
+                out << "  " << opcode << " " << target << ", [r8]\n";
+                return;
+            }
+            out << "  " << opcode << " " << target << ", [r13-" << offset << "]\n";
+        };
+        const auto frame_store = [&](const char* opcode, std::uint32_t slot,
+                                     const std::string& source) {
+            const std::uint32_t offset = 4u + 4u * slot;
+            if (offset > 128u) {
+                out << "  mov r8, r13\n";
+                out << "  sub r8, #" << offset << "\n";
+                out << "  " << opcode << " [r8], " << source << "\n";
+                return;
+            }
+            out << "  " << opcode << " [r13-" << offset << "], " << source << "\n";
         };
         const auto materialize = [&](const ir::Value* value, unsigned reg) {
             if (value == nullptr) {
@@ -354,7 +384,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 out << "  ld r" << reg << ", #0\n";
                 return;
             }
-            out << "  ld r" << reg << ", " << slot_address(slot->second) << "\n";
+            frame_load("ld", slot->second, "r" + std::to_string(reg));
         };
         // A load or store address: FP-relative for an alloca, R8 for a computed
         // pointer. Naming R8 keeps the address out of the value register.
@@ -393,7 +423,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             if (instruction->type != nullptr && instruction->type->kind != ir::TypeKind::Void) {
                 const auto slot = slot_of.find(instruction);
                 if (slot != slot_of.end()) {
-                    out << "  st " << slot_address(slot->second) << ", r" << reg << "\n";
+                    frame_store("st", slot->second, "r" + std::to_string(reg));
                 }
             }
         };
@@ -601,7 +631,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         materialize_float(instruction->operands[0], 0);
                         materialize_float(instruction->operands[1], 1);
                         out << "  " << op_name << " f0, f1\n";
-                        out << "  fst f0, " << slot_address(slot_of.at(instruction.get())) << "\n";
+                        frame_store("fst", slot_of.at(instruction.get()), "f0");
                         break;
                     }
                     case ir::Opcode::FPToSI:
@@ -801,8 +831,8 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             const std::uint32_t bytes =
                                 type_bytes(function->type->return_type);
                             materialize(instruction->operands[0], kValueReg);
-                            out << "  ld r" << kSecondReg << ", "
-                                << slot_address(return_pointer_slot) << "\n";
+                            frame_load("ld", return_pointer_slot,
+                                       "r" + std::to_string(kSecondReg));
                             for (std::uint32_t i = 0; i < bytes; ++i) {
                                 out << "  ldbu r" << kAddressReg << ", [r" << kValueReg << "+" << i
                                     << "]\n";
