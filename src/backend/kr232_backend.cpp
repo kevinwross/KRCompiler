@@ -137,6 +137,21 @@ std::uint32_t Kr232Backend::frame_bytes(const ir::Function& function) const {
     return align_frame(slots);
 }
 
+namespace {
+
+// A floating-point constant's label is its IEEE-754 bit pattern in hex. It used to
+// be std::hash<double>, which is implementation-defined: the same source produced
+// different labels under MSVC and libstdc++, so an image was not reproducible
+// across hosts.
+std::string fp_label(double value) {
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, &value, sizeof bits);
+    std::ostringstream label;
+    label << ".Lfp" << std::hex << bits;
+    return label.str();
+}
+
+}  // namespace
 std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     debug_info_.clear();
     std::ostringstream out;
@@ -164,7 +179,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         out << ".data\n";
         for (const double value : fp_constants) {
             std::ostringstream label;
-            label << ".Lfp" << std::hex << std::hash<double>{}(value);
+            label << fp_label(value);
             out << label.str() << ":\n";
             std::uint64_t bits = 0;
             std::memcpy(&bits, &value, sizeof bits);
@@ -508,7 +523,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         const auto materialize_float = [&](const ir::Value* value, unsigned fregister) {
             if (const auto* constant = dynamic_cast<const ir::ConstantFloat*>(value)) {
                 std::ostringstream label;
-                label << ".Lfp" << std::hex << std::hash<double>{}(constant->value);
+                label << fp_label(constant->value);
                 out << "  ld r" << kAddressReg << ", #" << label.str() << "\n";
                 out << "  fld f" << fregister << ", [r" << kAddressReg << "]\n";
                 return;
