@@ -106,6 +106,7 @@ add_library(krc_impl OBJECT
     src/backend/kr232_descriptor.cpp
     src/asm/kr232_encoder.cpp
     src/asm/kr232_object.cpp
+    src/linker/kr232_image.cpp
     src/asm/kr232_parser.cpp
     src/backend/kr32_descriptor.cpp
     src/backend/peephole.cpp

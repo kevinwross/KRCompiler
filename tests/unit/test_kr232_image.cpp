@@ -1,0 +1,112 @@
+#include "doctest.h"
+
+#include "linker/kr232_image.h"
+#include "linker/kro_object.h"
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+using krc::linker::Kr232Image;
+using krc::linker::Kr232Section;
+using krc::linker::write_kr232_image;
+
+namespace {
+
+std::uint32_t read32(const std::vector<std::uint8_t>& bytes, std::size_t at) {
+    return static_cast<std::uint32_t>(bytes[at]) |
+           (static_cast<std::uint32_t>(bytes[at + 1]) << 8) |
+           (static_cast<std::uint32_t>(bytes[at + 2]) << 16) |
+           (static_cast<std::uint32_t>(bytes[at + 3]) << 24);
+}
+
+std::uint16_t read16(const std::vector<std::uint8_t>& bytes, std::size_t at) {
+    return static_cast<std::uint16_t>(bytes[at] | (bytes[at + 1] << 8));
+}
+
+Kr232Image kernel_image() {
+    Kr232Image image;
+    image.entry = 0x0200;
+    image.image_base = 0;
+    image.sections.push_back(Kr232Section{".text", 1, 5 /* alloc | execute */, 0x0200, 4, {0x71}});
+    image.sections.push_back(Kr232Section{".kdbg", 1, 8 /* debug */, 0, 1, {0xAA}});
+    return image;
+}
+
+}  // namespace
+
+TEST_CASE("a kr232 image carries the ADR 0058 header") {
+    std::vector<std::uint8_t> bytes;
+    std::string error;
+    REQUIRE(write_kr232_image(kernel_image(), bytes, error));
+
+    REQUIRE(bytes.size() >= 64);
+    CHECK(bytes[0] == 'K');
+    CHECK(bytes[1] == '2');
+    CHECK(bytes[2] == '3');
+    CHECK(bytes[3] == '2');
+    CHECK(read16(bytes, 4) == 1);   // container version
+    CHECK(read16(bytes, 6) == 2);   // kind executable
+    CHECK(read32(bytes, 8) == 0);   // no debug payload flagged here
+    CHECK(read32(bytes, 12) == 64);
+    CHECK(read32(bytes, 16) == 0x0200);
+    CHECK(read16(bytes, 20) == 1);  // ABI version
+    CHECK(read16(bytes, 22) == 2);  // two sections
+    CHECK(read16(bytes, 24) == 5);  // target id
+    CHECK(read32(bytes, 28) == 0);  // kernel base
+    CHECK(read32(bytes, 44) == bytes.size());
+    CHECK(read32(bytes, 48) != 0);
+}
+
+TEST_CASE("the section records and CRC match the payload") {
+    std::vector<std::uint8_t> bytes;
+    std::string error;
+    REQUIRE(write_kr232_image(kernel_image(), bytes, error));
+
+    const std::uint32_t table = read32(bytes, 32);
+    const std::uint32_t strings = read32(bytes, 36);
+    REQUIRE(table + 64 <= bytes.size());
+
+    // First record: .text at 0x0200, one byte, alloc|execute.
+    CHECK(read16(bytes, table + 4) == 1);
+    CHECK(read16(bytes, table + 6) == 5);
+    CHECK(read32(bytes, table + 8) == 0x0200);
+    CHECK(read32(bytes, table + 16) == 1);
+    const std::uint32_t text_name = strings + read32(bytes, table);
+    CHECK(std::string(reinterpret_cast<const char*>(bytes.data() + text_name)) == ".text");
+    CHECK(bytes[read32(bytes, table + 12)] == 0x71);
+
+    // Second record: .kdbg unallocated, debug.
+    const std::uint32_t second = table + 32;
+    CHECK(read16(bytes, second + 6) == 8);
+    CHECK(read32(bytes, second + 8) == 0);
+    const std::uint32_t kdbg_name = strings + read32(bytes, second);
+    CHECK(std::string(reinterpret_cast<const char*>(bytes.data() + kdbg_name)) == ".kdbg");
+    CHECK(strings + 10 <= bytes.size());
+    CHECK(read32(bytes, 40) == bytes.size() - strings);
+
+    // The CRC is over the whole file with its own field zeroed.
+    std::vector<std::uint8_t> copy = bytes;
+    copy[48] = copy[49] = copy[50] = copy[51] = 0;
+    CHECK(krc::linker::crc32(copy) == read32(bytes, 48));
+}
+
+TEST_CASE("the writer refuses an entry outside text and overlapping sections") {
+    std::string error;
+    std::vector<std::uint8_t> bytes;
+
+    Kr232Image outside = kernel_image();
+    outside.entry = 0x0300;  // past the one-byte .text
+    CHECK(!write_kr232_image(outside, bytes, error));
+    CHECK(!error.empty());
+
+    Kr232Image overlap;
+    overlap.entry = 0x100;
+    overlap.sections.push_back(Kr232Section{".a", 1, 5, 0x100, 4, {0x71, 0x71}});
+    overlap.sections.push_back(Kr232Section{".b", 1, 5, 0x101, 4, {0x71}});
+    CHECK(!write_kr232_image(overlap, bytes, error));
+
+    Kr232Image user_out_of_range = kernel_image();
+    user_out_of_range.image_base = 0x08000000;  // .text at 0x0200 is now outside user RAM
+    CHECK(!write_kr232_image(user_out_of_range, bytes, error));
+}
