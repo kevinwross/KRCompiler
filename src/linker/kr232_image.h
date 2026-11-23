@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace krc::linker {
@@ -38,5 +40,12 @@ struct LinkedImage;
 // the linked model, then calls write_kr232_image.
 [[nodiscard]] bool write_kr232_container(const LinkedImage& image, std::vector<std::uint8_t>& out,
                                          std::string& error);
+
+// Reads one section's payload out of a `.k232` container by name, so a tool can
+// decode the `.kdbg` section without a full loader. False when the magic is not
+// K232 or the section is absent; `error` names which.
+[[nodiscard]] bool read_k232_section(std::span<const std::uint8_t> container,
+                                     std::string_view name,
+                                     std::span<const std::uint8_t>& payload, std::string& error);
 
 }  // namespace krc::linker

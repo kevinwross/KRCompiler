@@ -163,3 +163,25 @@ TEST_CASE("the linker writes a kr232 container for a kr232 object") {
     CHECK(read32(linked.image, 28) == 0);   // kernel base
     CHECK(read32(linked.image, 16) != 0);   // an entry inside text
 }
+TEST_CASE("a section payload is readable by name from a container") {
+    Kr232Image image;
+    image.entry = 0x0200;
+    image.sections.push_back(Kr232Section{".text", 1, 5, 0x0200, 4, {0x71}});
+    image.sections.push_back(Kr232Section{".kdbg", 1, 8, 0, 1, {0xDE, 0xAD}});
+    std::vector<std::uint8_t> bytes;
+    std::string error;
+    REQUIRE(write_kr232_image(image, bytes, error));
+
+    std::span<const std::uint8_t> payload;
+    REQUIRE(krc::linker::read_k232_section(bytes, ".kdbg", payload, error));
+    REQUIRE(payload.size() == 2);
+    CHECK(payload[0] == 0xDE);
+    CHECK(payload[1] == 0xAD);
+
+    std::span<const std::uint8_t> missing;
+    CHECK(!krc::linker::read_k232_section(bytes, ".nope", missing, error));
+    CHECK(error.find(".nope") != std::string::npos);
+
+    const std::uint8_t not_container[] = {'n', 'o', 'p', 'e'};
+    CHECK(!krc::linker::read_k232_section(not_container, ".kdbg", missing, error));
+}
