@@ -43,10 +43,9 @@ TEST_CASE("generated target bits match the checked-in sysroot headers") {
             std::filesystem::path(KRC_SOURCE_DIR) / "sysroot" / std::string(profile.name) /
             "include" / "bits";
         if (!std::filesystem::exists(directory)) {
-            // kr232's sysroot is M3's deliverable. A target without headers has
-            // nothing to compare, so the absence is allowed only for kr232 and
-            // the count below keeps it from becoming a silent skip.
-            CHECK(profile.id == krc::target::TargetId::Kr232);
+            // Every target now ships a sysroot, kr232's included, so a missing
+            // directory is a failure rather than a skip.
+            FAIL_CHECK("no bits headers for " << profile.name);
             continue;
         }
         INFO("target: " << profile.name);
@@ -56,5 +55,5 @@ TEST_CASE("generated target bits match the checked-in sysroot headers") {
         CHECK(krc::target::generate_bits_stdint(profile) ==
               read_file(directory / "stdint.h"));
     }
-    CHECK(checked == 4);
+    CHECK(checked == 5);
 }
