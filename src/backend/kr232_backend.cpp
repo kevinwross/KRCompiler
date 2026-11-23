@@ -874,7 +874,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             }
                             break;
                         }
-                        if (instruction->operands.size() > 5) {
+                        // A variadic callee has no register limit: every argument
+                        // is pushed in an eight-byte slot below.
+                        const bool callee_variadic =
+                            callee->type != nullptr && callee->type->variadic;
+                        if (instruction->operands.size() > 5 && !callee_variadic) {
                             error = "kr232 backend: more than four arguments needs the stack form";
                             return std::nullopt;
                         }
