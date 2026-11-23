@@ -644,11 +644,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             operand(i, kSecondReg);
                             if (element == 2) {
                                 out << "  shl r" << kSecondReg << ", #1\n";
-                            } else if (element == 4) {
+                            } else if (stride == 4) {
                                 out << "  shl r" << kSecondReg << ", #2\n";
-                            } else if (element == 8) {
+                            } else if (stride == 8) {
                                 out << "  shl r" << kSecondReg << ", #3\n";
-                            } else if (element != 1) {
+                            } else if (stride != 1) {
                                 error = "kr232 backend: an element size that is not a power of two";
                                 return std::nullopt;
                             }
