@@ -615,12 +615,27 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             store_result(instruction.get(), kValueReg);
                             break;
                         }
-                        for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
+                        // `gep [N x T], base, 0, i` is the shape the front end emits
+                        // for an array element: the leading zero steps over the array
+                        // itself and the second index selects elements. Scaling every
+                        // index by the pointee size made the stride the whole array,
+                        // so element 1 landed at base + N * sizeof(T) and every
+                        // initialiser past the first wrote outside the object.
+                        std::uint32_t stride = element;
+                        std::size_t first_index = 1;
+                        if (base_type != nullptr &&
+                            base_type->kind == ir::TypeKind::Array &&
+                            instruction->operands.size() == 3) {
+                            stride = type_bytes(base_type->element);
+                            first_index = 2;
+                        }
+                        for (std::size_t i = first_index; i < instruction->operands.size(); ++i) {
                             const auto* index =
                                 dynamic_cast<const ir::ConstantInt*>(instruction->operands[i]);
                             if (index != nullptr) {
                                 const std::int64_t constant =
-                                    index->value * static_cast<std::int64_t>(element);
+                                    index->value * static_cast<std::int64_t>(stride);
+
                                 if (constant != 0) {
                                     out << "  add r" << kValueReg << ", #" << constant << "\n";
                                 }

@@ -275,9 +275,14 @@ CIRGen::Expression CIRGen::emit_unary(const frontend::AstNode& expression) {
                 if (!initializers[index]) {
                     continue;
                 }
+                // Two indices: the first steps past the array type itself, the
+                // second selects an element. With one index the stride is the whole
+                // array, so element 1 landed at base + the array size and every
+                // initialiser past the first wrote outside it.
                 auto* element_pointer = builder_.create_gep(
                     type, pointer,
-                    {module_->constant_int(size_type(),
+                    {module_->constant_int(size_type(), 0),
+                     module_->constant_int(size_type(),
                                            static_cast<std::int64_t>(index))},
                     false, "new.element");
                 element_pointer->type = module_->types().pointer_type(type);
