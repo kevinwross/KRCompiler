@@ -408,6 +408,21 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             }
             out << "  " << opcode << " [r13-" << offset << "], " << source << "\n";
         };
+        // An object of more than one word occupies a run of slots, and a slot's
+        // address falls as its index rises, so the object's lowest byte sits at the
+        // LAST slot of its run. Using the first slot put a twelve-byte local array
+        // above FP, where it overwrote the saved frame pointer and every return
+        // through that frame jumped into nothing.
+        const auto alloca_offset = [&](const ir::Instruction& alloca) -> std::uint32_t {
+            const auto slot = slot_of.find(&alloca);
+            if (slot == slot_of.end()) {
+                return 4u;
+            }
+            const std::uint32_t words = std::max<std::uint32_t>(
+                1u, align_frame(type_bytes(alloca.allocated_type)) / 4u);
+            return 4u + 4u * (slot->second + words - 1u);
+        };
+
         const auto materialize = [&](const ir::Value* value, unsigned reg) {
             if (value == nullptr) {
                 out << "  ld r" << reg << ", #0\n";
@@ -429,7 +444,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     const auto alloca_slot = slot_of.find(value);
                     if (alloca_slot != slot_of.end()) {
                         out << "  mov r" << reg << ", r13\n";
-                        out << "  sub r" << reg << ", #" << (4u + 4u * alloca_slot->second)
+                        out << "  sub r" << reg << ", #" << alloca_offset(*instruction)
                             << "\n";
                         return;
                     }
@@ -449,7 +464,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 if (instruction->opcode == ir::Opcode::Alloca) {
                     const auto slot = slot_of.find(value);
                     if (slot != slot_of.end()) {
-                        return slot_address(slot->second);
+                        return "[r13-" + std::to_string(alloca_offset(*instruction)) + "]";
                     }
                 }
             }
