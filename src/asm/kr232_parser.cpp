@@ -66,6 +66,19 @@ bool parse_register(const std::string& text, unsigned& reg) {
     return true;
 }
 
+bool parse_fp_register(const std::string& text, unsigned& reg) {
+    if (text.size() < 2 || text[0] != 'f') {
+        return false;
+    }
+    char* end = nullptr;
+    const unsigned long value = std::strtoul(text.c_str() + 1, &end, 10);
+    if (end == nullptr || *end != '\0' || value > 3) {
+        return false;
+    }
+    reg = static_cast<unsigned>(value);
+    return true;
+}
+
 bool parse_number(const std::string& text, std::int32_t& value) {
     std::string digits = text;
     bool negative = false;
@@ -421,6 +434,100 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
             }
             if (mnemonic == "mov") {
                 return encode_ld_immediate(rd, static_cast<std::uint32_t>(value), error);
+            }
+        }
+    }
+
+    // Floating point: register-register, memory, conversions and the FP stack.
+    if (operands.size() == 1) {
+        unsigned fd = 0;
+        if (parse_fp_register(operands[0], fd)) {
+            if (mnemonic == "fpush" || mnemonic == "fpop") {
+                return encode_fp_stack(mnemonic == "fpush" ? 0 : 1, fd, error);
+            }
+            struct UnaryFp {
+                const char* name;
+                unsigned op;
+            };
+            constexpr UnaryFp kUnary[] = {
+                {"fneg", 4}, {"fabs", 5}, {"fsqrt", 6}, {"frnd", 9},
+            };
+            for (const UnaryFp& entry : kUnary) {
+                if (mnemonic == entry.name) {
+                    return encode_fp_register(entry.op, fd, 0, error);
+                }
+            }
+        }
+    }
+    if (operands.size() == 2) {
+        unsigned fd = 0;
+        unsigned fs = 0;
+        if (parse_fp_register(operands[0], fd) && parse_fp_register(operands[1], fs)) {
+            struct BinaryFp {
+                const char* name;
+                unsigned op;
+            };
+            constexpr BinaryFp kBinary[] = {
+                {"fadd", 0}, {"fsub", 1}, {"fmul", 2}, {"fdiv", 3}, {"fmov", 7}, {"fcmp", 8},
+            };
+            for (const BinaryFp& entry : kBinary) {
+                if (mnemonic == entry.name) {
+                    return encode_fp_register(entry.op, fd, fs, error);
+                }
+            }
+        }
+        // FP load and store: F4 with a d8, or FA when the displacement needs a word
+        // or the address is PC-relative.
+        unsigned fp_fd = 0;
+        Address fp_address;
+        if (parse_fp_register(operands[0], fp_fd) && parse_address(operands[1], fp_address)) {
+            struct FpMemory {
+                const char* name;
+                unsigned op;
+            };
+            constexpr FpMemory kFpMemory[] = {
+                {"fld", 0}, {"fst", 1}, {"flds", 2}, {"fsts", 3},
+            };
+            for (const FpMemory& entry : kFpMemory) {
+                if (mnemonic != entry.name) {
+                    continue;
+                }
+                if (fp_address.pc) {
+                    return encode_fp_memory_wide(entry.op, fp_fd, 1, 0, fp_address.disp, error);
+                }
+                if (fp_address.absolute || fp_address.sp) {
+                    error = "an FP load or store needs a base register or PC";
+                    return std::nullopt;
+                }
+                unsigned mode = 0;
+                if (fp_address.post) {
+                    mode = 2;
+                } else if (fp_address.pre) {
+                    mode = 3;
+                } else if (fp_address.disp != 0) {
+                    mode = 1;
+                }
+                if (mode == 1 && (fp_address.disp < -128 || fp_address.disp > 127)) {
+                    // A displacement that does not fit the byte uses FA's word.
+                    return encode_fp_memory_wide(entry.op, fp_fd, 0, fp_address.base,
+                                                 fp_address.disp, error);
+                }
+                return encode_fp_memory(entry.op, fp_fd, mode, fp_address.base, fp_address.disp,
+                                        error);
+            }
+        }
+        // Conversions: the FP register is the destination for i2f and u2f, and the
+        // source for f2i and f2u (ISA §8.5).
+        unsigned reg = 0;
+        unsigned convert_fd = 0;
+        if (mnemonic == "i2f" || mnemonic == "u2f") {
+            if (parse_fp_register(operands[0], convert_fd) && parse_register(operands[1], reg)) {
+                return encode_fp_convert(mnemonic == "i2f" ? 0 : 1, convert_fd, reg, error);
+            }
+        }
+        if (mnemonic == "f2i" || mnemonic == "f2u") {
+            if (parse_register(operands[0], reg) && parse_fp_register(operands[1], convert_fd)) {
+                return encode_fp_convert(mnemonic == "f2i" ? 2 : 3, convert_fd, reg, error);
             }
         }
     }

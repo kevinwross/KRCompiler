@@ -93,9 +93,28 @@ TEST_CASE("KR232 parser reads branches and control transfers") {
     expect_parse("call 0x1234", {0xF9, 0x10, 0x34, 0x12, 0x00, 0x00});
 }
 
+TEST_CASE("KR232 parser reads the floating-point text") {
+    expect_parse("fadd f1, f2", {0xF3, 0x06});
+    expect_parse("fsub f1, f2", {0xF3, 0x16});
+    expect_parse("fmov f1, f2", {0xF3, 0x76});
+    expect_parse("fcmp f0, f1", {0xF3, 0x81});
+    expect_parse("fneg f0", {0xF3, 0x40});
+    expect_parse("fsqrt f1", {0xF3, 0x64});
+    expect_parse("fld f1, [r2+8]", {0xF4, 0x05, 0x20, 0x08});
+    expect_parse("fst f1, [r2]", {0xF4, 0x14, 0x20});
+    expect_parse("flds f1, [r2]+", {0xF4, 0x26, 0x20});
+    expect_parse("fsts f1, -[r2]", {0xF4, 0x37, 0x20});
+    expect_parse("fld f1, [r2+0x400]", {0xFA, 0x04, 0x20, 0x00, 0x04, 0x00, 0x00});
+    expect_parse("fld f1, [pc+0x40]", {0xFA, 0x05, 0x00, 0x40, 0x00, 0x00, 0x00});
+    expect_parse("i2f f1, r2", {0xF5, 0x04, 0x20});
+    expect_parse("f2u r2, f1", {0xF5, 0x34, 0x20});
+    expect_parse("fpush f1", {0xF6, 0x01});
+    expect_parse("fpop f2", {0xF6, 0x06});
+}
+
 TEST_CASE("KR232 parser refuses what it cannot encode yet") {
     std::string error;
-    CHECK(!parse_instruction("fld f1, [r2]", error).has_value());
+    CHECK(!parse_instruction("fld f1, [0x1234]", error).has_value());
     CHECK(!parse_instruction("", error).has_value());
     CHECK(!parse_instruction("mov r16, r3", error).has_value());
     CHECK(!parse_instruction("frobnicate r2", error).has_value());
