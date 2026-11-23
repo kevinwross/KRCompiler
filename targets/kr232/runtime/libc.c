@@ -1,10 +1,12 @@
-/* The kr232 C runtime's output path. Device registers are kernel-only and there is
-   no kernel yet, so a program running in kernel mode writes the console transmit
-   register directly. Once the kernel exists this becomes a SYS write stub. */
-#define CONSOLE_TX (*(volatile unsigned int*)0xFFF08000u)
+/* The kernel-mode kr232 C runtime's output path. Device registers are kernel-only,
+   so this writes the terminal page's cell port at 0xFFF08000 directly; the page
+   advances the cursor, which is why `krc_kr232_run_transcript` reads `Hi!` back
+   out of the terminal grid. A program running under the kernel uses the packages
+   in targets/kr232/runtime/cons_user.c, which go through SYSCALL instead. */
+#define TERMINAL_CELL_OUT (*(volatile unsigned int*)0xFFF08000u)
 
 int putchar_(int ch) {
-    CONSOLE_TX = (unsigned int)ch;
+    TERMINAL_CELL_OUT = (unsigned int)ch;
     return ch;
 }
 
