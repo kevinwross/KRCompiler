@@ -201,6 +201,19 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
                     -DEXPECT_EXIT=65
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+        # The disassembler lives beside the emulator in the kr232 build; when it
+        # is not there the round trip cannot be read and the row is not added.
+        get_filename_component(kr232_bin_dir "${KRC_KR232_VM}" DIRECTORY)
+        set(kr232_dis "${kr232_bin_dir}/kr232-dis${CMAKE_EXECUTABLE_SUFFIX}")
+        if(EXISTS "${kr232_dis}")
+            add_test(NAME krc_kr232_encoding_roundtrip
+                COMMAND ${CMAKE_COMMAND}
+                        -DKRC=$<TARGET_FILE:krc>
+                        -DKRLD=$<TARGET_FILE:krld>
+                        -DDIS=${kr232_dis}
+                        -DWORK=${KRC_TEST_OUTPUT_DIR}/roundtrip
+                        -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232EncodingRoundTrip.cmake)
+        endif()
         add_test(NAME krc_kr232_run_exit300
             COMMAND ${CMAKE_COMMAND}
                     -DKRC=$<TARGET_FILE:krc>
