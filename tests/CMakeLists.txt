@@ -317,6 +317,19 @@ if(TARGET krc)
                     -DEXPECT_EXIT=6
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
+        # A record returned by value: the callee copies into the destination the
+        # caller names in R6, and 4 + 5 + 6 is 15 only if all three bytes arrived.
+        add_test(NAME krc_kr232_run_sret
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_sret.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=15
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
         # The keyboard package has no way to be exercised without input injection,
         # so its check is that it compiles against the profile's headers.
         add_test(NAME krc_kr232_input_compiles

@@ -186,12 +186,41 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 }
             }
         }
+        // A call that returns a record needs somewhere to put it: the callee copies
+        // into a destination the caller names. Those destinations get their own
+        // frame space, recorded per call.
+        std::unordered_map<const ir::Value*, std::uint32_t> aggregate_destination;
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode == ir::Opcode::Call && instruction->type != nullptr &&
+                    (instruction->type->kind == ir::TypeKind::Struct ||
+                     instruction->type->kind == ir::TypeKind::Union ||
+                     instruction->type->kind == ir::TypeKind::Array)) {
+                    aggregate_destination.emplace(instruction.get(), next_slot);
+                    next_slot += align_frame(type_bytes(instruction->type)) / 4u;
+                }
+            }
+        }
+        // A function that returns a record receives its destination in R6.
+        const bool returns_record = function->type != nullptr &&
+                                    function->type->return_type != nullptr &&
+                                    function->type->return_type->kind != ir::TypeKind::Void &&
+                                    (function->type->return_type->kind == ir::TypeKind::Struct ||
+                                     function->type->return_type->kind == ir::TypeKind::Union ||
+                                     function->type->return_type->kind == ir::TypeKind::Array);
+        std::uint32_t return_pointer_slot = 0;
+        if (returns_record) {
+            return_pointer_slot = next_slot++;
+        }
         for (const auto& parameter : function->parameters) {
             slot_of.emplace(parameter.get(), next_slot++);
         }
         const std::uint32_t frame = align_frame(next_slot * 4u);
 
         out << "  enter #" << frame << ", #0\n";
+        if (returns_record) {
+            out << "  st [r13-" << (4u + 4u * return_pointer_slot) << "], r6\n";
+        }
         for (std::size_t i = 0; i < function->parameters.size(); ++i) {
             const auto slot = slot_of.at(function->parameters[i].get());
             out << "  st [r13-" << (4u + 4u * slot) << "], r"
@@ -358,6 +387,16 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: load without an address";
                             return std::nullopt;
                         }
+                        // A record value is its address: loading one names where it
+                        // lives rather than copying its bytes.
+                        if (instruction->type != nullptr &&
+                            (instruction->type->kind == ir::TypeKind::Struct ||
+                             instruction->type->kind == ir::TypeKind::Union ||
+                             instruction->type->kind == ir::TypeKind::Array)) {
+                            materialize(instruction->operands[0], kValueReg);
+                            store_result(instruction.get(), kValueReg);
+                            break;
+                        }
                         const auto bytes = type_bytes(instruction->type);
                         const bool is_signed =
                             instruction->type != nullptr && instruction->type->is_signed;
@@ -378,6 +417,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: store without an address";
                             return std::nullopt;
+                        }
+                        // A record store copies its bytes: the value is an address
+                        // and so is the destination.
+                        if (instruction->operands[0]->type != nullptr &&
+                            (instruction->operands[0]->type->kind == ir::TypeKind::Struct ||
+                             instruction->operands[0]->type->kind == ir::TypeKind::Union ||
+                             instruction->operands[0]->type->kind == ir::TypeKind::Array)) {
+                            const std::uint32_t bytes =
+                                type_bytes(instruction->operands[0]->type);
+                            materialize(instruction->operands[1], kSecondReg);  // destination
+                            materialize(instruction->operands[0], kValueReg);   // source
+                            for (std::uint32_t i = 0; i < bytes; ++i) {
+                                out << "  ldbu r" << kAddressReg << ", [r" << kValueReg << "+" << i
+                                    << "]\n";
+                                out << "  stb [r" << kSecondReg << "+" << i << "], r"
+                                    << kAddressReg << "\n";
+                            }
+                            break;
                         }
                         const auto bytes = type_bytes(instruction->operands[0]->type);
                         // The value first, then the address into R8: a global's
@@ -503,6 +560,13 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             materialize(instruction->operands[i],
                                         2u + static_cast<unsigned>(i - 1));
                         }
+                        // A record return needs a destination the callee copies
+                        // into; the caller names it in R6.
+                        const auto destination = aggregate_destination.find(instruction.get());
+                        if (destination != aggregate_destination.end()) {
+                            out << "  mov r6, r13\n";
+                            out << "  sub r6, #" << (4u + 4u * destination->second) << "\n";
+                        }
                         out << "  call " << callee->name << "\n";
                         if (instruction->type != nullptr &&
                             instruction->type->kind != ir::TypeKind::Void) {
@@ -514,6 +578,21 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     case ir::Opcode::Ret: {
                         if (instruction->operands.empty()) {
                             out << "  ld r2, #0\n";
+                        } else if (returns_record) {
+                            // Copy the record out to the destination the caller named
+                            // in R6, and hand that pointer back in R2.
+                            const std::uint32_t bytes =
+                                type_bytes(function->type->return_type);
+                            materialize(instruction->operands[0], kValueReg);
+                            out << "  ld r" << kSecondReg << ", "
+                                << slot_address(return_pointer_slot) << "\n";
+                            for (std::uint32_t i = 0; i < bytes; ++i) {
+                                out << "  ldbu r" << kAddressReg << ", [r" << kValueReg << "+" << i
+                                    << "]\n";
+                                out << "  stb [r" << kSecondReg << "+" << i << "], r"
+                                    << kAddressReg << "\n";
+                            }
+                            out << "  mov r2, r" << kSecondReg << "\n";
                         } else {
                             materialize(instruction->operands[0], 2);
                         }
