@@ -364,7 +364,19 @@ int main(int argc, char** argv) {
             return fail(error);
         }
         krc::debug::KdbgImage image;
-        if (!krc::debug::decode_kdbg_image(bytes, image, error)) {
+        // A `.k232` container is not a KDBG image: its debug payload is the
+        // `.kdbg` section, which is decoded directly.
+        const bool is_container = bytes.size() >= 4 && bytes[0] == 'K' && bytes[1] == '2' &&
+                                  bytes[2] == '3' && bytes[3] == '2';
+        if (is_container) {
+            std::span<const std::uint8_t> payload;
+            if (!krc::image::read_k232_section(bytes, ".kdbg", payload, error)) {
+                return fail(error);
+            }
+            if (!krc::debug::decode_kdbg(payload, image, error)) {
+                return fail(error);
+            }
+        } else if (!krc::debug::decode_kdbg_image(bytes, image, error)) {
             return fail(error);
         }
         std::cout << (json_output ? krc::debug::dump_kdbg_json(image)
