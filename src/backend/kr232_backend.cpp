@@ -67,6 +67,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     debug_info_.clear();
     std::ostringstream out;
     out << "; kr232 backend, optimization level " << static_cast<int>(level_) << "\n";
+    // Globals live in `.data`; each is one word unless it holds an array of bytes.
+    if (!module_.globals().empty()) {
+        out << ".data\n";
+        for (const auto& global : module_.globals()) {
+            if (global->external) {
+                continue;
+            }
+            out << global->name << ":\n";
+            const auto* bytes = dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
+            if (bytes != nullptr && !bytes->bytes.empty()) {
+                for (const std::uint8_t byte : bytes->bytes) {
+                    out << "  .byte " << static_cast<unsigned>(byte) << "\n";
+                }
+            } else {
+                out << "  .word 0\n";
+            }
+        }
+    }
     for (const auto& function : module_.functions()) {
         // A declaration names a function defined elsewhere; emitting a body for
         // it would define a duplicate symbol.
@@ -122,6 +140,12 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         const auto materialize = [&](const ir::Value* value, unsigned reg) {
             if (const auto* constant = dynamic_cast<const ir::ConstantInt*>(value)) {
                 out << "  ld r" << reg << ", #" << constant->value << "\n";
+                return;
+            }
+            // A global is addressed by its symbol: the store or load that follows
+            // uses the register the linker filled with the symbol's address.
+            if (const auto* global = dynamic_cast<const ir::GlobalVariable*>(value)) {
+                out << "  ld r" << reg << ", #" << global->name << "\n";
                 return;
             }
             const unsigned source = register_for(value);

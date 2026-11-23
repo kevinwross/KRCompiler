@@ -230,7 +230,25 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         }
 
         std::string encode_error;
-        const auto encoded = parse_instruction(line, encode_error);
+        // An immediate that names a symbol instead of a number is the address of
+        // something in `.data`: it encodes as zero and carries an absolute
+        // relocation the linker fills with the symbol's address.
+        std::string symbol_immediate;
+        std::string effective = line;
+        {
+            const auto hash = line.find('#');
+            if (hash != std::string::npos) {
+                const std::string token = trim(line.substr(hash + 1));
+                const bool numeric = !token.empty() &&
+                                     (std::isdigit(static_cast<unsigned char>(token[0])) != 0 ||
+                                      token[0] == '-' || token[0] == '+');
+                if (!token.empty() && !numeric) {
+                    symbol_immediate = token;
+                    effective = line.substr(0, hash + 1) + "0";
+                }
+            }
+        }
+        const auto encoded = parse_instruction(effective, encode_error);
         if (!encoded.has_value()) {
             error = "line " + std::to_string(line_number) + ": " + encode_error;
             return false;
@@ -244,6 +262,13 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
             static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
         for (unsigned i = 0; i < encoded->length; ++i) {
             out.program.sections[0].bytes.push_back(encoded->bytes[i]);
+        }
+        if (!symbol_immediate.empty()) {
+            Program::Relocation relocation;
+            relocation.offset = offset + 1;
+            relocation.symbol = symbol_immediate;
+            relocation.absolute = true;
+            out.program.relocations.push_back(std::move(relocation));
         }
         out.lines.push_back(
             DebugLine{offset, static_cast<std::uint32_t>(line_number), std::string(file_name)});
@@ -277,7 +302,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     // symbol is a width the linker cannot verify.
     std::vector<Program::Relocation> unresolved;
     for (const Program::Relocation& relocation : out.program.relocations) {
-        const auto found = labels.find(relocation.symbol);
+        const auto found = relocation.absolute ? labels.end() : labels.find(relocation.symbol);
         if (found == labels.end()) {
             unresolved.push_back(relocation);
             continue;

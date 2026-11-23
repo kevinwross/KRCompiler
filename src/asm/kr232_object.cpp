@@ -73,8 +73,9 @@ bool make_object(const Program& program, const target::TargetProfile& profile,
         linker::KroRelocation out;
         out.section = relocation.section;
         out.offset = relocation.offset;
-        out.width = 2;
-        out.type = linker::KroRelocationType::PcRel16;
+        out.width = relocation.absolute ? 4u : 2u;
+        out.type = relocation.absolute ? linker::KroRelocationType::Abs32
+                                     : linker::KroRelocationType::PcRel16;
         out.symbol = index;
         out.addend = relocation.addend;
         object.relocations.push_back(std::move(out));

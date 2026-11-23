@@ -37,6 +37,9 @@ struct Program {
         std::uint32_t offset = 0;
         std::string symbol;
         std::int64_t addend = 0;
+        // A branch displacement is PC-relative and two bytes; a symbol's address
+        // in an instruction is absolute and four.
+        bool absolute = false;
     };
     std::vector<Relocation> relocations;
 };
