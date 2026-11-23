@@ -29,6 +29,13 @@ add_executable(krc_tests
     unit/test_preprocessor.cpp
     unit/test_sema.cpp
     unit/test_sysroot_bits.cpp
+    unit/test_kr232_encoder.cpp
+    unit/test_kr232_parser.cpp
+    unit/test_kr232_assembler.cpp
+    unit/test_kr232_image.cpp
+    unit/test_kr232_object.cpp
+    unit/test_kr232_roundtrip.cpp
+    unit/test_kr232_descriptor.cpp
     unit/test_target.cpp
     unit/test_kr216_encoder.cpp
     unit/test_kr216_object.cpp
@@ -110,6 +117,54 @@ if(TARGET krc)
                 -o "${KRC_TEST_OUTPUT_DIR}/kr232_no_backend.kro")
     set_tests_properties(krc_kr232_no_backend PROPERTIES
         PASS_REGULAR_EXPRESSION "target 'kr232' has no code generator yet")
+
+    # A real .k232 produced by `krc -c` and `krld --entry=main --base=0x200` from a
+    # two-instruction .s file. The decode says the container carries a .kdbg with
+    # the fixture's source, both lines and the main function.
+    add_test(NAME krc_kr232_dump_symbols
+        COMMAND $<TARGET_FILE:krc> --dump-symbols
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.k232")
+    set_tests_properties(krc_kr232_dump_symbols PROPERTIES
+        PASS_REGULAR_EXPRESSION "KDBG target=5[^\n]*lines=2 functions=1")
+
+    # The same container executed under the kr232 emulator: it pushes R2, asks to
+    # exit with R7 = 0 and the emulator returns that as its process status. The
+    # second test asks for the wrong status on purpose, so the runner's message is
+    # exercised rather than assumed.
+    if(KRC_KR232_VM AND EXISTS "${KRC_KR232_VM}")
+        add_test(NAME krc_kr232_run_fixture
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.k232
+                    -DEXPECT_EXIT=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        add_test(NAME krc_kr232_run_wrong_exit
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.k232
+                    -DEXPECT_EXIT=7
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        set_tests_properties(krc_kr232_run_wrong_exit PROPERTIES WILL_FAIL TRUE)
+
+        # The drawing fixture: one pixel into the back surface, a flip, a clean
+        # exit. The hash pins the rendered screen, and the wrong-hash test proves
+        # the comparison runs.
+        add_test(NAME krc_kr232_run_draw
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-draw.k232
+                    -DEXPECT_EXIT=0
+                    -DFRAME_HASH=e8bda242f061f369
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        add_test(NAME krc_kr232_wrong_frame
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-draw.k232
+                    -DEXPECT_EXIT=0
+                    -DFRAME_HASH=0000000000000000
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        set_tests_properties(krc_kr232_wrong_frame PROPERTIES WILL_FAIL TRUE)
+    endif()
 
     add_test(NAME krc_kr16_syntax
         COMMAND $<TARGET_FILE:krc> --target=kr16 -std=c11 -fsyntax-only

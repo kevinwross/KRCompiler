@@ -86,6 +86,30 @@ if(NOT KRC_KR16_VM)
     endif()
 endif()
 
+# The kr232 emulator is the sibling repository's `kr232-emu`, by the same rule as
+# the other two: a copy kept in this tree is preferred, the sibling checkout is a
+# Windows-only fallback, and an empty result registers no run test so a host
+# without the emulator stays green.
+set(KRC_KR232_VM "" CACHE FILEPATH "Path to a kr232 VM binary for the executed tests")
+if(NOT KRC_KR232_VM)
+    foreach(_krc_vm_dir IN ITEMS
+            "${CMAKE_CURRENT_SOURCE_DIR}/vm"
+            "${CMAKE_CURRENT_SOURCE_DIR}/build/vm")
+        if(NOT KRC_KR232_VM AND EXISTS "${_krc_vm_dir}/kr232-emu${CMAKE_EXECUTABLE_SUFFIX}")
+            set(KRC_KR232_VM "${_krc_vm_dir}/kr232-emu${CMAKE_EXECUTABLE_SUFFIX}"
+                CACHE FILEPATH "Path to a kr232 VM binary for the executed tests" FORCE)
+        endif()
+    endforeach()
+    if(WIN32 AND NOT KRC_KR232_VM)
+        set(_krc_sibling_vm
+            "${CMAKE_CURRENT_SOURCE_DIR}/../kr232/build/windows-msvc/kr232-emu.exe")
+        if(EXISTS "${_krc_sibling_vm}")
+            set(KRC_KR232_VM "${_krc_sibling_vm}" CACHE FILEPATH
+                "Path to a kr232 VM binary for the executed tests" FORCE)
+        endif()
+    endif()
+endif()
+
 # The implementation is an object library, not an installable target. The public
 # surface is `krc::toolchain`, whose archive carries these objects; `krc_impl`
 # never appears in the exported package.
@@ -103,6 +127,13 @@ add_library(krc_impl OBJECT
     src/backend/kr216_backend.cpp
     src/backend/machine_ir.cpp
     src/backend/machine_liveness.cpp
+    src/backend/kr232_descriptor.cpp
+    src/asm/kr232_assembler.cpp
+    src/asm/kr232_encoder.cpp
+    src/asm/kr232_object.cpp
+    src/image/k232.cpp
+    src/linker/kr232_image.cpp
+    src/asm/kr232_parser.cpp
     src/backend/kr32_descriptor.cpp
     src/backend/peephole.cpp
     src/backend/register_allocator.cpp

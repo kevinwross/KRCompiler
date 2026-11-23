@@ -138,6 +138,8 @@ std::uint32_t kROTargetId(target::TargetId target) {
         return 3;
     case target::TargetId::Kr216:
         return 4;
+    case target::TargetId::Kr232:
+        return 5;
     }
     return 0;
 }

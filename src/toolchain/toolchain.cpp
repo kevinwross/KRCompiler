@@ -12,8 +12,11 @@
 #include <vector>
 
 #include "asm/kr16_assembler.h"
+#include "linker/kr232_image.h"
 #include "asm/kr16_object.h"
 #include "asm/kr216_encoder.h"
+#include "asm/kr232_assembler.h"
+#include "asm/kr232_object.h"
 #include "asm/kr216_object.h"
 #include "asm/kr32_assembler.h"
 #include "asm/kro_writer.h"
@@ -45,6 +48,8 @@ target::TargetId to_target_id(Target target) {
         return target::TargetId::Kr64;
     case Target::Kr216:
         return target::TargetId::Kr216;
+    case Target::Kr232:
+        return target::TargetId::Kr232;
     case Target::Kr32:
         break;
     }
@@ -59,6 +64,8 @@ std::string target_name(Target target) {
         return "kr64";
     case Target::Kr216:
         return "kr216";
+    case Target::Kr232:
+        return "kr232";
     case Target::Kr32:
         break;
     }
@@ -196,6 +203,18 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
             return result;
         }
         append_debug_info(object, debug_info);
+    } else if (id == target::TargetId::Kr232) {
+        asm_kr232::AssembledProgram assembled;
+        if (!asm_kr232::assemble(assembly, "assembly", assembled, error)) {
+            result.error = "KR232 assembler: " + error;
+            return result;
+        }
+        if (!asm_kr232::make_object(assembled.program, profile, object, error)) {
+            result.error = "KR232 object: " + error;
+            return result;
+        }
+        // The kr232 assembler emits its own `.debug_info` bridge, so the option's
+        // bridge is not appended here; two bridges would duplicate every record.
     } else if (id == target::TargetId::Kr32) {
         asmkr32::AssemblyResult assembled;
         if (!asmkr32::assemble(assembly, assembled, error)) {
@@ -280,6 +299,7 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
     const auto target_id = parsed.front().target_id;
     const auto default_base = target_id == 2   ? std::uint64_t{0x100}
                               : target_id == 4 ? std::uint64_t{0x200}
+                              : target_id == 5 ? std::uint64_t{0x200}
                                                : std::uint64_t{0x00010000};
 
     linker::LinkedImage image;
@@ -348,6 +368,21 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
             return output;
         }
         if (!linker::write_kr216_image(filtered, result.image, error)) {
+            result.error = error;
+            return output;
+        }
+    } else if (target_id == 5) {
+        linker::LinkedImage filtered = image;
+        filtered.sections.clear();
+        for (const auto& section : image.sections) {
+            // `.debug_info` is the bridge `attach_kdbg` consumed; the container
+            // carries the converted `.kdbg` and every other section.
+            if (section.type == linker::KroSectionType::Debug && section.name != ".kdbg") {
+                continue;
+            }
+            filtered.sections.push_back(section);
+        }
+        if (!linker::write_kr232_container(filtered, result.image, error)) {
             result.error = error;
             return output;
         }
@@ -442,6 +477,21 @@ CompileResult compile(const Source& source, const Options& options) {
     const auto id = to_target_id(options.target);
     const auto& profile = target::get_target(id);
     const auto level = optimization_level(options);
+
+    // A target without a backend cannot generate code, whatever the source says.
+    // Reporting that before the front end runs is what makes the message stable:
+    // otherwise a source error pre-empts it and the caller learns about the wrong
+    // problem. `-fsyntax-only` and `-E` still work for such a target.
+    const bool needs_backend = options.stage == Stage::Assembly;
+    if (!profile.backend_available && needs_backend) {
+        frontend::SourceManager sources;
+        frontend::DiagnosticEngine diagnostics(sources);
+        diagnostics.report(frontend::Severity::Error,
+                           "target '" + target_name(options.target) +
+                               "' has no code generator yet");
+        finish_compile(result, diagnostics, sources);
+        return result;
+    }
 
     frontend::SourceManager sources;
     frontend::DiagnosticEngine diagnostics(sources);

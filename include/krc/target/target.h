@@ -12,6 +12,7 @@ enum class TargetId : std::uint8_t {
     Kr16,
     Kr64,
     Kr216,
+    Kr232,
 };
 
 enum class TargetFamily : std::uint8_t {

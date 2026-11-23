@@ -140,7 +140,43 @@ constexpr TargetProfile kKr216{
     AggregateRules::RegistersOrMemory,
 };
 
-constexpr std::array<TargetProfile, 4> kProfiles{kKr32, kKr16, kKr64, kKr216};
+// kr232: the 32-bit teaching VM of the sibling repository. Ilp32 with no 64-bit
+// integer type, a signed char, a 64-bit long double, and every by-value aggregate
+// in memory (kr232 plan §7, ADR 0057). `backend_available` is false until M3.
+constexpr TargetProfile kKr232{
+    TargetId::Kr232,
+    "kr232",
+    "__kr232__",
+    TargetFamily::Register,
+    32,
+    Endianness::Little,
+    DataModel::Ilp32,
+    8,
+    false,
+    16,
+    32,
+    32,
+    0,
+    32,
+    64,
+    64,
+    32,
+    32,
+    32,
+    32,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    AggregateRules::MemoryOnly,
+};
+
+constexpr std::array<TargetProfile, 5> kProfiles{kKr32, kKr16, kKr64, kKr216, kKr232};
 
 }  // namespace
 
@@ -154,6 +190,8 @@ std::string_view to_string(TargetId id) noexcept {
         return "kr64";
     case TargetId::Kr216:
         return "kr216";
+    case TargetId::Kr232:
+        return "kr232";
     }
     return "unknown";
 }
@@ -206,6 +244,9 @@ std::optional<TargetId> parse_target(std::string_view name) noexcept {
     }
     if (name == "kr216") {
         return TargetId::Kr216;
+    }
+    if (name == "kr232") {
+        return TargetId::Kr232;
     }
     return std::nullopt;
 }

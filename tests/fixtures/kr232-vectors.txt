@@ -1,0 +1,71 @@
+push fp	0D
+pop fp	1D
+ret	70
+nop	71
+brk	72
+sys	73
+ei	74
+di	75
+halt	76
+iret	77
+rdcycle	78
+syscall	79
+inc r2	22
+dec r2	32
+call r3	43
+mov r3, r0	8030
+add r3, r4	8134
+cmp r4, r0	8840
+ldbu r4, [r2]	9042
+ld r4, [r2]+	9342
+jmp r3	9F30
+mov fp, sp	80DF
+neg r2	9D20
+not r2	9E20
+beq +6	A006
+bra -9	BFF7
+ld r4, [r5+3]	C04503
+st [r5+3], r4	C14503
+ldhu r4, [r5+2]	DD4502
+sth [r5+2], r4	DE4502
+ldhs r4, [r5+2]	DF4502
+ld r4, #0x34	C64034
+ld r4, #-3	C540FD
+setlt r2	D32B00
+shl r2, #3	D42003
+div r2, r3	D92300
+sxtb r4	DB4000
+jmp +6	CF0600
+call +6	D00600
+jmp -8	CFF8FF
+push #0x0300	D70003
+pop #0x0300	D80003
+leave #0x0300	DC0003
+ld r2, #0x1234	5234120000
+ld r6, [0x4000]	6600400000
+st [0x4000], r6	E600400000
+ldbu r2, [0x4000]	F10200400000
+ldhu r2, [0x4000]	F15200400000
+lea r2, [sp+6]	F14206000000
+fadd f0, f1	F301
+fadd f2, f3	F30B
+fcmp f0, f1	F381
+frnd f1	F394
+fld f0, [r2+8]	F4012008
+fst f1, [r2]	F41420
+fsts f1, [r2+4]	F4352004
+i2f f0, r2	F50020
+f2i r2, f0	F52020
+fpush f1	F601
+fpop f1	F605
+enter #8, #0x0300	F7080003
+enter #300, #0	F82C010000
+enter #0x1000, #0x0100	FB001000000001
+jmp 0x0200	F90000020000
+call 0x0200	F91000020000
+jmp [0x4000]	F92000400000
+lea r2, [pc+0x100]	F94200010000
+ld r2, [pc+0x100]	F96200010000
+add r2, #0x123456	F9A256341200
+cmp r2, #0x10000	F9C200000100
+and r2, #0xFF00	F9D200FF0000

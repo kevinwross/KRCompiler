@@ -3,11 +3,51 @@
 #include "doctest.h"
 #include "krc/target/target.h"
 
+using krc::target::AggregateRules;
 using krc::target::DataModel;
+using krc::target::Endianness;
+using krc::target::TargetFamily;
 using krc::target::TargetId;
+using krc::target::TargetProfile;
 using krc::target::get_target;
 using krc::target::parse_target;
 using krc::target::target_profiles;
+
+TEST_CASE("KR232 profile matches the approved data model") {
+    const TargetProfile& profile = get_target(TargetId::Kr232);
+    CHECK(profile.id == TargetId::Kr232);
+    CHECK(profile.name == "kr232");
+    CHECK(profile.macro == "__kr232__");
+    CHECK(profile.family == TargetFamily::Register);
+    CHECK(profile.pointer_bits == 32);
+    CHECK(profile.endianness == Endianness::Little);
+    CHECK(profile.data_model == DataModel::Ilp32);
+    CHECK(profile.char_bits == 8);
+    CHECK_FALSE(profile.char_unsigned);
+    CHECK(profile.short_bits == 16);
+    CHECK(profile.int_bits == 32);
+    CHECK(profile.long_bits == 32);
+    CHECK(profile.long_long_bits == 0);  // no 64-bit integer type (plan 2.3)
+    CHECK(profile.float_bits == 32);
+    CHECK(profile.double_bits == 64);
+    CHECK(profile.long_double_bits == 64);  // an alias for double (plan 2.5)
+    CHECK(profile.size_t_bits == 32);
+    CHECK(profile.ptrdiff_bits == 32);
+    CHECK(profile.intmax_bits == 32);
+    CHECK(profile.wchar_bits == 32);
+    CHECK(profile.has_fpu);
+    CHECK_FALSE(profile.has_matrix);
+    CHECK_FALSE(profile.has_atomics);
+    CHECK_FALSE(profile.has_threads);
+    CHECK_FALSE(profile.has_eh);
+    CHECK_FALSE(profile.has_rtti);
+    CHECK_FALSE(profile.has_tls);
+    CHECK(profile.has_cpp);
+    CHECK_FALSE(profile.backend_available);
+    CHECK(profile.aggregate_rules == AggregateRules::MemoryOnly);
+    CHECK(to_string(TargetId::Kr232) == "kr232");
+    CHECK(parse_target("kr232") == TargetId::Kr232);
+}
 
 TEST_CASE("KR32 profile matches the approved data model") {
     const auto& profile = get_target(TargetId::Kr32);
@@ -74,5 +114,5 @@ TEST_CASE("target names parse and enumerate") {
     CHECK(parse_target("kr64") == TargetId::Kr64);
     CHECK(parse_target("kr216") == TargetId::Kr216);
     CHECK_FALSE(parse_target("unknown").has_value());
-    CHECK(target_profiles().size() == 4);
+    CHECK(target_profiles().size() == 5);
 }
