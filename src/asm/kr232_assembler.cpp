@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <map>
+#include <sstream>
 
 #include "asm/kr232_parser.h"
 
@@ -388,10 +389,22 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     };
     emit("S 1 " + std::string(file_name));
     const std::uint32_t text_size = static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
-    out.program.symbols.push_back(Symbol{".Lend", 0, text_size, false});  // a symbol only, not a line
+    // Line labels must be unique per source file. The linker merges every object's
+    // bridge into one section and resolves a label by name, so two objects that
+    // both call their first line `.L0` make each other's lines resolve to the wrong
+    // address -- which showed up as an empty function span in a two-object image.
+    std::uint32_t file_hash = 2166136261u;
+    for (const char character : std::string(file_name)) {
+        file_hash = (file_hash ^ static_cast<std::uint8_t>(character)) * 16777619u;
+    }
+    std::ostringstream prefix_stream;
+    prefix_stream << ".L" << std::hex << file_hash << "_";
+    const std::string label_prefix = prefix_stream.str();
+    const std::string end_label = label_prefix + "end";
+    out.program.symbols.push_back(Symbol{end_label, 0, text_size, false});
     for (std::size_t i = 0; i < out.lines.size(); ++i) {
         const DebugLine& line = out.lines[i];
-        const std::string label = ".L" + std::to_string(i);
+        const std::string label = label_prefix + std::to_string(i);
         out.program.symbols.push_back(Symbol{label, 0, line.offset, false});
         emit("L " + label + " 1 " + std::to_string(line.line) + " 0");
     }
@@ -399,7 +412,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         if (globals.count(name) == 0) {
             continue;
         }
-        emit("F " + name + " " + name + " .Lend 0 0");
+        emit("F " + name + " " + name + " " + end_label + " 0 0");
         (void)offset;
     }
     if (bridge.empty()) {
