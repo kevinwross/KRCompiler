@@ -451,6 +451,7 @@ int main(int argc, char** argv) {
             }
             toolchain::Options assemble_options = options;
             assemble_options.target = to_target(*target_id);
+            assemble_options.source_name = input;
             const auto assembled =
                 toolchain::assemble(text, assemble_options);
             if (!assembled.ok) {
@@ -503,8 +504,10 @@ int main(int argc, char** argv) {
             failed = true;
             continue;
         }
+        toolchain::Options file_options = options;
+        file_options.source_name = input;
         const toolchain::Source source{input, text};
-        const auto compiled = toolchain::compile(source, options);
+        const auto compiled = toolchain::compile(source, file_options);
         diagnostics.insert(diagnostics.end(), compiled.diagnostics.begin(),
                            compiled.diagnostics.end());
         // A partial AST is dumped even when parsing reported errors, matching the
@@ -596,7 +599,7 @@ int main(int argc, char** argv) {
             (target_id == krc::target::TargetId::Kr216 ||
              target_id == krc::target::TargetId::Kr232)) {
             const auto assembled =
-                toolchain::assemble(compiled.assembly, compiled.debug_info, options);
+                toolchain::assemble(compiled.assembly, compiled.debug_info, file_options);
             if (!assembled.ok) {
                 diagnostics.push_back(error_diagnostic(assembled.error));
                 failed = true;
@@ -611,7 +614,7 @@ int main(int argc, char** argv) {
 
         if (emit_object && target_id == krc::target::TargetId::Kr32) {
             const auto assembled =
-                toolchain::assemble(compiled.assembly, compiled.debug_info, options);
+                toolchain::assemble(compiled.assembly, compiled.debug_info, file_options);
             if (!assembled.ok) {
                 diagnostics.push_back(error_diagnostic(assembled.error));
                 failed = true;

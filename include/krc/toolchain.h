@@ -106,6 +106,10 @@ struct Options {
     // Applied by the linker's source-path rewrite before KDBG is built. Empty
     // leaves the recorded paths unchanged.
     std::string source_root;
+    // The translation unit's own name, recorded in the debug bridge so a debugger
+    // can open the file. Empty records "assembly", which is what the kr232
+    // assembler recorded for every input before this existed.
+    std::string source_name;
     // Drop sections the entry symbol cannot reach (section granularity). A
     // `.text.<name>` function section with no reference from a reachable
     // section is removed before layout.

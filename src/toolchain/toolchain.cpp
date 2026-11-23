@@ -206,7 +206,10 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
         append_debug_info(object, debug_info);
     } else if (id == target::TargetId::Kr232) {
         asm_kr232::AssembledProgram assembled;
-        if (!asm_kr232::assemble(assembly, "assembly", assembled, error)) {
+        const std::string_view recorded = options.source_name.empty()
+                                             ? std::string_view("assembly")
+                                             : std::string_view(options.source_name);
+        if (!asm_kr232::assemble(assembly, recorded, assembled, error)) {
             result.error = "KR232 assembler: " + error;
             return result;
         }
