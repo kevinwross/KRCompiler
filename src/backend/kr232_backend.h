@@ -29,9 +29,6 @@ public:
 
 private:
     const ir::Module& module_;
-    // Part of the construction contract the factory uses; no reader yet, and the
-    // widths this backend needs are constants.
-    [[maybe_unused]] const target::TargetProfile& profile_;
     OptimizationLevel level_;
     mutable std::string debug_info_;
 };

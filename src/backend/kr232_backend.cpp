@@ -116,7 +116,12 @@ constexpr unsigned kAddressReg = 8;
 
 Kr232Backend::Kr232Backend(const ir::Module& module, const target::TargetProfile& profile,
                            OptimizationLevel level)
-    : module_(module), profile_(profile), level_(level) {}
+    : module_(module), level_(level) {
+    // The factory passes the target profile to every backend; this one takes its
+    // widths from constants, so the parameter is part of the contract and nothing
+    // more. Keeping a field for it was dead weight.
+    (void)profile;
+}
 
 std::uint32_t Kr232Backend::frame_bytes(const ir::Function& function) const {
     // Every local and every value that must survive to a later instruction gets a
