@@ -85,6 +85,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     std::map<std::string, std::uint32_t> label_section;
     std::map<std::string, bool> globals;
     std::vector<Fixup> fixups;
+    std::vector<std::string> variable_records;
     std::uint32_t data_offset = 0;
     bool in_data = false;
 
@@ -111,6 +112,13 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         }
         if (line.rfind(".globl", 0) == 0) {
             globals[trim(line.substr(6))] = true;
+            continue;
+        }
+        // A variable record for the debug bridge: `V <function> <name> <offset>
+        // <type> <size>`. The assembler passes it through; what a local's offset
+        // means is the backend's contract with the debugger.
+        if (line.rfind(".debug_var", 0) == 0) {
+            variable_records.push_back("V " + trim(line.substr(10)));
             continue;
         }
         if (line.rfind(".word", 0) == 0 || line.rfind(".byte", 0) == 0) {
@@ -450,6 +458,9 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         }
         emit("F " + name + " " + name + " " + end_label + " 0 0");
         (void)offset;
+    }
+    for (const std::string& record : variable_records) {
+        emit(record);
     }
     if (bridge.empty()) {
         emit("S 1 .");

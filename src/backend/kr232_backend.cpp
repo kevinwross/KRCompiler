@@ -294,6 +294,30 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         const std::uint32_t frame = align_frame(next_slot * 4u);
 
         out << "  enter #" << frame << ", #0\n";
+        // Local variables for the debug bridge: a frame offset the debugger adds
+        // to the frame base it unwound. The type index is 0, so only the size is
+        // recorded until the bridge carries type records for this target.
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode != ir::Opcode::Alloca ||
+                    instruction->name.empty()) {
+                    continue;
+                }
+                const auto slot = slot_of.find(instruction.get());
+                if (slot == slot_of.end()) {
+                    continue;
+                }
+                std::string variable = instruction->name;
+                const std::string suffix = ".addr";
+                if (variable.size() > suffix.size() &&
+                    variable.compare(variable.size() - suffix.size(), suffix.size(), suffix) == 0) {
+                    variable.resize(variable.size() - suffix.size());
+                }
+                out << ".debug_var " << name << " " << variable << " "
+                    << static_cast<long>(0) - static_cast<long>(4 + 4 * slot->second) << " 0 "
+                    << type_bytes(instruction->allocated_type) << "\n";
+            }
+        }
         if (returns_record) {
             out << "  st [r13-" << (4u + 4u * return_pointer_slot) << "], r6\n";
         }
