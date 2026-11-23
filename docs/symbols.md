@@ -125,7 +125,9 @@ target's pointer width is 8; a 32-bit target writes only the v1 tags. The header
 pointer width is authoritative. Addresses that fit 32 bits are still written with
 the tag the target selects, so a reader never has to try both.
 
-`target_id` is the KRO target id: `1` KR32, `2` KR16, `3` KR64.
+`target_id` is the KRO target id: `1` KR32, `2` KR16, `3` KR64, `4` KR216,
+`5` KR232. KRO and KDBG carry the same number; KR216's row was missing here
+until KR232's was added (ADR 0057).
 
 ### Compatibility rules
 

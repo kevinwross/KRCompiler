@@ -17,6 +17,7 @@ The plan is approved (2026-11-09). Specifications marked frozen are stable contr
 - [abi.md](abi.md) — C/C++ ABI, data models, calling conventions, mangling, EH/RTTI.
 - [abi-kr16.md](abi-kr16.md) — KR16 IP16 scalar ABI, frame layout, and link rules.
 - [abi-kr216.md](abi-kr216.md) — KR216 ABI: `Ip16Long32` data model, registers, frames, aggregates, object rules.
+- [abi-kr232.md](abi-kr232.md) — KR232 ABI: `Ilp32` without a 64-bit type, the R6 aggregate destination, frames, vtables, `.k232` image rules.
 - [host-services.md](host-services.md) — KR32 host-service wrappers, errno, flags, and sandbox.
 - [object.md](object.md) — `KRO` object/executable container.
 - [symbols.md](symbols.md) — `KDBG` symbol and debug format.
