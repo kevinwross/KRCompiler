@@ -4,6 +4,7 @@
 #include <map>
 
 #include "linker/kro_object.h"
+#include "linker/linker.h"
 
 namespace krc::linker {
 namespace {
@@ -139,6 +140,27 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
     put32(out, 48, 0);  // the CRC field is zero while the CRC is computed
     put32(out, 48, crc32(out));
     return true;
+}
+
+bool write_kr232_container(const LinkedImage& linked, std::vector<std::uint8_t>& out,
+                           std::string& error) {
+    Kr232Image image;
+    image.entry = static_cast<std::uint32_t>(linked.entry);
+    image.image_base = static_cast<std::uint32_t>(linked.base);
+    for (const LinkedSection& section : linked.sections) {
+        Kr232Section out_section;
+        out_section.name = section.name;
+        out_section.type = static_cast<std::uint16_t>(section.type);
+        out_section.flags = section.flags;
+        out_section.address = static_cast<std::uint32_t>(section.address);
+        out_section.alignment = static_cast<std::uint16_t>(section.alignment);
+        out_section.data = section.data;
+        if ((section.flags & 8u) != 0) {
+            image.debug_present = true;
+        }
+        image.sections.push_back(std::move(out_section));
+    }
+    return write_kr232_image(image, out, error);
 }
 
 }  // namespace krc::linker

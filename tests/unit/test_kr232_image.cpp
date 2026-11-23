@@ -1,6 +1,7 @@
 #include "doctest.h"
 
 #include "linker/kr232_image.h"
+#include "linker/linker.h"
 #include "linker/kro_object.h"
 
 #include <cstdint>
@@ -109,4 +110,27 @@ TEST_CASE("the writer refuses an entry outside text and overlapping sections") {
     Kr232Image user_out_of_range = kernel_image();
     user_out_of_range.image_base = 0x08000000;  // .text at 0x0200 is now outside user RAM
     CHECK(!write_kr232_image(user_out_of_range, bytes, error));
+}
+
+TEST_CASE("a linked image maps onto the kr232 container") {
+    krc::linker::LinkedImage linked;
+    linked.target_id = 5;
+    linked.base = 0;
+    linked.entry = 0x0200;
+    krc::linker::LinkedSection text;
+    text.name = ".text";
+    text.type = static_cast<krc::linker::KroSectionType>(1);
+    text.flags = 5;  // alloc | execute
+    text.address = 0x0200;
+    text.alignment = 4;
+    text.data = {0x71};
+    text.size = 1;
+    linked.sections.push_back(text);
+
+    std::vector<std::uint8_t> bytes;
+    std::string error;
+    REQUIRE(krc::linker::write_kr232_container(linked, bytes, error));
+    CHECK(read16(bytes, 24) == 5);        // target id
+    CHECK(read32(bytes, 16) == 0x0200);   // entry
+    CHECK(read16(bytes, 22) == 1);        // one section
 }

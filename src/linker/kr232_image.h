@@ -31,4 +31,12 @@ struct Kr232Image {
 [[nodiscard]] bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
                                      std::string& error);
 
+struct LinkedImage;
+
+// The linker's entry to this writer: maps a `LinkedImage` onto the container,
+// taking the section flags from the section's type and the entry and base from
+// the linked model, then calls write_kr232_image.
+[[nodiscard]] bool write_kr232_container(const LinkedImage& image, std::vector<std::uint8_t>& out,
+                                         std::string& error);
+
 }  // namespace krc::linker
