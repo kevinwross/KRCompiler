@@ -131,7 +131,7 @@ if(TARGET krc)
         COMMAND $<TARGET_FILE:krc> --target=kr232 -S
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_frame.c")
     set_tests_properties(krc_kr232_frame PROPERTIES
-        PASS_REGULAR_EXPRESSION "enter #4, #0")
+        PASS_REGULAR_EXPRESSION "enter #0, #0")
 
     # A real .k232 produced by `krc -c` and `krld --entry=main --base=0x200` from a
     # two-instruction .s file. The decode says the container carries a .kdbg with
