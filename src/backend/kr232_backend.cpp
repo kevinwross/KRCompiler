@@ -68,6 +68,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     std::ostringstream out;
     out << "; kr232 backend, optimization level " << static_cast<int>(level_) << "\n";
     for (const auto& function : module_.functions()) {
+        // A declaration names a function defined elsewhere; emitting a body for
+        // it would define a duplicate symbol.
+        if (function->declaration) {
+            continue;
+        }
         const std::uint32_t frame = align_frame(frame_bytes(*function));
         const std::string name = function->name;
         out << ".globl " << name << "\n";
@@ -139,9 +144,13 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     }
                     case ir::Opcode::Trunc:
                     case ir::Opcode::ZExt:
-                    case ir::Opcode::SExt: {
+                    case ir::Opcode::SExt:
+                    case ir::Opcode::BitCast:
+                    case ir::Opcode::PtrToInt:
+                    case ir::Opcode::IntToPtr: {
                         // A cast changes nothing in a register: the store writes the
-                        // low bytes and the load sign- or zero-extends.
+                        // low bytes and the load sign- or zero-extends. The pointer
+                        // casts are the same: an address is a 32-bit value.
                         if (instruction->operands.empty()) {
                             error = "kr232 backend: cast without an operand";
                             return std::nullopt;
@@ -151,20 +160,52 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         reg_of[instruction.get()] = reg;
                         break;
                     }
+                    case ir::Opcode::GetElementPtr: {
+                        if (instruction->operands.empty()) {
+                            error = "kr232 backend: getelementptr without a base";
+                            return std::nullopt;
+                        }
+                        // A constant index folds to one displacement: `&p[i]` where
+                        // i is known is the base plus i times the element size.
+                        std::int64_t offset = 0;
+                        const auto* base_type =
+                            instruction->operands[0]->type != nullptr
+                                ? instruction->operands[0]->type->element
+                                : nullptr;
+                        const std::uint32_t element = type_bytes(base_type);
+                        for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
+                            const auto* index =
+                                dynamic_cast<const ir::ConstantInt*>(instruction->operands[i]);
+                            if (index == nullptr) {
+                                error = "kr232 backend: only constant indices are implemented";
+                                return std::nullopt;
+                            }
+                            offset += index->value * static_cast<std::int64_t>(element);
+                        }
+                        const unsigned reg = register_for(instruction.get());
+                        materialize(instruction->operands[0], reg);
+                        if (offset != 0) {
+                            out << "  add r" << reg << ", #" << offset << "\n";
+                        }
+                        break;
+                    }
                     case ir::Opcode::Store: {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: store without an address";
                             return std::nullopt;
                         }
                         const auto slot = slot_of.find(instruction->operands[1]);
-                        if (slot == slot_of.end()) {
-                            error = "kr232 backend: only frame slots can be stored to yet";
-                            return std::nullopt;
-                        }
                         const unsigned reg = register_for(instruction->operands[0]);
                         materialize(instruction->operands[0], reg);
                         const auto bytes = type_bytes(instruction->operands[0]->type);
-                        const std::string address = slot_address(slot->second);
+                        const bool in_frame = slot != slot_of.end();
+                        const unsigned addr_reg = in_frame ? 13u : (reg == 7 ? 6 : 7);
+                        if (!in_frame) {
+                            materialize(instruction->operands[1], addr_reg);
+                        }
+                        const std::string address = in_frame
+                                                        ? slot_address(slot->second)
+                                                        : "[r" + std::to_string(addr_reg) + "]";
                         if (bytes == 1) {
                             out << "  stb " << address << ", r" << reg << "\n";
                         } else if (bytes == 2) {
@@ -180,15 +221,17 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             return std::nullopt;
                         }
                         const auto slot = slot_of.find(instruction->operands[0]);
-                        if (slot == slot_of.end()) {
-                            error = "kr232 backend: only frame slots can be loaded yet";
-                            return std::nullopt;
-                        }
                         const unsigned reg = register_for(instruction.get());
                         const auto bytes = type_bytes(instruction->type);
+                        const bool in_frame = slot != slot_of.end();
+                        const unsigned load_addr = reg == 7 ? 6 : 7;
+                        if (!in_frame) {
+                            materialize(instruction->operands[0], load_addr);
+                        }
                         const bool is_signed =
                             instruction->type != nullptr && instruction->type->is_signed;
-                        const std::string address = slot_address(slot->second);
+                        const std::string address = in_frame ? slot_address(slot->second)
+                                                              : "[r" + std::to_string(load_addr) + "]";
                         if (bytes == 1) {
                             out << (is_signed ? "  ldbs r" : "  ldbu r") << reg << ", " << address
                                 << "\n";

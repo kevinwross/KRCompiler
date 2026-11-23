@@ -248,6 +248,20 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
                     -DEXPECT_EXIT=65
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+        # The runtime's console path: putchar_ writes the terminal page and the
+        # transcript is what a reader would see.
+        add_test(NAME krc_kr232_run_transcript
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/libc.c
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_hello.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_TRANSCRIPT=Hi!
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
     endif()
 
     add_test(NAME krc_kr16_syntax

@@ -27,17 +27,41 @@ if(NOT result EQUAL 0)
     message(FATAL_ERROR "compiling ${SOURCE} failed: ${output}${error}")
 endif()
 
-execute_process(COMMAND "${KRLD}" --entry=_start
-                        "${WORK}/kr232_crt0.o" "${WORK}/kr232_program.o"
+set(link_inputs "${WORK}/kr232_crt0.o" "${WORK}/kr232_program.o")
+if(DEFINED LIBC AND NOT LIBC STREQUAL "")
+    execute_process(COMMAND "${KRC}" -c --target kr232 "${LIBC}"
+                            -o "${WORK}/kr232_libc.o"
+                    RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+    if(NOT result EQUAL 0)
+        message(FATAL_ERROR "compiling ${LIBC} failed: ${output}${error}")
+    endif()
+    list(APPEND link_inputs "${WORK}/kr232_libc.o")
+endif()
+
+execute_process(COMMAND "${KRLD}" --entry=_start ${link_inputs}
                         -o "${WORK}/kr232_program.k232"
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "linking failed: ${output}${error}")
 endif()
 
+# The terminal transcript is the console's observable output: `--transcript`
+# prints the grid, and EXPECT_TRANSCRIPT is a substring the grid must contain.
+set(run_args)
+if(DEFINED EXPECT_TRANSCRIPT AND NOT EXPECT_TRANSCRIPT STREQUAL "")
+    list(APPEND run_args --transcript)
+endif()
+
 execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.k232" --max-steps 200000
+                        ${run_args}
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL EXPECT_EXIT)
     message(FATAL_ERROR "expected exit ${EXPECT_EXIT}, got ${result}\n${output}${error}")
+endif()
+if(DEFINED EXPECT_TRANSCRIPT AND NOT EXPECT_TRANSCRIPT STREQUAL "")
+    if(NOT output MATCHES "${EXPECT_TRANSCRIPT}")
+        message(FATAL_ERROR
+            "expected transcript matching '${EXPECT_TRANSCRIPT}', got:\n${output}${error}")
+    endif()
 endif()
 message(STATUS "the program exited ${result} as expected")
