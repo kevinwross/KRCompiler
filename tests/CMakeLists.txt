@@ -288,6 +288,30 @@ if(TARGET krc)
                     -DEXPECT_FRAME=b93590ec9d504765
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
+        # The console package writes the console page, and the emulator's
+        # transcript prints those bytes, so the text a program wrote is readable.
+        add_test(NAME krc_kr232_run_cons
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/cons.c
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_cons.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DINCLUDE=${CMAKE_SOURCE_DIR}/sysroot/kr232/include
+                    -DEXPECT_EXIT=0
+                    -DEXPECT_TRANSCRIPT=cons!
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
+        # The keyboard package has no way to be exercised without input injection,
+        # so its check is that it compiles against the profile's headers.
+        add_test(NAME krc_kr232_input_compiles
+            COMMAND $<TARGET_FILE:krc> -c --target kr232
+                    -I ${CMAKE_SOURCE_DIR}/sysroot/kr232/include
+                    ${CMAKE_SOURCE_DIR}/targets/kr232/runtime/input.c
+                    -o "${KRC_TEST_OUTPUT_DIR}/kr232_input.o")
+
         # Two builds of one program must be byte-identical: a frame hash or an
         # image hash is only meaningful if the image is reproducible.
         add_test(NAME krc_kr232_determinism
