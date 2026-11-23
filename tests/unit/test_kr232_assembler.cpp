@@ -46,16 +46,20 @@ TEST_CASE("kr232 assembly places instructions, data and labels") {
     const std::vector<std::uint8_t>& text = program.program.sections[0].bytes;
     const std::vector<std::uint8_t>& data = program.program.sections[1].bytes;
 
-    // push r2, ld r2,#1, beq (two bytes, patched to skip the pop), pop r2, sys.
-    REQUIRE(text.size() == 1 + 3 + 2 + 1 + 1);
+    // push r2, ld r2,#1, then a conditional label branch: it is a two-byte skip
+    // over a three-byte bra, because a label branch must reach any distance.
+    REQUIRE(text.size() == 1 + 3 + 2 + 3 + 1 + 1);
     CHECK(text[0] == 0x02);              // push r2
     CHECK(text[1] == 0xC6);              // ld r2, #1
     CHECK(text[2] == 0x20);
     CHECK(text[3] == 0x01);
-    CHECK(text[4] == 0xA0);             // beq, displacement patched to +2
-    CHECK(text[5] == 0x00);  // beq falls through to the next statement
-    CHECK(text[6] == 0x12);             // pop r2
-    CHECK(text[7] == 0x73);             // sys
+    CHECK(text[4] == 0xA2);             // bne +3, skipping the jmp
+    CHECK(text[5] == 0x03);
+    CHECK(text[6] == 0xCF);             // jmp +2, patched to the label
+    // The bra's displacement depends on where the label lands, so it is not
+    // asserted here; the two bytes after it are the patched offset.
+    CHECK(text[text.size() - 2] == 0x12);  // pop r2
+    CHECK(text[text.size() - 1] == 0x73);  // sys
 
     REQUIRE(data.size() == 6);
     CHECK(data[0] == 0x78);
@@ -77,7 +81,7 @@ TEST_CASE("kr232 assembly places instructions, data and labels") {
         if (symbol.name == "done") {
             saw_done = true;
             CHECK(symbol.section == 0);
-            CHECK(symbol.offset == 6);
+            CHECK(symbol.offset == 9);
         }
         if (symbol.name == "message") {
             saw_message = true;

@@ -43,7 +43,8 @@ TEST_CASE("KR232 profile matches the approved data model") {
     CHECK_FALSE(profile.has_rtti);
     CHECK_FALSE(profile.has_tls);
     CHECK(profile.has_cpp);
-    CHECK_FALSE(profile.backend_available);
+    // kr232 has had a code generator since M3, so this is no longer false.
+    CHECK(profile.backend_available);
     CHECK(profile.aggregate_rules == AggregateRules::MemoryOnly);
     CHECK(to_string(TargetId::Kr232) == "kr232");
     CHECK(parse_target("kr232") == TargetId::Kr232);
