@@ -46,5 +46,17 @@ int main(void) {
     if (input_pending() != 0) {
         return 5;
     }
+    /* One console byte reads back through the package, and the keyboard queue is
+       empty because the host pushed nothing: NO_EVENT is the documented answer. */
+    if (input_next() != KR232_NO_EVENT) {
+        return 10;
+    }
+    /* The row queues the single byte 'z', so a mismatch names the call that failed. */
+    if (cons_getc() != 'z') {
+        return 11;
+    }
+    if (fb_stride() != fb_width() * 4) {
+        return 12;
+    }
     return 0;
 }
