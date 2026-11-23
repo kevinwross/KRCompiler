@@ -75,6 +75,20 @@ argument evaluation so an argument that itself returns an aggregate cannot
 overwrite it. It is an ordinary caller-saved scratch at all other times, and R2–R5
 stay argument registers (kr232-plan §5).
 
+### Variadic calls
+
+A variadic callee receives **every** argument in an **eight-byte stack slot**, the first at
+`[FP+8]`. The caller pushes them last-first, so the first sits immediately above the return
+address, and the named parameter at index *i* lives at `[FP+8+8i]`. `va_start` answers the
+address of the first variable argument, `[FP+8+8·named]`, and the variable argument at index
+*j* is read from `va_start() + 8j`. An `int` occupies the low four bytes of its slot and a
+`double` the whole eight, which is why a mixed call needs no type tag: the callee reads each
+argument at the width its own code says.
+
+This is the kr16 convention (ADR 0029) with eight-byte slots rather than two. The register
+paragraph above applies to non-variadic calls only; a variadic call fills no argument
+register, so the callee never has to know which of its arguments arrived where.
+
 ### Capabilities
 
 `has_fpu` and `has_cpp` are true. `has_matrix`, `has_atomics`, `has_threads`,

@@ -339,13 +339,28 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             out << "  st [r13-" << (4u + 4u * return_pointer_slot) << "], r6\n";
         }
         // Arguments arrive in R2-R5, except floating-point ones, which arrive in
-        // F0-F3 and are spilled to their slots with `fst`.
+        // F0-F3 and are spilled to their slots with `fst`. A variadic function is
+        // the exception: every argument arrives in an eight-byte stack slot, the
+        // first at [FP+8], because the caller pushed them instead of filling
+        // registers (ADR 0057, variadic convention).
+        const bool variadic_function = function->type != nullptr && function->type->variadic;
         std::size_t integer_argument = 0;
         std::size_t float_argument = 0;
         for (std::size_t i = 0; i < function->parameters.size(); ++i) {
             const auto slot = slot_of.at(function->parameters[i].get());
             const ir::Type* type = function->parameters[i]->type;
             const bool is_float = type != nullptr && type->kind == ir::TypeKind::Float;
+            if (variadic_function) {
+                const std::uint32_t incoming = 8u + 8u * static_cast<std::uint32_t>(i);
+                if (is_float) {
+                    out << "  fld f0, [r13+" << incoming << "]\n";
+                    out << "  fst f0, [r13-" << (4u + 4u * slot) << "]\n";
+                } else {
+                    out << "  ld r5, [r13+" << incoming << "]\n";
+                    out << "  st [r13-" << (4u + 4u * slot) << "], r5\n";
+                }
+                continue;
+            }
             if (is_float) {
                 out << "  fst f" << float_argument++ << ", [r13-" << (4u + 4u * slot) << "]\n";
             } else {
@@ -803,6 +818,17 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         out << "  bra .Lbb" << block_index[instruction->successors[1]] << "\n";
                         break;
                     }
+                    case ir::Opcode::VaStart: {
+                        // The variable arguments begin after the named ones: the
+                        // first stack slot past the return address, eight bytes
+                        // each (ADR 0057, variadic convention).
+                        const auto fixed =
+                            static_cast<std::uint32_t>(function->parameters.size());
+                        out << "  mov r" << kAddressReg << ", r13\n";
+                        out << "  add r" << kAddressReg << ", #" << (8u + 8u * fixed) << "\n";
+                        store_result(instruction.get(), kAddressReg);
+                        break;
+                    }
                     case ir::Opcode::Call: {
                         // Arguments are typed: integers fill r2-r5, doubles fill
                         // f0-f3, each in its own order, which is how the callee's
@@ -861,6 +887,32 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                 materialize(argument, 2u + integer_arguments++);
                             }
                         }
+                        // A variadic callee reads every argument from the stack, so
+                        // the caller pushes them as eight-byte slots, last first:
+                        // the first then sits at [FP+8] in the callee.
+                        const bool variadic_call =
+                            callee->type != nullptr && callee->type->variadic;
+                        if (variadic_call) {
+                            for (std::size_t i = instruction->operands.size(); i-- > 1;) {
+                                const ir::Value* argument = instruction->operands[i];
+                                const bool argument_float =
+                                    argument->type != nullptr &&
+                                    argument->type->kind == ir::TypeKind::Float;
+                                if (argument_float) {
+                                    materialize_float(argument, 0);
+                                } else {
+                                    materialize(argument, kValueReg);
+                                }
+                                out << "  sub r15, #8\n";
+                                if (argument_float) {
+                                    out << "  fst f0, [r15]\n";
+                                } else {
+                                    out << "  st [r15], r" << kValueReg << "\n";
+                                    out << "  ld r" << kSecondReg << ", #0\n";
+                                    out << "  st [r15+4], r" << kSecondReg << "\n";
+                                }
+                            }
+                        }
                         // A record return needs a destination the callee copies
                         // into; the caller names it in R6.
                         const auto destination = aggregate_destination.find(instruction.get());
@@ -869,6 +921,12 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             out << "  sub r6, #" << (4u + 4u * destination->second) << "\n";
                         }
                         out << "  call " << callee->name << "\n";
+                        if (variadic_call) {
+                            out << "  add r15, #"
+                                << (8u * static_cast<unsigned>(
+                                              instruction->operands.size() - 1))
+                                << "\n";
+                        }
                         if (instruction->type != nullptr &&
                             instruction->type->kind == ir::TypeKind::Float) {
                             // A floating-point result comes back in F0.
