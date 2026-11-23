@@ -118,6 +118,15 @@ if(TARGET krc)
     set_tests_properties(krc_kr232_no_backend PROPERTIES
         PASS_REGULAR_EXPRESSION "target 'kr232' has no code generator yet")
 
+    # A real .k232 produced by `krc -c` and `krld --entry=main --base=0x200` from a
+    # two-instruction .s file. The decode says the container carries a .kdbg with
+    # the fixture's source, both lines and the main function.
+    add_test(NAME krc_kr232_dump_symbols
+        COMMAND $<TARGET_FILE:krc> --dump-symbols
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.k232")
+    set_tests_properties(krc_kr232_dump_symbols PROPERTIES
+        PASS_REGULAR_EXPRESSION "KDBG target=5[^\n]*lines=2 functions=1")
+
     add_test(NAME krc_kr16_syntax
         COMMAND $<TARGET_FILE:krc> --target=kr16 -std=c11 -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sizes.c")

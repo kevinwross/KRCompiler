@@ -478,6 +478,21 @@ CompileResult compile(const Source& source, const Options& options) {
     const auto& profile = target::get_target(id);
     const auto level = optimization_level(options);
 
+    // A target without a backend cannot generate code, whatever the source says.
+    // Reporting that before the front end runs is what makes the message stable:
+    // otherwise a source error pre-empts it and the caller learns about the wrong
+    // problem. `-fsyntax-only` and `-E` still work for such a target.
+    const bool needs_backend = options.stage == Stage::Assembly;
+    if (!profile.backend_available && needs_backend) {
+        frontend::SourceManager sources;
+        frontend::DiagnosticEngine diagnostics(sources);
+        diagnostics.report(frontend::Severity::Error,
+                           "target '" + target_name(options.target) +
+                               "' has no code generator yet");
+        finish_compile(result, diagnostics, sources);
+        return result;
+    }
+
     frontend::SourceManager sources;
     frontend::DiagnosticEngine diagnostics(sources);
     frontend::Preprocessor preprocessor(sources, diagnostics, profile,
