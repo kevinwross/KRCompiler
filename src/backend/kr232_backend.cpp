@@ -211,7 +211,21 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     out << "  .byte " << static_cast<unsigned>(byte) << "\n";
                 }
             } else {
-                out << "  .word 0\n";
+                // A global with no initialiser still occupies its whole type. One
+                // word was emitted for every such object, so the linker packed the
+                // next global four bytes in: `block[6]` and two counters overlapped,
+                // and a write to block[2] silently changed a counter.
+                const ir::Type* allocated = global->element_type != nullptr ? global->element_type : global->type;
+                std::uint32_t remaining = type_bytes(allocated);
+                if (remaining == 0) {
+                    remaining = 4;
+                }
+                for (; remaining >= 4; remaining -= 4) {
+                    out << "  .word 0\n";
+                }
+                if (remaining != 0) {
+                    out << "  .byte 0\n";
+                }
             }
         }
     }
