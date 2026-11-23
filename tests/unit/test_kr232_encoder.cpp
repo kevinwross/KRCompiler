@@ -7,6 +7,8 @@
 
 using krc::asm_kr232::encode_compact_branch;
 using krc::asm_kr232::encode_compact_register;
+using krc::asm_kr232::encode_generic;
+using krc::asm_kr232::encode_long_integer;
 using krc::asm_kr232::encode_ld_absolute;
 using krc::asm_kr232::encode_ld_immediate;
 using krc::asm_kr232::encode_normal;
@@ -74,6 +76,34 @@ TEST_CASE("KR232 encoders reject out-of-range operands") {
     CHECK(!encode_compact_branch(16, 0, error).has_value());
     CHECK(!encode_compact_branch(0, 256, error).has_value());
     CHECK(!encode_compact_branch(0, -257, error).has_value());
+}
+
+TEST_CASE("KR232 generic and long-integer forms encode as Appendix A shows") {
+    std::string error;
+    using krc::asm_kr232::Operand;
+    expect_bytes(encode_generic(0x00, {0, 2, 0}, {0, 3, 0}, error), {0xF0, 0x00, 0x02, 0x03});
+    // mov r2,#0x1234: operand 2 takes mode 1, which carries an imm16.
+    expect_bytes(encode_generic(0x00, {0, 2, 0}, {1, 0, 0x1234}, error),
+                 {0xF0, 0x00, 0x02, 0x10, 0x34, 0x12});
+    // ld r2,[r3+8]: mode 5 carries a d8.
+    expect_bytes(encode_generic(0x0E, {0, 2, 0}, {5, 3, 8}, error),
+                 {0xF0, 0x0E, 0x02, 0x53, 0x08});
+    // An absolute address is [R0+d32].
+    expect_bytes(encode_generic(0x0E, {0, 2, 0}, {7, 0, 0x1234}, error),
+                 {0xF0, 0x0E, 0x02, 0x70, 0x34, 0x12, 0x00, 0x00});
+    // Two extensions are illegal, and an immediate specifier must have a zero register.
+    CHECK(!encode_generic(0x01, {0, 2, 0}, {1, 3, 5}, error).has_value());
+    CHECK(!encode_generic(0x01, {5, 2, 8}, {1, 0, 5}, error).has_value());  // two extensions
+    CHECK(!encode_generic(0x01, {6, 2, 8}, {7, 3, 8}, error).has_value());  // two extensions
+    CHECK(!encode_generic(0x01, {1, 3, 5}, {0, 3, 0}, error).has_value());
+    CHECK(!encode_generic(0x1F, {0, 2, 0}, {0, 3, 0}, error).has_value());
+
+    expect_bytes(encode_long_integer(0, 2, 0x1234, error), {0xF1, 0x02, 0x34, 0x12, 0x00, 0x00});
+    expect_bytes(encode_long_integer(1, 2, 0x1234, error), {0xF1, 0x12, 0x34, 0x12, 0x00, 0x00});
+    expect_bytes(encode_long_integer(2, 2, 0x1234, error), {0xF1, 0x22, 0x34, 0x12, 0x00, 0x00});
+    expect_bytes(encode_long_integer(3, 2, 0x40, error), {0xF1, 0x32, 0x40, 0x00, 0x00, 0x00});
+    expect_bytes(encode_long_integer(7, 2, 0x1234, error), {0xF1, 0x72, 0x34, 0x12, 0x00, 0x00});
+    CHECK(!encode_long_integer(8, 2, 0, error).has_value());
 }
 
 TEST_CASE("KR232 normal forms encode as Appendix A shows") {

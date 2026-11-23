@@ -61,6 +61,26 @@ enum class ShortOp : std::uint8_t {
                                                                         unsigned rb,
                                                                         std::string& error);
 
+// One operand of the `F0` generic form: a mode from ISA §9 and its register.
+// Mode 1 is an immediate held in `value`; modes 5-7 hold their displacement there.
+struct Operand {
+    std::uint8_t mode = 0;
+    std::uint8_t reg = 0;
+    std::int32_t value = 0;
+};
+
+// `F0` generic two-operand form of ISA §8.1. At most one operand may take an
+// extension, which is what keeps the encoding within eight bytes.
+[[nodiscard]] std::optional<EncodedInstruction> encode_generic(unsigned operation,
+                                                               const Operand& one, const Operand& two,
+                                                               std::string& error);
+
+// `F1` long integer: `F1 | OOOO RRRR | addr32`, six bytes (ISA §8.2). Ops 3 and 4
+// take a signed displacement from PC or SP; the rest an absolute address.
+[[nodiscard]] std::optional<EncodedInstruction> encode_long_integer(unsigned op, unsigned rd,
+                                                                    std::int32_t operand,
+                                                                    std::string& error);
+
 // Normal class of ISA §7: three bytes, opcode then a payload whose layout depends
 // on the opcode. `rd` is the data register (for stores, the stored register), `rb`
 // the base or second register, and `immediate` the d8, imm8, rel16 or mask16 that

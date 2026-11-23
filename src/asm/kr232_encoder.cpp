@@ -268,4 +268,97 @@ std::optional<EncodedInstruction> encode_normal(unsigned op, unsigned rd, unsign
     return std::nullopt;
 }
 
+std::optional<EncodedInstruction> encode_generic(unsigned operation, const Operand& one,
+                                                 const Operand& two, std::string& error) {
+    if (operation > 0x1E) {
+        error = "generic operation out of range";
+        return std::nullopt;
+    }
+    for (const Operand* operand : {&one, &two}) {
+        if (operand->reg > 15) {
+            error = "register out of range";
+            return std::nullopt;
+        }
+        if (operand->mode > 7) {
+            error = "addressing mode out of range";
+            return std::nullopt;
+        }
+        if (operand->mode == 1 && operand->reg != 0) {
+            error = "an immediate specifier must have a zero register field";
+            return std::nullopt;
+        }
+    }
+    const bool one_extends = one.mode == 1 || one.mode >= 5;
+    const bool two_extends = two.mode == 1 || two.mode >= 5;
+    if (one_extends && two_extends) {
+        error = "only one operand may take an extension";
+        return std::nullopt;
+    }
+
+    EncodedInstruction out;
+    out.bytes[0] = 0xF0;
+    out.bytes[1] = static_cast<std::uint8_t>(operation);
+    out.bytes[2] = static_cast<std::uint8_t>((one.mode << 4) | one.reg);
+    out.bytes[3] = static_cast<std::uint8_t>((two.mode << 4) | two.reg);
+    out.length = 4;
+
+    const Operand* extending = one_extends ? &one : (two_extends ? &two : nullptr);
+    if (extending == nullptr) {
+        return out;
+    }
+    const auto append = [&](std::uint32_t bits, unsigned bytes) {
+        for (unsigned i = 0; i < bytes; ++i) {
+            out.bytes[out.length++] = static_cast<std::uint8_t>((bits >> (8 * i)) & 0xFF);
+        }
+    };
+    switch (extending->mode) {
+        case 1: {  // imm16, sign-extended to 32 bits
+            if (extending->value < -32768 || extending->value > 32767) {
+                error = "immediate out of the signed 16-bit range";
+                return std::nullopt;
+            }
+            append(static_cast<std::uint16_t>(extending->value & 0xFFFF), 2);
+            return out;
+        }
+        case 5:
+            if (extending->value < -128 || extending->value > 127) {
+                error = "displacement out of the signed byte range";
+                return std::nullopt;
+            }
+            append(static_cast<std::uint8_t>(extending->value & 0xFF), 1);
+            return out;
+        case 6:
+            if (extending->value < -32768 || extending->value > 32767) {
+                error = "displacement out of the signed 16-bit range";
+                return std::nullopt;
+            }
+            append(static_cast<std::uint16_t>(extending->value & 0xFFFF), 2);
+            return out;
+        default:  // mode 7: a full 32-bit displacement
+            append(static_cast<std::uint32_t>(extending->value), 4);
+            return out;
+    }
+}
+
+std::optional<EncodedInstruction> encode_long_integer(unsigned op, unsigned rd, std::int32_t operand,
+                                                      std::string& error) {
+    if (op > 7) {
+        error = "long-integer op out of range";
+        return std::nullopt;
+    }
+    if (!check_register(rd, error)) {
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = 0xF1;
+    out.bytes[1] = static_cast<std::uint8_t>((op << 4) | rd);
+    const auto bits = static_cast<std::uint32_t>(operand);
+    out.bytes[2] = static_cast<std::uint8_t>(bits & 0xFF);
+    out.bytes[3] = static_cast<std::uint8_t>((bits >> 8) & 0xFF);
+    out.bytes[4] = static_cast<std::uint8_t>((bits >> 16) & 0xFF);
+    out.bytes[5] = static_cast<std::uint8_t>((bits >> 24) & 0xFF);
+    out.length = 6;
+    return out;
+}
+
 }  // namespace krc::asm_kr232
