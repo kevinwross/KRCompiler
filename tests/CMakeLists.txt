@@ -343,6 +343,18 @@ if(TARGET krc)
                     -DEXPECT_EXIT=15
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
+        # A virtual call through a base pointer reaches the override: 2, not 4.
+        add_test(NAME krc_kr232_run_virtual
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_virtual.cpp
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=2
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
         # The keyboard package has no way to be exercised without input injection,
         # so its check is that it compiles against the profile's headers.
         add_test(NAME krc_kr232_input_compiles

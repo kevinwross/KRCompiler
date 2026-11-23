@@ -146,6 +146,22 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 continue;
             }
             out << global->name << ":\n";
+            // A table of addresses is what a vtable is: one relocated word per
+            // element, naming the function or object it points at.
+            if (const auto* addresses =
+                    dynamic_cast<const ir::ConstantAddressArray*>(global->initializer)) {
+                for (const ir::Value* element : addresses->elements) {
+                    if (const auto* function = dynamic_cast<const ir::Function*>(element)) {
+                        out << "  .word " << function->name << "\n";
+                    } else if (const auto* target =
+                                   dynamic_cast<const ir::GlobalVariable*>(element)) {
+                        out << "  .word " << target->name << "\n";
+                    } else {
+                        out << "  .word 0\n";
+                    }
+                }
+                continue;
+            }
             const auto* bytes = dynamic_cast<const ir::ConstantDataArray*>(global->initializer);
             if (bytes != nullptr && !bytes->bytes.empty()) {
                 for (const std::uint8_t byte : bytes->bytes) {

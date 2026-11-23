@@ -125,7 +125,29 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                 if (!piece.empty()) {
                     char* stop = nullptr;
                     const unsigned long value = std::strtoul(piece.c_str(), &stop, 0);
-                    if (stop == nullptr || *stop != '\0') {
+                    const bool numeric = stop != nullptr && *stop == '\0';
+                    // A word may name a symbol: that is what a vtable element is, and
+                    // the linker fills its address through an absolute relocation.
+                    if (!numeric && word && is_label_operand(piece)) {
+                        std::vector<std::uint8_t>& words = out.program.sections[1].bytes;
+                        const std::uint32_t field = static_cast<std::uint32_t>(words.size());
+                        for (unsigned i = 0; i < 4; ++i) {
+                            words.push_back(0);
+                        }
+                        Program::Relocation relocation;
+                        relocation.section = 1;
+                        relocation.offset = field;
+                        relocation.symbol = piece;
+                        relocation.absolute = true;
+                        out.program.relocations.push_back(std::move(relocation));
+                        data_offset += 4;
+                        if (comma == std::string::npos) {
+                            break;
+                        }
+                        start = comma + 1;
+                        continue;
+                    }
+                    if (!numeric) {
                         error = "line " + std::to_string(line_number) + ": bad data value '" +
                                 piece + "'";
                         return false;
