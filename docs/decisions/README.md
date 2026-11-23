@@ -97,3 +97,4 @@ The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
 - [0055-kr216-exception-descriptor.md](0055-kr216-exception-descriptor.md) — accepted; fixes the 16-bit `.cpp_except` descriptor, landing-pad entry state and frame walk.
 - [0056-kr216-64-bit-calling-convention.md](0056-kr216-64-bit-calling-convention.md) — accepted; a 64-bit argument occupies four integer slots and a 64-bit result is returned in R2–R5.
 - [0057-kr232-target-profile.md](0057-kr232-target-profile.md) — accepted; registers KR232 as a fifth target with the `Ilp32` data model (no 64-bit type), schema v2 unchanged, target ID 5, the R6 aggregate destination and `docs/abi-kr232.md`.
+- [0058-kr232-image-container.md](0058-kr232-image-container.md) — accepted; fixes the `K232` container: 64-byte header with 32-bit addresses, 32-byte section records, the reset word at `0x0100` for a kernel image, and one reader for kernel and user images.
