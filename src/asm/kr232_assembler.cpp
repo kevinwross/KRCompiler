@@ -244,7 +244,9 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                                       token[0] == '-' || token[0] == '+');
                 if (!token.empty() && !numeric) {
                     symbol_immediate = token;
-                    effective = line.substr(0, hash + 1) + "0";
+                    // The wide form, because the relocation writes four bytes at the
+                    // immediate and the encoder would otherwise pick a short form.
+                    effective = line.substr(0, hash + 1) + "0x80000000";
                 }
             }
         }
