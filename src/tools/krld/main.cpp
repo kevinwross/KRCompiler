@@ -185,6 +185,7 @@ int main(int argc, char** argv) {
         case krc::target::TargetId::Kr16: options.target = toolchain::Target::Kr16; break;
         case krc::target::TargetId::Kr64: options.target = toolchain::Target::Kr64; break;
         case krc::target::TargetId::Kr216: options.target = toolchain::Target::Kr216; break;
+        case krc::target::TargetId::Kr232: options.target = toolchain::Target::Kr232; break;
         }
     }
     options.base = base_set ? base : 0;
