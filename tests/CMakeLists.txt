@@ -312,6 +312,18 @@ if(TARGET krc)
                     ${CMAKE_SOURCE_DIR}/targets/kr232/runtime/input.c
                     -o "${KRC_TEST_OUTPUT_DIR}/kr232_input.o")
 
+        # The KDBG invariants a debugger relies on, on a compiled image: target 5,
+        # a line and a function present, and every line inside a function span.
+        add_test(NAME krc_kr232_kdbg_invariants
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_add.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232Kdbg.cmake)
+
+
         # Two builds of one program must be byte-identical: a frame hash or an
         # image hash is only meaningful if the image is reproducible.
         add_test(NAME krc_kr232_determinism

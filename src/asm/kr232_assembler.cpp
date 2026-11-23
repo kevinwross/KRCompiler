@@ -394,7 +394,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     // both call their first line `.L0` make each other's lines resolve to the wrong
     // address -- which showed up as an empty function span in a two-object image.
     std::uint32_t file_hash = 2166136261u;
-    for (const char character : std::string(file_name)) {
+    for (const char character : std::string(source)) {  // the text, not the name: every C input is assembled as "assembly"
         file_hash = (file_hash ^ static_cast<std::uint8_t>(character)) * 16777619u;
     }
     std::ostringstream prefix_stream;
