@@ -16,6 +16,7 @@
 #include "asm/kr16_object.h"
 #include "asm/kr216_encoder.h"
 #include "asm/kr232_assembler.h"
+#include "backend/kr232_backend.h"
 #include "asm/kr232_object.h"
 #include "asm/kr216_object.h"
 #include "asm/kr32_assembler.h"
@@ -591,7 +592,18 @@ CompileResult compile(const Source& source, const Options& options) {
     }
 
     std::string backend_error;
-    if (id == target::TargetId::Kr16) {
+    if (id == target::TargetId::Kr232) {
+        backend::Kr232Backend backend(*module, profile, level);
+        auto assembly = backend.emit(backend_error);
+        if (!assembly) {
+            diagnostics.report(frontend::Severity::Error, "KR232 backend: " + backend_error);
+        } else {
+            result.assembly = std::move(*assembly);
+            if (options.debug) {
+                result.debug_info = backend.debug_info();
+            }
+        }
+    } else if (id == target::TargetId::Kr16) {
         backend::Kr16Backend backend(*module, profile, level);
         auto assembly = backend.emit(backend_error);
         if (!assembly) {

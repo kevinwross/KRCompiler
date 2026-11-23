@@ -111,12 +111,19 @@ if(TARGET krc)
     # "unknown target", so this test is red until that row lands. It is the
     # failing test the guide's step 1 asks for, and M2 turns it green without
     # editing it.
-    add_test(NAME krc_kr232_no_backend
-        COMMAND $<TARGET_FILE:krc> --target=kr232 -c
-                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sizes.c"
-                -o "${KRC_TEST_OUTPUT_DIR}/kr232_no_backend.kro")
-    set_tests_properties(krc_kr232_no_backend PROPERTIES
-        PASS_REGULAR_EXPRESSION "target 'kr232' has no code generator yet")
+    # The M0 refusal test asked for "has no code generator yet"; that premise is
+    # obsolete now that the backend exists, so it is replaced by the two checks M3
+    # promises: the profile reports a backend, and -S reaches it with a prologue.
+    add_test(NAME krc_kr232_has_backend
+        COMMAND $<TARGET_FILE:krc> --list-targets)
+    set_tests_properties(krc_kr232_has_backend PROPERTIES
+        PASS_REGULAR_EXPRESSION "kr232  register  pointer=32  data=ilp32  backend=yes")
+
+    add_test(NAME krc_kr232_prologue
+        COMMAND $<TARGET_FILE:krc> --target=kr232 -S
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_min.c")
+    set_tests_properties(krc_kr232_prologue PROPERTIES
+        PASS_REGULAR_EXPRESSION "enter #0, #0")
 
     # A real .k232 produced by `krc -c` and `krld --entry=main --base=0x200` from a
     # two-instruction .s file. The decode says the container carries a .kdbg with

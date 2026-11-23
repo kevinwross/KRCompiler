@@ -172,7 +172,7 @@ constexpr TargetProfile kKr232{
     false,
     false,
     true,
-    false,
+    true,  // backend_available: the kr232 code generator exists from M3
     AggregateRules::MemoryOnly,
 };
 
