@@ -124,22 +124,51 @@ Kr232Backend::Kr232Backend(const ir::Module& module, const target::TargetProfile
 }
 
 std::uint32_t Kr232Backend::frame_bytes(const ir::Function& function) const {
-    // Every local and every value that must survive to a later instruction gets a
-    // slot. Spilling everything is slower than a register allocator and it is
-    // correct, which is the trade this backend makes until one exists.
-    std::uint32_t slots = 0;
+    // The size must be the slot count the emitter will use, computed the same way:
+    // an alloca reserves its whole size rounded to words, a value reserves one word
+    // and an eight-byte value two, aligned to an even slot. Counting bytes here
+    // instead -- no rounding, no alignment, no two-slot values -- made ENTER
+    // allocate less than the body wrote to, so a function's spills landed in its
+    // caller's frame.
+    std::uint32_t next_slot = 0;
+    for (const auto& parameter : function.parameters) {
+        if (type_bytes(parameter->type) > 4u) {
+            next_slot = 1u;
+            break;
+        }
+    }
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
             if (instruction->opcode == ir::Opcode::Alloca) {
-                slots += type_bytes(instruction->allocated_type);
-            } else if (instruction->type != nullptr &&
-                       instruction->type->kind != ir::TypeKind::Void) {
-                slots += 4;
+                next_slot += align_frame(type_bytes(instruction->allocated_type)) / 4u;
             }
         }
     }
-    slots += static_cast<std::uint32_t>(function.parameters.size()) * 4u;
-    return align_frame(slots);
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode == ir::Opcode::Call && instruction->type != nullptr &&
+                (instruction->type->kind == ir::TypeKind::Struct ||
+                 instruction->type->kind == ir::TypeKind::Union ||
+                 instruction->type->kind == ir::TypeKind::Array)) {
+                next_slot += align_frame(type_bytes(instruction->type)) / 4u;
+            }
+        }
+    }
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Alloca && instruction->type != nullptr &&
+                instruction->type->kind != ir::TypeKind::Void) {
+                const bool eight = instruction->type->kind == ir::TypeKind::Float &&
+                                   (instruction->type->bits + 7u) / 8u >= 8u;
+                const std::uint32_t slots = eight ? 2u : 1u;
+                if (slots == 2u && (next_slot % 2u) != 0u) {
+                    ++next_slot;
+                }
+                next_slot += slots;
+            }
+        }
+    }
+    return 4u + 4u * next_slot;
 }
 
 namespace {
