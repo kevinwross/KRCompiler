@@ -12,7 +12,7 @@ if(DEFINED INCLUDE AND NOT INCLUDE STREQUAL "")
     set(include_args -I "${INCLUDE}")
 endif()
 
-foreach(required KRC KRLD VM CRT0 SOURCE WORK EXPECT_EXIT)
+foreach(required KRC KRLD VM CRT0 SOURCE WORK)
     if(NOT DEFINED ${required})
         message(FATAL_ERROR "${required} is required")
     endif()
@@ -63,8 +63,20 @@ endif()
 execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.k232" --max-steps 200000
                         ${run_args}
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
-if(NOT result EQUAL EXPECT_EXIT)
+if(DEFINED EXPECT_EXIT AND NOT EXPECT_EXIT STREQUAL "" AND NOT result EQUAL EXPECT_EXIT)
     message(FATAL_ERROR "expected exit ${EXPECT_EXIT}, got ${result}\n${output}${error}")
+
+# The machine's own status is the full 32-bit value; a POSIX process status keeps
+# only its low eight bits, so a program exiting with 300 reads back as 44 there.
+if(DEFINED EXPECT_STATUS AND NOT EXPECT_STATUS STREQUAL "")
+    if(NOT output MATCHES "halted status ([0-9]+)")
+        message(FATAL_ERROR "no halted status in the output:\n${output}${error}")
+    endif()
+    if(NOT CMAKE_MATCH_1 STREQUAL EXPECT_STATUS)
+        message(FATAL_ERROR
+            "expected machine status ${EXPECT_STATUS}, got ${CMAKE_MATCH_1}\n${output}")
+    endif()
+endif()
 endif()
 if(DEFINED EXPECT_FRAME AND NOT EXPECT_FRAME STREQUAL "")
     if(NOT output MATCHES "frame ${EXPECT_FRAME}")

@@ -218,7 +218,12 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
                     -DEXPECT_EXIT=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232FrameLayout.cmake)
-        # Three functions in one object: labels must not collide across them.
+        # Windows reports a 32-bit process status, POSIX only the low eight bits.
+        if(WIN32)
+            set(KR232_EXIT300_PROCESS_ARG -DEXPECT_EXIT=300)
+        else()
+            set(KR232_EXIT300_PROCESS_ARG)
+        endif()
         add_test(NAME krc_kr232_three_functions
             COMMAND ${CMAKE_COMMAND}
                     -DKRC=$<TARGET_FILE:krc>
@@ -255,7 +260,8 @@ if(TARGET krc)
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_exit300.c
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
-                    -DEXPECT_EXIT=300
+                    -DEXPECT_STATUS=300
+                    ${KR232_EXIT300_PROCESS_ARG}
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_run_fp
             COMMAND ${CMAKE_COMMAND}
