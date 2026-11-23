@@ -473,7 +473,10 @@ std::optional<EncodedInstruction> encode_enter(std::uint32_t frame, unsigned mas
         out.bytes[2] = low;
         out.bytes[3] = high;
         out.length = 4;
-    } else if (frame <= 0xFFFF) {
+    } else if (frame <= 0xFFF) {
+        // Appendix A encodes a 300-byte frame with F8 and a 4096-byte one with FB;
+        // the ISA fixes no threshold, so this picks F8 up to 4095 and M2's log
+        // records the choice as a convention rather than compliance.
         out.bytes[0] = 0xF8;
         out.bytes[1] = static_cast<std::uint8_t>(frame & 0xFF);
         out.bytes[2] = static_cast<std::uint8_t>((frame >> 8) & 0xFF);

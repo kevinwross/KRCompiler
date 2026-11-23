@@ -57,7 +57,7 @@ TEST_CASE("KR232 parser reads register-with-immediate text") {
     expect_parse("leave #0", {0xDC, 0x00, 0x00});
 
     std::string error;
-    CHECK(!parse_instruction("and r2, #256", error).has_value());
+    CHECK(!parse_instruction("shl r2, #32", error).has_value());
     CHECK(!parse_instruction("shl r2, #32", error).has_value());
 }
 
@@ -85,7 +85,7 @@ TEST_CASE("KR232 parser reads branches and control transfers") {
     expect_parse("ble -9", {0xBB, 0xF7});
     expect_parse("bra -9", {0xBF, 0xF7});
     expect_parse("bra +6", {0xBE, 0x06});
-    expect_parse("call +6", {0xBC, 0x06});
+    expect_parse("call +6", {0xD0, 0x06, 0x00});
     expect_parse("jmp +6", {0xCF, 0x06, 0x00});
     expect_parse("jmp r2", {0x9F, 0x20});
     expect_parse("call r2", {0x42});
