@@ -50,7 +50,10 @@ bool is_label_operand(const std::string& operand) {
         return false;
     }
     const char first = operand[0];
-    return std::isalpha(static_cast<unsigned char>(first)) != 0 || first == '_';
+    // A leading '.' is a local label: the backend names its blocks `.LbbN` and its
+    // comparison tails `.LcmpN`, and a parser that rejected those would refuse
+    // every generated branch.
+    return std::isalpha(static_cast<unsigned char>(first)) != 0 || first == '_' || first == '.';
 }
 
 }  // namespace

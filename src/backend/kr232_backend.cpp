@@ -80,8 +80,14 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         std::unordered_map<const ir::Value*, std::uint32_t> slot_of;
         std::unordered_map<const ir::Value*, unsigned> reg_of;
         std::uint32_t next_slot = 0;
+        std::uint32_t next_compare = 0;
         unsigned next_scratch = 0;
         bool returned = false;
+        // Branch targets are block labels, numbered in function order.
+        std::unordered_map<const ir::BasicBlock*, std::size_t> block_index;
+        for (std::size_t i = 0; i < function->blocks.size(); ++i) {
+            block_index.emplace(function->blocks[i].get(), i);
+        }
 
         // A value's home register. Constants get one too: materialising them is
         // the caller's job, and a constant that is never materialised is how a
@@ -112,6 +118,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         };
 
         for (const auto& block : function->blocks) {
+            out << ".Lbb" << block_index[block.get()] << ":\n";
             for (const auto& instruction : block->instructions) {
                 switch (instruction->opcode) {
                     case ir::Opcode::Alloca: {
@@ -217,6 +224,63 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             out << "  " << op_name << " r" << reg << ", r" << register_for(right)
                                 << "\n";
                         }
+                        break;
+                    }
+                    case ir::Opcode::ICmp: {
+                        if (instruction->operands.size() < 2) {
+                            error = "kr232 backend: comparison without two operands";
+                            return std::nullopt;
+                        }
+                        const unsigned reg = register_for(instruction.get());
+                        const unsigned other = reg == 6 ? 7 : 6;
+                        materialize(instruction->operands[0], reg);
+                        materialize(instruction->operands[1], other);
+                        // A nested SETcc has no one-operand form in the assembler
+                        // yet, so the boolean is materialised through a branch: the
+                        // value starts at zero and the taken path loads one.
+                        const std::string tail = ".Lcmp" + std::to_string(next_compare++);
+                        const char* branch = "beq";
+                        switch (instruction->icmp_predicate) {
+                            case ir::ICmpPredicate::Eq: branch = "beq"; break;
+                            case ir::ICmpPredicate::Ne: branch = "bne"; break;
+                            case ir::ICmpPredicate::Ugt: branch = "bhi"; break;
+                            case ir::ICmpPredicate::Uge: branch = "bcs"; break;
+                            case ir::ICmpPredicate::Ult: branch = "bcc"; break;
+                            case ir::ICmpPredicate::Ule: branch = "bls"; break;
+                            case ir::ICmpPredicate::Sgt: branch = "bgt"; break;
+                            case ir::ICmpPredicate::Sge: branch = "bge"; break;
+                            case ir::ICmpPredicate::Slt: branch = "blt"; break;
+                            case ir::ICmpPredicate::Sle: branch = "ble"; break;
+                        }
+                        out << "  cmp r" << reg << ", r" << other << "\n";
+                        out << "  ld r" << reg << ", #0\n";
+                        out << "  " << branch << " " << tail << "\n";
+                        out << "  bra " << tail << "end\n";
+                        out << tail << ":\n";
+                        out << "  ld r" << reg << ", #1\n";
+                        out << tail << "end:\n";
+                        break;
+                    }
+                    case ir::Opcode::Br: {
+                        if (instruction->successors.empty()) {
+                            error = "kr232 backend: branch without a target";
+                            return std::nullopt;
+                        }
+                        out << "  bra .Lbb" << block_index[instruction->successors[0]] << "\n";
+                        break;
+                    }
+                    case ir::Opcode::CondBr: {
+                        if (instruction->operands.empty() || instruction->successors.size() < 2) {
+                            error = "kr232 backend: conditional branch without a condition";
+                            return std::nullopt;
+                        }
+                        const unsigned reg = register_for(instruction->operands[0]);
+                        materialize(instruction->operands[0], reg);
+                        const unsigned zero = reg == 6 ? 7 : 6;
+                        out << "  ld r" << zero << ", #0\n";
+                        out << "  cmp r" << reg << ", r" << zero << "\n";
+                        out << "  bne .Lbb" << block_index[instruction->successors[0]] << "\n";
+                        out << "  bra .Lbb" << block_index[instruction->successors[1]] << "\n";
                         break;
                     }
                     case ir::Opcode::Ret: {

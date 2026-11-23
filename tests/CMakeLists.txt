@@ -213,6 +213,29 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+        # Both sides of one branch: the false path falls through to 42, the true
+        # path takes the early return. A single test would not show the branch is
+        # decided rather than always taken.
+        add_test(NAME krc_kr232_run_branch_false
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_branch.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+        add_test(NAME krc_kr232_run_branch_true
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_branch_true.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=1
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
     endif()
 
     add_test(NAME krc_kr16_syntax
