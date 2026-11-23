@@ -40,3 +40,22 @@ if(NOT first STREQUAL second)
     message(FATAL_ERROR "two builds differ: ${first} vs ${second}")
 endif()
 message(STATUS "both builds hash ${first}")
+
+# The assembly text must be identical too: byte-identical images are meaningless
+# if the text that produced them is not reproducible.
+execute_process(COMMAND "${KRC}" -S --target kr232 "${SOURCE}"
+                OUTPUT_VARIABLE first_assembly ERROR_VARIABLE assembly_error
+                RESULT_VARIABLE assembly_result)
+if(NOT assembly_result EQUAL 0)
+    message(FATAL_ERROR "emitting assembly failed: ${assembly_error}")
+endif()
+execute_process(COMMAND "${KRC}" -S --target kr232 "${SOURCE}"
+                OUTPUT_VARIABLE second_assembly ERROR_VARIABLE assembly_error
+                RESULT_VARIABLE assembly_result)
+if(NOT assembly_result EQUAL 0)
+    message(FATAL_ERROR "emitting assembly failed: ${assembly_error}")
+endif()
+if(NOT first_assembly STREQUAL second_assembly)
+    message(FATAL_ERROR "two -S runs differ")
+endif()
+message(STATUS "assembly text is identical across runs")
