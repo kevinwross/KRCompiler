@@ -89,6 +89,61 @@ bool parse_number(const std::string& text, std::int32_t& value) {
     return true;
 }
 
+struct Address {
+    bool pc = false;
+    bool sp = false;
+    bool absolute = false;
+    bool post = false;
+    bool pre = false;
+    unsigned base = 0;
+    std::int32_t disp = 0;
+    std::uint32_t value = 0;
+};
+
+// `[r3]`, `[r3+8]`, `[r3-8]`, `[r3]+`, `-[r3]`, `[pc+0x40]`, `[sp+8]`, `[0x1234]`.
+bool parse_address(const std::string& text, Address& address) {
+    std::string body = text;
+    if (body.size() >= 2 && body.front() == '-' && body[1] == '[') {
+        address.pre = true;
+        body.erase(body.begin());
+    }
+    // A trailing '+' marks a post-increment and comes outside the brackets.
+    if (body.size() >= 2 && body.back() == '+') {
+        address.post = true;
+        body.pop_back();
+    }
+    if (body.size() < 3 || body.front() != '[' || body.back() != ']') {
+        return false;
+    }
+    body = body.substr(1, body.size() - 2);
+    if (body.rfind("pc", 0) == 0) {
+        address.pc = true;
+        body.erase(0, 2);
+    } else if (body.rfind("sp", 0) == 0) {
+        address.sp = true;
+        body.erase(0, 2);
+    } else if (body.rfind("r", 0) == 0) {
+        const std::size_t split = body.find_first_of("+-");
+        const std::string reg_text = split == std::string::npos ? body : body.substr(0, split);
+        if (!parse_register(reg_text, address.base)) {
+            return false;
+        }
+        body = split == std::string::npos ? std::string() : body.substr(split);
+    } else {
+        address.absolute = true;
+        std::int32_t value = 0;
+        if (!parse_number(body, value)) {
+            return false;
+        }
+        address.value = static_cast<std::uint32_t>(value);
+        return true;
+    }
+    if (!body.empty() && !parse_number(body, address.disp)) {
+        return false;
+    }
+    return true;
+}
+
 struct Condition {
     const char* name;
     unsigned code;
@@ -192,6 +247,95 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
             }
             if (mnemonic == "mov") {
                 return encode_compact_register(0, ra, rb, error);
+            }
+        }
+    }
+
+    // Register with a bracketed address, or a store whose address comes first.
+    if (operands.size() == 2) {
+        struct LoadStore {
+            const char* name;
+            unsigned normal_op;
+            unsigned compact_op;
+            unsigned long_op;
+        };
+        constexpr LoadStore kLoadStores[] = {
+            {"ld", 0, 14, 0xFF},   {"ldbu", 2, 16, 0},  {"ldbs", 3, 17, 1},
+            {"ldhu", 29, 255, 5},  {"ldhs", 31, 255, 7}, {"st", 1, 15, 0xFF},
+            {"stb", 4, 18, 2},     {"sth", 30, 255, 6},
+        };
+        unsigned rd = 0;
+        Address address;
+        const bool register_first = parse_register(operands[0], rd);
+        const bool address_second = register_first && parse_address(operands[1], address);
+        if (address_second) {
+            for (const LoadStore& entry : kLoadStores) {
+                if (mnemonic != entry.name) {
+                    continue;
+                }
+                if (address.absolute) {
+                    if (entry.long_op == 0xFF) {
+                        return encode_ld_absolute(rd, address.value, error);
+                    }
+                    return encode_long_integer(entry.long_op, rd,
+                                               static_cast<std::int32_t>(address.value), error);
+                }
+                if (address.pc) {
+                    if (mnemonic != "ldbu" && mnemonic != "ldbs") {
+                        error = "only the byte loads have a PC-relative normal form";
+                        return std::nullopt;
+                    }
+                    return encode_normal(mnemonic == "ldbu" ? 17 : 18, rd, 0, address.disp, error);
+                }
+                if (address.post || address.pre) {
+                    unsigned op = entry.compact_op;
+                    op += address.post ? 5u : 10u;
+                    return encode_compact_register(op, rd, address.base, error);
+                }
+                // `[Rb]` with no displacement is the two-byte compact form when
+                // that form exists; the normal form is three bytes.
+                if (address.disp == 0 && entry.compact_op != 255) {
+                    return encode_compact_register(entry.compact_op, rd, address.base, error);
+                }
+                return encode_normal(entry.normal_op, rd, address.base, address.disp, error);
+            }
+            if (mnemonic == "lea") {
+                if (address.absolute) {
+                    return encode_long_integer(3, rd, static_cast<std::int32_t>(address.value),
+                                               error);
+                }
+                if (address.sp || address.pc) {
+                    return encode_long_integer(address.sp ? 4 : 3, rd, address.disp, error);
+                }
+                return encode_normal(14, rd, address.base, address.disp, error);
+            }
+        }
+        unsigned rs = 0;
+        Address store_address;
+        if (!register_first && parse_address(operands[0], store_address) &&
+            parse_register(operands[1], rs)) {
+            for (const LoadStore& entry : kLoadStores) {
+                if (mnemonic != entry.name) {
+                    continue;
+                }
+                if (store_address.absolute) {
+                    if (entry.long_op == 0xFF) {
+                        return encode_st_absolute(rs, store_address.value, error);
+                    }
+                    return encode_long_integer(entry.long_op, rs,
+                                               static_cast<std::int32_t>(store_address.value),
+                                               error);
+                }
+                if (store_address.post || store_address.pre) {
+                    unsigned op = entry.compact_op;
+                    op += store_address.post ? 5u : 10u;
+                    return encode_compact_register(op, rs, store_address.base, error);
+                }
+                if (store_address.disp == 0 && entry.compact_op != 255) {
+                    return encode_compact_register(entry.compact_op, rs, store_address.base, error);
+                }
+                return encode_normal(entry.normal_op, rs, store_address.base, store_address.disp,
+                                     error);
             }
         }
     }

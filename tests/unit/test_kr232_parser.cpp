@@ -61,9 +61,25 @@ TEST_CASE("KR232 parser reads register-with-immediate text") {
     CHECK(!parse_instruction("shl r2, #32", error).has_value());
 }
 
+TEST_CASE("KR232 parser reads bracketed addresses") {
+    expect_parse("ld r2, [r3]", {0x8E, 0x23});
+    expect_parse("st [r3], r2", {0x8F, 0x23});
+    expect_parse("ld r4, [r2+8]", {0xC0, 0x42, 0x08});
+    expect_parse("st [r2+8], r4", {0xC1, 0x42, 0x08});
+    expect_parse("ldbu r2, [r3]", {0x90, 0x23});
+    expect_parse("ld r2, [r3]+", {0x93, 0x23});
+    expect_parse("ld r2, -[r3]", {0x98, 0x23});
+    expect_parse("ldbu r2, [0x1234]", {0xF1, 0x02, 0x34, 0x12, 0x00, 0x00});
+    expect_parse("ld r2, [0x1234]", {0x62, 0x34, 0x12, 0x00, 0x00});
+    expect_parse("st [0x1234], r2", {0xE2, 0x34, 0x12, 0x00, 0x00});
+    expect_parse("lea r2, [r3+8]", {0xCE, 0x23, 0x08});
+    expect_parse("lea r2, [pc+0x40]", {0xF1, 0x32, 0x40, 0x00, 0x00, 0x00});
+    expect_parse("lea r2, [sp+8]", {0xF1, 0x42, 0x08, 0x00, 0x00, 0x00});
+}
+
 TEST_CASE("KR232 parser refuses what it cannot encode yet") {
     std::string error;
-    CHECK(!parse_instruction("ld r2, [r3]", error).has_value());
+    CHECK(!parse_instruction("fld f1, [r2]", error).has_value());
     CHECK(!parse_instruction("", error).has_value());
     CHECK(!parse_instruction("mov r16, r3", error).has_value());
     CHECK(!parse_instruction("frobnicate r2", error).has_value());
