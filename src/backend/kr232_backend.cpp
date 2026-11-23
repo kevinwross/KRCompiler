@@ -151,6 +151,16 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             if (const auto* addresses =
                     dynamic_cast<const ir::ConstantAddressArray*>(global->initializer)) {
                 for (const ir::Value* element : addresses->elements) {
+                    // kr232 reserves the word below the vptr for type information
+                    // and requires it to be zero, unlike the Itanium ABI's pointer
+                    // to a typeinfo object. The IR names that slot with a `_ZTI`
+                    // symbol, so its word is emitted as zero.
+                    if (const auto* named = dynamic_cast<const ir::GlobalVariable*>(element)) {
+                        if (named->name.rfind("_ZTI", 0) == 0) {
+                            out << "  .word 0\n";
+                            continue;
+                        }
+                    }
                     if (const auto* function = dynamic_cast<const ir::Function*>(element)) {
                         out << "  .word " << function->name << "\n";
                     } else if (const auto* target =
