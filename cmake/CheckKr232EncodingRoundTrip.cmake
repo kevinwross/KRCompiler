@@ -5,6 +5,10 @@
 # base r0 for a whole milestone, and no unit test could see it because the
 # instruction was legal and the address was simply wrong.
 #
+# `[sp+0]` and `[rN+0]` are not listed: they canonicalise to the compact form
+# without a displacement, which is why a verbatim check would fail them; `[sp]`
+# is the entry that covers them.
+#
 # Required: KRC, KRLD, DIS, WORK
 
 if(NOT DEFINED KRC OR NOT DEFINED KRLD OR NOT DEFINED DIS OR NOT DEFINED WORK)
