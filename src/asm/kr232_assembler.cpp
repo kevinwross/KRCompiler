@@ -213,16 +213,34 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                         return false;
                     }
                 }
-                const auto encoded = encode_compact_branch(code, 0, encode_error);
-                if (!encoded.has_value()) {
-                    error = encode_error;
-                    return false;
+                // A label branch always uses the rel16 form, which the linker can
+                // reach at any distance. Only `bra`, `jmp` and `call` have that
+                // form directly; a conditional branch reaches it through a skip
+                // over the `bra`, because its own form is nine bits and a spilled
+                // function is easily longer than that.
+                const std::uint32_t offset =
+                    static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
+                if (mnemonic == "bra" || mnemonic == "call" || mnemonic == "jmp") {
+                    out.program.sections[0].bytes.push_back(mnemonic == "call" ? 0xD0 : 0xCF);
+                } else {
+                    const unsigned inverse = code ^ 1u;  // eq/ne, cs/cc, mi/pl, ...
+                    const auto skip = encode_compact_branch(inverse, 3, encode_error);
+                    if (!skip.has_value()) {
+                        error = encode_error;
+                        return false;
+                    }
+                    out.program.sections[0].bytes.push_back(skip->bytes[0]);
+                    out.program.sections[0].bytes.push_back(skip->bytes[1]);
+                    out.program.sections[0].bytes.push_back(0xCF);
                 }
-                const std::uint32_t offset = static_cast<std::uint32_t>(
-                    out.program.sections[0].bytes.size());
-                out.program.sections[0].bytes.push_back(encoded->bytes[0]);
-                out.program.sections[0].bytes.push_back(encoded->bytes[1]);
-                fixups.push_back(Fixup{offset, operand, static_cast<unsigned>(line_number)});
+                out.program.sections[0].bytes.push_back(0);
+                out.program.sections[0].bytes.push_back(0);
+                Program::Relocation relocation;
+                relocation.offset = static_cast<std::uint32_t>(
+                    out.program.sections[0].bytes.size()) - 2u;
+                relocation.symbol = operand;
+                relocation.addend = -2;  // relative to the next instruction
+                out.program.relocations.push_back(std::move(relocation));
                 out.lines.push_back(DebugLine{offset, static_cast<std::uint32_t>(line_number),
                                               std::string(file_name)});
                 continue;
