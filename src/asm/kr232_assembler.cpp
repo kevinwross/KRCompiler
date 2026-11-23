@@ -256,6 +256,30 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         out.program.sections[0].bytes[fixup.offset + 1] = static_cast<std::uint8_t>(bits & 0xFF);
     }
 
+    // A call or jmp to a label defined in this same object is patched here: the
+    // linker is for what this file cannot see, and a relocation left for a local
+    // symbol is a width the linker cannot verify.
+    std::vector<Program::Relocation> unresolved;
+    for (const Program::Relocation& relocation : out.program.relocations) {
+        const auto found = labels.find(relocation.symbol);
+        if (found == labels.end()) {
+            unresolved.push_back(relocation);
+            continue;
+        }
+        const auto displacement = static_cast<std::int64_t>(found->second) -
+                                  static_cast<std::int64_t>(relocation.offset + 2);
+        if (displacement < -32768 || displacement > 32767) {
+            error = "'" + relocation.symbol + "' is out of the 16-bit branch range";
+            return false;
+        }
+        const auto value = static_cast<std::uint16_t>(displacement & 0xFFFF);
+        out.program.sections[0].bytes[relocation.offset] =
+            static_cast<std::uint8_t>(value & 0xFF);
+        out.program.sections[0].bytes[relocation.offset + 1] =
+            static_cast<std::uint8_t>((value >> 8) & 0xFF);
+    }
+    out.program.relocations = std::move(unresolved);
+
     for (const auto& [name, offset] : labels) {
         const bool global = globals.count(name) != 0;
         out.program.symbols.push_back(

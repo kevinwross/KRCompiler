@@ -88,6 +88,18 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         for (std::size_t i = 0; i < function->blocks.size(); ++i) {
             block_index.emplace(function->blocks[i].get(), i);
         }
+        // Arguments arrive in R2-R5 (kr232 ABI), so a parameter's home register is
+        // the one the caller put it in. More than four needs the stack form the ABI
+        // also defines, which this pass does not emit yet.
+        {
+            if (function->parameters.size() > 4) {
+                error = "kr232 backend: more than four arguments needs the stack form";
+                return std::nullopt;
+            }
+            for (std::size_t i = 0; i < function->parameters.size(); ++i) {
+                reg_of.emplace(function->parameters[i].get(), 2u + static_cast<unsigned>(i));
+            }
+        }
 
         // A value's home register. Constants get one too: materialising them is
         // the caller's job, and a constant that is never materialised is how a
@@ -281,6 +293,32 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         out << "  cmp r" << reg << ", r" << zero << "\n";
                         out << "  bne .Lbb" << block_index[instruction->successors[0]] << "\n";
                         out << "  bra .Lbb" << block_index[instruction->successors[1]] << "\n";
+                        break;
+                    }
+                    case ir::Opcode::Call: {
+                        if (instruction->operands.empty()) {
+                            error = "kr232 backend: call without a callee";
+                            return std::nullopt;
+                        }
+                        const auto* callee = dynamic_cast<const ir::Function*>(instruction->operands[0]);
+                        if (callee == nullptr) {
+                            error = "kr232 backend: only a direct call to a function is implemented";
+                            return std::nullopt;
+                        }
+                        // Arguments go in R2-R5 before the call; the result comes
+                        // back in R2, so it moves into this value's register.
+                        for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
+                            materialize(instruction->operands[i], 2u + static_cast<unsigned>(i - 1));
+                        }
+                        out << "  call " << callee->name << "\n";
+                        const bool returns_value =
+                            instruction->type != nullptr && instruction->type->kind != ir::TypeKind::Void;
+                        if (returns_value) {
+                            const unsigned reg = register_for(instruction.get());
+                            if (reg != 2) {
+                                out << "  mov r" << reg << ", r2\n";
+                            }
+                        }
                         break;
                     }
                     case ir::Opcode::Ret: {
