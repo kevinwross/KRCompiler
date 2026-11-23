@@ -144,7 +144,10 @@ bool parse_address(const std::string& text, Address& address) {
         address.pc = true;
         body.erase(0, 2);
     } else if (body.rfind("sp", 0) == 0) {
+        // SP is R15: the base field must carry it, or a load through [sp+N]
+        // encodes base zero and reads address N instead of the stack.
         address.sp = true;
+        address.base = 15;
         body.erase(0, 2);
     } else if (body.rfind("r", 0) == 0) {
         const std::size_t split = body.find_first_of("+-");
