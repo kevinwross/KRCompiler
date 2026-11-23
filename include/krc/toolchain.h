@@ -110,6 +110,8 @@ struct Options {
     // can open the file. Empty records "assembly", which is what the kr232
     // assembler recorded for every input before this existed.
     std::string source_name;
+    // Emit calls in the kr232 indirect form, for an object whose calls can leave it.
+    bool far_calls = false;
     // Drop sections the entry symbol cannot reach (section granularity). A
     // `.text.<name>` function section with no reference from a reachable
     // section is removed before layout.

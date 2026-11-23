@@ -185,6 +185,7 @@ int main(int argc, char** argv) {
     bool emit_assembly = false;
     bool emit_object = false;
     bool emit_object_container = false;
+    bool far_calls = false;
     bool dump_symbols = false;
     bool json_output = false;
     bool cxx_mode = false;
@@ -305,6 +306,10 @@ int main(int argc, char** argv) {
         }
         if (argument == "-c") {
             emit_object = true;
+            continue;
+        }
+        if (argument == "--far-calls") {
+            far_calls = true;
             continue;
         }
         if (argument == "--emit-object") {
@@ -450,6 +455,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             toolchain::Options assemble_options = options;
+            assemble_options.far_calls = far_calls;
             assemble_options.target = to_target(*target_id);
             assemble_options.source_name = input;
             const auto assembled =
@@ -506,6 +512,7 @@ int main(int argc, char** argv) {
         }
         toolchain::Options file_options = options;
         file_options.source_name = input;
+        file_options.far_calls = far_calls;
         const toolchain::Source source{input, text};
         const auto compiled = toolchain::compile(source, file_options);
         diagnostics.insert(diagnostics.end(), compiled.diagnostics.begin(),

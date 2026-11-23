@@ -209,7 +209,7 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
         const std::string_view recorded = options.source_name.empty()
                                              ? std::string_view("assembly")
                                              : std::string_view(options.source_name);
-        if (!asm_kr232::assemble(assembly, recorded, assembled, error)) {
+        if (!asm_kr232::assemble(assembly, recorded, assembled, error, options.far_calls)) {
             result.error = "KR232 assembler: " + error;
             return result;
         }

@@ -26,7 +26,13 @@ struct AssembledProgram {
 // accepts. A label operand on `bra`, a `bcc`, `call` or `jmp` becomes a two-byte
 // compact branch whose displacement is patched once every label is placed; a
 // label out of the nine-bit range is an error rather than a truncation.
+//
+// `far_calls` emits every call in the indirect form (`ld r8, #symbol; call r8`).
+// A call that crosses an object boundary cannot be widened afterwards -- the
+// linker patches a field, it cannot grow one -- so an object whose calls all
+// leave it asks for the wide form here.
 [[nodiscard]] bool assemble(std::string_view source, std::string_view file_name,
-                            AssembledProgram& out, std::string& error);
+                            AssembledProgram& out, std::string& error,
+                            bool far_calls = false);
 
 }  // namespace krc::asm_kr232

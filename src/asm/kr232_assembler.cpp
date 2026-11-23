@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <sstream>
 
 #include "asm/kr232_parser.h"
@@ -74,8 +75,24 @@ bool is_register_operand(const std::string& operand) {
 
 }  // namespace
 
-bool assemble(std::string_view source, std::string_view file_name, AssembledProgram& out,
-              std::string& error) {
+namespace {
+
+// Far calls. `call rel16` reaches ±32 KiB and the C runtime's object is larger, so
+// a site that lands out of range is emitted as `ld r8, #symbol; call r8` -- the
+// ISA's indirect call has no range limit -- and the object is laid out again,
+// because the wider form moves everything after it. Sites are identified by their
+// ordinal: the instruction sequence is the same on every pass, only the widths
+// change.
+struct Relaxation {
+    std::set<std::size_t> far;                            // ordinals to widen
+    std::map<std::uint32_t, std::size_t> site_of_offset;  // relocation -> ordinal
+    std::set<std::size_t> too_far;                        // found this pass
+    std::size_t next_site = 0;
+};
+
+bool assemble_once(std::string_view source, std::string_view file_name,
+                   const std::set<std::size_t>& far, Relaxation& relaxation,
+                   AssembledProgram& out, std::string& error) {
     out = AssembledProgram{};
     out.program.sections.push_back(Section{".text", {}, 4, 5});
     out.program.sections.push_back(Section{".data", {}, 4, 3});
@@ -209,6 +226,27 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                 if (mnemonic == "call" || mnemonic == "jmp") {
                     const std::uint32_t offset =
                         static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
+                    const std::size_t site = relaxation.next_site++;
+                    if (mnemonic == "call" && far.count(site) != 0) {
+                        // ld r8, #symbol  then  call r8: the address is absolute, so
+                        // no distance is involved.
+                        out.program.sections[0].bytes.push_back(0x58);
+                        for (int byte = 0; byte < 4; ++byte) {
+                            out.program.sections[0].bytes.push_back(0);
+                        }
+                        Program::Relocation wide;
+                        wide.offset = offset + 1;
+                        wide.symbol = operand;
+                        wide.absolute = true;
+                        wide.local_only = false;
+                        out.program.relocations.push_back(std::move(wide));
+                        out.program.sections[0].bytes.push_back(0x48);  // call r8
+                        relaxation.site_of_offset[offset + 1] = site;
+                        out.lines.push_back(DebugLine{
+                            offset, static_cast<std::uint32_t>(line_number),
+                            std::string(file_name)});
+                        continue;
+                    }
                     out.program.sections[0].bytes.push_back(mnemonic == "call" ? 0xD0 : 0xCF);
                     out.program.sections[0].bytes.push_back(0);
                     out.program.sections[0].bytes.push_back(0);
@@ -217,6 +255,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                     relocation.symbol = operand;
                     relocation.addend = -2;  // relative to the next instruction
                 relocation.local_only = mnemonic != "call" && mnemonic != "jmp";
+                    relaxation.site_of_offset[offset + 1] = site;
                     out.program.relocations.push_back(std::move(relocation));
                     out.lines.push_back(DebugLine{offset, static_cast<std::uint32_t>(line_number),
                                                   std::string(file_name)});
@@ -382,6 +421,13 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         const auto displacement = static_cast<std::int64_t>(found->second) -
                                   static_cast<std::int64_t>(relocation.offset + 2);
         if (displacement < -32768 || displacement > 32767) {
+            const auto site = relaxation.site_of_offset.find(relocation.offset);
+            if (site != relaxation.site_of_offset.end()) {
+                // Widen it on the next pass rather than refuse: only a call can be
+                // widened, and only a call reaches this far in practice.
+                relaxation.too_far.insert(site->second);
+                continue;
+            }
             error = "'" + relocation.symbol + "' is out of the 16-bit branch range";
             return false;
         }
@@ -480,4 +526,38 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     return true;
 }
 
+}  // namespace
+
+// The public entry: lay the file out, widen whatever landed out of range, and lay
+// it out again. Six passes is far more than a real file needs -- one is typical,
+// because the first pass finds every far site at once -- and bounds a case where
+// widening one site pushes another out.
+bool assemble(std::string_view source, std::string_view file_name, AssembledProgram& out,
+              std::string& error, bool far_calls) {
+    std::set<std::size_t> far;
+    for (int pass = 0; pass < 6; ++pass) {
+        Relaxation relaxation;
+        AssembledProgram candidate;
+        std::string pass_error;
+        if (!assemble_once(source, file_name, far, relaxation, candidate, pass_error)) {
+            error = pass_error;
+            return false;
+        }
+        if (far_calls && pass == 0) {
+            // Every call site in the file, so no relocation leaves for the linker
+            // to overflow.
+            for (std::size_t site = 0; site < relaxation.next_site; ++site) {
+                far.insert(site);
+            }
+            continue;
+        }
+        if (relaxation.too_far.empty()) {
+            out = std::move(candidate);
+            return true;
+        }
+        far.insert(relaxation.too_far.begin(), relaxation.too_far.end());
+    }
+    error = "a call is out of range and could not be widened";
+    return false;
+}
 }  // namespace krc::asm_kr232
