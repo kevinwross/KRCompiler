@@ -735,7 +735,27 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         break;
                     }
-                    case ir::Opcode::FAdd:
+                    case ir::Opcode::FPTrunc:
+                    case ir::Opcode::FPExt: {
+                        // The profile has one floating-point format, so `float` and
+                        // `double` are both 64 bits and a conversion between them
+                        // moves the same value: a copy, not an instruction. The ISA
+                        // has no FCVT to emit.
+                        if (instruction->operands.empty()) {
+                            error = "kr232 backend: conversion without an operand";
+                            return std::nullopt;
+                        }
+                        materialize_float(instruction->operands[0], 0);
+                        const std::uint32_t offset = 4u + 4u * slot_of.at(instruction.get());
+                        if (offset > 128u) {
+                            out << "  mov r8, r13\n";
+                            out << "  sub r8, #" << offset << "\n";
+                            out << "  fst f0, [r8]\n";
+                        } else {
+                            out << "  fst f0, [r13-" << offset << "]\n";
+                        }
+                        break;
+                    }                    case ir::Opcode::FAdd:
                     case ir::Opcode::FSub:
                     case ir::Opcode::FMul:
                     case ir::Opcode::FDiv: {
@@ -745,7 +765,27 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         const char* op_name = "fadd";
                         switch (instruction->opcode) {
-                            case ir::Opcode::FAdd: op_name = "fadd"; break;
+                            case ir::Opcode::FPTrunc:
+                    case ir::Opcode::FPExt: {
+                        // The profile has one floating-point format, so `float` and
+                        // `double` are both 64 bits and a conversion between them
+                        // moves the same value: a copy, not an instruction. The ISA
+                        // has no FCVT to emit.
+                        if (instruction->operands.empty()) {
+                            error = "kr232 backend: conversion without an operand";
+                            return std::nullopt;
+                        }
+                        materialize_float(instruction->operands[0], 0);
+                        const std::uint32_t offset = 4u + 4u * slot_of.at(instruction.get());
+                        if (offset > 128u) {
+                            out << "  mov r8, r13\n";
+                            out << "  sub r8, #" << offset << "\n";
+                            out << "  fst f0, [r8]\n";
+                        } else {
+                            out << "  fst f0, [r13-" << offset << "]\n";
+                        }
+                        break;
+                    }                    case ir::Opcode::FAdd: op_name = "fadd"; break;
                             case ir::Opcode::FSub: op_name = "fsub"; break;
                             case ir::Opcode::FMul: op_name = "fmul"; break;
                             default: op_name = "fdiv"; break;

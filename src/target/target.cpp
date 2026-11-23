@@ -157,7 +157,7 @@ constexpr TargetProfile kKr232{
     32,
     32,
     0,
-    32,
+    64,
     64,
     64,
     32,

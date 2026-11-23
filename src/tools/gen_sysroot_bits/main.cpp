@@ -57,7 +57,9 @@ int main(int argc, char** argv) {
             output / std::string(profile.name) / "include" / "bits";
         if (!write_file(directory / "types.h", krc::target::generate_bits_types(profile)) ||
             !write_file(directory / "stdint.h",
-                        krc::target::generate_bits_stdint(profile))) {
+                        krc::target::generate_bits_stdint(profile)) ||
+            !write_file(directory / "float.h",
+                        krc::target::generate_bits_float(profile))) {
             return 1;
         }
     }

@@ -106,4 +106,30 @@ std::string generate_bits_stdint(const TargetProfile& profile) {
     return out.str();
 }
 
+std::string generate_bits_float(const TargetProfile& profile) {
+    std::ostringstream out;
+    out << "#ifndef KRC_BITS_FLOAT_H\n"
+        << "#define KRC_BITS_FLOAT_H\n"
+        << "\n"
+        << "#define FLT_RADIX 2\n";
+    if (profile.float_bits == 64) {
+        out << "#define FLT_MANT_DIG 53\n"
+            << "#define FLT_DIG 15\n"
+            << "#define FLT_MIN_EXP (-1021)\n"
+            << "#define FLT_MAX_EXP 1024\n"
+            << "#define FLT_MAX 1.7976931348623157e+308\n"
+            << "#define FLT_EPSILON 2.2204460492503131e-16\n";
+    } else if (profile.float_bits == 32) {
+        out << "#define FLT_MANT_DIG 24\n"
+            << "#define FLT_DIG 6\n"
+            << "#define FLT_MIN_EXP (-125)\n"
+            << "#define FLT_MAX_EXP 128\n"
+            << "#define FLT_MAX 3.4028234663852886e+38F\n"
+            << "#define FLT_EPSILON 1.1920928955078125e-7F\n";
+    }
+    out << "\n"
+        << "#endif\n";
+    return out.str();
+}
+
 }  // namespace krc::target

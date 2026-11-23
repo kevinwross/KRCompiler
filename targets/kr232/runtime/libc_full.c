@@ -1218,10 +1218,11 @@ double atof(const char *text) {
     return strtod(text, 0);
 }
 
-/* strtof is absent: kr232 has one floating-point format, so a conversion to
-   single precision is an FPTrunc the backend cannot lower and the ISA cannot
-   express. A program that needs it gets an undefined symbol at link time rather
-   than a silent widening. */
+/* kr232 has one floating-point format: float is 64 bits, the same as double, so
+   this needs no conversion and cannot lose precision. */
+float strtof(const char *text, char **end) {
+    return (float)strtod(text, end);
+}
 
 long llabs(long value) {
     return value < 0 ? -value : value;

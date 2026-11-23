@@ -1,0 +1,12 @@
+#ifndef KRC_BITS_FLOAT_H
+#define KRC_BITS_FLOAT_H
+
+#define FLT_RADIX 2
+#define FLT_MANT_DIG 53
+#define FLT_DIG 15
+#define FLT_MIN_EXP (-1021)
+#define FLT_MAX_EXP 1024
+#define FLT_MAX 1.7976931348623157e+308
+#define FLT_EPSILON 2.2204460492503131e-16
+
+#endif

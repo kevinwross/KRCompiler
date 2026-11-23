@@ -28,7 +28,7 @@ TEST_CASE("KR232 profile matches the approved data model") {
     CHECK(profile.int_bits == 32);
     CHECK(profile.long_bits == 32);
     CHECK(profile.long_long_bits == 0);  // no 64-bit integer type (plan 2.3)
-    CHECK(profile.float_bits == 32);
+    CHECK(profile.float_bits == 64);  // one floating-point format: float is double
     CHECK(profile.double_bits == 64);
     CHECK(profile.long_double_bits == 64);  // an alias for double (plan 2.5)
     CHECK(profile.size_t_bits == 32);

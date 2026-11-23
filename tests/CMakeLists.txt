@@ -253,7 +253,7 @@ if(TARGET krc)
                     -DINCLUDE=${KRC_STAGE_SYSROOT}/kr232/include
                     -DFAR_CALLS=ON
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
-                    -DEXPECT_CONSOLE=total=50
+                    -DEXPECT_CONSOLE=total=55 float=8
                     -DEXPECT_STATUS=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
