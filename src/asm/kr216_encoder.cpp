@@ -696,7 +696,7 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
             }
             return encode_normal_ld_d8(rd, base, displacement, out, error);
         }
-        const auto indirect = [&second](std::string_view text, std::uint8_t& base) {
+        const auto indirect = [](std::string_view text, std::uint8_t& base) {
             if (text.size() < 3 || text.front() != '[' || text.back() != ']') return false;
             return parse_register(trim(text.substr(1, text.size() - 2)), base);
         };
@@ -830,7 +830,7 @@ bool assemble_line(std::string_view line, Encoding& out, std::string& error) {
         const auto store_data = [&](std::uint8_t& rs) {
             return parse_register(second, rs);
         };
-        const auto store_indirect = [&first](std::string_view text, std::uint8_t& base) {
+        const auto store_indirect = [](std::string_view text, std::uint8_t& base) {
             if (text.size() < 3 || text.front() != '[' || text.back() != ']') return false;
             return parse_register(trim(text.substr(1, text.size() - 2)), base);
         };
