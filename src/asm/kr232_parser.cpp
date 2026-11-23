@@ -149,6 +149,11 @@ struct Condition {
     unsigned code;
 };
 
+constexpr Condition kConditions[] = {
+    {"eq", 0}, {"ne", 1}, {"cs", 2},  {"cc", 3},  {"mi", 4},  {"pl", 5}, {"vs", 6},
+    {"vc", 7}, {"hi", 8}, {"ls", 9},  {"ge", 10}, {"lt", 11}, {"gt", 12}, {"le", 13},
+};
+
 // Mnemonics of the compact register form (ISA §6.1), excluding the load/store
 // and branch forms, which need their own operand shapes.
 struct CompactOp {
@@ -220,12 +225,45 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
                 }
                 return encode_compact_register(op, reg, 0, error);
             }
+            if (mnemonic == "jmp") {
+                return encode_compact_register(31, reg, 0, error);
+            }
         }
         std::int32_t mask = 0;
         if ((mnemonic == "push" || mnemonic == "pop" || mnemonic == "leave") &&
             parse_number(operands[0], mask)) {
             const unsigned op = mnemonic == "push" ? 23 : (mnemonic == "pop" ? 24 : 28);
             return encode_normal(op, 0, 0, mask, error);
+        }
+        // Branch, call and jump: a signed displacement is relative, a bare number
+        // is an absolute target that only F9 carries (ISA §7, §8.8).
+        if (!operands[0].empty() && (operands[0][0] == '+' || operands[0][0] == '-' ||
+                                     std::isdigit(static_cast<unsigned char>(operands[0][0])) !=
+                                         0)) {
+            std::int32_t value = 0;
+            if (!parse_number(operands[0], value)) {
+                error = "malformed branch displacement or target";
+                return std::nullopt;
+            }
+            const bool relative = operands[0][0] == '+' || operands[0][0] == '-';
+            if (mnemonic == "bra") {
+                return encode_compact_branch(15, value, error);
+            }
+            if (mnemonic == "call") {
+                return relative ? encode_compact_branch(14, value, error)
+                                : encode_wide(1, 0, static_cast<std::uint32_t>(value), error);
+            }
+            if (mnemonic == "jmp") {
+                return relative ? encode_normal(15, 0, 0, value, error)
+                                : encode_wide(0, 0, static_cast<std::uint32_t>(value), error);
+            }
+            for (const Condition& condition : kConditions) {
+                if (mnemonic == std::string("b") + condition.name) {
+                    return encode_compact_branch(condition.code, value, error);
+                }
+            }
+            error = "unsupported branch";
+            return std::nullopt;
         }
     }
 

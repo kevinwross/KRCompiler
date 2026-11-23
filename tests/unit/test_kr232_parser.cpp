@@ -77,6 +77,22 @@ TEST_CASE("KR232 parser reads bracketed addresses") {
     expect_parse("lea r2, [sp+8]", {0xF1, 0x42, 0x08, 0x00, 0x00, 0x00});
 }
 
+TEST_CASE("KR232 parser reads branches and control transfers") {
+    expect_parse("beq +6", {0xA0, 0x06});
+    expect_parse("bne +6", {0xA2, 0x06});
+    expect_parse("beq -9", {0xA1, 0xF7});
+    expect_parse("bge +6", {0xB4, 0x06});
+    expect_parse("ble -9", {0xBB, 0xF7});
+    expect_parse("bra -9", {0xBF, 0xF7});
+    expect_parse("bra +6", {0xBE, 0x06});
+    expect_parse("call +6", {0xBC, 0x06});
+    expect_parse("jmp +6", {0xCF, 0x06, 0x00});
+    expect_parse("jmp r2", {0x9F, 0x20});
+    expect_parse("call r2", {0x42});
+    expect_parse("jmp 0x1234", {0xF9, 0x00, 0x34, 0x12, 0x00, 0x00});
+    expect_parse("call 0x1234", {0xF9, 0x10, 0x34, 0x12, 0x00, 0x00});
+}
+
 TEST_CASE("KR232 parser refuses what it cannot encode yet") {
     std::string error;
     CHECK(!parse_instruction("fld f1, [r2]", error).has_value());
