@@ -181,6 +181,44 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         break;
                     }
+                    case ir::Opcode::Add:
+                    case ir::Opcode::Sub:
+                    case ir::Opcode::Mul:
+                    case ir::Opcode::And:
+                    case ir::Opcode::Or:
+                    case ir::Opcode::Xor:
+                    case ir::Opcode::Shl:
+                    case ir::Opcode::LShr:
+                    case ir::Opcode::AShr: {
+                        if (instruction->operands.size() < 2) {
+                            error = "kr232 backend: binary operation without two operands";
+                            return std::nullopt;
+                        }
+                        const ir::Value* left = instruction->operands[0];
+                        const ir::Value* right = instruction->operands[1];
+                        const unsigned reg = register_for(instruction.get());
+                        materialize(left, reg);
+                        const auto* constant = dynamic_cast<const ir::ConstantInt*>(right);
+                        const char* op_name = nullptr;
+                        switch (instruction->opcode) {
+                            case ir::Opcode::Add: op_name = "add"; break;
+                            case ir::Opcode::Sub: op_name = "sub"; break;
+                            case ir::Opcode::Mul: op_name = "mul"; break;
+                            case ir::Opcode::And: op_name = "and"; break;
+                            case ir::Opcode::Or: op_name = "or"; break;
+                            case ir::Opcode::Xor: op_name = "xor"; break;
+                            case ir::Opcode::Shl: op_name = "shl"; break;
+                            case ir::Opcode::LShr: op_name = "shr"; break;
+                            default: op_name = "sar"; break;
+                        }
+                        if (constant != nullptr) {
+                            out << "  " << op_name << " r" << reg << ", #" << constant->value << "\n";
+                        } else {
+                            out << "  " << op_name << " r" << reg << ", r" << register_for(right)
+                                << "\n";
+                        }
+                        break;
+                    }
                     case ir::Opcode::Ret: {
                         const ir::Value* value =
                             instruction->operands.empty() ? nullptr : instruction->operands[0];
