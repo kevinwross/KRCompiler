@@ -788,11 +788,15 @@ struct heap_header {
 
 static unsigned char *heap_next;
 static struct heap_header *free_head;
-/* The heap must start above the loaded image. Images load at 0x10000 and a
+/* The heap must start above the loaded image, inside a window both modes can write.
+   A kr232 user image loads at 0x08000000 and the runtime is about 150 KB, so
+   0x09000000 is clear of it, clear of the stack at the top of the window, and
+   reachable from kernel mode as well. The kr32 original chose 0x00100000, which
+   only a kernel-mode program can touch.
    large program's .text alone can run past 0x40000, so a base of 0x00020000
    handed out memory inside the code and allocations overwrote the
    instructions that were about to run. */
-#define HEAP_BEGIN ((unsigned char *)0x00100000)
+#define HEAP_BEGIN ((unsigned char *)0x09000000)
 #define HEAP_END ((unsigned char *)0x08000000)
 
 void *malloc(unsigned int size) {

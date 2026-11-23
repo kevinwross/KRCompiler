@@ -12,20 +12,27 @@ if(DEFINED INCLUDE AND NOT INCLUDE STREQUAL "")
     set(include_args -I "${INCLUDE}")
 endif()
 
+# An object whose calls leave it cannot have them widened afterwards, so the
+# compiler emits the wide form for every call when asked.
+set(far_args)
+if(DEFINED FAR_CALLS AND FAR_CALLS)
+    set(far_args --far-calls)
+endif()
+
 foreach(required KRC KRLD VM CRT0 SOURCE WORK)
     if(NOT DEFINED ${required})
         message(FATAL_ERROR "${required} is required")
     endif()
 endforeach()
 
-execute_process(COMMAND "${KRC}" -c --target kr232 "${CRT0}"
+execute_process(COMMAND "${KRC}" -c --target kr232 ${far_args} "${CRT0}"
                         -o "${WORK}/kr232_crt0.o"
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "assembling crt0 failed: ${output}${error}")
 endif()
 
-execute_process(COMMAND "${KRC}" -c --target kr232 ${include_args} "${SOURCE}"
+execute_process(COMMAND "${KRC}" -c --target kr232 ${far_args} ${include_args} "${SOURCE}"
                         -o "${WORK}/kr232_program.o"
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
@@ -44,13 +51,28 @@ if(DEFINED PACKAGES AND NOT PACKAGES STREQUAL "")
     list(APPEND link_inputs ${_package_objects})
 endif()
 if(DEFINED LIBC AND NOT LIBC STREQUAL "")
-    execute_process(COMMAND "${KRC}" -c --target kr232 ${include_args} "${LIBC}"
+    execute_process(COMMAND "${KRC}" -c --target kr232 ${far_args} ${include_args} "${LIBC}"
                             -o "${WORK}/kr232_libc.o"
                     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
     if(NOT result EQUAL 0)
         message(FATAL_ERROR "compiling ${LIBC} failed: ${output}${error}")
     endif()
     list(APPEND link_inputs "${WORK}/kr232_libc.o")
+endif()
+
+if(DEFINED EXTRA AND NOT EXTRA STREQUAL "")
+    # Further sources the program needs: the host layer of a C runtime, or an
+    # object a fixture is built from.
+    foreach(extra IN LISTS EXTRA)
+        get_filename_component(extra_name "${extra}" NAME_WE)
+        execute_process(COMMAND "${KRC}" -c --target kr232 ${far_args} ${include_args}
+                                "${extra}" -o "${WORK}/${extra_name}.o"
+                        RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
+        if(NOT result EQUAL 0)
+            message(FATAL_ERROR "compiling ${extra} failed: ${output}${error}")
+        endif()
+        list(APPEND link_inputs "${WORK}/${extra_name}.o")
+    endforeach()
 endif()
 
 execute_process(COMMAND "${KRLD}" --entry=_start ${link_inputs}

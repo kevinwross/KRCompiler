@@ -238,6 +238,25 @@ if(TARGET krc)
         else()
             set(KR232_EXIT300_PROCESS_ARG)
         endif()
+        # The C runtime: printf, malloc/free, strcpy, strlen and atoi, built from
+        # the ported library and its host layer. Every call is emitted in the wide
+        # form because the runtime object is far larger than rel16 can reach.
+        add_test(NAME krc_kr232_runtime
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_runtime.c
+                    -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/libc_full.c
+                    -DEXTRA=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/fileio_full.s
+                    -DINCLUDE=${KRC_STAGE_SYSROOT}/kr232/include
+                    -DFAR_CALLS=ON
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_CONSOLE=total=50
+                    -DEXPECT_STATUS=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
         # A program built against the installed packages: the header declares
         # cons_puts and the staged object defines it. Without the package objects
         # this links to an undefined symbol, which is how the package runtime went
