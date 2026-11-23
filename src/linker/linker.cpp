@@ -713,7 +713,15 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
     // `.kex` is mapped at its section addresses rather than relocated. Recording
     // the base lets a reader reject a payload built for a different image
     // instead of placing breakpoints at addresses that mean nothing.
-    kdbg.image_base = image.base;
+    //
+    // kr232 is the exception: its kernel image is linked above the vector table
+    // (base 0x200) while the container records base 0, so the payload must record
+    // the container's base and not the link address.
+    if (image.target_id == 5) {
+        kdbg.image_base = image.base == 0x08000000u ? 0x08000000u : 0;
+    } else {
+        kdbg.image_base = image.base;
+    }
     kdbg.compiler = "krc";
     std::unordered_map<std::string, std::size_t> type_index;
     const auto ensure_type = [&](const std::string& name, std::uint32_t size,

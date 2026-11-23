@@ -148,6 +148,7 @@ TEST_CASE("kr232 assembly emits a debug bridge the linker turns into .kdbg") {
     krc::debug::KdbgImage image;
     REQUIRE_MESSAGE(krc::debug::decode_kdbg(kdbg, image, error), error);
     CHECK(image.target_id == 5);
+    CHECK(image.image_base == 0);  // a kernel image records base 0 (ADR 0058)
     REQUIRE(!image.sources.empty());
     CHECK(image.sources.front().path == "fixture.s");
     CHECK(image.lines.size() == 2);
