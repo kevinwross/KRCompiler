@@ -114,5 +114,5 @@ TEST_CASE("target names parse and enumerate") {
     CHECK(parse_target("kr64") == TargetId::Kr64);
     CHECK(parse_target("kr216") == TargetId::Kr216);
     CHECK_FALSE(parse_target("unknown").has_value());
-    CHECK(target_profiles().size() == 4);
+    CHECK(target_profiles().size() == 5);
 }
