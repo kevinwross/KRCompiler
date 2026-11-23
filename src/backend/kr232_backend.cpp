@@ -631,7 +631,17 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         materialize_float(instruction->operands[0], 0);
                         materialize_float(instruction->operands[1], 1);
                         out << "  " << op_name << " f0, f1\n";
-                        frame_store("fst", slot_of.at(instruction.get()), "f0");
+                        // The FP store names its register first: `fst fD, [addr]`.
+                        {
+                            const std::uint32_t offset = 4u + 4u * slot_of.at(instruction.get());
+                            if (offset > 128u) {
+                                out << "  mov r8, r13\n";
+                                out << "  sub r8, #" << offset << "\n";
+                                out << "  fst f0, [r8]\n";
+                            } else {
+                                out << "  fst f0, [r13-" << offset << "]\n";
+                            }
+                        }
                         break;
                     }
                     case ir::Opcode::FPToSI:
