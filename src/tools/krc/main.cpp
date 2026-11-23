@@ -593,7 +593,8 @@ int main(int argc, char** argv) {
         }
 
         if ((emit_object || emit_object_container) &&
-            target_id == krc::target::TargetId::Kr216) {
+            (target_id == krc::target::TargetId::Kr216 ||
+             target_id == krc::target::TargetId::Kr232)) {
             const auto assembled =
                 toolchain::assemble(compiled.assembly, compiled.debug_info, options);
             if (!assembled.ok) {

@@ -179,6 +179,30 @@ if(TARGET krc)
                     -DFRAME_HASH=0000000000000000
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
         set_tests_properties(krc_kr232_wrong_frame PROPERTIES WILL_FAIL TRUE)
+
+        # The first compiled programs: a byte stored to a frame slot and loaded
+        # back, and a constant return. Both go through crt0 so the status `main`
+        # returns is the status the process exits with.
+        add_test(NAME krc_kr232_run_charload
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_charload.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=65
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+        add_test(NAME krc_kr232_run_return42
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_return42.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
     endif()
 
     add_test(NAME krc_kr16_syntax

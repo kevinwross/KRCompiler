@@ -6,4 +6,5 @@
 .text
 _start:
   call main
+  ld r7, #0
   sys
