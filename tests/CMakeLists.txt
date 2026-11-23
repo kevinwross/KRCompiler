@@ -201,6 +201,16 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
                     -DEXPECT_EXIT=65
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+        add_test(NAME krc_kr232_run_exit300
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_exit300.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=300
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_run_fp
             COMMAND ${CMAKE_COMMAND}
                     -DKRC=$<TARGET_FILE:krc>
