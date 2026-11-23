@@ -60,6 +60,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     out = AssembledProgram{};
     out.program.sections.push_back(Section{".text", {}, 4, 5});
     out.program.sections.push_back(Section{".data", {}, 4, 3});
+    out.program.sections.push_back(Section{".debug_info", {}, 1, 8});
 
     std::map<std::string, std::uint32_t> labels;   // label -> offset in its section
     std::map<std::string, std::uint32_t> label_section;
@@ -238,6 +239,35 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         const bool global = globals.count(name) != 0;
         out.program.symbols.push_back(
             Symbol{name, label_section[name], offset, global});
+    }
+
+    // The `.debug_info` bridge: NUL-terminated records `attach_kdbg` converts
+    // into a `.kdbg`. Each line record names a label at the instruction's offset,
+    // so a synthetic local symbol is emitted for every line.
+    std::vector<std::uint8_t>& bridge = out.program.sections[2].bytes;
+    const auto emit = [&](const std::string& record) {
+        bridge.insert(bridge.end(), record.begin(), record.end());
+        bridge.push_back(0);
+    };
+    emit("S 1 " + std::string(file_name));
+    const std::uint32_t text_size = static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
+    emit("L .Lend 1 " + std::to_string(line_number) + " 0");
+    out.program.symbols.push_back(Symbol{".Lend", 0, text_size, false});
+    for (std::size_t i = 0; i < out.lines.size(); ++i) {
+        const DebugLine& line = out.lines[i];
+        const std::string label = ".L" + std::to_string(i);
+        out.program.symbols.push_back(Symbol{label, 0, line.offset, false});
+        emit("L " + label + " 1 " + std::to_string(line.line) + " 0");
+    }
+    for (const auto& [name, offset] : labels) {
+        if (globals.count(name) == 0) {
+            continue;
+        }
+        emit("F " + name + " " + name + " .Lend 0 0");
+        (void)offset;
+    }
+    if (bridge.empty()) {
+        emit("S 1 .");
     }
     return true;
 }

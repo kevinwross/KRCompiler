@@ -1,10 +1,24 @@
 #include "doctest.h"
 
 #include "asm/kr232_assembler.h"
+#include "krc/debug/kdbg.h"
+#include "krc/toolchain.h"
+#include "asm/kr232_object.h"
 
 #include <string>
 #include <vector>
 
+namespace {
+std::uint32_t read32(const std::vector<std::uint8_t>& bytes, std::size_t at) {
+    return static_cast<std::uint32_t>(bytes[at]) |
+           (static_cast<std::uint32_t>(bytes[at + 1]) << 8) |
+           (static_cast<std::uint32_t>(bytes[at + 2]) << 16) |
+           (static_cast<std::uint32_t>(bytes[at + 3]) << 24);
+}
+std::uint16_t read16(const std::vector<std::uint8_t>& bytes, std::size_t at) {
+    return static_cast<std::uint16_t>(bytes[at] | (bytes[at + 1] << 8));
+}
+}  // namespace
 using krc::asm_kr232::assemble;
 using krc::asm_kr232::AssembledProgram;
 
@@ -28,7 +42,7 @@ TEST_CASE("kr232 assembly places instructions, data and labels") {
     std::string error;
     REQUIRE_MESSAGE(assemble(source, "fixture.s", program, error), error);
 
-    REQUIRE(program.program.sections.size() == 2);
+    REQUIRE(program.program.sections.size() == 3);  // text, data, debug bridge
     const std::vector<std::uint8_t>& text = program.program.sections[0].bytes;
     const std::vector<std::uint8_t>& data = program.program.sections[1].bytes;
 
