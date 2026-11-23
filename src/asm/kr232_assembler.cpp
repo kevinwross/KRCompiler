@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <algorithm>
 #include <map>
 
 #include "asm/kr232_parser.h"
@@ -341,10 +342,40 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     }
     out.program.relocations = std::move(unresolved);
 
+    // A symbol's size is the distance to the next symbol in its section, so a
+    // function assembled from `.s` carries a span a debugger can bound instead of
+    // a zero-length one.
+    std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint64_t> symbol_sizes;
+    {
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> starts;
+        for (const auto& [name, offset] : labels) {
+            starts.emplace_back(label_section[name], offset);
+        }
+        std::sort(starts.begin(), starts.end());
+        for (std::size_t i = 0; i < starts.size(); ++i) {
+            const std::uint32_t section = starts[i].first;
+            const std::uint32_t start = starts[i].second;
+            std::uint32_t end =
+                section == 0 ? static_cast<std::uint32_t>(out.program.sections[0].bytes.size())
+                             : static_cast<std::uint32_t>(data_offset);
+            for (std::size_t j = i + 1; j < starts.size(); ++j) {
+                if (starts[j].first == section) {
+                    end = starts[j].second;
+                    break;
+                }
+            }
+            symbol_sizes[{section, start}] = end > start ? end - start : 0;
+        }
+    }
     for (const auto& [name, offset] : labels) {
         const bool global = globals.count(name) != 0;
-        out.program.symbols.push_back(
-            Symbol{name, label_section[name], offset, global});
+        Symbol symbol;
+        symbol.name = name;
+        symbol.section = label_section[name];
+        symbol.offset = offset;
+        symbol.size = symbol_sizes[{symbol.section, static_cast<std::uint32_t>(offset)}];
+        symbol.global = global;
+        out.program.symbols.push_back(std::move(symbol));
     }
 
     // The `.debug_info` bridge: NUL-terminated records `attach_kdbg` converts

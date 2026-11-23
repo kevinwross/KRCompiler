@@ -44,6 +44,7 @@ bool make_object(const Program& program, const target::TargetProfile& profile,
         out.name = symbol.name;
         out.section = symbol.section;
         out.value = symbol.offset;
+        out.size = symbol.size;
         out.binding =
             symbol.global ? linker::KroSymbolBinding::Global : linker::KroSymbolBinding::Local;
         object.symbols.push_back(std::move(out));

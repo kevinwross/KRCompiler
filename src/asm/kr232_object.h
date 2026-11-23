@@ -23,6 +23,9 @@ struct Symbol {
     std::string name;
     std::uint32_t section = 0;
     std::uint64_t offset = 0;
+    // The function or object size, so a reader can bound a symbol without
+    // guessing from its neighbours.
+    std::uint64_t size = 0;
     bool global = false;
 };
 
