@@ -536,10 +536,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             dynamic_cast<const ir::Instruction*>(instruction->operands[0]);
                         if (base_instruction != nullptr &&
                             base_instruction->opcode == ir::Opcode::Alloca) {
-                            const auto slot = slot_of.find(base_instruction);
+                            // The element offset below is added to the object's lowest
+                            // byte, which is its last slot, not its first.
                             out << "  mov r" << kValueReg << ", r13\n";
-                            out << "  sub r" << kValueReg << ", #" << (4u + 4u * slot->second)
-                                << "\n";
+                            out << "  sub r" << kValueReg << ", #"
+                                << alloca_offset(*base_instruction) << "\n";
                         } else {
                             operand(0, kValueReg);
                         }

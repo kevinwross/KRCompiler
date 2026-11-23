@@ -10,9 +10,10 @@
 
 static unsigned current_colour;
 
-unsigned fb_width(void) { return FB_PAGE[0]; }
-unsigned fb_height(void) { return FB_PAGE[1]; }
-unsigned fb_stride(void) { return FB_PAGE[2]; }
+/* +0 is CONTROL: the mode words start at +4 (kr232-devices.md §3). */
+unsigned fb_width(void) { return FB_PAGE[1]; }
+unsigned fb_height(void) { return FB_PAGE[2]; }
+unsigned fb_stride(void) { return FB_PAGE[3]; }
 void fb_flip(void) { FLIP_REGISTER = 1u; }
 
 void gfx_set_colour(unsigned colour) { current_colour = colour; }
