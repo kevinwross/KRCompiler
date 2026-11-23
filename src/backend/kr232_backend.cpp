@@ -296,6 +296,21 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 }
             }
         }
+        // An object of more than one word occupies a run of slots, and a slot's
+        // address falls as its index rises, so the object's lowest byte sits at the
+        // LAST slot of its run. Using the first slot put a twelve-byte local array
+        // above FP, where it overwrote the saved frame pointer and every return
+        // through that frame jumped into nothing.
+        const auto alloca_offset = [&](const ir::Instruction& alloca) -> std::uint32_t {
+            const auto slot = slot_of.find(&alloca);
+            if (slot == slot_of.end()) {
+                return 4u;
+            }
+            const std::uint32_t words = std::max<std::uint32_t>(
+                1u, align_frame(type_bytes(alloca.allocated_type)) / 4u);
+            return 4u + 4u * (slot->second + words - 1u);
+        };
+
         // A function that returns a record receives its destination in R6.
         const bool returns_record = function->type != nullptr &&
                                     function->type->return_type != nullptr &&
@@ -304,6 +319,51 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                      function->type->return_type->kind == ir::TypeKind::Union ||
                                      function->type->return_type->kind == ir::TypeKind::Array);
         std::uint32_t return_pointer_slot = 0;
+        const auto slot_address = [&](std::uint32_t slot) -> std::string {
+            // A d8 displacement is a signed byte; a deeper slot is reached through R8.
+            const std::uint32_t frame_offset = 4u + 4u * slot;
+            // A d8 displacement is a signed byte, so a frame deeper than that
+            // cannot be expressed yet; the assembler will refuse it by name
+            // rather than the backend emitting code it cannot encode.
+
+            return "[r13-" + std::to_string(frame_offset) + "]";
+        };
+        // A frame access that names its operand after any prologue it needs, so a
+        // deep slot is reached through R8 instead of an unencodable displacement.
+        const auto frame_load = [&](const char* opcode, std::uint32_t slot,
+                                    const std::string& target) {
+            const std::uint32_t offset = 4u + 4u * slot;
+            if (offset > 128u) {
+                out << "  mov r8, r13\n";
+                out << "  sub r8, #" << offset << "\n";
+                out << "  " << opcode << " " << target << ", [r8]\n";
+                return;
+            }
+            out << "  " << opcode << " " << target << ", [r13-" << offset << "]\n";
+        };
+        // `fst` names its register first, so it needs its own helper: passing "fst"
+        // through frame_store emitted `fst [r13-52], f0`, which the assembler rejects.
+        const auto frame_store_float = [&](const std::string& source, std::uint32_t slot) {
+            const std::uint32_t offset = 4u + 4u * slot;
+            if (offset > 128u) {
+                out << "  mov r8, r13\n";
+                out << "  sub r8, #" << offset << "\n";
+                out << "  fst " << source << ", [r8]\n";
+                return;
+            }
+            out << "  fst " << source << ", [r13-" << offset << "]\n";
+        };
+        const auto frame_store = [&](const char* opcode, std::uint32_t slot,
+                                     const std::string& source) {
+            const std::uint32_t offset = 4u + 4u * slot;
+            if (offset > 128u) {
+                out << "  mov r8, r13\n";
+                out << "  sub r8, #" << offset << "\n";
+                out << "  " << opcode << " [r8], " << source << "\n";
+                return;
+            }
+            out << "  " << opcode << " [r13-" << offset << "], " << source << "\n";
+        };
         if (returns_record) {
             return_pointer_slot = next_slot++;
         }
@@ -338,12 +398,12 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     variable.resize(variable.size() - suffix.size());
                 }
                 out << ".debug_var " << name << " " << variable << " "
-                    << static_cast<long>(0) - static_cast<long>(4 + 4 * slot->second) << " 0 "
-                    << type_bytes(instruction->allocated_type) << "\n";
+                    << static_cast<long>(0) - static_cast<long>(alloca_offset(*instruction))
+                    << " 0 " << type_bytes(instruction->allocated_type) << "\n";
             }
         }
         if (returns_record) {
-            out << "  st [r13-" << (4u + 4u * return_pointer_slot) << "], r6\n";
+            frame_store("st", return_pointer_slot, "r6");
         }
         // Arguments arrive in R2-R5, except floating-point ones, which arrive in
         // F0-F3 and are spilled to their slots with `fst`. A variadic function is
@@ -361,18 +421,17 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 const std::uint32_t incoming = 8u + 8u * static_cast<std::uint32_t>(i);
                 if (is_float) {
                     out << "  fld f0, [r13+" << incoming << "]\n";
-                    out << "  fst f0, [r13-" << (4u + 4u * slot) << "]\n";
+                    frame_store_float("f0", slot);
                 } else {
                     out << "  ld r5, [r13+" << incoming << "]\n";
-                    out << "  st [r13-" << (4u + 4u * slot) << "], r5\n";
+                    frame_store("st", slot, "r5");
                 }
                 continue;
             }
             if (is_float) {
-                out << "  fst f" << float_argument++ << ", [r13-" << (4u + 4u * slot) << "]\n";
+                frame_store_float("f" + std::to_string(float_argument++), slot);
             } else {
-                out << "  st [r13-" << (4u + 4u * slot) << "], r" << (2u + integer_argument++)
-                    << "\n";
+                frame_store("st", slot, "r" + std::to_string(2u + integer_argument++));
             }
         }
 
@@ -382,54 +441,6 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         for (std::size_t i = 0; i < function->blocks.size(); ++i) {
             block_index.emplace(function->blocks[i].get(), i);
         }
-        const auto slot_address = [&](std::uint32_t slot) -> std::string {
-            // A d8 displacement is a signed byte; a deeper slot is reached through R8.
-            const std::uint32_t frame_offset = 4u + 4u * slot;
-            // A d8 displacement is a signed byte, so a frame deeper than that
-            // cannot be expressed yet; the assembler will refuse it by name
-            // rather than the backend emitting code it cannot encode.
-
-            return "[r13-" + std::to_string(frame_offset) + "]";
-        };
-        // A frame access that names its operand after any prologue it needs, so a
-        // deep slot is reached through R8 instead of an unencodable displacement.
-        const auto frame_load = [&](const char* opcode, std::uint32_t slot,
-                                    const std::string& target) {
-            const std::uint32_t offset = 4u + 4u * slot;
-            if (offset > 128u) {
-                out << "  mov r8, r13\n";
-                out << "  sub r8, #" << offset << "\n";
-                out << "  " << opcode << " " << target << ", [r8]\n";
-                return;
-            }
-            out << "  " << opcode << " " << target << ", [r13-" << offset << "]\n";
-        };
-        const auto frame_store = [&](const char* opcode, std::uint32_t slot,
-                                     const std::string& source) {
-            const std::uint32_t offset = 4u + 4u * slot;
-            if (offset > 128u) {
-                out << "  mov r8, r13\n";
-                out << "  sub r8, #" << offset << "\n";
-                out << "  " << opcode << " [r8], " << source << "\n";
-                return;
-            }
-            out << "  " << opcode << " [r13-" << offset << "], " << source << "\n";
-        };
-        // An object of more than one word occupies a run of slots, and a slot's
-        // address falls as its index rises, so the object's lowest byte sits at the
-        // LAST slot of its run. Using the first slot put a twelve-byte local array
-        // above FP, where it overwrote the saved frame pointer and every return
-        // through that frame jumped into nothing.
-        const auto alloca_offset = [&](const ir::Instruction& alloca) -> std::uint32_t {
-            const auto slot = slot_of.find(&alloca);
-            if (slot == slot_of.end()) {
-                return 4u;
-            }
-            const std::uint32_t words = std::max<std::uint32_t>(
-                1u, align_frame(type_bytes(alloca.allocated_type)) / 4u);
-            return 4u + 4u * (slot->second + words - 1u);
-        };
-
         const auto materialize = [&](const ir::Value* value, unsigned reg) {
             if (value == nullptr) {
                 out << "  ld r" << reg << ", #0\n";
