@@ -105,3 +105,52 @@ TEST_CASE("kr232 assembly reports an undefined label and a bad directive") {
     CHECK(!assemble(".bogus\n", "x.s", program, error));
     CHECK(!assemble(".text\n  frobnicate r2\n", "x.s", program, error));
 }
+
+TEST_CASE("kr232 assembly emits a debug bridge the linker turns into .kdbg") {
+    const std::string source =
+        ".globl main\n"
+        ".text\n"
+        "main:\n"
+        "  push r2\n"
+        "  sys\n";
+    krc::asm_kr232::AssembledProgram assembled;
+    std::string error;
+    REQUIRE_MESSAGE(assemble(source, "fixture.s", assembled, error), error);
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr232);
+    krc::linker::KroObject object;
+    REQUIRE(krc::asm_kr232::make_object(assembled.program, profile, object, error));
+    std::vector<std::uint8_t> object_bytes;
+    REQUIRE(krc::linker::write_object(object, object_bytes, error));
+
+    std::vector<krc::toolchain::Object> objects(1);
+    objects[0].name = "fixture.o";
+    objects[0].bytes = object_bytes;
+    krc::toolchain::Options options;
+    const krc::toolchain::LinkResult linked = krc::toolchain::link(objects, options);
+    REQUIRE_MESSAGE(linked.ok, linked.error);
+
+    const std::uint32_t table = read32(linked.image, 32);
+    const std::uint32_t strings = read32(linked.image, 36);
+    const std::uint16_t count = read16(linked.image, 22);
+    std::vector<std::uint8_t> kdbg;
+    for (std::uint16_t i = 0; i < count; ++i) {
+        const std::uint32_t at = table + 32u * i;
+        const std::string name(reinterpret_cast<const char*>(linked.image.data() + strings +
+                                                              read32(linked.image, at)));
+        if (name == ".kdbg") {
+            const std::uint32_t offset = read32(linked.image, at + 12);
+            const std::uint32_t size = read32(linked.image, at + 16);
+            kdbg.assign(linked.image.begin() + offset, linked.image.begin() + offset + size);
+        }
+    }
+    REQUIRE(!kdbg.empty());
+    krc::debug::KdbgImage image;
+    REQUIRE_MESSAGE(krc::debug::decode_kdbg(kdbg, image, error), error);
+    CHECK(image.target_id == 5);
+    REQUIRE(!image.sources.empty());
+    CHECK(image.sources.front().path == "fixture.s");
+    CHECK(image.lines.size() == 2);
+    REQUIRE(!image.functions.empty());
+    CHECK(image.functions.front().name == "main");
+}

@@ -251,8 +251,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     };
     emit("S 1 " + std::string(file_name));
     const std::uint32_t text_size = static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
-    emit("L .Lend 1 " + std::to_string(line_number) + " 0");
-    out.program.symbols.push_back(Symbol{".Lend", 0, text_size, false});
+    out.program.symbols.push_back(Symbol{".Lend", 0, text_size, false});  // a symbol only, not a line
     for (std::size_t i = 0; i < out.lines.size(); ++i) {
         const DebugLine& line = out.lines[i];
         const std::string label = ".L" + std::to_string(i);
