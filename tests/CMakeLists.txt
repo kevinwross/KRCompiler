@@ -238,6 +238,24 @@ if(TARGET krc)
         else()
             set(KR232_EXIT300_PROCESS_ARG)
         endif()
+        # A program built against the installed packages: the header declares
+        # cons_puts and the staged object defines it. Without the package objects
+        # this links to an undefined symbol, which is how the package runtime went
+        # missing from the prefix in the first place.
+        add_test(NAME krc_kr232_packages
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_console.c
+                    -DINCLUDE=${KRC_STAGE_SYSROOT}/kr232/include
+                    -DPACKAGES=${KRC_STAGE_SYSROOT}/kr232/lib
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_CONSOLE=packages
+                    -DEXPECT_STATUS=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
         # A status above 2^31: the machine keeps the whole word, and only the
         # printed status can carry it because a POSIX process status cannot.
         add_test(NAME krc_kr232_status_high

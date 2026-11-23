@@ -19,6 +19,7 @@ set(KRC_STAGE_DIR "${CMAKE_BINARY_DIR}/stage")
 set(KRC_STAGE_SYSROOT "${KRC_STAGE_DIR}/sysroot")
 set(KRC_STAGE_RUNTIME "${KRC_STAGE_SYSROOT}/kr32/lib")
 set(KRC_STAGE_RUNTIME_KR16 "${KRC_STAGE_SYSROOT}/kr16/lib")
+set(KRC_STAGE_RUNTIME_KR232 "${KRC_STAGE_SYSROOT}/kr232/lib")
 set(KRC_TEST_OUTPUT_DIR "${KRC_STAGE_DIR}/tests")
 file(MAKE_DIRECTORY "${KRC_TEST_OUTPUT_DIR}")
 
@@ -238,6 +239,9 @@ if(KRC_BUILD_TOOLS)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/sysroot/kr64/include"
                 "${KRC_STAGE_SYSROOT}/kr64/include"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/sysroot/kr232/include"
+                "${KRC_STAGE_SYSROOT}/kr232/include"
         COMMAND $<TARGET_FILE:krc_gen_sysroot_bits> --out "${KRC_STAGE_SYSROOT}"
         COMMENT "Staging target sysroot headers and generated bits"
         VERBATIM)
@@ -308,6 +312,35 @@ if(KRC_BUILD_TOOLS)
             COMMENT "Building the staged KR16 runtime"
             VERBATIM)
         add_dependencies(krc_target_runtime_kr16 krc krc_stage_sysroot)
+
+        # The kr232 packages. A program that includes <kr232/cons.h>, gfx.h, fb.h
+        # or input.h links these objects; without them the header declares a
+        # function no object defines and every such program fails at link time
+        # with an undefined symbol. Each object is written to a temporary name and
+        # renamed, for the same reason as the runtimes above.
+        set(KRC_KR232_PACKAGE_SOURCES
+            cons_user.c gfx_user.c fb_user.c input_user.c syscall6.s)
+        set(_kr232_package_commands
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${KRC_STAGE_RUNTIME_KR232}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr232/runtime/crt0.s"
+                    "${KRC_STAGE_RUNTIME_KR232}/crt0.s")
+        foreach(package IN LISTS KRC_KR232_PACKAGE_SOURCES)
+            get_filename_component(_stem "${package}" NAME_WE)
+            list(APPEND _kr232_package_commands
+                COMMAND $<TARGET_FILE:krc> --target=kr232 -c
+                        "--sysroot=${KRC_STAGE_SYSROOT}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/targets/kr232/runtime/${package}"
+                        -o "${KRC_STAGE_RUNTIME_KR232}/${_stem}.kro.new"
+                COMMAND ${CMAKE_COMMAND} -E rename
+                        "${KRC_STAGE_RUNTIME_KR232}/${_stem}.kro.new"
+                        "${KRC_STAGE_RUNTIME_KR232}/${_stem}.kro")
+        endforeach()
+        add_custom_target(krc_target_runtime_kr232 ALL
+            ${_kr232_package_commands}
+            COMMENT "Building the staged kr232 packages"
+            VERBATIM)
+        add_dependencies(krc_target_runtime_kr232 krc krc_stage_sysroot)
     endif()
 endif()
 

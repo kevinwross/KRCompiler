@@ -33,6 +33,16 @@ if(NOT result EQUAL 0)
 endif()
 
 set(link_inputs "${WORK}/kr232_crt0.o" "${WORK}/kr232_program.o")
+if(DEFINED PACKAGES AND NOT PACKAGES STREQUAL "")
+    # The installed packages, as the prefix ships them: a program that includes
+    # <kr232/cons.h> links these objects, exactly as the debugger's build chain
+    # does.
+    file(GLOB _package_objects "${PACKAGES}/*.kro")
+    if(_package_objects STREQUAL "")
+        message(FATAL_ERROR "no package objects in ${PACKAGES}")
+    endif()
+    list(APPEND link_inputs ${_package_objects})
+endif()
 if(DEFINED LIBC AND NOT LIBC STREQUAL "")
     execute_process(COMMAND "${KRC}" -c --target kr232 ${include_args} "${LIBC}"
                             -o "${WORK}/kr232_libc.o"
