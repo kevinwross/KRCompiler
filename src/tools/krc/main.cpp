@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "krc/debug/kdbg.h"
+#include "krc/image/k232.h"
 #include "krc/target/target.h"
 #include "krc/toolchain.h"
 #include "krc/version.h"

@@ -2,6 +2,7 @@
 
 #include "asm/kr232_object.h"
 #include "krc/toolchain.h"
+#include "krc/image/k232.h"
 #include "linker/kr232_image.h"
 #include "linker/linker.h"
 #include "linker/kro_object.h"
@@ -173,15 +174,15 @@ TEST_CASE("a section payload is readable by name from a container") {
     REQUIRE(write_kr232_image(image, bytes, error));
 
     std::span<const std::uint8_t> payload;
-    REQUIRE(krc::linker::read_k232_section(bytes, ".kdbg", payload, error));
+    REQUIRE(krc::image::read_k232_section(bytes, ".kdbg", payload, error));
     REQUIRE(payload.size() == 2);
     CHECK(payload[0] == 0xDE);
     CHECK(payload[1] == 0xAD);
 
     std::span<const std::uint8_t> missing;
-    CHECK(!krc::linker::read_k232_section(bytes, ".nope", missing, error));
+    CHECK(!krc::image::read_k232_section(bytes, ".nope", missing, error));
     CHECK(error.find(".nope") != std::string::npos);
 
     const std::uint8_t not_container[] = {'n', 'o', 'p', 'e'};
-    CHECK(!krc::linker::read_k232_section(not_container, ".kdbg", missing, error));
+    CHECK(!krc::image::read_k232_section(not_container, ".kdbg", missing, error));
 }
