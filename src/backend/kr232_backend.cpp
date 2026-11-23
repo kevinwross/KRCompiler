@@ -219,6 +219,20 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 out << "  ld r" << reg << ", #" << global->name << "\n";
                 return;
             }
+            // An alloca's value is its address, which is FP-relative. A cast or a
+            // member GEP built on an alloca reaches here, and reading a slot would
+            // hand the caller the alloca's contents instead of its address.
+            if (const auto* instruction = dynamic_cast<const ir::Instruction*>(value)) {
+                if (instruction->opcode == ir::Opcode::Alloca) {
+                    const auto alloca_slot = slot_of.find(value);
+                    if (alloca_slot != slot_of.end()) {
+                        out << "  ld r" << reg << ", r13\n";
+                        out << "  sub r" << reg << ", #" << (4u + 4u * alloca_slot->second)
+                            << "\n";
+                        return;
+                    }
+                }
+            }
             const auto slot = slot_of.find(value);
             if (slot == slot_of.end()) {
                 out << "  ld r" << reg << ", #0\n";
