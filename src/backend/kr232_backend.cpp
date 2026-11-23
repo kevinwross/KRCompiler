@@ -73,7 +73,36 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         // The prologue the ABI fixes: ENTER saves FP, pushes the mask and reserves
         // the frame. No stack setup is needed because reset SP is 0x08000000.
         out << "  enter #" << frame << ", #0\n";
-        // The epilogue mirrors it; instruction selection fills the body.
+        // Instruction selection, one opcode at a time. Anything not handled here is
+        // reported rather than emitted as something plausible: a backend that
+        // guesses produces wrong code that runs.
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode != ir::Opcode::Ret) {
+                    error = "kr232 backend: opcode " +
+                            std::to_string(static_cast<int>(instruction->opcode)) +
+                            " is not implemented yet";
+                    return std::nullopt;
+                }
+                // The return value goes in R2. Only an integer constant is handled
+                // so far; the caller has already been told about anything else.
+                std::int64_t value = 0;
+                if (!instruction->operands.empty() && instruction->operands[0] != nullptr) {
+                    const auto* constant = dynamic_cast<const ir::ConstantInt*>(instruction->operands[0]);
+                    if (constant == nullptr) {
+                        error = "kr232 backend: only constant returns are implemented";
+                        return std::nullopt;
+                    }
+                    value = constant->value;
+                }
+                out << "  ld r2, #" << value << "\n";
+                out << "  leave #0\n";
+                out << "  ret\n";
+                return out.str();
+            }
+        }
+        // A function with no return at all still needs an epilogue.
+        out << "  ld r2, #0\n";
         out << "  leave #0\n";
         out << "  ret\n";
     }
