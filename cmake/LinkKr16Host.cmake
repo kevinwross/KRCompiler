@@ -47,6 +47,11 @@ endif()
 
 foreach(pair IN LISTS inputs)
     string(FIND "${pair}" "|" separator)
+    if(separator EQUAL -1)
+        # Without the separator the slices below take the whole string twice and
+        # hand krc a nonsense object name; name the malformed pair instead.
+        message(FATAL_ERROR "an input pair is malformed: '${pair}'")
+    endif()
     string(SUBSTRING "${pair}" 0 ${separator} input)
     math(EXPR after "${separator} + 1")
     string(SUBSTRING "${pair}" ${after} -1 object)
