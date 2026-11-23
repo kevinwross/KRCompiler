@@ -103,6 +103,7 @@ add_library(krc_impl OBJECT
     src/backend/kr216_backend.cpp
     src/backend/machine_ir.cpp
     src/backend/machine_liveness.cpp
+    src/backend/kr232_descriptor.cpp
     src/backend/kr32_descriptor.cpp
     src/backend/peephole.cpp
     src/backend/register_allocator.cpp

@@ -29,6 +29,7 @@ add_executable(krc_tests
     unit/test_preprocessor.cpp
     unit/test_sema.cpp
     unit/test_sysroot_bits.cpp
+    unit/test_kr232_descriptor.cpp
     unit/test_target.cpp
     unit/test_kr216_encoder.cpp
     unit/test_kr216_object.cpp
