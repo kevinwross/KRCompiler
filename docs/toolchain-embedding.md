@@ -31,6 +31,20 @@ Configure with `-DCMAKE_PREFIX_PATH=<install prefix>`. The installed interface
 exposes `include/krc` and nothing under `src/`; the compiler implementation is
 inside `libkrc-toolchain.a` / `krc-toolchain.lib`.
 
+## One configuration per prefix
+
+The installed libraries are static and built with the dynamic CRT, and one install
+exports exactly one configuration: a Debug install writes `krc-targets-debug.cmake`,
+a Release install writes `krc-targets-release.cmake`, and both name the same file.
+A host built for one configuration therefore has to link a package of that
+configuration — a Debug host against a Release archive fails with `LNK2038`, naming
+`_ITERATOR_DEBUG_LEVEL` and `RuntimeLibrary`. Since `krc-toolchain_DIR` is cached,
+one build tree can only carry one of them, so a machine that builds both keeps two
+prefixes and points each tree at the matching one. The development machine here
+uses `C:/Users/kevin/krc` for Release and `C:/Users/kevin/krc-debug` for Debug,
+installed from the same source with `cmake --install build\windows-msvc-debug
+--config <Debug|Release>`.
+
 ## Ten lines to an image
 
 ```cpp
