@@ -104,6 +104,7 @@ add_library(krc_impl OBJECT
     src/backend/machine_ir.cpp
     src/backend/machine_liveness.cpp
     src/backend/kr232_descriptor.cpp
+    src/asm/kr232_assembler.cpp
     src/asm/kr232_encoder.cpp
     src/asm/kr232_object.cpp
     src/linker/kr232_image.cpp
