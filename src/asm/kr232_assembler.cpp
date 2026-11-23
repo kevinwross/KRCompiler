@@ -216,6 +216,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                     relocation.offset = offset + 1;
                     relocation.symbol = operand;
                     relocation.addend = -2;  // relative to the next instruction
+                relocation.local_only = mnemonic != "call" && mnemonic != "jmp";
                     out.program.relocations.push_back(std::move(relocation));
                     out.lines.push_back(DebugLine{offset, static_cast<std::uint32_t>(line_number),
                                                   std::string(file_name)});
@@ -286,6 +287,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                     out.program.sections[0].bytes.size()) - 2u;
                 relocation.symbol = operand;
                 relocation.addend = -2;  // relative to the next instruction
+                relocation.local_only = mnemonic != "call" && mnemonic != "jmp";
                 out.program.relocations.push_back(std::move(relocation));
                 out.lines.push_back(DebugLine{offset, static_cast<std::uint32_t>(line_number),
                                               std::string(file_name)});
@@ -370,6 +372,10 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
     for (const Program::Relocation& relocation : out.program.relocations) {
         const auto found = relocation.absolute ? labels.end() : labels.find(relocation.symbol);
         if (found == labels.end()) {
+            if (relocation.local_only) {
+                error = "undefined label '" + relocation.symbol + "'";
+                return false;
+            }
             unresolved.push_back(relocation);
             continue;
         }

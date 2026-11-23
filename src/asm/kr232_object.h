@@ -43,6 +43,9 @@ struct Program {
         // A branch displacement is PC-relative and two bytes; a symbol's address
         // in an instruction is absolute and four.
         bool absolute = false;
+        // A plain branch must resolve inside its own object; only a call or a jmp
+        // may name a label the linker will find elsewhere.
+        bool local_only = false;
     };
     std::vector<Relocation> relocations;
 };
