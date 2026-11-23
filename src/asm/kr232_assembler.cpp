@@ -58,6 +58,20 @@ bool is_label_operand(const std::string& operand) {
     return std::isalpha(static_cast<unsigned char>(first)) != 0 || first == '_' || first == '.';
 }
 
+// A register operand is not a label: `jmp r8` jumps through R8, and reading it as
+// a symbol is how an indirect call became an undefined reference.
+bool is_register_operand(const std::string& operand) {
+    if (operand.size() < 2 || operand[0] != 'r') {
+        return false;
+    }
+    for (std::size_t i = 1; i < operand.size(); ++i) {
+        if (std::isdigit(static_cast<unsigned char>(operand[i])) == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 bool assemble(std::string_view source, std::string_view file_name, AssembledProgram& out,
@@ -153,7 +167,7 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                                (mnemonic.size() == 3 && mnemonic[0] == 'b');
         if (is_branch && space != std::string::npos) {
             const std::string operand = trim(line.substr(space + 1));
-            if (is_label_operand(operand)) {
+            if (is_label_operand(operand) && !is_register_operand(operand)) {
                 if (in_data) {
                     error = "line " + std::to_string(line_number) +
                             ": an instruction cannot appear in .data";

@@ -228,6 +228,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         }
 
         std::uint32_t next_compare = 0;
+        std::uint32_t next_indirect = 0;
         std::unordered_map<const ir::BasicBlock*, std::size_t> block_index;
         for (std::size_t i = 0; i < function->blocks.size(); ++i) {
             block_index.emplace(function->blocks[i].get(), i);
@@ -549,8 +550,32 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         const auto* callee =
                             dynamic_cast<const ir::Function*>(instruction->operands[0]);
                         if (callee == nullptr) {
-                            error = "kr232 backend: only a direct call is implemented";
-                            return std::nullopt;
+                            // An indirect call: a virtual dispatch reaches a function
+                            // pointer loaded from the vtable. The ISA has no call
+                            // through a register, so the return address is pushed and
+                            // the callee is reached with `jmp rD` -- `ret` pops what
+                            // was pushed, exactly as `call` would have left it.
+                            if (instruction->operands.size() > 5) {
+                                error =
+                                    "kr232 backend: more than four arguments needs the stack form";
+                                return std::nullopt;
+                            }
+                            for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
+                                materialize(instruction->operands[i],
+                                            2u + static_cast<unsigned>(i - 1));
+                            }
+                            const std::string back = ".Lcall" + std::to_string(next_indirect++);
+                            materialize(instruction->operands[0], kAddressReg);
+                            out << "  ld r" << kSecondReg << ", #" << back << "\n";
+                            out << "  push r" << kSecondReg << "\n";
+                            out << "  jmp r" << kAddressReg << "\n";
+                            out << back << ":\n";
+                            if (instruction->type != nullptr &&
+                                instruction->type->kind != ir::TypeKind::Void) {
+                                out << "  mov r" << kValueReg << ", r2\n";
+                                store_result(instruction.get(), kValueReg);
+                            }
+                            break;
                         }
                         if (instruction->operands.size() > 5) {
                             error = "kr232 backend: more than four arguments needs the stack form";
