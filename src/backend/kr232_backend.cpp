@@ -193,7 +193,14 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         out << name << ":\n";
 
         // Slots: allocas first (their address is FP-relative), then one slot per
-        // value, then one per parameter.
+        // value, then one per parameter. An f64 takes two slots and starts on an
+        // eight-byte boundary, so adjacent doubles cannot overlap.
+        const auto slots_for = [](const ir::Type* type) -> std::uint32_t {
+            return type != nullptr && type->kind == ir::TypeKind::Float &&
+                           (type->bits + 7u) / 8u >= 8u
+                       ? 2u
+                       : 1u;
+        };
         std::unordered_map<const ir::Value*, std::uint32_t> slot_of;
         std::uint32_t next_slot = 0;
         for (const auto& block : function->blocks) {
@@ -208,7 +215,12 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             for (const auto& instruction : block->instructions) {
                 if (instruction->opcode != ir::Opcode::Alloca && instruction->type != nullptr &&
                     instruction->type->kind != ir::TypeKind::Void) {
-                    slot_of.emplace(instruction.get(), next_slot++);
+                    const std::uint32_t slots = slots_for(instruction->type);
+                    if (slots == 2u && (next_slot % 2u) != 0u) {
+                        ++next_slot;
+                    }
+                    slot_of.emplace(instruction.get(), next_slot);
+                    next_slot += slots;
                 }
             }
         }
@@ -239,7 +251,12 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             return_pointer_slot = next_slot++;
         }
         for (const auto& parameter : function->parameters) {
-            slot_of.emplace(parameter.get(), next_slot++);
+            const std::uint32_t slots = slots_for(parameter->type);
+            if (slots == 2u && (next_slot % 2u) != 0u) {
+                ++next_slot;
+            }
+            slot_of.emplace(parameter.get(), next_slot);
+            next_slot += slots;
         }
         const std::uint32_t frame = align_frame(next_slot * 4u);
 
@@ -247,10 +264,20 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         if (returns_record) {
             out << "  st [r13-" << (4u + 4u * return_pointer_slot) << "], r6\n";
         }
+        // Arguments arrive in R2-R5, except floating-point ones, which arrive in
+        // F0-F3 and are spilled to their slots with `fst`.
+        std::size_t integer_argument = 0;
+        std::size_t float_argument = 0;
         for (std::size_t i = 0; i < function->parameters.size(); ++i) {
             const auto slot = slot_of.at(function->parameters[i].get());
-            out << "  st [r13-" << (4u + 4u * slot) << "], r"
-                << (2u + static_cast<unsigned>(i)) << "\n";
+            const ir::Type* type = function->parameters[i]->type;
+            const bool is_float = type != nullptr && type->kind == ir::TypeKind::Float;
+            if (is_float) {
+                out << "  fst f" << float_argument++ << ", [r13-" << (4u + 4u * slot) << "]\n";
+            } else {
+                out << "  st [r13-" << (4u + 4u * slot) << "], r" << (2u + integer_argument++)
+                    << "\n";
+            }
         }
 
         std::uint32_t next_compare = 0;
@@ -326,7 +353,9 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 out << "  fld f" << fregister << ", [r" << kAddressReg << "]\n";
                 return;
             }
-            out << "  fld f" << fregister << ", " << slot_address(slot->second) << "\n";
+            out << "  mov r" << kAddressReg << ", r13\n";
+            out << "  sub r" << kAddressReg << ", #" << (4u + 4u * slot->second) << "\n";
+            out << "  fld f" << fregister << ", [r" << kAddressReg << "]\n";
         };        const auto store_result = [&](const ir::Instruction* instruction, unsigned reg) {
             if (instruction->type != nullptr && instruction->type->kind != ir::TypeKind::Void) {
                 const auto slot = slot_of.find(instruction);
@@ -512,9 +541,9 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         // Floating-point values live in frame slots like everything
                         // else: two words each, moved through f6 and f7.
-                        materialize_float(instruction->operands[0], 6);
-                        materialize_float(instruction->operands[1], 7);
-                        out << "  " << op_name << " f0, f6, f7\n";
+                        materialize_float(instruction->operands[0], 0);
+                        materialize_float(instruction->operands[1], 1);
+                        out << "  " << op_name << " f0, f1\n";
                         out << "  fst f0, " << slot_address(slot_of.at(instruction.get())) << "\n";
                         break;
                     }
@@ -524,7 +553,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: an FP conversion needs an operand";
                             return std::nullopt;
                         }
-                        materialize_float(instruction->operands[0], 6);
+                        materialize_float(instruction->operands[0], 0);
                         out << "  " << (instruction->opcode == ir::Opcode::FPToSI ? "f2i" : "f2u")
                             << " f6, r6\n";
                         store_result(instruction.get(), kValueReg);
