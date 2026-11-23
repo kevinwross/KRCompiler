@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "asm/kr16_assembler.h"
+#include "linker/kr232_image.h"
 #include "asm/kr16_object.h"
 #include "asm/kr216_encoder.h"
 #include "asm/kr216_object.h"
@@ -280,6 +281,7 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
     const auto target_id = parsed.front().target_id;
     const auto default_base = target_id == 2   ? std::uint64_t{0x100}
                               : target_id == 4 ? std::uint64_t{0x200}
+                              : target_id == 5 ? std::uint64_t{0}
                                                : std::uint64_t{0x00010000};
 
     linker::LinkedImage image;
@@ -348,6 +350,21 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
             return output;
         }
         if (!linker::write_kr216_image(filtered, result.image, error)) {
+            result.error = error;
+            return output;
+        }
+    } else if (target_id == 5) {
+        linker::LinkedImage filtered = image;
+        filtered.sections.clear();
+        for (const auto& section : image.sections) {
+            // `.debug_info` is the bridge `attach_kdbg` consumed; the container
+            // carries the converted `.kdbg` and every other section.
+            if (section.type == linker::KroSectionType::Debug && section.name != ".kdbg") {
+                continue;
+            }
+            filtered.sections.push_back(section);
+        }
+        if (!linker::write_kr232_container(filtered, result.image, error)) {
             result.error = error;
             return output;
         }

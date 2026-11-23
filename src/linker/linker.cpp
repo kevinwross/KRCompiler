@@ -577,7 +577,7 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
     // is what kr16's own linker uses. A different alignment here moved the value
     // libc's `.data` embeds, so a krc-built image differed from the reference by
     // one word.
-    const auto heap_start = align_up(image_end, narrow ? 2 : 8);
+    const auto heap_start = align_up(image_end, narrow ? 2 : (objects.front().target_id == 5 ? 4 : 8));
     // KR32 sits above a 64 KiB window at 0x08000000; IP16 has a 64 KiB address
     // space whose RAM ends below the memory-mapped I/O window.
     std::uint64_t stack_top = 0x08010000;
