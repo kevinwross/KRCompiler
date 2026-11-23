@@ -270,6 +270,17 @@ if(TARGET krc)
                     -DEXPECT_EXIT=0
                     -DEXPECT_TRANSCRIPT=Hi!
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
+        # Two builds of one program must be byte-identical: a frame hash or an
+        # image hash is only meaningful if the image is reproducible.
+        add_test(NAME krc_kr232_determinism
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_add.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232Determinism.cmake)
     endif()
 
     add_test(NAME krc_kr16_syntax
