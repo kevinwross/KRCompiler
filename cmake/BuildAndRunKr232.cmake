@@ -68,6 +68,20 @@ if(NOT result EQUAL EXPECT_EXIT)
 endif()
 if(DEFINED EXPECT_FRAME AND NOT EXPECT_FRAME STREQUAL "")
     if(NOT output MATCHES "frame ${EXPECT_FRAME}")
+    # A drawing golden that equals the frame a program commits without drawing
+    # anything is not a drawing: two were recorded that way when the graphics
+    # clip clipped every pixel away and the device still answered OK.
+    if(DEFINED BLANK_IMAGE AND NOT BLANK_IMAGE STREQUAL "" AND EXISTS "${BLANK_IMAGE}")
+        execute_process(COMMAND "${VM}" vm "${BLANK_IMAGE}" --frame-hash
+                        OUTPUT_VARIABLE blank_output RESULT_VARIABLE blank_code)
+        if(NOT blank_code EQUAL 0 OR NOT blank_output MATCHES "frame ([0-9a-f]+)")
+            message(FATAL_ERROR "cannot measure the blank frame: ${blank_output}")
+        endif()
+        if(CMAKE_MATCH_1 STREQUAL EXPECT_FRAME)
+            message(FATAL_ERROR
+                "the golden ${EXPECT_FRAME} is the blank committed frame: nothing was drawn")
+        endif()
+    endif()
         message(FATAL_ERROR "expected frame ${EXPECT_FRAME}, got:\n${output}${error}")
     endif()
 endif()

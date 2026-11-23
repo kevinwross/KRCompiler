@@ -352,6 +352,7 @@ if(TARGET krc)
                     -DINCLUDE=${CMAKE_SOURCE_DIR}/sysroot/kr232/include
                     -DEXPECT_EXIT=0
                     -DEXPECT_FRAME=fea4ea80530198a5
+                    -DBLANK_IMAGE=${KRC_KR232_BLANK_IMAGE}
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
         # The console package writes the console page, and the emulator's

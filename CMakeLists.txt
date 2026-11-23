@@ -91,6 +91,9 @@ endif()
 # Windows-only fallback, and an empty result registers no run test so a host
 # without the emulator stays green.
 set(KRC_KR232_VM "" CACHE FILEPATH "Path to a kr232 VM binary for the executed tests")
+set(KRC_KR232_BLANK_IMAGE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../kr232/tests/fixtures/blank-flip.k232"
+    CACHE FILEPATH "A program that commits the surface without drawing: no drawing golden may equal its frame")
 if(NOT KRC_KR232_VM)
     foreach(_krc_vm_dir IN ITEMS
             "${CMAKE_CURRENT_SOURCE_DIR}/vm"
