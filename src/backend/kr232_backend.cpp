@@ -216,11 +216,18 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         }
     }
 
+    std::size_t next_function_label = 0;
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             continue;
         }
         const std::string name = function->name;
+        // Block, compare and indirect-call labels belong to one function. Two
+        // functions both emitting `.Lbb0` left the assembler binding every branch
+        // to whichever it saw first, so a branch could leave its own function --
+        // which is how cons_puts lost its loop while its code was byte-identical
+        // to a working one.
+        const std::string label_tag = ".Lf" + std::to_string(next_function_label++) + "_";
         out << ".globl " << name << "\n";
         out << ".text\n";
         out << name << ":\n";
@@ -500,7 +507,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         };
 
         for (const auto& block : function->blocks) {
-            out << ".Lbb" << block_index[block.get()] << ":\n";
+            out << label_tag << "bb" << block_index[block.get()] << ":\n";
             for (const auto& instruction : block->instructions) {
                 const auto operand = [&](std::size_t index, unsigned reg) {
                     materialize(index < instruction->operands.size()
@@ -790,7 +797,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         operand(0, kValueReg);
                         operand(1, kSecondReg);
-                        const std::string tail = ".Lcmp" + std::to_string(next_compare++);
+                        const std::string tail = label_tag + "cmp" + std::to_string(next_compare++);
                         const char* branch = "beq";
                         switch (instruction->icmp_predicate) {
                             case ir::ICmpPredicate::Eq: branch = "beq"; break;
@@ -819,7 +826,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             error = "kr232 backend: branch without a target";
                             return std::nullopt;
                         }
-                        out << "  bra .Lbb" << block_index[instruction->successors[0]] << "\n";
+                        out << "  bra " << label_tag << "bb" << block_index[instruction->successors[0]] << "\n";
                         break;
                     }
                     case ir::Opcode::CondBr: {
@@ -830,8 +837,8 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         operand(0, kValueReg);
                         out << "  ld r" << kSecondReg << ", #0\n";
                         out << "  cmp r" << kValueReg << ", r" << kSecondReg << "\n";
-                        out << "  bne .Lbb" << block_index[instruction->successors[0]] << "\n";
-                        out << "  bra .Lbb" << block_index[instruction->successors[1]] << "\n";
+                        out << "  bne " << label_tag << "bb" << block_index[instruction->successors[0]] << "\n";
+                        out << "  bra " << label_tag << "bb" << block_index[instruction->successors[1]] << "\n";
                         break;
                     }
                     case ir::Opcode::VaStart: {
@@ -877,7 +884,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                     materialize(argument, 2u + integer_arguments++);
                                 }
                             }
-                            const std::string back = ".Lcall" + std::to_string(next_indirect++);
+                            const std::string back = label_tag + "call" + std::to_string(next_indirect++);
                             materialize(instruction->operands[0], kAddressReg);
                             out << "  ld r" << kSecondReg << ", #" << back << "\n";
                             out << "  push r" << kSecondReg << "\n";

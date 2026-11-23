@@ -206,7 +206,18 @@ if(TARGET krc)
         get_filename_component(kr232_bin_dir "${KRC_KR232_VM}" DIRECTORY)
         set(kr232_dis "${kr232_bin_dir}/kr232-dis${CMAKE_EXECUTABLE_SUFFIX}")
         if(EXISTS "${kr232_dis}")
-            add_test(NAME krc_kr232_run_varargs
+            # Three functions in one object: labels must not collide across them.
+        add_test(NAME krc_kr232_three_functions
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_three_functions.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=131
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+        add_test(NAME krc_kr232_run_varargs
             COMMAND ${CMAKE_COMMAND}
                     -DKRC=$<TARGET_FILE:krc>
                     -DKRLD=$<TARGET_FILE:krld>
