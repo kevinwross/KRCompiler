@@ -3,7 +3,7 @@
 namespace krc::asm_kr232 {
 namespace {
 
-constexpr std::uint8_t kMinimumRegister = 0;
+
 constexpr std::uint8_t kMaximumRegister = 15;
 
 bool check_register(unsigned reg, std::string& error) {

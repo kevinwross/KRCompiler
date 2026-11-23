@@ -319,15 +319,6 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                      function->type->return_type->kind == ir::TypeKind::Union ||
                                      function->type->return_type->kind == ir::TypeKind::Array);
         std::uint32_t return_pointer_slot = 0;
-        const auto slot_address = [&](std::uint32_t slot) -> std::string {
-            // A d8 displacement is a signed byte; a deeper slot is reached through R8.
-            const std::uint32_t frame_offset = 4u + 4u * slot;
-            // A d8 displacement is a signed byte, so a frame deeper than that
-            // cannot be expressed yet; the assembler will refuse it by name
-            // rather than the backend emitting code it cannot encode.
-
-            return "[r13-" + std::to_string(frame_offset) + "]";
-        };
         // A frame access that names its operand after any prologue it needs, so a
         // deep slot is reached through R8 instead of an unencodable displacement.
         const auto frame_load = [&](const char* opcode, std::uint32_t slot,
