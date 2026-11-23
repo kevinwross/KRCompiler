@@ -66,6 +66,29 @@ bool parse_register(const std::string& text, unsigned& reg) {
     return true;
 }
 
+bool parse_number(const std::string& text, std::int32_t& value) {
+    std::string digits = text;
+    bool negative = false;
+    if (!digits.empty() && digits.front() == '#') {
+        digits.erase(digits.begin());
+    }
+    if (!digits.empty() && (digits.front() == '+' || digits.front() == '-')) {
+        negative = digits.front() == '-';
+        digits.erase(digits.begin());
+    }
+    if (digits.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    const unsigned long magnitude = std::strtoul(digits.c_str(), &end, 0);
+    if (end == nullptr || *end != '\0') {
+        return false;
+    }
+    const auto wide = static_cast<std::int64_t>(magnitude);
+    value = static_cast<std::int32_t>(negative ? -wide : wide);
+    return true;
+}
+
 struct Condition {
     const char* name;
     unsigned code;
@@ -143,6 +166,12 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
                 return encode_compact_register(op, reg, 0, error);
             }
         }
+        std::int32_t mask = 0;
+        if ((mnemonic == "push" || mnemonic == "pop" || mnemonic == "leave") &&
+            parse_number(operands[0], mask)) {
+            const unsigned op = mnemonic == "push" ? 23 : (mnemonic == "pop" ? 24 : 28);
+            return encode_normal(op, 0, 0, mask, error);
+        }
     }
 
     // Compact register form with two registers.
@@ -163,6 +192,53 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
             }
             if (mnemonic == "mov") {
                 return encode_compact_register(0, ra, rb, error);
+            }
+        }
+    }
+
+    // Register with an immediate: the shortest form whose range fits (ISA §7).
+    if (operands.size() == 2) {
+        unsigned rd = 0;
+        std::int32_t value = 0;
+        const bool register_first = parse_register(operands[0], rd);
+        const bool immediate_second =
+            !operands[1].empty() &&
+            (operands[1][0] == '#' || operands[1][0] == '-' || operands[1][0] == '+' ||
+             std::isdigit(static_cast<unsigned char>(operands[1][0])) != 0);
+        if (register_first && immediate_second && parse_number(operands[1], value)) {
+            struct ImmediateOp {
+                const char* name;
+                unsigned op;
+            };
+            constexpr ImmediateOp kSigned[] = {{"add", 7}, {"sub", 8}, {"cmp", 9}};
+            constexpr ImmediateOp kUnsigned[] = {{"and", 11}, {"or", 12}, {"xor", 13}};
+            constexpr ImmediateOp kShift[] = {{"shl", 20}, {"shr", 21}, {"sar", 22}};
+            for (const ImmediateOp& entry : kSigned) {
+                if (mnemonic == entry.name) {
+                    return encode_normal(entry.op, rd, 0, value, error);
+                }
+            }
+            for (const ImmediateOp& entry : kUnsigned) {
+                if (mnemonic == entry.name) {
+                    return encode_normal(entry.op, rd, 0, value, error);
+                }
+            }
+            for (const ImmediateOp& entry : kShift) {
+                if (mnemonic == entry.name) {
+                    return encode_normal(entry.op, rd, 0, value, error);
+                }
+            }
+            if (mnemonic == "ld") {
+                if (value >= -128 && value <= -1) {
+                    return encode_normal(5, rd, 0, value, error);
+                }
+                if (value >= 0 && value <= 255) {
+                    return encode_normal(6, rd, 0, value, error);
+                }
+                return encode_ld_immediate(rd, static_cast<std::uint32_t>(value), error);
+            }
+            if (mnemonic == "mov") {
+                return encode_ld_immediate(rd, static_cast<std::uint32_t>(value), error);
             }
         }
     }

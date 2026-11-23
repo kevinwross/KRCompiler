@@ -43,9 +43,27 @@ TEST_CASE("KR232 parser reads the zero-operand and register-only forms") {
     expect_parse("  ADD   R2 ,  R3  ", {0x81, 0x23});
 }
 
+TEST_CASE("KR232 parser reads register-with-immediate text") {
+    expect_parse("ld r2, #5", {0xC6, 0x20, 0x05});
+    expect_parse("ld r2, #-1", {0xC5, 0x20, 0xFF});
+    expect_parse("ld r2, #0x1234", {0x52, 0x34, 0x12, 0x00, 0x00});
+    expect_parse("add r2, #7", {0xC7, 0x20, 0x07});
+    expect_parse("sub r2, #7", {0xC8, 0x20, 0x07});
+    expect_parse("cmp r2, #7", {0xC9, 0x20, 0x07});
+    expect_parse("and r2, #0xFF", {0xCB, 0x20, 0xFF});
+    expect_parse("shl r2, #3", {0xD4, 0x20, 0x03});
+    expect_parse("push #0x0300", {0xD7, 0x00, 0x03});
+    expect_parse("pop #0x0300", {0xD8, 0x00, 0x03});
+    expect_parse("leave #0", {0xDC, 0x00, 0x00});
+
+    std::string error;
+    CHECK(!parse_instruction("and r2, #256", error).has_value());
+    CHECK(!parse_instruction("shl r2, #32", error).has_value());
+}
+
 TEST_CASE("KR232 parser refuses what it cannot encode yet") {
     std::string error;
-    CHECK(!parse_instruction("ld r2, #0x1234", error).has_value());
+    CHECK(!parse_instruction("ld r2, [r3]", error).has_value());
     CHECK(!parse_instruction("", error).has_value());
     CHECK(!parse_instruction("mov r16, r3", error).has_value());
     CHECK(!parse_instruction("frobnicate r2", error).has_value());
