@@ -787,6 +787,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         break;
                     }
                     case ir::Opcode::Call: {
+                        // Arguments are typed: integers fill r2-r5, doubles fill
+                        // f0-f3, each in its own order, which is how the callee's
+                        // prologue stores them.
+                        unsigned integer_arguments = 0;
+                        unsigned float_arguments = 0;
                         if (instruction->operands.empty()) {
                             error = "kr232 backend: call without a callee";
                             return std::nullopt;
@@ -805,8 +810,13 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                 return std::nullopt;
                             }
                             for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
-                                materialize(instruction->operands[i],
-                                            2u + static_cast<unsigned>(i - 1));
+                                const ir::Value* argument = instruction->operands[i];
+                                if (argument->type != nullptr &&
+                                    argument->type->kind == ir::TypeKind::Float) {
+                                    materialize_float(argument, float_arguments++);
+                                } else {
+                                    materialize(argument, 2u + integer_arguments++);
+                                }
                             }
                             const std::string back = ".Lcall" + std::to_string(next_indirect++);
                             materialize(instruction->operands[0], kAddressReg);
@@ -826,8 +836,13 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             return std::nullopt;
                         }
                         for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
-                            materialize(instruction->operands[i],
-                                        2u + static_cast<unsigned>(i - 1));
+                            const ir::Value* argument = instruction->operands[i];
+                            if (argument->type != nullptr &&
+                                argument->type->kind == ir::TypeKind::Float) {
+                                materialize_float(argument, float_arguments++);
+                            } else {
+                                materialize(argument, 2u + integer_arguments++);
+                            }
                         }
                         // A record return needs a destination the callee copies
                         // into; the caller names it in R6.
