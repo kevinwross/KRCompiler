@@ -183,6 +183,22 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                         code = 0;
                     } else if (mnemonic == "bne") {
                         code = 1;
+                    } else if (mnemonic == "bcs") {
+                        code = 2;
+                    } else if (mnemonic == "bcc") {
+                        code = 3;
+                    } else if (mnemonic == "bmi") {
+                        code = 4;
+                    } else if (mnemonic == "bpl") {
+                        code = 5;
+                    } else if (mnemonic == "bvs") {
+                        code = 6;
+                    } else if (mnemonic == "bvc") {
+                        code = 7;
+                    } else if (mnemonic == "bhi") {
+                        code = 8;
+                    } else if (mnemonic == "bls") {
+                        code = 9;
                     } else if (mnemonic == "bge") {
                         code = 10;
                     } else if (mnemonic == "blt") {

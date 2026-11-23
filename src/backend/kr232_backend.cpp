@@ -166,24 +166,37 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             return std::nullopt;
                         }
                         // A constant index folds to one displacement: `&p[i]` where
-                        // i is known is the base plus i times the element size.
+                        // i is known is the base plus i times the element size. A
+                        // variable index is scaled and added at run time.
                         std::int64_t offset = 0;
                         const auto* base_type =
                             instruction->operands[0]->type != nullptr
                                 ? instruction->operands[0]->type->element
                                 : nullptr;
                         const std::uint32_t element = type_bytes(base_type);
+                        const unsigned reg = register_for(instruction.get());
+                        materialize(instruction->operands[0], reg);
                         for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
                             const auto* index =
                                 dynamic_cast<const ir::ConstantInt*>(instruction->operands[i]);
-                            if (index == nullptr) {
-                                error = "kr232 backend: only constant indices are implemented";
+                            if (index != nullptr) {
+                                offset += index->value * static_cast<std::int64_t>(element);
+                                continue;
+                            }
+                            const unsigned other = reg == 6 ? 7 : 6;
+                            materialize(instruction->operands[i], other);
+                            if (element == 2) {
+                                out << "  shl r" << other << ", #1\n";
+                            } else if (element == 4) {
+                                out << "  shl r" << other << ", #2\n";
+                            } else if (element == 8) {
+                                out << "  shl r" << other << ", #3\n";
+                            } else if (element != 1) {
+                                error = "kr232 backend: an element size that is not a power of two";
                                 return std::nullopt;
                             }
-                            offset += index->value * static_cast<std::int64_t>(element);
+                            out << "  add r" << reg << ", r" << other << "\n";
                         }
-                        const unsigned reg = register_for(instruction.get());
-                        materialize(instruction->operands[0], reg);
                         if (offset != 0) {
                             out << "  add r" << reg << ", #" << offset << "\n";
                         }
@@ -251,13 +264,26 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     case ir::Opcode::Xor:
                     case ir::Opcode::Shl:
                     case ir::Opcode::LShr:
-                    case ir::Opcode::AShr: {
+                    case ir::Opcode::AShr:
+                    case ir::Opcode::UDiv:
+                    case ir::Opcode::SDiv:
+                    case ir::Opcode::URem:
+                    case ir::Opcode::SRem: {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: binary operation without two operands";
                             return std::nullopt;
                         }
                         const ir::Value* left = instruction->operands[0];
                         const ir::Value* right = instruction->operands[1];
+                        // Neither division has a remainder form and the two-register
+                        // model has no third scratch for quotient, product and
+                        // result; a remainder is refused by name rather than emitted
+                        // as a division.
+                        if (instruction->opcode == ir::Opcode::URem ||
+                            instruction->opcode == ir::Opcode::SRem) {
+                            error = "kr232 backend: remainder is not implemented";
+                            return std::nullopt;
+                        }
                         const unsigned reg = register_for(instruction.get());
                         materialize(left, reg);
                         const auto* constant = dynamic_cast<const ir::ConstantInt*>(right);
@@ -271,13 +297,23 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             case ir::Opcode::Xor: op_name = "xor"; break;
                             case ir::Opcode::Shl: op_name = "shl"; break;
                             case ir::Opcode::LShr: op_name = "shr"; break;
+                            case ir::Opcode::UDiv: op_name = "div"; break;
+                            case ir::Opcode::SDiv: op_name = "divs"; break;
+                            case ir::Opcode::URem: op_name = "srem"; break;
+                            case ir::Opcode::SRem: op_name = "srem"; break;
                             default: op_name = "sar"; break;
                         }
-                        if (constant != nullptr) {
+                        const bool register_form = constant == nullptr ||
+                                                   instruction->opcode == ir::Opcode::UDiv ||
+                                                   instruction->opcode == ir::Opcode::SDiv ||
+                                                   instruction->opcode == ir::Opcode::URem ||
+                                                   instruction->opcode == ir::Opcode::SRem;
+                        if (!register_form) {
                             out << "  " << op_name << " r" << reg << ", #" << constant->value << "\n";
                         } else {
-                            out << "  " << op_name << " r" << reg << ", r" << register_for(right)
-                                << "\n";
+                            const unsigned divisor = reg == 6 ? 7 : 6;
+                            materialize(right, divisor);
+                            out << "  " << op_name << " r" << reg << ", r" << divisor << "\n";
                         }
                         break;
                     }
