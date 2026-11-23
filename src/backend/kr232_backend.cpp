@@ -310,7 +310,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             materialize(value, kAddressReg);
             return "[r8]";
         };
-        const auto store_result = [&](const ir::Instruction* instruction, unsigned reg) {
+        // A floating-point value is two words in a slot; a constant is loaded from
+        // its own .data entry, emitted in `fp_constants`.
+        const auto materialize_float = [&](const ir::Value* value, unsigned fregister) {
+            if (const auto* constant = dynamic_cast<const ir::ConstantFloat*>(value)) {
+                std::ostringstream label;
+                label << ".Lfp" << std::hex << std::hash<double>{}(constant->value);
+                out << "  ld r" << kAddressReg << ", #" << label.str() << "\n";
+                out << "  fld f" << fregister << ", [r" << kAddressReg << "]\n";
+                return;
+            }
+            const auto slot = slot_of.find(value);
+            if (slot == slot_of.end()) {
+                out << "  ld r" << kAddressReg << ", #0\n";
+                out << "  fld f" << fregister << ", [r" << kAddressReg << "]\n";
+                return;
+            }
+            out << "  fld f" << fregister << ", " << slot_address(slot->second) << "\n";
+        };        const auto store_result = [&](const ir::Instruction* instruction, unsigned reg) {
             if (instruction->type != nullptr && instruction->type->kind != ir::TypeKind::Void) {
                 const auto slot = slot_of.find(instruction);
                 if (slot != slot_of.end()) {
@@ -476,6 +493,53 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         } else {
                             out << "  st " << address << ", r" << kValueReg << "\n";
                         }
+                        break;
+                    }
+                    case ir::Opcode::FAdd:
+                    case ir::Opcode::FSub:
+                    case ir::Opcode::FMul:
+                    case ir::Opcode::FDiv: {
+                        if (instruction->operands.size() < 2) {
+                            error = "kr232 backend: a floating-point operation needs two operands";
+                            return std::nullopt;
+                        }
+                        const char* op_name = "fadd";
+                        switch (instruction->opcode) {
+                            case ir::Opcode::FAdd: op_name = "fadd"; break;
+                            case ir::Opcode::FSub: op_name = "fsub"; break;
+                            case ir::Opcode::FMul: op_name = "fmul"; break;
+                            default: op_name = "fdiv"; break;
+                        }
+                        // Floating-point values live in frame slots like everything
+                        // else: two words each, moved through f6 and f7.
+                        materialize_float(instruction->operands[0], 6);
+                        materialize_float(instruction->operands[1], 7);
+                        out << "  " << op_name << " f0, f6, f7\n";
+                        out << "  fst f0, " << slot_address(slot_of.at(instruction.get())) << "\n";
+                        break;
+                    }
+                    case ir::Opcode::FPToSI:
+                    case ir::Opcode::FPToUI: {
+                        if (instruction->operands.empty()) {
+                            error = "kr232 backend: an FP conversion needs an operand";
+                            return std::nullopt;
+                        }
+                        materialize_float(instruction->operands[0], 6);
+                        out << "  " << (instruction->opcode == ir::Opcode::FPToSI ? "f2i" : "f2u")
+                            << " f6, r6\n";
+                        store_result(instruction.get(), kValueReg);
+                        break;
+                    }
+                    case ir::Opcode::SIToFP:
+                    case ir::Opcode::UIToFP: {
+                        if (instruction->operands.empty()) {
+                            error = "kr232 backend: an FP conversion needs an operand";
+                            return std::nullopt;
+                        }
+                        materialize(instruction->operands[0], kValueReg);
+                        out << "  " << (instruction->opcode == ir::Opcode::SIToFP ? "i2f" : "u2f")
+                            << " r6, f0\n";
+                        out << "  fst f0, " << slot_address(slot_of.at(instruction.get())) << "\n";
                         break;
                     }
                     case ir::Opcode::Add:
