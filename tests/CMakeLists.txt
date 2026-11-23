@@ -127,6 +127,26 @@ if(TARGET krc)
     set_tests_properties(krc_kr232_dump_symbols PROPERTIES
         PASS_REGULAR_EXPRESSION "KDBG target=5[^\n]*lines=2 functions=1")
 
+    # The same container executed under the kr232 emulator: it pushes R2, asks to
+    # exit with R7 = 0 and the emulator returns that as its process status. The
+    # second test asks for the wrong status on purpose, so the runner's message is
+    # exercised rather than assumed.
+    if(KRC_KR232_VM AND EXISTS "${KRC_KR232_VM}")
+        add_test(NAME krc_kr232_run_fixture
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.k232
+                    -DEXPECT_EXIT=0
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        add_test(NAME krc_kr232_run_wrong_exit
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.k232
+                    -DEXPECT_EXIT=7
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        set_tests_properties(krc_kr232_run_wrong_exit PROPERTIES WILL_FAIL TRUE)
+    endif()
+
     add_test(NAME krc_kr16_syntax
         COMMAND $<TARGET_FILE:krc> --target=kr16 -std=c11 -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sizes.c")
