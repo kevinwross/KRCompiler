@@ -7,8 +7,15 @@
 
 using krc::asm_kr232::encode_compact_branch;
 using krc::asm_kr232::encode_compact_register;
+using krc::asm_kr232::encode_enter;
+using krc::asm_kr232::encode_fp_convert;
+using krc::asm_kr232::encode_fp_memory;
+using krc::asm_kr232::encode_fp_memory_wide;
+using krc::asm_kr232::encode_fp_register;
+using krc::asm_kr232::encode_fp_stack;
 using krc::asm_kr232::encode_generic;
 using krc::asm_kr232::encode_long_integer;
+using krc::asm_kr232::encode_wide;
 using krc::asm_kr232::encode_ld_absolute;
 using krc::asm_kr232::encode_ld_immediate;
 using krc::asm_kr232::encode_normal;
@@ -104,6 +111,38 @@ TEST_CASE("KR232 generic and long-integer forms encode as Appendix A shows") {
     expect_bytes(encode_long_integer(3, 2, 0x40, error), {0xF1, 0x32, 0x40, 0x00, 0x00, 0x00});
     expect_bytes(encode_long_integer(7, 2, 0x1234, error), {0xF1, 0x72, 0x34, 0x12, 0x00, 0x00});
     CHECK(!encode_long_integer(8, 2, 0, error).has_value());
+}
+
+TEST_CASE("KR232 fp and frame escapes encode by their documented layout") {
+    std::string error;
+    expect_bytes(encode_fp_register(0, 1, 2, error), {0xF3, 0x06});   // fadd f1,f2
+    expect_bytes(encode_fp_register(7, 1, 2, error), {0xF3, 0x76});   // fmov f1,f2
+    expect_bytes(encode_fp_register(4, 0, 0, error), {0xF3, 0x40});   // fneg f0
+    expect_bytes(encode_fp_memory(0, 1, 1, 2, 8, error), {0xF4, 0x05, 0x20, 0x08});  // fld f1,[r2+8]
+    expect_bytes(encode_fp_memory(1, 1, 0, 2, 0, error), {0xF4, 0x14, 0x20});        // fst f1,[r2]
+    expect_bytes(encode_fp_memory(2, 1, 2, 2, 0, error), {0xF4, 0x26, 0x20});        // flds f1,[r2]+
+    expect_bytes(encode_fp_convert(0, 1, 2, error), {0xF5, 0x04, 0x20});             // i2f f1,r2
+    expect_bytes(encode_fp_convert(2, 1, 2, error), {0xF5, 0x24, 0x20});             // f2i r2,f1
+    expect_bytes(encode_fp_stack(0, 1, error), {0xF6, 0x01});                        // fpush f1
+    expect_bytes(encode_fp_stack(1, 2, error), {0xF6, 0x06});                        // fpop f2
+    expect_bytes(encode_enter(8, 0, error), {0xF7, 0x08, 0x00, 0x00});
+    expect_bytes(encode_enter(0x200, 0x0300, error), {0xF8, 0x00, 0x02, 0x00, 0x03});
+    expect_bytes(encode_enter(0x10000, 0, error), {0xFB, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00});
+    expect_bytes(encode_wide(0, 0, 0x1234, error), {0xF9, 0x00, 0x34, 0x12, 0x00, 0x00});
+    expect_bytes(encode_wide(1, 0, 0x1234, error), {0xF9, 0x10, 0x34, 0x12, 0x00, 0x00});
+    expect_bytes(encode_fp_memory_wide(0, 1, 1, 2, 0x40, error),
+                 {0xFA, 0x05, 0x20, 0x40, 0x00, 0x00, 0x00});
+
+    CHECK(!encode_fp_register(10, 1, 0, error).has_value());  // reserved op
+    CHECK(!encode_fp_register(4, 1, 2, error).has_value());   // unary with a second register
+    CHECK(!encode_fp_memory(0, 1, 1, 2, 200, error).has_value());
+    CHECK(!encode_fp_memory(4, 1, 0, 2, 0, error).has_value());
+    CHECK(!encode_fp_convert(4, 1, 2, error).has_value());
+    CHECK(!encode_fp_stack(2, 1, error).has_value());
+    CHECK(!encode_enter(10, 0, error).has_value());       // not a multiple of four
+    CHECK(!encode_enter(8, 0x2000, error).has_value());   // mask bit 13
+    CHECK(!encode_wide(16, 0, 0, error).has_value());
+    CHECK(!encode_fp_memory_wide(0, 4, 0, 2, 0, error).has_value());
 }
 
 TEST_CASE("KR232 normal forms encode as Appendix A shows") {

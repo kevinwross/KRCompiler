@@ -361,4 +361,183 @@ std::optional<EncodedInstruction> encode_long_integer(unsigned op, unsigned rd, 
     return out;
 }
 
+std::optional<EncodedInstruction> encode_fp_register(unsigned op, unsigned fd, unsigned fs,
+                                                     std::string& error) {
+    if (op > 9) {
+        error = "fp register op out of range";
+        return std::nullopt;
+    }
+    if (fd > 3 || fs > 3) {
+        error = "fp register out of range";
+        return std::nullopt;
+    }
+    // FNEG, FABS, FSQRT and FRND are unary: Fs is reserved and must be zero.
+    if ((op == 4 || op == 5 || op == 6 || op == 9) && fs != 0) {
+        error = "this fp operation takes no second register";
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = 0xF3;
+    out.bytes[1] = static_cast<std::uint8_t>((op << 4) | (fd << 2) | fs);
+    out.length = 2;
+    return out;
+}
+
+std::optional<EncodedInstruction> encode_fp_memory(unsigned op, unsigned fd, unsigned mode,
+                                                   unsigned base, std::int32_t displacement,
+                                                   std::string& error) {
+    if (op > 3) {
+        error = "fp memory op out of range";
+        return std::nullopt;
+    }
+    if (fd > 3) {
+        error = "fp register out of range";
+        return std::nullopt;
+    }
+    if (mode > 3) {
+        error = "fp addressing mode out of range";
+        return std::nullopt;
+    }
+    if (!check_register(base, error)) {
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = 0xF4;
+    out.bytes[1] = static_cast<std::uint8_t>((op << 4) | (fd << 2) | mode);
+    out.bytes[2] = static_cast<std::uint8_t>(base << 4);  // the low nibble is reserved
+    out.length = 3;
+    if (mode == 1) {
+        if (displacement < -128 || displacement > 127) {
+            error = "displacement out of the signed byte range";
+            return std::nullopt;
+        }
+        out.bytes[3] = static_cast<std::uint8_t>(displacement & 0xFF);
+        out.length = 4;
+    }
+    return out;
+}
+
+std::optional<EncodedInstruction> encode_fp_convert(unsigned op, unsigned fd, unsigned rb,
+                                                    std::string& error) {
+    if (op > 3) {
+        error = "fp conversion op out of range";
+        return std::nullopt;
+    }
+    if (fd > 3) {
+        error = "fp register out of range";
+        return std::nullopt;
+    }
+    if (!check_register(rb, error)) {
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = 0xF5;
+    out.bytes[1] = static_cast<std::uint8_t>((op << 4) | (fd << 2));
+    out.bytes[2] = static_cast<std::uint8_t>(rb << 4);
+    out.length = 3;
+    return out;
+}
+
+std::optional<EncodedInstruction> encode_fp_stack(unsigned op, unsigned fd, std::string& error) {
+    if (op > 1) {
+        error = "fp stack op out of range";
+        return std::nullopt;
+    }
+    if (fd > 3) {
+        error = "fp register out of range";
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = 0xF6;
+    out.bytes[1] = static_cast<std::uint8_t>((op << 2) | fd);
+    out.length = 2;
+    return out;
+}
+
+std::optional<EncodedInstruction> encode_enter(std::uint32_t frame, unsigned mask,
+                                               std::string& error) {
+    if (frame % 4u != 0) {
+        error = "the frame size must be a multiple of four";
+        return std::nullopt;
+    }
+    if (mask > 0x1FFFu) {
+        error = "mask bits 13, 14 and 15 must be zero";
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    const auto low = static_cast<std::uint8_t>(mask & 0xFF);
+    const auto high = static_cast<std::uint8_t>((mask >> 8) & 0xFF);
+    if (frame <= 0xFF) {
+        out.bytes[0] = 0xF7;
+        out.bytes[1] = static_cast<std::uint8_t>(frame);
+        out.bytes[2] = low;
+        out.bytes[3] = high;
+        out.length = 4;
+    } else if (frame <= 0xFFFF) {
+        out.bytes[0] = 0xF8;
+        out.bytes[1] = static_cast<std::uint8_t>(frame & 0xFF);
+        out.bytes[2] = static_cast<std::uint8_t>((frame >> 8) & 0xFF);
+        out.bytes[3] = low;
+        out.bytes[4] = high;
+        out.length = 5;
+    } else {
+        out.bytes[0] = 0xFB;
+        out.bytes[1] = static_cast<std::uint8_t>(frame & 0xFF);
+        out.bytes[2] = static_cast<std::uint8_t>((frame >> 8) & 0xFF);
+        out.bytes[3] = static_cast<std::uint8_t>((frame >> 16) & 0xFF);
+        out.bytes[4] = static_cast<std::uint8_t>((frame >> 24) & 0xFF);
+        out.bytes[5] = low;
+        out.bytes[6] = high;
+        out.length = 7;
+    }
+    return out;
+}
+
+std::optional<EncodedInstruction> encode_wide(unsigned op, unsigned rd, std::uint32_t payload,
+                                              std::string& error) {
+    if (op > 15) {
+        error = "wide op out of range";
+        return std::nullopt;
+    }
+    if (!check_register(rd, error)) {
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = 0xF9;
+    out.bytes[1] = static_cast<std::uint8_t>((op << 4) | rd);
+    out.bytes[2] = static_cast<std::uint8_t>(payload & 0xFF);
+    out.bytes[3] = static_cast<std::uint8_t>((payload >> 8) & 0xFF);
+    out.bytes[4] = static_cast<std::uint8_t>((payload >> 16) & 0xFF);
+    out.bytes[5] = static_cast<std::uint8_t>((payload >> 24) & 0xFF);
+    out.length = 6;
+    return out;
+}
+
+std::optional<EncodedInstruction> encode_fp_memory_wide(unsigned op, unsigned fd, unsigned mode,
+                                                        unsigned base, std::int32_t displacement,
+                                                        std::string& error) {
+    if (op > 3) {
+        error = "fp memory op out of range";
+        return std::nullopt;
+    }
+    if (fd > 3 || mode > 3) {
+        error = "fp register or addressing mode out of range";
+        return std::nullopt;
+    }
+    if (!check_register(base, error)) {
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = 0xFA;
+    out.bytes[1] = static_cast<std::uint8_t>((op << 4) | (fd << 2) | mode);
+    out.bytes[2] = static_cast<std::uint8_t>(base << 4);
+    const auto bits = static_cast<std::uint32_t>(displacement);
+    out.bytes[3] = static_cast<std::uint8_t>(bits & 0xFF);
+    out.bytes[4] = static_cast<std::uint8_t>((bits >> 8) & 0xFF);
+    out.bytes[5] = static_cast<std::uint8_t>((bits >> 16) & 0xFF);
+    out.bytes[6] = static_cast<std::uint8_t>((bits >> 24) & 0xFF);
+    out.length = 7;
+    return out;
+}
+
 }  // namespace krc::asm_kr232
