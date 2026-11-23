@@ -54,9 +54,21 @@ bool write_value(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint
         return false;
     }
     if (width < 8) {
+        // A PC-relative relocation can be negative: the target may sit behind the
+        // instruction that branches to it. Accept a value that fits either as
+        // unsigned or as two's complement, and reject only a genuine overflow.
         const auto limit = (1ULL << (width * 8)) - 1;
-        if (value > limit) {
-            error = "link relocation overflows its width";
+        const auto signed_min = -(1LL << (width * 8 - 1));
+        const auto signed_max = (1LL << (width * 8 - 1)) - 1;
+        const auto as_signed = static_cast<std::int64_t>(value);
+        if (value > limit && (as_signed < signed_min || as_signed > signed_max)) {
+            char detail[128] = {};
+            std::snprintf(detail, sizeof(detail),
+                          "link relocation overflows its width (value 0x%llX, width %u, "
+                          "offset %zu)",
+                          static_cast<unsigned long long>(value),
+                          static_cast<unsigned>(width), offset);
+            error = detail;
             return false;
         }
     }
