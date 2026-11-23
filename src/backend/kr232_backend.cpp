@@ -850,7 +850,48 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         store_result(instruction.get(), kValueReg);
                         break;
                     }
-                    case ir::Opcode::ICmp: {
+                    case ir::Opcode::FCmp: {
+                        // FCMP writes N = (Fd < Fs), Z = (Fd == Fs) and
+                        // V = unordered (ISA §10), so the ordered predicates are the
+                        // integer branch conditions and the unordered ones test Z.
+                        if (instruction->operands.size() < 2) {
+                            error = "kr232 backend: comparison without two operands";
+                            return std::nullopt;
+                        }
+                        materialize_float(instruction->operands[0], 0);
+                        materialize_float(instruction->operands[1], 1);
+                        const std::string tail =
+                            label_tag + "fcmp" + std::to_string(next_compare++);
+                        out << "  fcmp f0, f1\n";
+                        const auto predicate = instruction->fcmp_predicate;
+                        if (predicate == ir::FCmpPredicate::False ||
+                            predicate == ir::FCmpPredicate::True) {
+                            out << "  ld r" << kValueReg << ", #"
+                                << (predicate == ir::FCmpPredicate::True ? 1 : 0) << "\n";
+                            store_result(instruction.get(), kValueReg);
+                            break;
+                        }
+                        const char* branch = "beq";
+                        switch (predicate) {
+                            case ir::FCmpPredicate::Oeq: branch = "beq"; break;
+                            case ir::FCmpPredicate::One: branch = "bne"; break;
+                            case ir::FCmpPredicate::Olt: branch = "blt"; break;
+                            case ir::FCmpPredicate::Ole: branch = "ble"; break;
+                            case ir::FCmpPredicate::Ogt: branch = "bgt"; break;
+                            case ir::FCmpPredicate::Oge: branch = "bge"; break;
+                            case ir::FCmpPredicate::Ord: branch = "bvc"; break;
+                            case ir::FCmpPredicate::Uno: branch = "bvs"; break;
+                            default: break;
+                        }
+                        out << "  ld r" << kValueReg << ", #0\n";
+                        out << "  " << branch << " " << tail << "\n";
+                        out << "  bra " << tail << "end\n";
+                        out << tail << ":\n";
+                        out << "  ld r" << kValueReg << ", #1\n";
+                        out << tail << "end:\n";
+                        store_result(instruction.get(), kValueReg);
+                        break;
+                    }                    case ir::Opcode::ICmp: {
                         if (instruction->operands.size() < 2) {
                             error = "kr232 backend: comparison without two operands";
                             return std::nullopt;
