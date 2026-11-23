@@ -125,6 +125,14 @@ if(TARGET krc)
     set_tests_properties(krc_kr232_prologue PROPERTIES
         PASS_REGULAR_EXPRESSION "enter #0, #0")
 
+    # The kr232 sysroot's widths against the profile: 8, 16 and 32-bit integers,
+    # a 32-bit pointer, and no 64-bit integer type at all, because the ABI records
+    # long_long_bits as zero.
+    add_test(NAME krc_kr232_sysroot_widths
+        COMMAND $<TARGET_FILE:krc> --target=kr232 -fsyntax-only
+                --sysroot ${CMAKE_SOURCE_DIR}/sysroot
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_stdint.c")
+
     # A frame-size check at the boundary: one int local is one 4-byte slot, so the
     # prologue's ENTER immediate must be 4.
     add_test(NAME krc_kr232_frame
