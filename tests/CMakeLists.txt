@@ -145,6 +145,25 @@ if(TARGET krc)
                     -DEXPECT_EXIT=7
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
         set_tests_properties(krc_kr232_run_wrong_exit PROPERTIES WILL_FAIL TRUE)
+
+        # The drawing fixture: one pixel into the back surface, a flip, a clean
+        # exit. The hash pins the rendered screen, and the wrong-hash test proves
+        # the comparison runs.
+        add_test(NAME krc_kr232_run_draw
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-draw.k232
+                    -DEXPECT_EXIT=0
+                    -DFRAME_HASH=e8bda242f061f369
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        add_test(NAME krc_kr232_wrong_frame
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR232_VM}
+                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-draw.k232
+                    -DEXPECT_EXIT=0
+                    -DFRAME_HASH=0000000000000000
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
+        set_tests_properties(krc_kr232_wrong_frame PROPERTIES WILL_FAIL TRUE)
     endif()
 
     add_test(NAME krc_kr16_syntax
