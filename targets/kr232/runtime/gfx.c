@@ -41,3 +41,50 @@ void gfx_fill_rect(int x, int y, int width, int height) {
         }
     }
 }
+/* The command block form: the page takes COMMAND, then its arguments, then a
+   doorbell write; STATUS bit 0 is ERROR. */
+#define GFX ((volatile unsigned*)0xFFF09000u)
+#define GFX_COMMAND(index, value) (GFX[index] = (unsigned)(value))
+
+static int submit(unsigned command) {
+    GFX_COMMAND(0, command);
+    GFX_COMMAND(9, 1);          /* offset 36: the doorbell */
+    return (int)GFX[10];        /* offset 40: STATUS */
+}
+
+int gfx_copy_rect(int x, int y, int width, int height) {
+    GFX_COMMAND(1, 0);          /* the surface origin */
+    GFX_COMMAND(2, x);
+    GFX_COMMAND(3, y);
+    GFX_COMMAND(4, width);
+    GFX_COMMAND(5, height);
+    return submit(4);
+}
+
+int gfx_draw_line(int x0, int y0, int x1, int y1) {
+    GFX_COMMAND(1, x0);
+    GFX_COMMAND(2, y0);
+    GFX_COMMAND(3, x1);
+    GFX_COMMAND(4, y1);
+    GFX_COMMAND(5, current_colour);
+    return submit(5);
+}
+
+int gfx_draw_text(int x, int y, const char* text, int length) {
+    GFX_COMMAND(1, x);
+    GFX_COMMAND(2, y);
+    GFX_COMMAND(3, (unsigned)text);
+    GFX_COMMAND(4, length);
+    GFX_COMMAND(5, current_colour);
+    GFX_COMMAND(6, 0);
+    return submit(6);
+}
+
+int gfx_upload(const void* pixels, int width, int height, int stride) {
+    GFX_COMMAND(1, (unsigned)pixels);
+    GFX_COMMAND(2, 0);          /* surface offset */
+    GFX_COMMAND(3, width);
+    GFX_COMMAND(4, height);
+    GFX_COMMAND(5, stride);
+    return submit(10);
+}

@@ -11,4 +11,14 @@ void gfx_set_colour(unsigned colour);
 void gfx_clear(void);
 void gfx_fill_rect(int x, int y, int width, int height);
 
+/* At most four arguments, because that is what the ABI passes in registers: the
+   commands that need more travel as one block behind a pointer, and the ones that
+   want a colour use the one gfx_set_colour recorded. Each answers the device
+   STATUS, whose bit 0 is ERROR, so a caller sees a refusal instead of assuming
+   success -- DRAW_TEXT always refuses until the glyph atlas ships. */
+int gfx_copy_rect(int x, int y, int width, int height);
+int gfx_draw_line(int x0, int y0, int x1, int y1);
+int gfx_draw_text(int x, int y, const char* text, int length);
+int gfx_upload(const void* pixels, int width, int height, int stride);
+
 #endif
