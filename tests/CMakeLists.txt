@@ -99,6 +99,18 @@ if(TARGET krc)
     add_test(NAME krc_unknown_target COMMAND $<TARGET_FILE:krc> --target=unknown)
     set_tests_properties(krc_unknown_target PROPERTIES WILL_FAIL TRUE)
 
+    # kr232 (plan §5, M0): the target is named and has no backend. The expected
+    # message is the one M2's profile row produces; at M0 the tool still answers
+    # "unknown target", so this test is red until that row lands. It is the
+    # failing test the guide's step 1 asks for, and M2 turns it green without
+    # editing it.
+    add_test(NAME krc_kr232_no_backend
+        COMMAND $<TARGET_FILE:krc> --target=kr232 -c
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sizes.c"
+                -o "${KRC_TEST_OUTPUT_DIR}/kr232_no_backend.kro")
+    set_tests_properties(krc_kr232_no_backend PROPERTIES
+        PASS_REGULAR_EXPRESSION "target 'kr232' has no code generator yet")
+
     add_test(NAME krc_kr16_syntax
         COMMAND $<TARGET_FILE:krc> --target=kr16 -std=c11 -fsyntax-only
                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sizes.c")
