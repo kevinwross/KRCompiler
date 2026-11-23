@@ -226,7 +226,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 if (instruction->opcode == ir::Opcode::Alloca) {
                     const auto alloca_slot = slot_of.find(value);
                     if (alloca_slot != slot_of.end()) {
-                        out << "  ld r" << reg << ", r13\n";
+                        out << "  mov r" << reg << ", r13\n";
                         out << "  sub r" << reg << ", #" << (4u + 4u * alloca_slot->second)
                             << "\n";
                         return;
@@ -301,7 +301,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         if (base_instruction != nullptr &&
                             base_instruction->opcode == ir::Opcode::Alloca) {
                             const auto slot = slot_of.find(base_instruction);
-                            out << "  ld r" << kValueReg << ", r13\n";
+                            out << "  mov r" << kValueReg << ", r13\n";
                             out << "  sub r" << kValueReg << ", #" << (4u + 4u * slot->second)
                                 << "\n";
                         } else {

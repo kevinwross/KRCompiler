@@ -304,6 +304,19 @@ if(TARGET krc)
                     -DEXPECT_TRANSCRIPT=cons!
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
+        # The three-char record by value: the copy must be size-exact, so 1 + 2 + 3
+        # is 6 only if each member landed at its own byte.
+        add_test(NAME krc_kr232_run_struct
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_struct.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=6
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
         # The keyboard package has no way to be exercised without input injection,
         # so its check is that it compiles against the profile's headers.
         add_test(NAME krc_kr232_input_compiles
