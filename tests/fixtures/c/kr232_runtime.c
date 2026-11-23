@@ -6,7 +6,9 @@ int main(void) {
     char *buffer = (char *)malloc(32);
     int total = 0;
     int i;
-    if (buffer == 0) {
+    /* The allocation must be in the heap, not merely non-null: an address of 0 is
+       writable RAM in kernel mode, so a failed malloc used to be invisible here. */
+    if ((unsigned)buffer < 0x09000000u || (unsigned)buffer >= 0x10000000u) {
         return 1;
     }
     strcpy(buffer, "runtime");

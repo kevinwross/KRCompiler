@@ -797,7 +797,10 @@ static struct heap_header *free_head;
    handed out memory inside the code and allocations overwrote the
    instructions that were about to run. */
 #define HEAP_BEGIN ((unsigned char *)0x09000000)
-#define HEAP_END ((unsigned char *)0x08000000)
+/* The top of user RAM. The stack grows down from here, so the heap is bounded by
+   it rather than by the window base: leaving kr32's 0x08000000 made every
+   allocation fail its own size check and return 0. */
+#define HEAP_END ((unsigned char *)0x10000000)
 
 void *malloc(unsigned int size) {
     size = (size + 7) & ~7u;
