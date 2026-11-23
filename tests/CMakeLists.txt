@@ -218,6 +218,20 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}
                     -DEXPECT_EXIT=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232FrameLayout.cmake)
+        # A frame whose objects sit deeper than a signed-byte displacement: the
+        # address has to be formed in R8, and every object must still end below FP.
+        add_test(NAME krc_kr232_deep_frame
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_deep_frame.c
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DEXPECT_EXIT=3
+                    -DEXPECT_PARAM=seed
+                    -DMIN_DEPTH=128
+                    -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232FrameLayout.cmake)
         # Windows reports a 32-bit process status, POSIX only the low eight bits.
         if(WIN32)
             set(KR232_EXIT300_PROCESS_ARG -DEXPECT_EXIT=300)

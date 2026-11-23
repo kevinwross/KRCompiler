@@ -487,7 +487,16 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 if (instruction->opcode == ir::Opcode::Alloca) {
                     const auto slot = slot_of.find(value);
                     if (slot != slot_of.end()) {
-                        return "[r13-" + std::to_string(alloca_offset(*instruction)) + "]";
+                        const std::uint32_t offset = alloca_offset(*instruction);
+                        if (offset > 128u) {
+                            // A d8 displacement cannot reach a slot this deep: form the
+                            // address in R8, the register the backend keeps as its
+                            // address scratch.
+                            out << "  mov r8, r13\n";
+                            out << "  sub r8, #" << offset << "\n";
+                            return "[r8]";
+                        }
+                        return "[r13-" + std::to_string(offset) + "]";
                     }
                 }
             }
