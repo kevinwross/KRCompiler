@@ -15,6 +15,8 @@ struct Section {
     std::string name = ".text";
     std::vector<std::uint8_t> bytes;
     std::uint64_t alignment = 4;
+    // Container flags: 1 alloc, 2 write, 4 execute, 8 debug. Text is the default.
+    std::uint16_t flags = 5;
 };
 
 struct Symbol {

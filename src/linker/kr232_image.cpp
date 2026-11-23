@@ -146,7 +146,9 @@ bool write_kr232_container(const LinkedImage& linked, std::vector<std::uint8_t>&
                            std::string& error) {
     Kr232Image image;
     image.entry = static_cast<std::uint32_t>(linked.entry);
-    image.image_base = static_cast<std::uint32_t>(linked.base);
+    // A kernel image is linked above the vector table but its container base is 0;
+    // only a user image records 0x08000000.
+    image.image_base = linked.base == 0x08000000u ? 0x08000000u : 0u;
     for (const LinkedSection& section : linked.sections) {
         Kr232Section out_section;
         out_section.name = section.name;

@@ -32,6 +32,7 @@ bool make_object(const Program& program, const target::TargetProfile& profile,
         linker::KroSection out;
         out.name = section.name;
         out.alignment = section.alignment;
+        out.flags = section.flags;
         out.size = section.bytes.size();
         out.data = section.bytes;
         object.sections.push_back(std::move(out));

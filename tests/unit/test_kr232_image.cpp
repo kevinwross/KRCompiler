@@ -1,5 +1,7 @@
 #include "doctest.h"
 
+#include "asm/kr232_object.h"
+#include "krc/toolchain.h"
 #include "linker/kr232_image.h"
 #include "linker/linker.h"
 #include "linker/kro_object.h"
@@ -133,4 +135,31 @@ TEST_CASE("a linked image maps onto the kr232 container") {
     CHECK(read16(bytes, 24) == 5);        // target id
     CHECK(read32(bytes, 16) == 0x0200);   // entry
     CHECK(read16(bytes, 22) == 1);        // one section
+}
+TEST_CASE("the linker writes a kr232 container for a kr232 object") {
+    krc::asm_kr232::Program program;
+    program.sections.push_back(krc::asm_kr232::Section{".text", {0x73}, 4});  // sys
+    program.symbols.push_back(krc::asm_kr232::Symbol{"main", 0, 0, true});
+
+    const auto& profile = krc::target::get_target(krc::target::TargetId::Kr232);
+    krc::linker::KroObject object;
+    std::string error;
+    REQUIRE(krc::asm_kr232::make_object(program, profile, object, error));
+    std::vector<std::uint8_t> object_bytes;
+    REQUIRE(krc::linker::write_object(object, object_bytes, error));
+
+    std::vector<krc::toolchain::Object> objects(1);
+    objects[0].name = "start.o";
+    objects[0].bytes = object_bytes;
+    krc::toolchain::Options options;  // the target is inferred from the object
+    const krc::toolchain::LinkResult linked = krc::toolchain::link(objects, options);
+    REQUIRE_MESSAGE(linked.ok, linked.error);
+    REQUIRE(linked.image.size() >= 64);
+    CHECK(linked.image[0] == 'K');
+    CHECK(linked.image[1] == '2');
+    CHECK(linked.image[2] == '3');
+    CHECK(linked.image[3] == '2');
+    CHECK(read16(linked.image, 24) == 5);   // target id
+    CHECK(read32(linked.image, 28) == 0);   // kernel base
+    CHECK(read32(linked.image, 16) != 0);   // an entry inside text
 }

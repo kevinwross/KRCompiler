@@ -281,7 +281,7 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
     const auto target_id = parsed.front().target_id;
     const auto default_base = target_id == 2   ? std::uint64_t{0x100}
                               : target_id == 4 ? std::uint64_t{0x200}
-                              : target_id == 5 ? std::uint64_t{0}
+                              : target_id == 5 ? std::uint64_t{0x200}
                                                : std::uint64_t{0x00010000};
 
     linker::LinkedImage image;
