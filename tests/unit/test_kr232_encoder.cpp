@@ -6,6 +6,7 @@
 #include <vector>
 
 using krc::asm_kr232::encode_compact_branch;
+using krc::asm_kr232::encode_compact_register;
 using krc::asm_kr232::encode_ld_absolute;
 using krc::asm_kr232::encode_ld_immediate;
 using krc::asm_kr232::encode_short;
@@ -72,4 +73,22 @@ TEST_CASE("KR232 encoders reject out-of-range operands") {
     CHECK(!encode_compact_branch(16, 0, error).has_value());
     CHECK(!encode_compact_branch(0, 256, error).has_value());
     CHECK(!encode_compact_branch(0, -257, error).has_value());
+}
+
+TEST_CASE("KR232 compact register forms encode as Appendix A shows") {
+    std::string error;
+    expect_bytes(encode_compact_register(0, 2, 3, error), {0x80, 0x23});   // mov r2,r3
+    expect_bytes(encode_compact_register(1, 2, 3, error), {0x81, 0x23});   // add r2,r3
+    expect_bytes(encode_compact_register(3, 2, 3, error), {0x83, 0x23});   // sub r2,r3
+    expect_bytes(encode_compact_register(5, 2, 3, error), {0x85, 0x23});   // and r2,r3
+    expect_bytes(encode_compact_register(14, 2, 3, error), {0x8E, 0x23});  // ld r2,[r3]
+    expect_bytes(encode_compact_register(15, 2, 3, error), {0x8F, 0x23});  // st [r3],r2
+    expect_bytes(encode_compact_register(16, 2, 3, error), {0x90, 0x23});  // ldbu r2,[r3]
+    expect_bytes(encode_compact_register(29, 2, 0, error), {0x9D, 0x20});  // neg r2
+    expect_bytes(encode_compact_register(30, 2, 0, error), {0x9E, 0x20});  // not r2
+    expect_bytes(encode_compact_register(31, 2, 0, error), {0x9F, 0x20});  // jmp r2
+    // The unary forms demand R0 as the second register.
+    CHECK(!encode_compact_register(29, 2, 3, error).has_value());
+    CHECK(!encode_compact_register(31, 2, 3, error).has_value());
+    CHECK(!encode_compact_register(32, 2, 0, error).has_value());
 }

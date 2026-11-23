@@ -54,4 +54,11 @@ enum class ShortOp : std::uint8_t {
                                                                       std::int32_t displacement,
                                                                       std::string& error);
 
+// Compact register form of ISA §6.1: first byte `0x80 + op`, second
+// `Ra << 4 | Rb`. `Rb` must be R0 for NEG, NOT and JMP (ISA §6.1).
+[[nodiscard]] std::optional<EncodedInstruction> encode_compact_register(unsigned op,
+                                                                        unsigned ra,
+                                                                        unsigned rb,
+                                                                        std::string& error);
+
 }  // namespace krc::asm_kr232

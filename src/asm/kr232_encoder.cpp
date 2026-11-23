@@ -124,4 +124,25 @@ std::optional<EncodedInstruction> encode_compact_branch(unsigned condition,
     return out;
 }
 
+std::optional<EncodedInstruction> encode_compact_register(unsigned op, unsigned ra, unsigned rb,
+                                                          std::string& error) {
+    if (op > 31) {
+        error = "register-form op out of range";
+        return std::nullopt;
+    }
+    if (!check_register(ra, error) || !check_register(rb, error)) {
+        return std::nullopt;
+    }
+    // NEG, NOT and JMP are unary: their second register must be R0 (ISA §6.1).
+    if ((op == 29 || op == 30 || op == 31) && rb != 0) {
+        error = "this operation requires R0 as the second register";
+        return std::nullopt;
+    }
+    EncodedInstruction out;
+    out.bytes[0] = static_cast<std::uint8_t>(0x80u | op);
+    out.bytes[1] = static_cast<std::uint8_t>((ra << 4) | rb);
+    out.length = 2;
+    return out;
+}
+
 }  // namespace krc::asm_kr232
