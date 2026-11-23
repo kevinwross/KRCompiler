@@ -774,7 +774,14 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         }
                         out << "  call " << callee->name << "\n";
                         if (instruction->type != nullptr &&
-                            instruction->type->kind != ir::TypeKind::Void) {
+                            instruction->type->kind == ir::TypeKind::Float) {
+                            // A floating-point result comes back in F0.
+                            out << "  mov r8, r13\n";
+                            out << "  sub r8, #" << (4u + 4u * slot_of.at(instruction.get()))
+                                << "\n";
+                            out << "  fst f0, [r8]\n";
+                        } else if (instruction->type != nullptr &&
+                                   instruction->type->kind != ir::TypeKind::Void) {
                             out << "  mov r" << kValueReg << ", r2\n";
                             store_result(instruction.get(), kValueReg);
                         }
@@ -783,6 +790,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                     case ir::Opcode::Ret: {
                         if (instruction->operands.empty()) {
                             out << "  ld r2, #0\n";
+                        } else if (function->type != nullptr &&
+                                   function->type->return_type != nullptr &&
+                                   function->type->return_type->kind == ir::TypeKind::Float) {
+                            // A floating-point result is returned in F0.
+                            materialize_float(instruction->operands[0], 0);
                         } else if (returns_record) {
                             // Copy the record out to the destination the caller named
                             // in R6, and hand that pointer back in R2.
