@@ -154,6 +154,24 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
                             ": an instruction cannot appear in .data";
                     return false;
                 }
+                // `call` and `jmp` to a label use the three-byte rel16 form plus a
+                // relocation: the label may live in another object, and a fixed
+                // length lets the assembler emit the bytes before it knows.
+                if (mnemonic == "call" || mnemonic == "jmp") {
+                    const std::uint32_t offset =
+                        static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
+                    out.program.sections[0].bytes.push_back(mnemonic == "call" ? 0xD0 : 0xCF);
+                    out.program.sections[0].bytes.push_back(0);
+                    out.program.sections[0].bytes.push_back(0);
+                    Program::Relocation relocation;
+                    relocation.offset = offset + 1;
+                    relocation.symbol = operand;
+                    relocation.addend = -2;  // relative to the next instruction
+                    out.program.relocations.push_back(std::move(relocation));
+                    out.lines.push_back(DebugLine{offset, static_cast<std::uint32_t>(line_number),
+                                                  std::string(file_name)});
+                    continue;
+                }
                 std::string encode_error;
                 const unsigned cond = mnemonic == "bra" ? 15 : (mnemonic == "call" ? 14 : 0);
                 unsigned code = cond;

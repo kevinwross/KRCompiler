@@ -1,5 +1,7 @@
 #include "kr232_object.h"
 
+#include <limits>
+
 #include "linker/kro_object.h"
 
 namespace krc::asm_kr232 {
@@ -45,6 +47,37 @@ bool make_object(const Program& program, const target::TargetProfile& profile,
         out.binding =
             symbol.global ? linker::KroSymbolBinding::Global : linker::KroSymbolBinding::Local;
         object.symbols.push_back(std::move(out));
+    }
+    // A relocation naming a symbol this object does not define becomes an external
+    // symbol, marked the way the other writers mark one: section all ones.
+    for (const Program::Relocation& relocation : program.relocations) {
+        std::uint32_t index = 0;
+        bool found = false;
+        for (std::size_t i = 0; i < object.symbols.size(); ++i) {
+            if (object.symbols[i].name == relocation.symbol) {
+                index = static_cast<std::uint32_t>(i);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            linker::KroSymbol external;
+            external.name = relocation.symbol;
+            external.binding = linker::KroSymbolBinding::Global;
+            external.type = linker::KroSymbolType::NoType;
+            external.section = std::numeric_limits<std::uint32_t>::max();
+            external.value = 0;
+            index = static_cast<std::uint32_t>(object.symbols.size());
+            object.symbols.push_back(std::move(external));
+        }
+        linker::KroRelocation out;
+        out.section = relocation.section;
+        out.offset = relocation.offset;
+        out.width = 2;
+        out.type = linker::KroRelocationType::PcRel16;
+        out.symbol = index;
+        out.addend = relocation.addend;
+        object.relocations.push_back(std::move(out));
     }
     return true;
 }

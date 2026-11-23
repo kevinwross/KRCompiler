@@ -29,6 +29,16 @@ struct Symbol {
 struct Program {
     std::vector<Section> sections;
     std::vector<Symbol> symbols;
+    // A reference the assembler could not resolve: a branch to a label in another
+    // object. `offset` is the displacement field's offset in its section; the
+    // linker patches it with a PC-relative 16-bit value.
+    struct Relocation {
+        std::uint32_t section = 0;
+        std::uint32_t offset = 0;
+        std::string symbol;
+        std::int64_t addend = 0;
+    };
+    std::vector<Relocation> relocations;
 };
 
 // Writes a KRO object for a kr232 program: target id 5 through `kROTargetId`, the
