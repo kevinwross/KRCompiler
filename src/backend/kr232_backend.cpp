@@ -10,9 +10,50 @@ namespace {
 // The ABI's frame is a multiple of the 4-byte stack alignment.
 std::uint32_t align_frame(std::uint32_t bytes) { return (bytes + 3u) & ~3u; }
 
+// The alignment a type requires. A packed record aligns to one byte, which is
+// what makes a three-char record three bytes rather than twelve -- the ABI's
+// size-exact copy depends on it.
+std::uint32_t type_bytes(const ir::Type* type);
+
+std::uint32_t type_align(const ir::Type* type) {
+    if (type == nullptr) {
+        return 1;
+    }
+    switch (type->kind) {
+        case ir::TypeKind::Void:
+            return 1;
+        case ir::TypeKind::Pointer:
+            return 4;
+        case ir::TypeKind::Integer:
+        case ir::TypeKind::Float: {
+            const std::uint32_t bytes = (type->bits + 7u) / 8u;
+            return bytes < 4u ? (bytes == 0 ? 1u : bytes) : 4u;
+        }
+        case ir::TypeKind::Array:
+            return type_align(type->element);
+        case ir::TypeKind::Struct:
+        case ir::TypeKind::Union: {
+            if (type->packed) {
+                return 1;
+            }
+            std::uint32_t alignment = 1;
+            for (const ir::Type* field : type->fields) {
+                const std::uint32_t field_align = type_align(field);
+                if (field_align > alignment) {
+                    alignment = field_align;
+                }
+            }
+            return alignment;
+        }
+        case ir::TypeKind::Function:
+            return 1;
+    }
+    return 1;
+}
+
 // kr232 sizes: a pointer is 32 bits, an integer or float is `bits` wide, an array
-// is its element times its count, a record is its fields laid out at 4-byte
-// alignment. `type_size` is private to each backend, so this backend owns its own.
+// is its element times its count, a record is its fields laid out at their natural
+// offsets. `type_size` is private to each backend, so this backend owns its own.
 std::uint32_t type_bytes(const ir::Type* type) {
     if (type == nullptr) {
         return 0;
@@ -29,16 +70,37 @@ std::uint32_t type_bytes(const ir::Type* type) {
             return type_bytes(type->element) * static_cast<std::uint32_t>(type->count);
         case ir::TypeKind::Struct:
         case ir::TypeKind::Union: {
+            // Fields take their natural offsets; a packed record pads nothing. A
+            // three-char record is three bytes, which the ABI's size-exact copy
+            // depends on.
             std::uint32_t bytes = 0;
             for (const ir::Type* field : type->fields) {
-                bytes += align_frame(type_bytes(field));
+                const std::uint32_t field_align = type->packed ? 1u : type_align(field);
+                bytes = (bytes + field_align - 1u) & ~(field_align - 1u);
+                bytes += type_bytes(field);
             }
-            return bytes;
+            const std::uint32_t record_align = type->packed ? 1u : type_align(type);
+            return (bytes + record_align - 1u) & ~(record_align - 1u);
         }
         case ir::TypeKind::Function:
             return 0;
     }
     return 0;
+}
+
+// The byte offset of a record's field, which is what a member index means.
+std::uint32_t field_offset(const ir::Type* record, std::size_t index) {
+    std::uint32_t bytes = 0;
+    for (std::size_t i = 0; i < record->fields.size(); ++i) {
+        const ir::Type* field = record->fields[i];
+        const std::uint32_t field_align = record->packed ? 1u : type_align(field);
+        bytes = (bytes + field_align - 1u) & ~(field_align - 1u);
+        if (i == index) {
+            return bytes;
+        }
+        bytes += type_bytes(field);
+    }
+    return bytes;
 }
 
 // R6 is the value scratch and R8 the address scratch. They are separate on
@@ -230,6 +292,25 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                 << "\n";
                         } else {
                             operand(0, kValueReg);
+                        }
+                        // A record member index selects a field: its byte offset is
+                        // the sum of the preceding fields' sizes, not the index
+                        // times the whole record.
+                        if (base_type != nullptr && base_type->kind == ir::TypeKind::Struct &&
+                            instruction->operands.size() == 3) {
+                            const auto* member =
+                                dynamic_cast<const ir::ConstantInt*>(instruction->operands[2]);
+                            if (member == nullptr) {
+                                error = "kr232 backend: a variable member index is not implemented";
+                                return std::nullopt;
+                            }
+                            const std::uint32_t offset_bytes =
+                                field_offset(base_type, static_cast<std::size_t>(member->value));
+                            if (offset_bytes != 0) {
+                                out << "  add r" << kValueReg << ", #" << offset_bytes << "\n";
+                            }
+                            store_result(instruction.get(), kValueReg);
+                            break;
                         }
                         for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
                             const auto* index =
