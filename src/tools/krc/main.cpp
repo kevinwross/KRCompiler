@@ -135,6 +135,8 @@ toolchain::Target to_target(krc::target::TargetId id) {
         return toolchain::Target::Kr64;
     case krc::target::TargetId::Kr216:
         return toolchain::Target::Kr216;
+    case krc::target::TargetId::Kr232:
+        return toolchain::Target::Kr232;
     case krc::target::TargetId::Kr32:
         break;
     }
@@ -408,6 +410,9 @@ int main(int argc, char** argv) {
         target_id == krc::target::TargetId::Kr216) {
         link_options.base = 0x100;
         link_options.entry = "_start";
+    } else if (target_id == krc::target::TargetId::Kr232) {
+        link_options.base = 0x200;  // above the reset word and the vectors
+        link_options.entry = "main";
     }
 
     std::vector<toolchain::Diagnostic> diagnostics;
@@ -417,7 +422,8 @@ int main(int argc, char** argv) {
         const auto input_extension = std::filesystem::path(input).extension().string();
         if ((emit_object_container || emit_object) && input_extension == ".s") {
             if (target_id != krc::target::TargetId::Kr16 &&
-                target_id != krc::target::TargetId::Kr216) {
+                target_id != krc::target::TargetId::Kr216 &&
+                target_id != krc::target::TargetId::Kr232) {
                 diagnostics.push_back(error_diagnostic(
                     "target '" + std::string(profile.name) +
                     "' does not accept assembly input for -c"));

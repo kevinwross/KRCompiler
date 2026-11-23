@@ -15,6 +15,8 @@
 #include "linker/kr232_image.h"
 #include "asm/kr16_object.h"
 #include "asm/kr216_encoder.h"
+#include "asm/kr232_assembler.h"
+#include "asm/kr232_object.h"
 #include "asm/kr216_object.h"
 #include "asm/kr32_assembler.h"
 #include "asm/kro_writer.h"
@@ -46,6 +48,8 @@ target::TargetId to_target_id(Target target) {
         return target::TargetId::Kr64;
     case Target::Kr216:
         return target::TargetId::Kr216;
+    case Target::Kr232:
+        return target::TargetId::Kr232;
     case Target::Kr32:
         break;
     }
@@ -60,6 +64,8 @@ std::string target_name(Target target) {
         return "kr64";
     case Target::Kr216:
         return "kr216";
+    case Target::Kr232:
+        return "kr232";
     case Target::Kr32:
         break;
     }
@@ -197,6 +203,18 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
             return result;
         }
         append_debug_info(object, debug_info);
+    } else if (id == target::TargetId::Kr232) {
+        asm_kr232::AssembledProgram assembled;
+        if (!asm_kr232::assemble(assembly, "assembly", assembled, error)) {
+            result.error = "KR232 assembler: " + error;
+            return result;
+        }
+        if (!asm_kr232::make_object(assembled.program, profile, object, error)) {
+            result.error = "KR232 object: " + error;
+            return result;
+        }
+        // The kr232 assembler emits its own `.debug_info` bridge, so the option's
+        // bridge is not appended here; two bridges would duplicate every record.
     } else if (id == target::TargetId::Kr32) {
         asmkr32::AssemblyResult assembled;
         if (!asmkr32::assemble(assembly, assembled, error)) {
