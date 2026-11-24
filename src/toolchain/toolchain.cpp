@@ -173,6 +173,61 @@ void append_debug_info(linker::KroObject& object, std::string_view debug_info) {
     object.sections.push_back(std::move(section));
 }
 
+namespace {
+
+// `.target NAME` is a toolchain directive rather than an instruction: a generated
+// assembly file carries it so a mismatched file is caught before it is assembled
+// into a wrong object. A file without one assembles as before, because hand
+// written sources predate the directive and stay valid.
+std::optional<std::string> declared_target(std::string_view assembly) {
+    std::size_t position = 0;
+    while (position < assembly.size()) {
+        const auto newline = assembly.find('\n', position);
+        const auto end = newline == std::string_view::npos ? assembly.size() : newline;
+        auto line = assembly.substr(position, end - position);
+        while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) {
+            line.remove_prefix(1);
+        }
+        if (line.rfind(".target", 0) == 0) {
+            auto rest = line.substr(std::string_view(".target").size());
+            while (!rest.empty() && (rest.front() == ' ' || rest.front() == '\t')) {
+                rest.remove_prefix(1);
+            }
+            while (!rest.empty() && (rest.back() == '\r' || rest.back() == ' ')) {
+                rest.remove_suffix(1);
+            }
+            return std::string(rest);
+        }
+        position = end + 1;
+    }
+    return std::nullopt;
+}
+
+// Removes the directive so the target assembler never sees a line it would have
+// to know about; one place validates it, none has to parse it.
+void strip_target_directive(std::string& assembly) {
+    std::string cleaned;
+    std::size_t position = 0;
+    while (position < assembly.size()) {
+        const auto newline = assembly.find('\n', position);
+        const auto end = newline == std::string::npos ? assembly.size() : newline;
+        auto line = std::string_view(assembly).substr(position, end - position);
+        auto probe = line;
+        while (!probe.empty() && (probe.front() == ' ' || probe.front() == '\t')) {
+            probe.remove_prefix(1);
+        }
+        if (probe.rfind(".target", 0) != 0) {
+            cleaned.append(line);
+            if (newline != std::string::npos) {
+                cleaned.push_back('\n');
+            }
+        }
+        position = end + 1;
+    }
+    assembly = std::move(cleaned);
+}
+
+}  // namespace
 AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_info,
                              const Options& options) {
     AssembleResult result;
@@ -180,6 +235,18 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
     const auto& profile = target::get_target(id);
     linker::KroObject object;
     std::string error;
+
+    std::string text(assembly);
+    if (const auto declared = declared_target(text)) {
+        const auto expected = std::string(target::to_string(id));
+        if (*declared != expected) {
+            result.error = "this assembly declares .target " + *declared +
+                           " but the assembler was asked for " + expected;
+            return result;
+        }
+    }
+    strip_target_directive(text);
+    assembly = text;
 
     if (id == target::TargetId::Kr16) {
         asmkr16::AssemblyResult assembled;
@@ -675,6 +742,12 @@ CompileResult compile(const Source& source, const Options& options) {
         }
     }
     finish_compile(result, diagnostics, sources);
+    // Every backend emits the directive, so a saved `-S` file says which machine
+    // it is for even after it is renamed.
+    if (!result.assembly.empty() && result.error.empty()) {
+        const auto declared_id = to_target_id(options.target);
+        result.assembly.insert(0, ".target " + std::string(target::to_string(declared_id)) + "\n");
+    }
     return result;
 }
 
