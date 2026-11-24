@@ -815,7 +815,7 @@ bool Assembler::parse(std::string_view source, std::string& error) {
                 section = Section::Data;
             } else if (directive == ".CPP_EXCEPT") {
                 section = Section::Exception;
-            } else if (directive == ".GLOBAL") {
+            } else if (directive == ".GLOBAL" || directive == ".GLOBL") {
                 global_names_.emplace(std::string(rest));
             } else if (directive == ".WEAK") {
                 weak_names_.emplace(std::string(rest));

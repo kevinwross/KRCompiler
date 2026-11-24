@@ -741,7 +741,7 @@ bool assemble(std::string_view source, AssemblyResult& result,
             } else if (name == ".bss") {
                 section = kBss;
                 note_section();
-            } else if (name == ".global") {
+            } else if (name == ".global" || name == ".globl") {
                 std::string symbol;
                 directive >> symbol;
                 globals.push_back(symbol);

@@ -8187,3 +8187,12 @@ if(KRC_KR16_VM AND EXISTS "${KRC_KR16_VM}")
     set_tests_properties(krc_run_kr16_make_unique PROPERTIES
         DEPENDS krc_link_kr16_make_unique)
 endif()
+
+    # G10: `.global` is the spelling the back ends emit; `.globl` is accepted as
+    # the alias every other assembler in the family already took.
+    add_test(NAME krc_asm_globl_alias
+        COMMAND $<TARGET_FILE:krc> image --target=kr32 --entry=entry --flat
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s"
+                -o "${KRC_TEST_OUTPUT_DIR}/globl_alias.bin")
+    set_tests_properties(krc_asm_globl_alias PROPERTIES
+        PASS_REGULAR_EXPRESSION "linked 1 object")
