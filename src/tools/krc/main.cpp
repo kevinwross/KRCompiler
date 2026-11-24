@@ -8,6 +8,7 @@
 
 #include "krc/debug/kdbg.h"
 #include "krc/image/k232.h"
+#include "krc/listing.h"
 #include "krc/target/target.h"
 #include "krc/toolchain.h"
 #include "krc/version.h"
@@ -400,6 +401,8 @@ int main(int argc, char** argv) {
     bool dump_stats = false;
     int optimization = 0;
     bool emit_assembly = false;
+    bool want_listing = false;
+    std::string listing_path;
     bool emit_object = false;
     bool emit_object_container = false;
     bool far_calls = false;
@@ -499,6 +502,25 @@ int main(int argc, char** argv) {
         }
         if (argument == "-S") {
             emit_assembly = true;
+            continue;
+        }
+        if (argument == "-l") {
+            want_listing = true;
+            // H3: -l takes an optional file name, recognised by its .lst suffix.
+            // A following argument that is not a listing name is a source path and
+            // must stay one, so the suffix decides rather than the position.
+            if (i + 1 < argc) {
+                const std::string_view next = argv[i + 1];
+                if (next.size() > 4 && next.substr(next.size() - 4) == ".lst") {
+                    listing_path = std::string(next);
+                    ++i;
+                }
+            }
+            continue;
+        }
+        if (argument.starts_with("--listing=")) {
+            want_listing = true;
+            listing_path = std::string(argument.substr(std::string_view("--listing=").size()));
             continue;
         }
         if (argument == "-I") {
@@ -671,8 +693,71 @@ int main(int argc, char** argv) {
     std::vector<toolchain::Diagnostic> diagnostics;
     bool failed = false;
 
+    // H2/H3: the listing is named by D5's rule -- an explicit -l wins, then the
+    // output name plus .lst, then the source stem -- and rendered through the one
+    // shared renderer, so every target's listing has the same shape.
+    const auto write_listing = [&](const std::vector<toolchain::ListingRow>& rows,
+                                   const std::vector<toolchain::SymbolInfo>& symbols,
+                                   const std::vector<toolchain::SectionInfo>& sections,
+                                   const std::string& title, bool linked,
+                                   std::uint64_t base, const std::string& source,
+                                   std::string& error) {
+        krc::listing::Document document;
+        document.title = title;
+        document.target = std::string(profile.name);
+        document.linked = linked;
+        document.base = base;
+        switch (*target_id) {
+            case krc::target::TargetId::Kr16:
+            case krc::target::TargetId::Kr216:
+                document.word_bytes = 2;
+                break;
+            default:
+                document.word_bytes = 4;
+                break;
+        }
+        std::filesystem::path path;
+        if (!listing_path.empty()) {
+            path = listing_path;
+        } else if (!output_path.empty()) {
+            path = std::string(output_path) + ".lst";
+        } else {
+            path = std::filesystem::path(source).replace_extension(".lst");
+        }
+        return write_text_file(path, krc::listing::render(rows, symbols, sections, document),
+                               error);
+    };
+
     for (const auto& input : inputs) {
         const auto input_extension = std::filesystem::path(input).extension().string();
+        // `krc -l prog.s` lists an assembly file without producing an object: the
+        // request is the listing, and writing a .kro nobody asked for would be a
+        // side effect of asking to read.
+        if (want_listing && !emit_object && !emit_object_container && !emit_assembly &&
+            input_extension == ".s") {
+            std::string text;
+            std::string error;
+            if (!read_text_file(input, text, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
+                continue;
+            }
+            toolchain::Options assemble_options = options;
+            assemble_options.far_calls = far_calls;
+            assemble_options.target = to_target(*target_id);
+            assemble_options.source_name = input;
+            const auto assembled = toolchain::assemble(text, assemble_options);
+            if (!assembled.ok) {
+                diagnostics.push_back(error_diagnostic(assembled.error));
+                failed = true;
+                continue;
+            }
+            if (!write_listing(assembled.listing, {}, {}, input, false, 0, input, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
+            }
+            continue;
+        }
         if ((emit_object_container || emit_object) && input_extension == ".s") {
             if (target_id != krc::target::TargetId::Kr16 &&
                 target_id != krc::target::TargetId::Kr216 &&
@@ -789,6 +874,22 @@ int main(int argc, char** argv) {
             return std::filesystem::path(input).replace_extension(extension);
         };
 
+        if (want_listing && !emit_object) {
+            // `-S -l`: the listing comes from assembling what the compiler
+            // generated, which is the only way to know the encoded bytes.
+            const auto assembled =
+                toolchain::assemble(compiled.assembly, compiled.debug_info, file_options);
+            if (!assembled.ok) {
+                diagnostics.push_back(error_diagnostic(assembled.error));
+                failed = true;
+                continue;
+            }
+            if (!write_listing(assembled.listing, {}, {}, input, false, 0, input, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
+            }
+        }
+
         // For KR16, `-c` owns the output: the old driver printed the assembly
         // only in the branch that ran when no object was requested.
         const bool suppress_assembly = target_id == krc::target::TargetId::Kr16 &&
@@ -875,6 +976,11 @@ int main(int argc, char** argv) {
                 diagnostics.push_back(error_diagnostic(error));
                 failed = true;
             }
+            if (want_listing &&
+                !write_listing(assembled.listing, {}, {}, input, false, 0, input, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
+            }
             continue;
         }
 
@@ -887,6 +993,11 @@ int main(int argc, char** argv) {
                 continue;
             }
             if (!write_binary_file(emit_path(".kro"), assembled.object, error)) {
+                diagnostics.push_back(error_diagnostic(error));
+                failed = true;
+            }
+            if (want_listing &&
+                !write_listing(assembled.listing, {}, {}, input, false, 0, input, error)) {
                 diagnostics.push_back(error_diagnostic(error));
                 failed = true;
             }
@@ -904,7 +1015,7 @@ int main(int argc, char** argv) {
     // judged by, so asking for the numbers is a complete invocation rather than a
     // missing output.
     if (syntax_only || preprocess_only || dump_ast || dump_ir || dump_stats ||
-        emit_assembly || emit_object) {
+        emit_assembly || emit_object || want_listing) {
         return 0;
     }
 
