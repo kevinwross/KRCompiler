@@ -286,6 +286,8 @@ One misconception is now settled and worth recording, because it cost two rounds
 
 **P2 — one preset vocabulary, exported cores, krdbg uniform.** C1, C4, D1, D2, D3, **G5, I1, I2, I3, J5**. Exit: the five preset names exist in all four repositories; krdbg links four `::core` targets, compiles no VM source, and picks adapters from the extension table; its two suites pass; the family builds in graph order from a clean tree.
 
+**P3 closed 2026-11-24.** Both items are done and each has the row its exit names. B5: kr232's kernel target links with `krc image --target=kr232 --entry=_start` instead of `krc -c` followed by `krld`, so the kernel is produced by one tool, and `kr232_kernel_matches_source` still compares the result against the committed kernel and passes -- 15 of 15. B4: `resources/embed_libc.py` is deleted and `resources/embed_libc.cmake` generates `src/resources/embedded_libc.cpp` from `libc.s`, `fileio.c` and `systemservices.h` with the tool every host already has; the regenerated file is identical to the committed one on all 3,928 lines below its header, and a new row `kr16.embed.libc` regenerates in memory and compares against the committed copy so the file cannot drift -- 61 of 61. P1-0 remains carried.
+
 **P3 — remaining embedded artefacts.** B4, B5. Exit: kr16's libc and kr232's kernel are produced by `krc image`; their drift rows pass.
 
 **P4 — tests and fixtures.** E1, E2, E3. Exit: `ctest -j 8` three times in each repository, plus one serial run; every fixture has a generator.
