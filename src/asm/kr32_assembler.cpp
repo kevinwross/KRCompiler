@@ -313,6 +313,12 @@ bool is_identifier(std::string_view text) {
     if (text.empty()) {
         return false;
     }
+    // An identifier never starts with a digit: without this rule a number the
+    // assembler could not parse (454660, say) is taken as a symbol name and the
+    // real complaint -- an operand form it does not support -- never appears.
+    if (std::isdigit(static_cast<unsigned char>(text.front()))) {
+        return false;
+    }
     for (const auto character : text) {
         const auto uc = static_cast<unsigned char>(character);
         if (!(std::isalnum(uc) || character == '_' || character == '.' || character == '$')) {
@@ -1080,6 +1086,17 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
             is_symbol = true;
             symbol = std::string(text);
             return true;
+        }
+        // `#symbol` is the immediate form of the same thing: the kr32os assembly
+        // loads an address with `MOV Rd, #label`, and the relocation is identical
+        // to the one the bare form emits.
+        if (text.size() > 1 && text.front() == '#') {
+            const auto bare = trim(text.substr(1));
+            if (is_identifier(bare)) {
+                is_symbol = true;
+                symbol = std::string(bare);
+                return true;
+            }
         }
         return false;
     };
