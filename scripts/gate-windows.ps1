@@ -66,7 +66,7 @@ foreach ($name in $presets) {
     Step "$name build" { & $cmake --build --preset $name --parallel $jobs }
     if (-not $script:ok) { continue }
     if (-not $SkipTests) {
-        # -j: the suite is 968 rows of short tests, and running them one at a time
+        # -j: the suite is 976 rows of short tests, and running them one at a time
         # was the longest single step in the family matrix.
         Step "$name ctest" { & $ctest --preset $name --parallel $jobs --output-on-failure --no-tests=error }
         if (-not $script:ok) { continue }
