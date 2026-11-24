@@ -117,6 +117,10 @@ struct KroObject {
 
 [[nodiscard]] bool write_object(const KroObject& object, std::vector<std::uint8_t>& bytes,
                                 std::string& error);
+// True when the bytes begin with the KRO magic. A caller uses this instead of the
+// file name: an explicit path names a file, not a format, and G7 of the build
+// cleanup plan says a suffix never decides what a file is.
+[[nodiscard]] bool is_object(std::span<const std::uint8_t> bytes);
 [[nodiscard]] bool read_object(std::span<const std::uint8_t> bytes, KroObject& object,
                                std::string& error);
 

@@ -238,8 +238,9 @@ int main(int argc, char** argv) {
             }
             continue;
         }
-        const auto extension = std::filesystem::path(path).extension().string();
-        if (extension == ".s" || extension == ".S") {
+        // The content decides, not the suffix: an explicit path names a file, and
+        // an object that happens to be called program.s must still link.
+        if (!krc::linker::is_object(bytes)) {
             const std::string text(bytes.begin(), bytes.end());
             const auto assembled = toolchain::assemble(text, options);
             if (!assembled.ok) {

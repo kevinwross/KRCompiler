@@ -342,6 +342,10 @@ bool write_object(const KroObject& object, std::vector<std::uint8_t>& bytes,
     return true;
 }
 
+bool is_object(std::span<const std::uint8_t> bytes) {
+    return bytes.size() >= 4 && bytes[0] == 'K' && bytes[1] == 'R' && bytes[2] == 'O' &&
+           bytes[3] == 0;
+}
 bool read_object(std::span<const std::uint8_t> bytes, KroObject& object, std::string& error) {
     object = KroObject{};
     if (bytes.size() < kHeaderSize) {

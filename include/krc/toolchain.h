@@ -242,6 +242,11 @@ struct BuildResult {
 // between hosts and between builds.
 [[nodiscard]] std::string map_text(const LinkResult& linked);
 
+// Content detection for a host tool that was handed a path: what the file is,
+// decided by its bytes. An explicit path names a file, not a format.
+[[nodiscard]] bool is_relocatable_object(std::span<const std::uint8_t> bytes);
+[[nodiscard]] bool is_linker_archive(std::span<const std::uint8_t> bytes);
+
 // Preprocesses one translation unit and returns its tokens. `-E` is the only
 // client; every other stage starts from `compile`.
 [[nodiscard]] PreprocessResult preprocess(const Source& source, const Options& options);

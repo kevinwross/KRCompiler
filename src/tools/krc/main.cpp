@@ -298,8 +298,9 @@ int run_image(int argc, char** argv) {
         }
         std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
                                         std::istreambuf_iterator<char>()};
-        const auto extension = std::filesystem::path(path).extension().string();
-        if (extension == ".s" || extension == ".S") {
+        // The content decides, not the suffix (G7): an explicit path names a
+        // file, and an object called program.s must still link.
+        if (!toolchain::is_relocatable_object(bytes)) {
             const std::string text(bytes.begin(), bytes.end());
             const auto assembled = toolchain::assemble(text, options);
             if (!assembled.ok) {

@@ -35,6 +35,7 @@
 #include "krc/target/target.h"
 #include "linker/kr16_image.h"
 #include "linker/kr216_image.h"
+#include "linker/archive.h"
 #include "linker/kro_object.h"
 #include "linker/linker.h"
 
@@ -760,6 +761,13 @@ AssembleResult assemble(std::string_view assembly, std::string_view debug_info,
     return assemble_impl(assembly, debug_info, options);
 }
 
+bool is_relocatable_object(std::span<const std::uint8_t> bytes) {
+    return linker::is_object(bytes);
+}
+
+bool is_linker_archive(std::span<const std::uint8_t> bytes) {
+    return linker::is_archive(bytes);
+}
 std::string map_text(const LinkResult& linked) {
     std::ostringstream out;
     out << "base=0x" << std::hex << linked.base << " entry=0x" << linked.entry << std::dec
