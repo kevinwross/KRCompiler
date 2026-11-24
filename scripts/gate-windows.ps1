@@ -12,6 +12,16 @@
 param(
     [string]$Preset = '',
     [switch]$SkipTests
+# J5: ask the doctor first, so a missing tool fails with a sentence naming the
+# tool and the repository instead of a build error. The doctor lives in the
+# compiler tree, the same place the shell one does.
+$doctor = Join-Path (Split-Path -Parent $PSScriptRoot) '../krcompiler/scripts/doctor.ps1'
+if (Test-Path $doctor) {
+    & pwsh -NoProfile -File $doctor -Repo krcompiler
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+    Write-Warning "gate: no doctor at '$doctor'; continuing without one"
+}
 )
 $ErrorActionPreference = 'Stop'
 
