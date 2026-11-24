@@ -4,6 +4,10 @@
 # hash and a reproducible gate meaningful. The two builds write to different paths,
 # so a path leaking into the image would show up here.
 #
+# The work directory belongs to the row that owns it: create it rather than
+# assuming the shared test output directory already exists.
+file(MAKE_DIRECTORY "${WORK}")
+ 
 # Required: KRC, KRLD, CRT0, SOURCE, WORK
 
 foreach(required KRC KRLD CRT0 SOURCE WORK)
@@ -39,6 +43,7 @@ file(SHA256 "${WORK}/det_2.k232" second)
 if(NOT first STREQUAL second)
     message(FATAL_ERROR "two builds differ: ${first} vs ${second}")
 endif()
+
 message(STATUS "both builds hash ${first}")
 
 # The assembly text must be identical too: byte-identical images are meaningless

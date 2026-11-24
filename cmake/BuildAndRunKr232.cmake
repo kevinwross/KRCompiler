@@ -19,6 +19,10 @@ if(DEFINED FAR_CALLS AND FAR_CALLS)
     set(far_args --far-calls)
 endif()
 
+# The work directory belongs to the caller and may now be a row's own: create it
+# rather than assuming the shared test output directory already exists.
+file(MAKE_DIRECTORY "${WORK}")
+
 foreach(required KRC KRLD VM CRT0 SOURCE WORK)
     if(NOT DEFINED ${required})
         message(FATAL_ERROR "${required} is required")

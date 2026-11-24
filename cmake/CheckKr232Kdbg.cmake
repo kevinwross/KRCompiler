@@ -2,6 +2,10 @@
 # on: the target id is 5, the payload names at least one line and one function, and
 # every line address falls inside the span of the functions.
 #
+# The work directory belongs to the row that owns it: create it rather than
+# assuming the shared test output directory already exists.
+file(MAKE_DIRECTORY "${WORK}")
+ 
 # Required: KRC, KRLD, CRT0, SOURCE, WORK
 
 foreach(required KRC KRLD CRT0 SOURCE WORK)
@@ -15,6 +19,7 @@ execute_process(COMMAND "${KRC}" -c --target kr232 "${CRT0}" -o "${WORK}/kdbg_cr
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "assembling crt0 failed: ${output}${error}")
 endif()
+
 execute_process(COMMAND "${KRC}" -c --target kr232 "${SOURCE}" -o "${WORK}/kdbg_program.o"
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)

@@ -198,7 +198,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_charload.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_charload
                     -DEXPECT_EXIT=65
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         # The disassembler lives beside the emulator in the kr232 build; when it
@@ -215,7 +215,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_frame_objects.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_frame_layout
                     -DEXPECT_EXIT=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232FrameLayout.cmake)
         # A frame whose objects sit deeper than a signed-byte displacement: the
@@ -227,7 +227,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_deep_frame.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_deep_frame
                     -DEXPECT_EXIT=3
                     -DEXPECT_PARAM=seed
                     -DMIN_DEPTH=128
@@ -252,7 +252,7 @@ if(TARGET krc)
                     -DEXTRA=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/fileio_full.s
                     -DINCLUDE=${KRC_STAGE_SYSROOT}/kr232/include
                     -DFAR_CALLS=ON
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_runtime
                     -DEXPECT_CONSOLE=total=55 float=8
                     -DEXPECT_STATUS=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
@@ -270,7 +270,7 @@ if(TARGET krc)
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_console.c
                     -DINCLUDE=${KRC_STAGE_SYSROOT}/kr232/include
                     -DPACKAGES=${KRC_STAGE_SYSROOT}/kr232/lib
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_packages
                     -DEXPECT_CONSOLE=packages
                     -DEXPECT_STATUS=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
@@ -284,7 +284,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/status-high.s
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_status_high
                     -DEXPECT_STATUS=2147483653
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         # An array global must not overlap the globals after it.
@@ -295,7 +295,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_globals.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_globals
                     -DEXPECT_EXIT=12
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
@@ -306,7 +306,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_three_functions.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_three_functions
                     -DEXPECT_EXIT=131
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_run_varargs
@@ -316,7 +316,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_varargs.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_varargs
                     -DEXPECT_EXIT=45
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
     add_test(NAME krc_kr232_varargs_function
@@ -327,7 +327,7 @@ if(TARGET krc)
                 -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_varargs_fn.c
                 -DINCLUDE=${CMAKE_SOURCE_DIR}/sysroot/kr232/include
-                -DWORK=${KRC_TEST_OUTPUT_DIR}
+                -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_varargs_function
                 -DEXPECT_EXIT=0
                 -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_encoding_roundtrip
@@ -335,7 +335,7 @@ if(TARGET krc)
                         -DKRC=$<TARGET_FILE:krc>
                         -DKRLD=$<TARGET_FILE:krld>
                         -DDIS=${kr232_dis}
-                        -DWORK=${KRC_TEST_OUTPUT_DIR}/roundtrip
+                        -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_encoding_roundtrip/roundtrip
                         -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232EncodingRoundTrip.cmake)
         endif()
         add_test(NAME krc_kr232_run_exit300
@@ -345,7 +345,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_exit300.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_exit300
                     -DEXPECT_STATUS=300
                     ${KR232_EXIT300_PROCESS_ARG}
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
@@ -356,7 +356,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_fp.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_fp
                     -DEXPECT_EXIT=4
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_run_return42
@@ -366,7 +366,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_return42.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_return42
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_run_add
@@ -376,7 +376,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_add.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_add
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         # Both sides of one branch: the false path falls through to 42, the true
@@ -389,7 +389,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_branch.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_branch_false
                     -DEXPECT_EXIT=42
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_run_branch_true
@@ -399,7 +399,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_branch_true.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_branch_true
                     -DEXPECT_EXIT=1
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         # By-value parameters: a char and a short arrive in R2 and R3 and the sum
@@ -411,7 +411,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_params.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_params
                     -DEXPECT_EXIT=65
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         # The runtime's console path: putchar_ writes the terminal page and the
@@ -424,7 +424,7 @@ if(TARGET krc)
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/libc.c
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_hello.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_transcript
                     -DEXPECT_EXIT=0
                     -DEXPECT_TRANSCRIPT=Hi!
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
@@ -440,7 +440,7 @@ if(TARGET krc)
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/gfx.c
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_draw.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_gfx_draw
                     -DINCLUDE=${CMAKE_SOURCE_DIR}/sysroot/kr232/include
                     -DEXPECT_EXIT=0
                     -DEXPECT_FRAME=438710e84aa0bd25
@@ -457,7 +457,7 @@ if(TARGET krc)
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/cons.c
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_cons.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_cons
                     -DINCLUDE=${CMAKE_SOURCE_DIR}/sysroot/kr232/include
                     -DEXPECT_EXIT=0
                     -DEXPECT_TRANSCRIPT=cons!
@@ -472,7 +472,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_struct.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_struct
                     -DEXPECT_EXIT=6
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
@@ -485,7 +485,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_sret.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_sret
                     -DEXPECT_EXIT=15
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
@@ -498,7 +498,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_nested.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_nested
                     -DEXPECT_EXIT=15
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
@@ -510,7 +510,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_virtual.cpp
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_virtual
                     -DEXPECT_EXIT=2
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
@@ -523,7 +523,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_typeinfo.cpp
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_typeinfo
                     -DEXPECT_EXIT=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
@@ -543,7 +543,7 @@ if(TARGET krc)
                     -DKRLD=$<TARGET_FILE:krld>
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_add.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_kdbg_invariants
                     -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232Kdbg.cmake)
 
 
@@ -556,7 +556,7 @@ if(TARGET krc)
                     -DVM=${KRC_KR232_VM}
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_cpp.cpp
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_cpp
                     -DEXPECT_EXIT=17
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         # Two builds of one program must be byte-identical: a frame hash or an
@@ -567,7 +567,7 @@ if(TARGET krc)
                     -DKRLD=$<TARGET_FILE:krld>
                     -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
                     -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_add.c
-                    -DWORK=${KRC_TEST_OUTPUT_DIR}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_determinism
                     -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232Determinism.cmake)
     endif()
 
