@@ -28,6 +28,7 @@
 
 #include "krc/frontend/diagnostics.h"
 #include "krc/frontend/lexer.h"
+#include "krc/listing.h"
 
 namespace krc::toolchain {
 
@@ -133,15 +134,11 @@ struct Options {
 // the statement as written, and `source_line` is the source line a preceding
 // `.Ldbg` label attributed it to, or 0 when none did.
 //
-// A host renders its own `.lst`: the two VM front ends disagree on the format
-// and keep their own.
-struct ListingRow {
-    std::string section;
-    std::uint64_t address = 0;
-    std::vector<std::uint8_t> bytes;
-    std::string text;
-    std::uint32_t source_line = 0;
-};
+// `ListingRow`, `SectionInfo` and `SymbolInfo` live in krc/listing.h, which the
+// renderer includes: the renderer is inline so a host that ships a static-CRT binary
+// can call it without linking an archive built against another CRT, and that only
+// works if the types it needs do not drag in this header. They are still spelled
+// `toolchain::` here through using-declarations.
 
 // A diagnostic rendered to data. `file`, `line`, `column` and `line_text` are
 // resolved while the source manager that produced them is still alive, so a
@@ -184,23 +181,7 @@ struct AssembleResult {
     std::string error;
 };
 
-struct SectionInfo {
-    std::string name;
-    std::uint64_t address = 0;
-    std::uint64_t size = 0;
-    std::uint64_t alignment = 1;
-    // The section's contents, for sections that occupy memory. Empty for a
-    // section that exists only in the object file, such as debug information,
-    // which is what tells `flatten` which sections to place.
-    std::vector<std::uint8_t> bytes;
-};
 
-struct SymbolInfo {
-    std::string name;
-    std::uint64_t value = 0;
-    std::uint64_t size = 0;
-    bool global = false;
-};
 
 struct LinkResult {
     bool ok = false;
