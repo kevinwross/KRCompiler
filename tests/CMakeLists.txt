@@ -2282,6 +2282,37 @@ if(TARGET krc)
     # and faulted. This is the smallest program with that shape -- a static array of
     # records, a bound, and a field test that never ends the loop -- run at both
     # levels, because the defect only appears when the optimiser is on.
+    # The same shape with the write and the read of the stored field, which is
+    # where the -O1 allocator defect appeared: the address of table[index] was
+    # computed as table + table*48 because the result shared a register with the
+    # index it reads. Both levels must agree.
+    foreach(spawn_level IN ITEMS o0 o1)
+        if(spawn_level STREQUAL "o1")
+            set(spawn_flag "-O1")
+        else()
+            set(spawn_flag "-O0")
+        endif()
+        add_test(NAME krc_link_table_spawn_${spawn_level}
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/table_spawn.c
+                    -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                    -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                    -DLEVEL=${spawn_flag}
+                    -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/table_spawn_${spawn_level}_linked.kr32
+                    -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+        if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+            add_test(NAME krc_run_table_spawn_${spawn_level}
+                COMMAND ${CMAKE_COMMAND}
+                        -DVM=${KRC_KR32_VM}
+                        -DIMAGE=${KRC_TEST_OUTPUT_DIR}/table_spawn_${spawn_level}_linked.kr32
+                        -DEXPECT_EXIT=0
+                        -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+            set_tests_properties(krc_run_table_spawn_${spawn_level} PROPERTIES
+                DEPENDS krc_link_table_spawn_${spawn_level})
+        endif()
+    endforeach()
     foreach(table_level IN ITEMS o0 o1)
         set(table_flag " ")
         if(table_level STREQUAL "o1")

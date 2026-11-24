@@ -169,6 +169,20 @@ bool allocate_registers(const ir::Function& function,
             for (const auto live : found->second) {
                 add_edge(defined, live);
             }
+            // A definition also interferes with the values the instruction reads.
+            // The backend lowers one IR instruction into several machine
+            // instructions -- a getelementptr becomes a base load, an index load, a
+            // multiply and an add -- so if the result shares a register with an
+            // operand, the copy that materialises one of them overwrites the other.
+            // That is the shape of the -O1 defect that walked a process table by
+            // table + table*48: the index was allocated the register the address
+            // computation then copied the base into.
+            for (const auto& operand : instruction->operands) {
+                const auto operand_id = intern(operand);
+                if (operand_id != static_cast<std::size_t>(-1)) {
+                    add_edge(defined, operand_id);
+                }
+            }
         }
     }
     const auto entry = block_ids.find(function.blocks.front().get());
