@@ -277,6 +277,20 @@ Each phase ends with a gate that can fail. Nothing is committed that has not bee
 **Carried defect P1-0 — the rebuilt kernel panics.** The compiler's kernel reaches the banner and then faults (vector 4, `pc=0x150632`); the committed kernel boots. It is layout-sensitive: the same sources with console markers and `kernel_enable_interrupts()` disabled boot to user mode and run the shell. The cross test isolates it (new bios + committed kernel boots; committed bios + new kernel panics), and the isolated probes pass for the calling convention, a framed C function, and a trap through a C handler and `IRET`. Eight hypotheses are eliminated with evidence in the log: relocation immediates, the vector table, the trap mechanism, the timer IRQ path, frame-size encoding, writable-page mapping, fixed-address overlap, and `process_spawn` itself. The next step is a layout bisect of the instrumented build, then the one address `0x150632` in the map.
 
 One misconception is now settled and worth recording, because it cost two rounds: kr32os writes its vector table with **byte offsets**, not indices (`VECTOR_TIMER 64` is slot 16, `VECTOR_PAGE_FAULT 16` is slot 4), and the machine delivers IRQ line *n* as vector `16 + n`. The two agree — the timer on line 0 arrives at slot 16, which is where `traps_install` put it — so the OS's interrupt wiring is correct and the "timer installed at the wrong vector" theory is dead. The panic's `vector=4` is therefore a genuine page fault, and a probe that recorded a higher vector was recording its own general protection, not the timer.
+**P1-0 root cause found, 2026-11-26: the address of `table[index]` is computed as `table + table*48`.** The `-O1` code for the failing access is five instructions, and the second one throws away the index:
+
+```
+0x24F60  LEA  R9, [0x00028dfc]   ; R9 = &table
+0x24F68  LOAD R8, [R7 + 20]      ; R8 = index
+0x24F6C  MOV  R8, R9             ; R8 = &table   <- the index is destroyed
+0x24F74  MUL  R1, R1, #48        ; R1 = &table * 48
+0x24F78  ADD  R8, R8, R1         ; R8 = &table + &table*48
+0x24F8C  LOAD R8, [R0]           ; faults
+```
+
+The arithmetic confirms it exactly: `0x28DFC + 0x28DFC*48 + 4 = 0x7D2D40`, which is the FAR the panic has been reporting all along. The load at 0x24F68 is dead code because the next instruction overwrites its destination; the compiler should have multiplied the *index* by 48 and added the base, and instead multiplied the base by 48 and added the base. Everything else about P1-0 follows from this one instruction: it happens only at `-O1` because only the optimiser coalesces these temporaries; the standalone fixtures pass because their address computations did not take this shape; and the panic's address moved on every rebuild because `&table` moved. The fix belongs in the register allocator's handling of the address expression `base + index*scale`, and it needs a reproducer built from *this* statement sequence rather than the loop around it.
+
+
 **P1-0: runtime measurements, 2026-11-26.** Two temporary prints inside `process_spawn` (reverted, not committed) show the scan ending at `index=0` with a valid table base and both sampled `used` flags zero, and the `name` parameter valid (`0x27E90`, first byte `0x69`) with `index=0` -- so the search and the argument are both correct, and the fault lands on the *store* of the name copy at `-O1`, at an address in the 0x7D.... region. Two standalone programs with exactly those statements (a bounded scan over a 48-byte-record table, and a character copy into `table[index].name[offset]`) pass at both `-O0` and `-O1`, so the statements compile correctly in isolation and the defect needs the kernel's surroundings. The trap path itself was re-read and is sound: the timer stub saves `R0` and `R1`-`R15` and restores them before `IRET`. What is left is which register holds the destination address at that store, which one breakpoint with the corrected dump will show.
 
 
