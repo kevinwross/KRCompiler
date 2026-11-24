@@ -15,6 +15,31 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# I2: build in the native mirror, never on the mount. This tree owns the mirror
+# tool, so the default path is its own script; a caller can still override it.
+IN_PLACE=0
+for argument in "$@"; do
+    if [ "$argument" = "--in-place" ]; then IN_PLACE=1; fi
+done
+case "$ROOT" in
+    /mnt/*)
+        if [ "$IN_PLACE" = "1" ]; then
+            echo "gate-linux: building on $ROOT (--in-place): debug paths will carry the mount" >&2
+        else
+            REPO="$(basename "$ROOT")"
+            MIRROR_TOOL="${KRC_MIRROR_TOOL:-$ROOT/scripts/kr-mirror.sh}"
+            if [ ! -f "$MIRROR_TOOL" ]; then
+                echo "gate-linux: $ROOT is a /mnt path and no mirror tool was found at '$MIRROR_TOOL'; set KRC_MIRROR_TOOL or pass --in-place" >&2
+                exit 2
+            fi
+            bash "$MIRROR_TOOL" "$REPO" --wait 600 >&2
+            MIRROR="$HOME/mirrors/$REPO"
+            echo "gate-linux: source was $ROOT; building from the mirror at $MIRROR" >&2
+            exec bash "$MIRROR/scripts/gate-linux.sh" "$@"
+        fi
+        ;;
+esac
+
 # The job count lives here because a test preset cannot compute one; the same rule
 # is in scripts/gate-windows.ps1.
 CORES="$(nproc 2>/dev/null || echo 4)"
