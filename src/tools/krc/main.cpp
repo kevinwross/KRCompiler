@@ -283,6 +283,27 @@ int run_image(int argc, char** argv) {
         return 1;
     }
 
+    // G4: the writer suggests the convention. A -o with no suffix gets the
+    // target's image extension -- or .flat for raw output -- and a suffix that
+    // names a different target is refused, naming both, because it contradicts
+    // --target rather than merely being unusual.
+    {
+        const std::filesystem::path requested(output_path);
+        const std::string suffix = requested.extension().string();
+        const std::string wanted =
+            flat ? std::string(".flat")
+                 : std::string(krc::target::image_extension(*parsed));
+        if (suffix.empty()) {
+            output_path =
+                (requested.parent_path() / (requested.filename().string() + wanted)).string();
+        } else if (const auto claimed = krc::target::target_for_extension(suffix);
+                   claimed.has_value() && *claimed != *parsed) {
+            std::cerr << "krc image: '" << output_path << "' says "
+                      << krc::target::get_target(*claimed).name << " but --target is "
+                      << krc::target::get_target(*parsed).name << '\n';
+            return 1;
+        }
+    }
     toolchain::Options options;
     options.target = to_target(*parsed);
     options.entry = entry;

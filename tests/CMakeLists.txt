@@ -8196,3 +8196,25 @@ endif()
                 -o "${KRC_TEST_OUTPUT_DIR}/globl_alias.bin")
     set_tests_properties(krc_asm_globl_alias PROPERTIES
         PASS_REGULAR_EXPRESSION "linked 1 object")
+
+    # G4: a suffixless -o gets the target's extension, --flat gets .flat, and a
+    # suffix naming another target is refused rather than obeyed.
+    add_test(NAME krc_image_output_suffix
+        COMMAND $<TARGET_FILE:krc> image --target=kr32 --entry=entry --flat
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s"
+                -o "${KRC_TEST_OUTPUT_DIR}/named")
+    set_tests_properties(krc_image_output_suffix PROPERTIES
+        PASS_REGULAR_EXPRESSION "named\\.flat")
+
+    add_test(NAME krc_image_output_extension
+        COMMAND $<TARGET_FILE:krc> image --target=kr32 --entry=entry
+                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s"
+                -o "${KRC_TEST_OUTPUT_DIR}/container")
+    set_tests_properties(krc_image_output_extension PROPERTIES
+        PASS_REGULAR_EXPRESSION "container\\.kr32")
+
+    add_test(NAME krc_image_output_contradiction
+        COMMAND ${CMAKE_COMMAND} "-DEXE=$<TARGET_FILE:krc>"
+                "-DARGS=image;--target=kr32;--entry=entry;${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s;-o;${KRC_TEST_OUTPUT_DIR}/wrong.kr16"
+                "-DEXPECT=says kr16 but --target is kr32"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/expect_refusal.cmake")
