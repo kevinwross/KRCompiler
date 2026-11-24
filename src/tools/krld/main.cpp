@@ -104,7 +104,9 @@ int main(int argc, char** argv) {
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument = argv[index];
         if (argument == "--version") {
-            std::cout << "krld " << krc::kVersionString << '\n';
+            std::cout << "krld " << krc::kVersionString << '\n'
+                  << "build " << krc::kBuildType << ", revision " << krc::kBuildRevision
+                  << ", " << krc::kBuildCompiler << '\n';
             return 0;
         }
         if (argument == "--help" || argument == "-h") {
