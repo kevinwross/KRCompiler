@@ -177,10 +177,20 @@ bool allocate_registers(const ir::Function& function,
             // That is the shape of the -O1 defect that walked a process table by
             // table + table*48: the index was allocated the register the address
             // computation then copied the base into.
-            for (const auto& operand : instruction->operands) {
-                const auto operand_id = intern(operand);
-                if (operand_id != static_cast<std::size_t>(-1)) {
-                    add_edge(defined, operand_id);
+            // A getelementptr is the one opcode whose result must not share a
+            // register with anything it reads: the backend lowers it to a base
+            // load, an index load into a scratch register, a multiply and an add,
+            // so sharing lets the copy that materialises the base overwrite the
+            // index -- the -O1 defect that walked a process table by
+            // table + table*48. Simple arithmetic needs no such edge: `add dst,
+            // dst, src` is a legal encoding, so a blanket rule here costs reuse
+            // the allocator's own tests measure.
+            if (instruction->opcode == ir::Opcode::GetElementPtr) {
+                for (const auto& operand : instruction->operands) {
+                    const auto operand_id = intern(operand);
+                    if (operand_id != static_cast<std::size_t>(-1)) {
+                        add_edge(defined, operand_id);
+                    }
                 }
             }
         }
