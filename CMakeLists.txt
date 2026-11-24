@@ -2,6 +2,36 @@ cmake_minimum_required(VERSION 3.25)
 
 project(KRCompiler VERSION 0.2.0 LANGUAGES CXX)
 
+# Build provenance for krc --version: an image can say which compiler built it
+# only if the compiler can say what it is. The revision is optional -- a source
+# tree without git still builds, and says "unknown" rather than guessing.
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE KRC_BUILD_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+if(NOT KRC_BUILD_REVISION)
+    set(KRC_BUILD_REVISION "unknown")
+endif()
+if(NOT CMAKE_BUILD_TYPE)
+    set(KRC_BUILD_TYPE "unspecified")
+else()
+    set(KRC_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+endif()
+set(KRC_BUILD_COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+string(CONFIGURE
+    "#pragma once\n\n#define KRC_BUILD_REVISION \"@KRC_BUILD_REVISION@\"\n#define KRC_BUILD_COMPILER \"@KRC_BUILD_COMPILER@\"\n"
+    KRC_BUILD_STAMP_CONTENT @ONLY)
+file(WRITE "${CMAKE_BINARY_DIR}/generated/krc/version_stamp.h" "${KRC_BUILD_STAMP_CONTENT}")
+# Every tool that reports its version reads the stamp, so the directory is on the
+# include path of the whole build rather than of one target at a time.
+include_directories("${CMAKE_BINARY_DIR}/generated")
+# The configuration is a per-configuration fact, so it travels as a generator
+# expression rather than being frozen into the generated header: a multi-config
+# generator has no CMAKE_BUILD_TYPE at configure time to freeze.
+add_compile_definitions($<$<COMPILE_LANGUAGE:CXX>:KRC_BUILD_TYPE="$<CONFIG>">)
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
@@ -164,7 +194,9 @@ add_library(krc_impl OBJECT
     src/target/sysroot_bits.cpp
     src/target/target.cpp
 )
-target_include_directories(krc_impl PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(krc_impl PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_BINARY_DIR}/generated")
 target_include_directories(krc_impl PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_compile_features(krc_impl PUBLIC cxx_std_20)
 krc_apply_warnings(krc_impl)
@@ -251,6 +283,8 @@ if(KRC_BUILD_TOOLS)
     add_dependencies(krc_stage_sysroot krc_gen_sysroot_bits)
 
     add_executable(krc src/tools/krc/main.cpp)
+# The build stamp lives in the build tree, so the tool needs that include path.
+target_include_directories(krc PRIVATE "${CMAKE_BINARY_DIR}/generated")
     target_link_libraries(krc PRIVATE krc::toolchain)
     target_compile_definitions(krc PRIVATE
         KRC_SYSROOT_DIR="${KRC_STAGE_SYSROOT}")
