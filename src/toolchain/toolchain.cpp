@@ -788,6 +788,32 @@ LinkResult link(std::span<const Object> objects, const Options& options) {
     return link_impl(objects, options).result;
 }
 
+LinkResult link_with_listing(std::span<const Object> objects,
+                             std::span<const std::vector<ListingRow>> listings,
+                             const Options& options) {
+    auto linked = link_impl(objects, options);
+    auto result = std::move(linked.result);
+    if (!result.ok) {
+        return result;
+    }
+    // A `.text` row is an offset in its object's text, so it moves by that
+    // object's placed address; any other section's rows move by the merged
+    // section's address, which is what the linker can promise for a section it
+    // merges across objects.
+    for (std::size_t index = 0; index < listings.size(); ++index) {
+        const auto object_base = index < linked.object_text_addresses.size()
+                                     ? linked.object_text_addresses[index]
+                                     : 0;
+        for (auto row : listings[index]) {
+            const auto address = linked_section_address(result.sections, row.section);
+            row.address = row.section == ".text" ? object_base + row.address
+                                                 : address + row.address;
+            result.listing.push_back(std::move(row));
+        }
+    }
+    return result;
+}
+
 std::vector<std::uint8_t> flatten(const LinkResult& linked) {
     std::uint64_t end = linked.base;
     for (const auto& section : linked.sections) {

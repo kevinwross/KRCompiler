@@ -25,7 +25,13 @@ struct Document {
     std::string title;
     // The image base, added to each row's address when `linked` is set. An
     // assembly listing has no base: its addresses are offsets in their section.
+    // Added to each row's address. Zero for a linked listing, whose rows the
+    // linker already placed at their final addresses.
     std::uint64_t base = 0;
+    // What the header says the image was placed at. Separate from `base` because
+    // a linked listing's rows are already final: adding the base twice is exactly
+    // the bug this field exists to prevent.
+    std::uint64_t image_base = 0;
     // Linked listings carry the section table, the placement summary and the
     // entry point; an assembly listing is statements and symbols only.
     bool linked = false;

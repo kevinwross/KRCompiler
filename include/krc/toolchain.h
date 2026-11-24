@@ -205,6 +205,10 @@ struct SymbolInfo {
 struct LinkResult {
     bool ok = false;
     std::vector<std::uint8_t> image;
+    // Statement rows with final addresses, filled only by `link_with_listing`.
+    // A plain `link` leaves this empty: its objects carry bytes, and words to put
+    // in the listing have to come from whoever assembled them.
+    std::vector<ListingRow> listing;
     // Filled only when Options::symbol_sidecar asked for it, and only for kr32:
     // a container carrying the image sections plus `__sym_crc`.
     std::vector<std::uint8_t> sidecar;
@@ -262,6 +266,14 @@ struct BuildResult {
 // Links object bytes into the target's executable container: a `.kr32` image for
 // KR32 and a `.kr16` image for KR16. The target and the base default are inferred
 // from the objects; `options.target` does not override the objects.
+// Links objects and composes their statement rows into a listing with final
+// addresses, one row group per object in the same order. `krc image -l` needs
+// this: a `.kro` carries bytes rather than rows, so the caller supplies the rows
+// it assembled and the linker places them.
+[[nodiscard]] LinkResult link_with_listing(
+    std::span<const Object> objects,
+    std::span<const std::vector<ListingRow>> listings, const Options& options);
+
 [[nodiscard]] LinkResult link(std::span<const Object> objects,
                               const Options& options);
 

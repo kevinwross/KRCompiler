@@ -8237,6 +8237,17 @@ endif()
             "-DEXPECT_TEXT=entry:"
             -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/CheckListing.cmake)
 
+    # H2: the linked listing is the composed document. The addresses are the ones
+    # the linker placed, not offsets, and the header says which base that is.
+    add_test(NAME krc_list_linked_image
+        COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DWORK=${KRC_TEST_OUTPUT_DIR}/listing
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s
+            "-DARGS=image;--target=kr32;--entry=entry;-o;app.kr32;-l"
+            -DEXPECT_FILE=${KRC_TEST_OUTPUT_DIR}/listing/app.kr32.lst
+            "-DEXPECT_TEXT=linked image, base"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/CheckListing.cmake)
     add_test(NAME krc_list_takes_the_output_name
         COMMAND ${CMAKE_COMMAND}
             -DKRC=$<TARGET_FILE:krc>

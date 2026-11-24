@@ -63,7 +63,7 @@ std::string render(const std::vector<toolchain::ListingRow>& rows,
         out += "; target " + document.target + "\n";
     }
     if (document.linked) {
-        out += "; linked image, base 0x" + hex(document.base, 8) + "\n";
+        out += "; linked image, base 0x" + hex(document.image_base, 8) + "\n";
     }
     out += "\n";
 

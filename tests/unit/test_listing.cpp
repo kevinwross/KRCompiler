@@ -76,6 +76,7 @@ TEST_CASE("A linked listing adds the base, the section table and the placement")
     document.word_bytes = 4;
     document.linked = true;
     document.base = 0x1'0000;
+    document.image_base = 0x1'0000;
 
     const std::string expected =
         "; krc listing\n"

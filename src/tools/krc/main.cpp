@@ -187,6 +187,8 @@ int run_image(int argc, char** argv) {
     std::string map_path;
     std::string source_root;
     std::string sym_path;
+    std::string listing_path;
+    bool want_listing = false;
     std::vector<std::string> inputs;
     bool flat = false;
     std::uint64_t base = 0;
@@ -214,8 +216,25 @@ int run_image(int argc, char** argv) {
             "  --source-root=DIR  Emit debug source paths relative to DIR\n"
                          "  --map=FILE      Write the deterministic image map\n"
                          "  --sym=FILE      Write the kr32 symbol sidecar\n"
+                         "  -l [FILE]       Write a listing (default <output>.lst)\n"
                          "  -o FILE         Output image\n";
             return 0;
+        }
+        if (argument == "-l") {
+            want_listing = true;
+            if (index + 1 < argc) {
+                const std::string_view next = argv[index + 1];
+                if (next.size() > 4 && next.substr(next.size() - 4) == ".lst") {
+                    listing_path = std::string(next);
+                    ++index;
+                }
+            }
+            continue;
+        }
+        if (argument.starts_with("--listing=")) {
+            want_listing = true;
+            listing_path = std::string(argument.substr(std::string_view("--listing=").size()));
+            continue;
         }
         if (argument == "-o") {
             if (index + 1 >= argc) {
@@ -319,6 +338,7 @@ int run_image(int argc, char** argv) {
     options.source_root = source_root;
 
     std::vector<toolchain::Object> objects;
+    std::vector<std::vector<toolchain::ListingRow>> per_object_listing;
     for (const auto& path : inputs) {
         std::ifstream input(path, std::ios::binary);
         if (!input) {
@@ -337,12 +357,18 @@ int run_image(int argc, char** argv) {
                 return 1;
             }
             objects.push_back(toolchain::Object{path, assembled.object});
+            per_object_listing.push_back(std::move(assembled.listing));
             continue;
         }
         objects.push_back(toolchain::Object{path, std::move(bytes)});
+        // An object file carries bytes, not statement rows, so an input that was
+        // already assembled contributes no statements to the listing.
+        per_object_listing.push_back({});
     }
 
-    const auto linked = toolchain::link(objects, options);
+    const auto linked = want_listing
+                            ? toolchain::link_with_listing(objects, per_object_listing, options)
+                            : toolchain::link(objects, options);
     if (!linked.ok) {
         std::cerr << "krc image: " << linked.error << '\n';
         return 1;
@@ -378,6 +404,32 @@ int run_image(int argc, char** argv) {
                       static_cast<std::streamsize>(linked.sidecar.size()));
         if (!sidecar) {
             std::cerr << "krc image: cannot write sidecar '" << sym_path << "'\n";
+            return 1;
+        }
+    }
+    if (want_listing) {
+        // H2/H3: the linked listing is the composed document -- header, section
+        // table, statements with final addresses, symbol table -- and its name is
+        // the output name plus .lst unless -l named a file.
+        krc::listing::Document document;
+        document.title = output_path;
+        document.target = std::string(krc::target::get_target(*parsed).name);
+        document.linked = true;
+        // The rows are already at their final addresses, so the base is stated,
+        // not added.
+        document.base = 0;
+        document.image_base = linked.base;
+        document.word_bytes = (*parsed == krc::target::TargetId::Kr16 ||
+                               *parsed == krc::target::TargetId::Kr216)
+                                  ? 2
+                                  : 4;
+        const std::string path =
+            listing_path.empty() ? output_path + ".lst" : listing_path;
+        std::ofstream listing_out(path);
+        listing_out << krc::listing::render(linked.listing, linked.symbols,
+                                           linked.sections, document);
+        if (!listing_out) {
+            std::cerr << "krc image: cannot write listing '" << path << "'\n";
             return 1;
         }
     }
