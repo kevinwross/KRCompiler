@@ -290,6 +290,7 @@ One misconception is now settled and worth recording, because it cost two rounds
 
 **P3 — remaining embedded artefacts.** B4, B5. Exit: kr16's libc and kr232's kernel are produced by `krc image`; their drift rows pass.
 
+**E1 blocked 2026-11-24, four fixtures.** The audit found five fixtures with no generator; one of them, `no_debug.kr232`, was investigated and is not the rename its test comment describes -- the committed file is 712 bytes against 1170, and linking the same objects without a debug payload gives 1298, so neither the comment nor the obvious builds reproduce it. The other four are `compiled-draw.kr232`, whose source is not in the tree (the example sources build to 4660, 7375 and a link error, none 955 bytes), and three kr216 fixtures whose producer is the released bundle under `dist/`, not anything this tree builds. Every other fixture in every tree is covered by `regenerate.ps1`, `regenerate.py` or `CheckFixtureDrift.cmake`, and those checks run as rows. Closing E1 needs a kr216 compiler backend or the bundle, and the sources for two kr232 fixtures.
 **P4 — tests and fixtures.** E1, E2, E3. Exit: `ctest -j 8` three times in each repository, plus one serial run; every fixture has a generator.
 
 **P5 — family verification.** F1, F2, C5, C6, **I4, I5, I6, J1, J4, J7**. Exit: one command builds and gates the family on Windows and, with `-Arm64`, on BitWhiz.
