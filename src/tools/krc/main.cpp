@@ -25,6 +25,7 @@ void print_usage(std::ostream& out) {
     out << "krc " << krc::kVersionString << " — KRCompiler driver\n"
         << "\n"
         << "Usage: krc [options] files...\n"
+        << "       krc image [options] objects... -o image\n"
         << "\n"
         << "Options:\n"
         << "  --version              Print the compiler version\n"
@@ -172,7 +173,194 @@ toolchain::Diagnostic error_diagnostic(std::string message) {
 
 }  // namespace
 
+namespace {
+
+// `krc image` builds one image from objects and assembly sources: the command
+// the guest-artefact pipeline calls. It shares the linker, the flat writer and
+// the map renderer with `krld`, so the two cannot disagree about what an image
+// is; only the command line differs.
+int run_image(int argc, char** argv) {
+    std::string target_name = "kr32";
+    std::string entry = "_start";
+    std::string output_path;
+    std::string map_path;
+    std::string sym_path;
+    std::vector<std::string> inputs;
+    bool flat = false;
+    std::uint64_t base = 0;
+    bool base_set = false;
+
+    auto parse_address = [](std::string_view text, std::uint64_t& value) {
+        try {
+            std::size_t used = 0;
+            const std::string owned(text);
+            value = std::stoull(owned, &used, 0);
+            return used == owned.size();
+        } catch (...) {
+            return false;
+        }
+    };
+
+    for (int index = 1; index < argc; ++index) {
+        const std::string_view argument = argv[index];
+        if (argument == "--help" || argument == "-h") {
+            std::cout << "usage: krc image [options] objects... -o image\n"
+                         "  --target=NAME   kr32, kr16, kr64, kr216 or kr232 (default kr32)\n"
+                         "  --base=ADDR     Image base\n"
+                         "  --entry=NAME    Entry symbol (default _start)\n"
+                         "  --flat          Write the raw image instead of a container\n"
+                         "  --map=FILE      Write the deterministic image map\n"
+                         "  --sym=FILE      Write the kr32 symbol sidecar\n"
+                         "  -o FILE         Output image\n";
+            return 0;
+        }
+        if (argument == "-o") {
+            if (index + 1 >= argc) {
+                std::cerr << "krc image: -o requires a file\n";
+                return 1;
+            }
+            output_path = argv[++index];
+            continue;
+        }
+        if (argument == "--flat") {
+            flat = true;
+            continue;
+        }
+        if (argument.starts_with("--target=")) {
+            target_name = std::string(argument.substr(std::string_view("--target=").size()));
+            continue;
+        }
+        if (argument.starts_with("--entry=")) {
+            entry = std::string(argument.substr(std::string_view("--entry=").size()));
+            continue;
+        }
+        if (argument == "--map") {
+            if (index + 1 >= argc) {
+                std::cerr << "krc image: --map requires a file\n";
+                return 1;
+            }
+            map_path = argv[++index];
+            continue;
+        }
+        if (argument.starts_with("--map=")) {
+            map_path = std::string(argument.substr(std::string_view("--map=").size()));
+            continue;
+        }
+        if (argument == "--sym") {
+            if (index + 1 >= argc) {
+                std::cerr << "krc image: --sym requires a file\n";
+                return 1;
+            }
+            sym_path = argv[++index];
+            continue;
+        }
+        if (argument.starts_with("--sym=")) {
+            sym_path = std::string(argument.substr(std::string_view("--sym=").size()));
+            continue;
+        }
+        if (argument.starts_with("--base=")) {
+            if (!parse_address(argument.substr(std::string_view("--base=").size()), base)) {
+                std::cerr << "krc image: invalid --base value\n";
+                return 1;
+            }
+            base_set = true;
+            continue;
+        }
+        if (argument.starts_with("--")) {
+            std::cerr << "krc image: unknown option '" << argument << "'\n";
+            return 1;
+        }
+        inputs.emplace_back(argument);
+    }
+
+    if (inputs.empty() || output_path.empty()) {
+        std::cerr << "krc image: inputs and -o are required\n";
+        return 1;
+    }
+    const auto parsed = krc::target::parse_target(target_name);
+    if (!parsed) {
+        std::cerr << "krc image: unknown target '" << target_name << "'\n";
+        return 1;
+    }
+
+    toolchain::Options options;
+    options.target = to_target(*parsed);
+    options.entry = entry;
+    options.base = base_set ? base : 0;
+    options.symbol_sidecar = !sym_path.empty();
+
+    std::vector<toolchain::Object> objects;
+    for (const auto& path : inputs) {
+        std::ifstream input(path, std::ios::binary);
+        if (!input) {
+            std::cerr << "krc image: cannot read '" << path << "'\n";
+            return 1;
+        }
+        std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
+                                        std::istreambuf_iterator<char>()};
+        const auto extension = std::filesystem::path(path).extension().string();
+        if (extension == ".s" || extension == ".S") {
+            const std::string text(bytes.begin(), bytes.end());
+            const auto assembled = toolchain::assemble(text, options);
+            if (!assembled.ok) {
+                std::cerr << "krc image: " << path << ": " << assembled.error << '\n';
+                return 1;
+            }
+            objects.push_back(toolchain::Object{path, assembled.object});
+            continue;
+        }
+        objects.push_back(toolchain::Object{path, std::move(bytes)});
+    }
+
+    const auto linked = toolchain::link(objects, options);
+    if (!linked.ok) {
+        std::cerr << "krc image: " << linked.error << '\n';
+        return 1;
+    }
+
+    const auto bytes = flat ? toolchain::flatten(linked) : linked.image;
+    std::ofstream image(output_path, std::ios::binary);
+    if (!image) {
+        std::cerr << "krc image: cannot write '" << output_path << "'\n";
+        return 1;
+    }
+    image.write(reinterpret_cast<const char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+    if (!image) {
+        std::cerr << "krc image: failed to write '" << output_path << "'\n";
+        return 1;
+    }
+    if (!map_path.empty()) {
+        std::ofstream map(map_path);
+        map << toolchain::map_text(linked);
+        if (!map) {
+            std::cerr << "krc image: cannot write map '" << map_path << "'\n";
+            return 1;
+        }
+    }
+    if (!sym_path.empty()) {
+        if (linked.sidecar.empty()) {
+            std::cerr << "krc image: --sym is defined for kr32 images; this target wrote none\n";
+            return 1;
+        }
+        std::ofstream sidecar(sym_path, std::ios::binary);
+        sidecar.write(reinterpret_cast<const char*>(linked.sidecar.data()),
+                      static_cast<std::streamsize>(linked.sidecar.size()));
+        if (!sidecar) {
+            std::cerr << "krc image: cannot write sidecar '" << sym_path << "'\n";
+            return 1;
+        }
+    }
+    std::cout << "krc image: linked " << objects.size() << " object(s) to " << output_path
+              << " (entry " << linked.entry << ")\n";
+    return 0;
+}
+
+} // namespace
 int main(int argc, char** argv) {
+    if (argc >= 2 && std::string_view(argv[1]) == "image") {
+        return run_image(argc - 1, argv + 1);
+    }
     std::string target_name = "kr32";
     std::vector<std::string> inputs;
     std::vector<std::string> include_paths;

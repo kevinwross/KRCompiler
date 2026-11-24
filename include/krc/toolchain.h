@@ -237,6 +237,11 @@ struct BuildResult {
 // default. A result with no allocated section flattens to nothing.
 [[nodiscard]] std::vector<std::uint8_t> flatten(const LinkResult& linked);
 
+// The deterministic image map: base and entry, then every section and symbol
+// with its address and size. Stable text, so a committed map is comparable
+// between hosts and between builds.
+[[nodiscard]] std::string map_text(const LinkResult& linked);
+
 // Preprocesses one translation unit and returns its tokens. `-E` is the only
 // client; every other stage starts from `compile`.
 [[nodiscard]] PreprocessResult preprocess(const Source& source, const Options& options);

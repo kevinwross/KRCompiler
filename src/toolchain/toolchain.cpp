@@ -687,6 +687,22 @@ AssembleResult assemble(std::string_view assembly, std::string_view debug_info,
     return assemble_impl(assembly, debug_info, options);
 }
 
+std::string map_text(const LinkResult& linked) {
+    std::ostringstream out;
+    out << "base=0x" << std::hex << linked.base << " entry=0x" << linked.entry << std::dec
+        << '\n';
+    out << "section address size\n";
+    for (const auto& section : linked.sections) {
+        out << section.name << " 0x" << std::hex << section.address << std::dec << ' '
+            << section.size << '\n';
+    }
+    out << "symbol value size binding\n";
+    for (const auto& symbol : linked.symbols) {
+        out << symbol.name << " 0x" << std::hex << symbol.value << std::dec << ' '
+            << symbol.size << ' ' << (symbol.global ? "global" : "local") << '\n';
+    }
+    return out.str();
+}
 LinkResult link(std::span<const Object> objects, const Options& options) {
     return link_impl(objects, options).result;
 }

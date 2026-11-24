@@ -298,17 +298,10 @@ int main(int argc, char** argv) {
             std::cerr << "krld: cannot write map '" << map_path << "'\n";
             return 1;
         }
-        map << "base=0x" << std::hex << linked.base << " entry=0x" << linked.entry
-            << std::dec << '\n';
-        map << "section address size\n";
-        for (const auto& section : linked.sections) {
-            map << section.name << " 0x" << std::hex << section.address << std::dec
-                << ' ' << section.size << '\n';
-        }
-        map << "symbol value size binding\n";
-        for (const auto& symbol : linked.symbols) {
-            map << symbol.name << " 0x" << std::hex << symbol.value << std::dec << ' '
-                << symbol.size << ' ' << (symbol.global ? "global" : "local") << '\n';
+        map << krc::toolchain::map_text(linked);
+        if (!map) {
+            std::cerr << "krld: failed to write '" << map_path << "'\n";
+            return 1;
         }
     }
 
