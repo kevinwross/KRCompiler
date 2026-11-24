@@ -186,6 +186,10 @@ struct SectionInfo {
     std::uint64_t address = 0;
     std::uint64_t size = 0;
     std::uint64_t alignment = 1;
+    // The section's contents, for sections that occupy memory. Empty for a
+    // section that exists only in the object file, such as debug information,
+    // which is what tells `flatten` which sections to place.
+    std::vector<std::uint8_t> bytes;
 };
 
 struct SymbolInfo {
@@ -219,6 +223,13 @@ struct BuildResult {
 };
 
 [[nodiscard]] CompileResult compile(const Source& source, const Options& options);
+
+// The link result as a flat image: each section that occupies memory copied to
+// its linked address, zero everywhere else, spanning `base` to the end of the
+// last such section. This is the form a boot loader reads; `LinkResult::image`
+// is the container form, which carries headers and is what `krc` writes by
+// default. A result with no allocated section flattens to nothing.
+[[nodiscard]] std::vector<std::uint8_t> flatten(const LinkResult& linked);
 
 // Preprocesses one translation unit and returns its tokens. `-E` is the only
 // client; every other stage starts from `compile`.

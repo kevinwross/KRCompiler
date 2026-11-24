@@ -27,6 +27,8 @@ void print_usage(std::ostream& out) {
         << "  --target=NAME          Target for .s inputs (kr32, kr16, kr64, kr216)\n"
         << "  --entry=NAME           Entry symbol (default _start)\n"
         << "  --base=ADDR            Image base (default 0x00010000)\n"
+        << "  --flat                 Write the raw image instead of a container:\n"
+        << "                         allocated sections at their addresses, no header\n"
         << "  -o FILE                Output executable\n"
         << "  --map=FILE             Write a deterministic image map\n"
         << "  --layout=FILE          Place sections using NAME ADDRESS lines\n"
@@ -89,6 +91,9 @@ int main(int argc, char** argv) {
     std::string layout_path;
     std::string source_root;
     bool print_size = false;
+    // `--flat` writes the image the way a boot loader reads it: no container
+    // header, allocated sections at their linked addresses.
+    bool flat = false;
     bool gc_sections = false;
     std::optional<krc::target::TargetId> options_target;
     std::vector<std::string> inputs;
@@ -145,6 +150,10 @@ int main(int argc, char** argv) {
                 return 1;
             }
             map_path = argv[++index];
+            continue;
+        }
+        if (argument == "--flat") {
+            flat = true;
             continue;
         }
         if (argument == "--print-size") {
@@ -292,8 +301,9 @@ int main(int argc, char** argv) {
         std::cerr << "krld: cannot open output '" << output << "'\n";
         return 1;
     }
-    file.write(reinterpret_cast<const char*>(linked.image.data()),
-               static_cast<std::streamsize>(linked.image.size()));
+    const auto bytes = flat ? krc::toolchain::flatten(linked) : linked.image;
+    file.write(reinterpret_cast<const char*>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
     if (!file) {
         std::cerr << "krld: failed to write '" << output << "'\n";
         return 1;

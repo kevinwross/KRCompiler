@@ -262,8 +262,12 @@ void fill_link_result(LinkResult& result, const linker::LinkedImage& image) {
     result.base = image.base;
     result.sections.reserve(image.sections.size());
     for (const auto& section : image.sections) {
-        result.sections.push_back(
-            {section.name, section.address, section.size, section.alignment});
+        // Only a section with the alloc bit occupies memory; a debug section
+        // carries flags 8 and no alloc bit, exactly as the linker places them.
+        const bool allocated = (section.flags & 0x0001u) != 0;
+        result.sections.push_back({section.name, section.address, section.size,
+                                   section.alignment,
+                                   allocated ? section.data : std::vector<std::uint8_t>{}});
     }
     result.symbols.reserve(image.symbols.size());
     for (const auto& symbol : image.symbols) {
@@ -658,6 +662,27 @@ AssembleResult assemble(std::string_view assembly, std::string_view debug_info,
 
 LinkResult link(std::span<const Object> objects, const Options& options) {
     return link_impl(objects, options).result;
+}
+
+std::vector<std::uint8_t> flatten(const LinkResult& linked) {
+    std::uint64_t end = linked.base;
+    for (const auto& section : linked.sections) {
+        if (section.bytes.empty()) {
+            continue;
+        }
+        end = std::max(end, section.address + section.size);
+    }
+    std::vector<std::uint8_t> image(static_cast<std::size_t>(end - linked.base), 0);
+    for (const auto& section : linked.sections) {
+        if (section.bytes.empty()) {
+            continue;
+        }
+        const auto offset = static_cast<std::size_t>(section.address - linked.base);
+        std::copy(section.bytes.begin(), section.bytes.begin() +
+                                            static_cast<std::ptrdiff_t>(section.size),
+                  image.begin() + static_cast<std::ptrdiff_t>(offset));
+    }
+    return image;
 }
 
 BuildResult build(std::span<const Source> sources, const Options& options) {

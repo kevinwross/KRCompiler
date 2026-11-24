@@ -341,3 +341,73 @@ TEST_CASE("A KR16 declaration does not take the next statement's line") {
     }
     CHECK_EQ(first_line, 3);
 }
+TEST_CASE("flatten places allocated sections at their linked addresses") {
+    // A1 of the build cleanup plan: the flat image is what a boot loader reads,
+    // so the bytes must land at the addresses the linker chose and everything
+    // between sections must be zero rather than uninitialised.
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr32;
+    options.entry = "_start";
+    options.base = 0x1000;
+
+    const std::string text =
+        ".text\n"
+        ".global _start\n"
+        "_start:\n"
+        "  MOV R2, #7\n"
+        ".data\n"
+        ".global value\n"
+        "value:\n"
+        "  .WORD 0x11223344\n";
+    const auto assembled = krc::toolchain::assemble(text, options);
+    REQUIRE(assembled.ok);
+
+    const std::vector<krc::toolchain::Object> objects{{"flat_probe.s", assembled.object}};
+    const auto linked = krc::toolchain::link(objects, options);
+    REQUIRE(linked.ok);
+
+    // Both sections occupy memory, so both carry bytes; a debug section would not.
+    std::uint64_t end = linked.base;
+    std::size_t allocated = 0;
+    for (const auto& section : linked.sections) {
+        if (section.bytes.empty()) {
+            continue;
+        }
+        ++allocated;
+        end = std::max(end, section.address + section.size);
+    }
+    REQUIRE(allocated >= 2);
+
+    const auto flat = krc::toolchain::flatten(linked);
+    REQUIRE(flat.size() == end - linked.base);
+
+    // The data word is stored little-endian at its own address.
+    const auto data = std::find_if(linked.sections.begin(), linked.sections.end(),
+                                   [](const krc::toolchain::SectionInfo& section) {
+                                       return section.name == ".data";
+                                   });
+    REQUIRE(data != linked.sections.end());
+    REQUIRE(data->size >= 4);
+    const auto offset = static_cast<std::size_t>(data->address - linked.base);
+    CHECK(flat[offset + 0] == 0x44);
+    CHECK(flat[offset + 1] == 0x33);
+    CHECK(flat[offset + 2] == 0x22);
+    CHECK(flat[offset + 3] == 0x11);
+
+    // Every byte outside an allocated section is zero.
+    std::vector<bool> covered(flat.size(), false);
+    for (const auto& section : linked.sections) {
+        if (section.bytes.empty()) {
+            continue;
+        }
+        const auto start = static_cast<std::size_t>(section.address - linked.base);
+        for (std::size_t index = 0; index < section.size; ++index) {
+            covered[start + index] = true;
+        }
+    }
+    for (std::size_t index = 0; index < flat.size(); ++index) {
+        if (!covered[index]) {
+            CHECK(flat[index] == 0);
+        }
+    }
+}
