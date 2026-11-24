@@ -152,11 +152,17 @@ other times.
 
 ## Variadic calls
 
-A variadic or unprototyped call passes every argument on the stack, including
-floating point, each in its natural size: four bytes for integers, pointers and
-the hidden aggregate pointer, eight for a `double`. The callee reads the first
-stack argument at `FP + 8`, `va_start` yields a pointer to it, and `<stdarg.h>`
-advances by the size of the type being read. The caller keeps SP 8-byte aligned.
+A variadic or unprototyped call passes every argument in an **eight-byte**
+stack slot, whatever its type, the first at `FP + 8` and the argument at index
+*i* at `FP + 8 + 8i`. The caller keeps SP 8-byte aligned, and the hidden
+aggregate pointer occupies a slot like any other argument.
+
+`va_list` is a plain `char *` at the current slot (ADR 0059), `va_start` yields
+`FP + 8 + 8 x named`, and `va_arg(ap, T)` reads `T` from the low bytes of the
+slot and advances the pointer by eight. An `int` therefore occupies the low four
+bytes of its slot and a `double` all eight, which is why a mixed call needs no
+type tag: the callee reads each argument at the width its own code names. The
+definitions live in `sysroot/kr232/include/stdarg.h`.
 
 ## Function pointers and virtual calls
 
