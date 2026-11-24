@@ -277,6 +277,16 @@ Each phase ends with a gate that can fail. Nothing is committed that has not bee
 **Carried defect P1-0 — the rebuilt kernel panics.** The compiler's kernel reaches the banner and then faults (vector 4, `pc=0x150632`); the committed kernel boots. It is layout-sensitive: the same sources with console markers and `kernel_enable_interrupts()` disabled boot to user mode and run the shell. The cross test isolates it (new bios + committed kernel boots; committed bios + new kernel panics), and the isolated probes pass for the calling convention, a framed C function, and a trap through a C handler and `IRET`. Eight hypotheses are eliminated with evidence in the log: relocation immediates, the vector table, the trap mechanism, the timer IRQ path, frame-size encoding, writable-page mapping, fixed-address overlap, and `process_spawn` itself. The next step is a layout bisect of the instrumented build, then the one address `0x150632` in the map.
 
 One misconception is now settled and worth recording, because it cost two rounds: kr32os writes its vector table with **byte offsets**, not indices (`VECTOR_TIMER 64` is slot 16, `VECTOR_PAGE_FAULT 16` is slot 4), and the machine delivers IRQ line *n* as vector `16 + n`. The two agree — the timer on line 0 arrives at slot 16, which is where `traps_install` put it — so the OS's interrupt wiring is correct and the "timer installed at the wrong vector" theory is dead. The panic's `vector=4` is therefore a genuine page fault, and a probe that recorded a higher vector was recording its own general protection, not the timer.
+**P1-0 reproduced standalone, 2026-11-27.** A 40-line program with the kernel's shape -- `static struct Process table[256]` of 48-byte records, a bounded scan for a free slot, then `table[index].used = 1; table[index].pid = next_pid++;` -- compiles and runs correctly at `-O0` and returns the wrong value at `-O1`::
+
+```
+-O0: HALTED exit=0     (every check passes)
+-O1: HALTED exit=1     (the first spawn did not return pid 1)
+```
+
+That is the first reproduction outside the kernel: one translation unit, no interrupts, no other writers, no runtime beyond crt0. It is kept at `build/spawn-repro/spawn_repro.c` while the compiler is being fixed, because a row that fails cannot be committed on its own; the row and the fix go in together.
+
+
 **P1-0 root cause found, 2026-11-26: the address of `table[index]` is computed as `table + table*48`.** The `-O1` code for the failing access is five instructions, and the second one throws away the index:
 
 ```
