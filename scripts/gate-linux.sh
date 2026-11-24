@@ -15,6 +15,15 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# J5: every gate asks the doctor first, so a missing tool fails before the first
+# compile with a sentence naming the tool and the repository.
+doctor_tool="${KRC_DOCTOR_TOOL:-$ROOT/../krcompiler/scripts/doctor.sh}"
+if [ -f "$doctor_tool" ]; then
+    sh "$doctor_tool" krcompiler
+else
+    echo "gate: no doctor at '$doctor_tool' (set KRC_DOCTOR_TOOL); continuing without one" >&2
+fi
+
 # I2: build in the native mirror, never on the mount. This tree owns the mirror
 # tool, so the default path is its own script; a caller can still override it.
 IN_PLACE=0
