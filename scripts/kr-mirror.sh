@@ -76,10 +76,27 @@ if ! flock -w "$wait_s" 9; then
 fi
 echo "$$" > "$lock"
 
+# A repository may need some of its ignored-at-first-glance trees: krdbg vendors
+# its kdbg reader under third_party and cannot build without it, while kr32's
+# third_party is a fetched SDL2 tree. So the exclusions are per repository, read
+# from <source>/.kr-mirror-exclude, with only build/ and .git/ unconditional.
+extra=""
+if [ -f "$source_root/.kr-mirror-exclude" ]; then
+    extra="$source_root/.kr-mirror-exclude"
+fi
+
 echo "kr-mirror: $source_root -> $mirror"
-rsync -a --delete \
-    --exclude 'build/' --exclude '.git/' --exclude 'third_party/' \
-    --exclude '*.tmp' \
-    "$source_root"/ "$mirror"/
+if [ -n "$extra" ]; then
+    echo "kr-mirror: extra exclusions from $extra"
+    rsync -a --delete \
+        --exclude 'build/' --exclude '.git/' --exclude '*.tmp' \
+        --exclude-from "$extra" \
+        "$source_root"/ "$mirror"/
+else
+    rsync -a --delete \
+        --exclude 'build/' --exclude '.git/' --exclude '*.tmp' \
+        --exclude 'third_party/' \
+        "$source_root"/ "$mirror"/
+fi
 
 echo "kr-mirror: refreshed (lock held by $$)"
