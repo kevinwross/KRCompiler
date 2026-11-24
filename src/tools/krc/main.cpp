@@ -184,6 +184,7 @@ int run_image(int argc, char** argv) {
     std::string entry = "_start";
     std::string output_path;
     std::string map_path;
+    std::string source_root;
     std::string sym_path;
     std::vector<std::string> inputs;
     bool flat = false;
@@ -209,6 +210,7 @@ int run_image(int argc, char** argv) {
                          "  --base=ADDR     Image base\n"
                          "  --entry=NAME    Entry symbol (default _start)\n"
                          "  --flat          Write the raw image instead of a container\n"
+            "  --source-root=DIR  Emit debug source paths relative to DIR\n"
                          "  --map=FILE      Write the deterministic image map\n"
                          "  --sym=FILE      Write the kr32 symbol sidecar\n"
                          "  -o FILE         Output image\n";
@@ -224,6 +226,10 @@ int run_image(int argc, char** argv) {
         }
         if (argument == "--flat") {
             flat = true;
+            continue;
+        }
+        if (argument.starts_with("--source-root=")) {
+            source_root = std::string(argument.substr(std::string_view("--source-root=").size()));
             continue;
         }
         if (argument.starts_with("--target=")) {
@@ -309,6 +315,7 @@ int run_image(int argc, char** argv) {
     options.entry = entry;
     options.base = base_set ? base : 0;
     options.symbol_sidecar = !sym_path.empty();
+    options.source_root = source_root;
 
     std::vector<toolchain::Object> objects;
     for (const auto& path : inputs) {
