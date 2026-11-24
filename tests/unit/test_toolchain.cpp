@@ -10,6 +10,7 @@
 
 #include "krc/debug/kdbg.h"
 #include "krc/toolchain.h"
+#include "linker/kro_object.h"
 
 namespace {
 
@@ -410,4 +411,56 @@ TEST_CASE("flatten places allocated sections at their linked addresses") {
             CHECK(flat[index] == 0);
         }
     }
+}
+TEST_CASE("the symbol sidecar carries the image symbols and a CRC of the flat form") {
+    // A2 of the build cleanup plan. The kr32 OS reads this sidecar, and its
+    // consumer (kr32/include/kr32/os/symbols.h) refuses one whose `__sym_crc`
+    // does not equal the CRC32 of the flat image it placed in memory.
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr32;
+    options.entry = "_start";
+    options.base = 0x1000;
+    options.symbol_sidecar = true;
+
+    const std::string text =
+        ".text\n"
+        ".global _start\n"
+        "_start:\n"
+        "  MOV R2, #7\n"
+        ".data\n"
+        ".global value\n"
+        "value:\n"
+        "  .WORD 0x11223344\n";
+    const auto assembled = krc::toolchain::assemble(text, options);
+    REQUIRE(assembled.ok);
+    const std::vector<krc::toolchain::Object> objects{{"sidecar_probe.s", assembled.object}};
+    const auto linked = krc::toolchain::link(objects, options);
+    REQUIRE(linked.ok);
+    REQUIRE_FALSE(linked.sidecar.empty());
+
+    // It is a kr32 container: magic "K32\0".
+    REQUIRE(linked.sidecar.size() > 4);
+    CHECK(linked.sidecar[0] == 'K');
+    CHECK(linked.sidecar[1] == '3');
+    CHECK(linked.sidecar[2] == '2');
+    CHECK(linked.sidecar[3] == 0x00);
+
+    // The checksum section is present, and its four bytes are the CRC32 of the
+    // flat image, which is what the OS compares against.
+    const std::string sidecar_text(linked.sidecar.begin(), linked.sidecar.end());
+    CHECK(sidecar_text.find("__sym_crc") != std::string::npos);
+    const auto flat = krc::toolchain::flatten(linked);
+    const auto checksum = krc::linker::crc32(flat);
+    bool found = false;
+    for (std::size_t index = 0; index + 4 <= linked.sidecar.size(); ++index) {
+        const auto value = static_cast<std::uint32_t>(linked.sidecar[index]) |
+                           (static_cast<std::uint32_t>(linked.sidecar[index + 1]) << 8) |
+                           (static_cast<std::uint32_t>(linked.sidecar[index + 2]) << 16) |
+                           (static_cast<std::uint32_t>(linked.sidecar[index + 3]) << 24);
+        if (value == checksum) {
+            found = true;
+            break;
+        }
+    }
+    CHECK(found);
 }

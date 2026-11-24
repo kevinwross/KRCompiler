@@ -31,6 +31,8 @@ void print_usage(std::ostream& out) {
         << "                         allocated sections at their addresses, no header\n"
         << "  -o FILE                Output executable\n"
         << "  --map=FILE             Write a deterministic image map\n"
+        << "  --sym=FILE             Write the kr32 symbol sidecar: the image\n"
+        << "                         sections plus the CRC of its flat form\n"
         << "  --layout=FILE          Place sections using NAME ADDRESS lines\n"
         << "  --source-root=DIR      Emit debug source paths relative to DIR\n"
         << "  --print-size           Print section sizes\n"
@@ -94,6 +96,7 @@ int main(int argc, char** argv) {
     // `--flat` writes the image the way a boot loader reads it: no container
     // header, allocated sections at their linked addresses.
     bool flat = false;
+    std::string sym_path;
     bool gc_sections = false;
     std::optional<krc::target::TargetId> options_target;
     std::vector<std::string> inputs;
@@ -152,6 +155,18 @@ int main(int argc, char** argv) {
             map_path = argv[++index];
             continue;
         }
+        if (argument.starts_with("--sym=")) {
+            sym_path = std::string(argument.substr(std::string_view("--sym=").size()));
+            continue;
+        }
+        if (argument == "--sym") {
+            if (index + 1 >= argc) {
+                std::cerr << "krld: --sym requires a file\n";
+                return 1;
+            }
+            sym_path = argv[++index];
+            continue;
+        }
         if (argument == "--flat") {
             flat = true;
             continue;
@@ -201,6 +216,7 @@ int main(int argc, char** argv) {
     options.entry = entry;
     options.gc_sections = gc_sections;
     options.source_root = source_root;
+    options.symbol_sidecar = !sym_path.empty();
 
     std::vector<toolchain::Object> objects;
     for (const auto& path : inputs) {
@@ -307,6 +323,23 @@ int main(int argc, char** argv) {
     if (!file) {
         std::cerr << "krld: failed to write '" << output << "'\n";
         return 1;
+    }
+    if (!sym_path.empty()) {
+        if (linked.sidecar.empty()) {
+            std::cerr << "krld: --sym is defined for kr32 images; this target wrote none\n";
+            return 1;
+        }
+        std::ofstream sidecar(sym_path, std::ios::binary);
+        if (!sidecar) {
+            std::cerr << "krld: cannot write sidecar '" << sym_path << "'\n";
+            return 1;
+        }
+        sidecar.write(reinterpret_cast<const char*>(linked.sidecar.data()),
+                      static_cast<std::streamsize>(linked.sidecar.size()));
+        if (!sidecar) {
+            std::cerr << "krld: failed to write '" << sym_path << "'\n";
+            return 1;
+        }
     }
     std::cout << "krld: linked " << objects.size() << " object(s) to " << output
               << " (entry " << linked.entry << ")\n";

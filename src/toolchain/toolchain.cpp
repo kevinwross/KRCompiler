@@ -401,6 +401,33 @@ LinkedOutput link_impl(std::span<const Object> objects, const Options& options) 
 
     fill_link_result(result, image);
     output.object_text_addresses = image.object_text_addresses;
+
+    // The kr32 OS reads its own symbols from a sibling `<image>.sym` container:
+    // every section of the image plus `__sym_crc`, whose four bytes are the
+    // CRC32 of the flat image the loader places in memory (symbols.h consumes
+    // it and rejects a sidecar that does not match). The CRC is the same
+    // polynomial and finalisation as the container writer's.
+    if (options.symbol_sidecar && options.target == Target::Kr32) {
+        const auto flat = flatten(result);
+        const auto checksum = linker::crc32(flat);
+        linker::LinkedImage augmented = image;
+        linker::LinkedSection crc_section;
+        crc_section.name = "__sym_crc";
+        crc_section.type = linker::KroSectionType::Data;
+        crc_section.flags = 0;
+        crc_section.alignment = 1;
+        crc_section.data = {static_cast<std::uint8_t>(checksum & 0xFFu),
+                            static_cast<std::uint8_t>((checksum >> 8) & 0xFFu),
+                            static_cast<std::uint8_t>((checksum >> 16) & 0xFFu),
+                            static_cast<std::uint8_t>((checksum >> 24) & 0xFFu)};
+        crc_section.size = crc_section.data.size();
+        augmented.sections.push_back(crc_section);
+        std::string sidecar_error;
+        if (!linker::write_kr32_executable(augmented, result.sidecar, sidecar_error)) {
+            result.error = sidecar_error;
+            return output;
+        }
+    }
     result.ok = true;
     return output;
 }

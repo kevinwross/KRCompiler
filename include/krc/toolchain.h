@@ -116,6 +116,9 @@ struct Options {
     // `.text.<name>` function section with no reference from a reachable
     // section is removed before layout.
     bool gc_sections = false;
+    // Emit the sibling symbol sidecar as well as the container: a kr32 OS reads
+    // its own symbols from it, verifying the CRC of the flat image (symbols.h).
+    bool symbol_sidecar = false;
     // Section placements for the layout the host wants; empty uses the linker's
     // default packing.
     std::vector<SectionPlacement> section_addresses;
@@ -202,6 +205,9 @@ struct SymbolInfo {
 struct LinkResult {
     bool ok = false;
     std::vector<std::uint8_t> image;
+    // Filled only when Options::symbol_sidecar asked for it, and only for kr32:
+    // a container carrying the image sections plus `__sym_crc`.
+    std::vector<std::uint8_t> sidecar;
     std::vector<SectionInfo> sections;
     std::vector<SymbolInfo> symbols;
     std::uint64_t entry = 0;
