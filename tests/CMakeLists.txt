@@ -8214,6 +8214,38 @@ endif()
     set_tests_properties(krc_image_output_extension PROPERTIES
         PASS_REGULAR_EXPRESSION "container\\.kr32")
 
+    # H2/H3: a listing is a file, and its name follows D5. Three rows, one per
+    # naming rule: bare -l beside the source, -l with an explicit name, and -c -l
+    # with an output name, which takes the output name plus .lst.
+    add_test(NAME krc_list_names_beside_source
+        COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DWORK=${KRC_TEST_OUTPUT_DIR}/listing
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s
+            "-DARGS=-l;--target=kr32"
+            -DEXPECT_FILE=${KRC_TEST_OUTPUT_DIR}/listing/globl_alias.lst
+            "-DEXPECT_TEXT=; target kr32"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/CheckListing.cmake)
+
+    add_test(NAME krc_list_honours_explicit_name
+        COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DWORK=${KRC_TEST_OUTPUT_DIR}/listing
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s
+            "-DARGS=-l;named.lst;--target=kr32"
+            -DEXPECT_FILE=${KRC_TEST_OUTPUT_DIR}/listing/named.lst
+            "-DEXPECT_TEXT=entry:"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/CheckListing.cmake)
+
+    add_test(NAME krc_list_takes_the_output_name
+        COMMAND ${CMAKE_COMMAND}
+            -DKRC=$<TARGET_FILE:krc>
+            -DWORK=${KRC_TEST_OUTPUT_DIR}/listing
+            -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/aggregate.c
+            "-DARGS=-c;-l;-o;prog.kr32;--target=kr32"
+            -DEXPECT_FILE=${KRC_TEST_OUTPUT_DIR}/listing/prog.kr32.lst
+            "-DEXPECT_TEXT=; target kr32"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/CheckListing.cmake)
     add_test(NAME krc_image_output_contradiction
         COMMAND ${CMAKE_COMMAND} "-DEXE=$<TARGET_FILE:krc>"
                 "-DARGS=image;--target=kr32;--entry=entry;${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s;-o;${KRC_TEST_OUTPUT_DIR}/wrong.kr16"

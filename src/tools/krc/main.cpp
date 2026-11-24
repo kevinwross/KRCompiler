@@ -722,7 +722,9 @@ int main(int argc, char** argv) {
         } else if (!output_path.empty()) {
             path = std::string(output_path) + ".lst";
         } else {
-            path = std::filesystem::path(source).replace_extension(".lst");
+            // H3: the stem goes in the working directory, as -S already does for
+            // generated assembly, so a build writes its outputs where it runs.
+            path = std::filesystem::path(source).filename().replace_extension(".lst");
         }
         return write_text_file(path, krc::listing::render(rows, symbols, sections, document),
                                error);
