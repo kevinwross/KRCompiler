@@ -55,7 +55,15 @@ CORES="$(nproc 2>/dev/null || echo 4)"
 JOBS=$(( CORES * 8 / 10 ))
 [ "$JOBS" -lt 1 ] && JOBS=1
 
-PRESETS="linux-gcc-debug linux-gcc-release linux-clang-debug"
+PRESETS="linux-gcc-debug linux-gcc-release"
+# A preset whose compiler is not installed is named as a skip rather than failing
+# the gate: clang is useful here, not required, and a host that has it still runs
+# the row. I5 asks that every skip be named.
+if command -v clang++ >/dev/null 2>&1; then
+    PRESETS="$PRESETS linux-clang-debug"
+else
+    echo "== skipping linux-clang-debug: clang++ is not installed"
+fi
 SKIP_TESTS=0
 while [ $# -gt 0 ]; do
     case "$1" in
