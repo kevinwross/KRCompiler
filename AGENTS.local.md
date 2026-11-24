@@ -78,6 +78,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 - [ ] Builds clean with **no warnings** in **every configuration this host built**: `/W4 /WX` on MSVC, `-Wall -Wextra -Wpedantic -Werror` on GCC/Clang (plan §15.4).
 - [ ] `ctest --preset <host-debug>` is green, and so is the test run for every other configuration this host built.
 - [ ] The deterministic-output check passes: the same inputs built twice compare byte-for-byte (§15.6).
+- [ ] A release unpacks and runs: `pwsh -File scripts/verify-release.ps1` packages twice, compares the archives, unpacks one, and compiles and links a fixture with the packaged headers and sysroot.
 - [ ] `docs/` and `implementation.md` are updated in the same change — every merged change updates the implementation log (§15.7).
 - [ ] An ADR under `docs/decisions/` exists when the change touches ABI, object format, symbol format, target description, or IR.
 - [ ] An Appendix A entry exists when a `D-xxx` decision changes.
