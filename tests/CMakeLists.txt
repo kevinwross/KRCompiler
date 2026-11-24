@@ -8281,7 +8281,7 @@ endif()
     # source and compared byte for byte. Editing the committed listing by hand
     # fails here, which is what makes it a description of the machine rather than
     # a note somebody once wrote down.
-    foreach(listing_target IN ITEMS kr16 kr32)
+    foreach(listing_target IN ITEMS kr16 kr32 kr216 kr232)
         add_test(NAME krc_listing_drift_${listing_target}
             COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

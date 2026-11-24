@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "krc/toolchain.h"
+
 namespace krc::asmkr216 {
 
 // kr216 instruction encodings, ../kr216/kr216-isa.md (frozen 1.0). The encoder emits bytes;
@@ -170,6 +172,9 @@ struct AssembledProgram {
     std::vector<std::string> externals;
     std::vector<Relocation> relocations;
     std::vector<DataSection> data_sections;
+    // One row per source line, so `-l` can render a listing without re-reading the
+    // assembly text.
+    std::vector<toolchain::ListingRow> listing;
 };
 
 [[nodiscard]] bool assemble_text(std::string_view source, AssembledProgram& out,

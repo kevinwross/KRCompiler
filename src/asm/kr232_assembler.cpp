@@ -553,6 +553,44 @@ bool assemble(std::string_view source, std::string_view file_name, AssembledProg
         }
         if (relaxation.too_far.empty()) {
             out = std::move(candidate);
+            // The listing is built here because this is the only place the source and
+            // the final offsets are both in hand: `lines` gives each statement's
+            // offset, the next statement's offset ends its bytes, and the source line
+            // supplies the text.
+            const auto source_lines = [&]() {
+                std::vector<std::string_view> text;
+                std::size_t start = 0;
+                for (std::size_t index = 0; index <= source.size(); ++index) {
+                    if (index == source.size() || source[index] == '\n') {
+                        text.push_back(source.substr(start, index - start));
+                        start = index + 1;
+                    }
+                }
+                return text;
+            }();
+            const auto& text_bytes = out.program.sections.empty()
+                                         ? std::vector<std::uint8_t>{}
+                                         : out.program.sections[0].bytes;
+            out.listing.reserve(out.lines.size());
+            for (std::size_t index = 0; index < out.lines.size(); ++index) {
+                const auto& entry = out.lines[index];
+                const std::uint32_t end = index + 1 < out.lines.size()
+                                              ? out.lines[index + 1].offset
+                                              : static_cast<std::uint32_t>(text_bytes.size());
+                toolchain::ListingRow row;
+                row.section = ".text";
+                row.address = entry.offset;
+                if (entry.line >= 1 && entry.line <= source_lines.size()) {
+                    row.text = std::string(source_lines[entry.line - 1]);
+                }
+                row.source_line = entry.line;
+                if (end > entry.offset && end <= text_bytes.size()) {
+                    row.bytes.assign(
+                        text_bytes.begin() + static_cast<std::ptrdiff_t>(entry.offset),
+                        text_bytes.begin() + static_cast<std::ptrdiff_t>(end));
+                }
+                out.listing.push_back(std::move(row));
+            }
             return true;
         }
         far.insert(relaxation.too_far.begin(), relaxation.too_far.end());

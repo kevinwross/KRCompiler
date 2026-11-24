@@ -1,0 +1,42 @@
+; krc listing
+; crt0.s
+; target kr216
+
+; .text
+00000000                       ; kr216 startup: run .init_array, call main, run .fini_array and exit.
+00000000                       .text
+00000000                       .global _start
+00000000                       .extern main
+00000000                       .extern __init_array_start
+00000000                       .extern __init_array_end
+00000000                       .extern __fini_array_start
+00000000                       .extern __fini_array_end
+00000000                       _start:
+00000000  5800 00                  ld r8, #__init_array_start
+00000003  5900 00                  ld r9, #__init_array_end
+00000006                       init_loop:
+00000006  8889                     cmp r8, r9
+00000008  A408                     bcs init_done
+0000000A  8E78                     ld r7, [r8]
+0000000C  47                       call r7
+0000000D  C780 02                  add r8, #2
+00000010  BFF4                     bra init_loop
+00000012                       init_done:
+00000012  5200 00                  ld r2, #0
+00000015  5300 00                  ld r3, #0
+00000018  D000 00                  call main
+0000001B  02                       push r2
+0000001C  5800 00                  ld r8, #__fini_array_start
+0000001F  5900 00                  ld r9, #__fini_array_end
+00000022                       fini_loop:
+00000022  8889                     cmp r8, r9
+00000024  A408                     bcs fini_done
+00000026  8E78                     ld r7, [r8]
+00000028  47                       call r7
+00000029  C780 02                  add r8, #2
+0000002C  BFF4                     bra fini_loop
+0000002E                       fini_done:
+0000002E  12                       pop r2
+0000002F  5700 00                  ld r7, #0
+00000032  73                       sys
+00000033                       

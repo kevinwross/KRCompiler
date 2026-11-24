@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "asm/kr232_object.h"
+#include "krc/toolchain.h"
 
 namespace krc::asm_kr232 {
 
@@ -19,6 +20,10 @@ struct DebugLine {
 struct AssembledProgram {
     Program program;
     std::vector<DebugLine> lines;
+    // One row per statement, so `-l` can render a listing without re-reading the
+    // assembly text. Filled from `lines` and the source, which is why it lives here
+    // rather than in the object writer: the source is not available there.
+    std::vector<toolchain::ListingRow> listing;
 };
 
 // Assembles the kr232 text subset the backend will emit: `.text`, `.data`,

@@ -272,6 +272,7 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
             return result;
         }
         append_debug_info(object, debug_info);
+        result.listing = std::move(assembled.listing);
     } else if (id == target::TargetId::Kr232) {
         asm_kr232::AssembledProgram assembled;
         const std::string_view recorded = options.source_name.empty()
@@ -287,6 +288,7 @@ AssembleResult assemble_impl(std::string_view assembly, std::string_view debug_i
         }
         // The kr232 assembler emits its own `.debug_info` bridge, so the option's
         // bridge is not appended here; two bridges would duplicate every record.
+        result.listing = std::move(assembled.listing);
     } else if (id == target::TargetId::Kr32) {
         asmkr32::AssemblyResult assembled;
         if (!asmkr32::assemble(assembly, assembled, error)) {

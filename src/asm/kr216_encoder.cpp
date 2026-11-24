@@ -1169,7 +1169,19 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         }
     };
 
+    // One entry per source line, in order, recording where the statement started and
+    // what it said. The byte length is the distance to the next entry in the same
+    // section, so a statement that emits nothing (a label, a directive with no data)
+    // still gets a row and the rows never overlap.
+    struct LineStart {
+        std::uint32_t section = 0;
+        std::uint32_t offset = 0;
+        std::string text;
+    };
+    std::vector<LineStart> line_starts;
+
     for (const std::string_view raw : split_lines(source)) {
+        line_starts.push_back({current_section, section_size(), std::string(raw)});
         std::string_view line = raw;
         const std::size_t comment = line.find(';');
         if (comment != std::string_view::npos) line = line.substr(0, comment);
@@ -1410,6 +1422,29 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         }
         error = "kr216: undefined label '" + fixup.label + "'";
         return false;
+    }
+
+    out.listing.reserve(line_starts.size());
+    for (std::size_t index = 0; index < line_starts.size(); ++index) {
+        const auto& start = line_starts[index];
+        const std::vector<std::uint8_t>& bytes =
+            start.section == 0 ? out.bytes : out.data_sections[start.section - 1].bytes;
+        std::uint32_t end = static_cast<std::uint32_t>(bytes.size());
+        for (std::size_t next = index + 1; next < line_starts.size(); ++next) {
+            if (line_starts[next].section == start.section) {
+                end = line_starts[next].offset;
+                break;
+            }
+        }
+        toolchain::ListingRow row;
+        row.section = start.section == 0 ? ".text" : ".data";
+        row.address = start.offset;
+        row.text = start.text;
+        if (end > start.offset && end <= bytes.size()) {
+            row.bytes.assign(bytes.begin() + static_cast<std::ptrdiff_t>(start.offset),
+                             bytes.begin() + static_cast<std::ptrdiff_t>(end));
+        }
+        out.listing.push_back(std::move(row));
     }
     return true;
 }

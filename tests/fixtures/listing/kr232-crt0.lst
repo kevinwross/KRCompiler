@@ -1,0 +1,8 @@
+; krc listing
+; crt0.s
+; target kr232
+
+; .text
+00000000  D00000                                 call main
+00000003  C67000                                 ld r7, #0
+00000006  73                                     sys
