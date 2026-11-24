@@ -2278,6 +2278,38 @@ if(TARGET krc)
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/longlong_arith_linked.kr32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
 
+    # P1-0: the rebuilt kr32os kernel walked a table index past its bound at -O1
+    # and faulted. This is the smallest program with that shape -- a static array of
+    # records, a bound, and a field test that never ends the loop -- run at both
+    # levels, because the defect only appears when the optimiser is on.
+    foreach(table_level IN ITEMS o0 o1)
+        set(table_flag " ")
+        if(table_level STREQUAL "o1")
+            set(table_flag "-O1")
+        else()
+            set(table_flag "-O0")
+        endif()
+        add_test(NAME krc_link_table_bound_${table_level}
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/table_bound.c
+                    -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                    -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                    -DLEVEL=${table_flag}
+                    -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/table_bound_${table_level}_linked.kr32
+                    -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+        if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+            add_test(NAME krc_run_table_bound_${table_level}
+                COMMAND ${CMAKE_COMMAND}
+                        -DVM=${KRC_KR32_VM}
+                        -DIMAGE=${KRC_TEST_OUTPUT_DIR}/table_bound_${table_level}_linked.kr32
+                        -DEXPECT_EXIT=0
+                        -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+            set_tests_properties(krc_run_table_bound_${table_level} PROPERTIES
+                DEPENDS krc_link_table_bound_${table_level})
+        endif()
+    endforeach()
     # Executed checks, registered only when a VM was configured for this
     # machine. A link-only test cannot see a wrong result in generated code.
     # Every executed test must go inside this block, above its
