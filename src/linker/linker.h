@@ -50,6 +50,12 @@ struct LinkedImage {
     std::vector<std::uint64_t> object_text_addresses;
 };
 
+// The message for a relocation whose value does not fit its width. Named rather
+// than inlined so a test can assert both halves of it: a PC-relative relocation
+// names `--far-calls`, and any other names nothing, because that flag does not
+// apply to it.
+[[nodiscard]] std::string overflow_message(std::uint64_t value, std::uint8_t width,
+                                           std::size_t offset, bool pc_relative);
 [[nodiscard]] bool link_objects(std::span<const KroObject> objects, const LinkOptions& options,
                                 LinkedImage& image, std::string& error);
 

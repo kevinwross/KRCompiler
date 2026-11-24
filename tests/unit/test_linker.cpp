@@ -249,3 +249,17 @@ TEST_CASE("linker patches data-section relocations") {
     CHECK(data_section->data[4] == 0);
     CHECK(data_section->data[7] == 0);
 }
+TEST_CASE("a relocation overflow names the remedy only when one applies") {
+    // The hint was added because a link failed with the overflow alone and left the
+    // reader to find `--far-calls`; it then had no test, and the only thing that
+    // proved it was an accidental sighting in a link.
+    const std::string branch = krc::linker::overflow_message(0x12345, 2, 7, true);
+    CHECK(branch.find("--far-calls") != std::string::npos);
+    CHECK(branch.find("width 2") != std::string::npos);
+    CHECK(branch.find("offset 7") != std::string::npos);
+    // A data relocation has no such option, so naming the flag there would be
+    // advice that does not apply.
+    const std::string data = krc::linker::overflow_message(0x12345, 2, 7, false);
+    CHECK(data.find("--far-calls") == std::string::npos);
+    CHECK(data.find("width 2") != std::string::npos);
+}

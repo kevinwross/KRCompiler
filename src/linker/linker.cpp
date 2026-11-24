@@ -18,6 +18,22 @@
 
 namespace krc::linker {
 
+std::string overflow_message(std::uint64_t value, std::uint8_t width, std::size_t offset,
+                             bool pc_relative) {
+    char detail[256] = {};
+    // Name the remedy for the one case that has one: a call or branch the
+    // displacement cannot reach is linked wide with `--far-calls`, and a message
+    // that only reports the overflow leaves the reader to discover the flag. Other
+    // relocations have no such option, so they say nothing.
+    std::snprintf(detail, sizeof(detail),
+                  "link relocation overflows its width (value 0x%llX, width %u, offset %zu)%s",
+                  static_cast<unsigned long long>(value), static_cast<unsigned>(width), offset,
+                  pc_relative ? "; a call or branch this far from its target needs --far-calls "
+                                "(krc -c --far-calls)"
+                              : "");
+    return detail;
+}
+
 namespace {
 
 constexpr std::uint32_t kUndefinedSection = 0xFFFFFFFFu;
@@ -62,21 +78,7 @@ bool write_value(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint
         const auto signed_max = (1LL << (width * 8 - 1)) - 1;
         const auto as_signed = static_cast<std::int64_t>(value);
         if (value > limit && (as_signed < signed_min || as_signed > signed_max)) {
-            char detail[256] = {};
-            // Name the remedy for the one case that has one: a call or branch the
-            // displacement cannot reach is linked wide with `--far-calls`, and a
-            // message that only reports the overflow leaves the reader to discover
-            // the flag. Other relocations have no such option, so they say nothing.
-            std::snprintf(detail, sizeof(detail),
-                          "link relocation overflows its width (value 0x%llX, width %u, "
-                          "offset %zu)%s",
-                          static_cast<unsigned long long>(value),
-                          static_cast<unsigned>(width), offset,
-                          pc_relative
-                              ? "; a call or branch this far from its target needs "
-                                "--far-calls (krc -c --far-calls)"
-                              : "");
-            error = detail;
+            error = overflow_message(value, width, offset, pc_relative);
             return false;
         }
     }
