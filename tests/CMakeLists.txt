@@ -37,6 +37,7 @@ add_executable(krc_tests
     unit/test_kr232_roundtrip.cpp
     unit/test_kr232_descriptor.cpp
     unit/test_target.cpp
+    unit/test_listing.cpp
     unit/test_kr216_encoder.cpp
     unit/test_kr216_object.cpp
     unit/test_kr216_image.cpp
