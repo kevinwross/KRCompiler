@@ -143,7 +143,7 @@ functions defined in the same image or resolved by the linker.
 - The linker defines `__heap_start` (the first byte past the image), `__heap_end` and `__stack_limit` (`0xE000`), and `__stack_top` (`0xF000`). The runtime heap is a first-fit free list over `__heap_start`..`__heap_end`: each block carries its payload size, a forward link, and a free flag, `free` merges with a free neighbour in either direction, and `malloc` splits a block when the remainder can hold a header and one aligned pair.
 - `puts` and `_start` live in `targets/kr16/runtime/crt0.s`. The startup object
   calls `main` through `MOV R0, #main; CALL R0`.
-- `krc -c --target=kr16` keeps the single-unit `.kex` path. `--emit-object`
+- `krc -c --target=kr16` keeps the single-unit `.kr16` path. `--emit-object`
   plus `krld` is the relocatable path.
 
 ## Object and relocation rules

@@ -241,7 +241,7 @@ inside kernel RAM):
 - Sections: `.text`, `.rodata`, `.data`, `.bss`, `.init_array`, `.fini_array` and
   `.kdbg`, plus a 4-byte `.reset` at `0x0100` for a kernel image.
 - Relocations are the common absolute and PC-relative families.
-- The image is a `.k232` container per [ADR 0058](decisions/0058-kr232-image-container.md):
+- The image is a `.kr232` container per [ADR 0058](decisions/0058-kr232-image-container.md):
   magic, container and ABI version, target id 5, sections, entry, image base and
   the embedded KDBG payload. `image_base` is 0 for a kernel image and
   `0x08000000` for a user image.

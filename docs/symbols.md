@@ -3,7 +3,7 @@
 **Status:** KDBG v1 frozen for the M4 subset; **v1.1 adds records additively**
 (major `1`, minor `1`) and does not change a v1 record's shape. Images carry one
 `.kdbg` debug section built from the textual `.debug_info` bridge. Both VM
-backends emit the bridge: KR32 for its GUI/DAP debugger, KR16 so a `.kex` can
+backends emit the bridge: KR32 for its GUI/DAP debugger, KR16 so a `.kr16` can
 carry `.kdbg` at all. The bridge remains an intermediate format; KDBG is the
 contract. See [ADR 0009](decisions/0009-kdbg-v1-freeze.md) and
 [ADR 0008](decisions/0008-debug-info-bridge.md).
@@ -12,7 +12,7 @@ contract. See [ADR 0009](decisions/0009-kdbg-v1-freeze.md) and
 
 ## Image encoding
 
-`.kdbg` is a single debug payload carried as a section of a `.k32` or `.kex`
+`.kdbg` is a single debug payload carried as a section of a `.kr32` or `.kr16`
 image. Its 64-byte header is:
 
 | Offset | Field |
@@ -35,10 +35,10 @@ image. Its 64-byte header is:
 | 56 | image base (u64, little-endian; 0 = not recorded) |
 
 Addresses in the payload are absolute in the image's load space. `attach_kdbg`
-runs after layout, and a `.kex` is mapped at the addresses in its section table
+runs after layout, and a `.kr16` is mapped at the addresses in its section table
 rather than relocated at load. The image base the payload was built for is the
 little-endian `u64` at offset 56; a reader compares it with the container's own
-base — the `.k32` header's base field, or the address of the `.kex`'s first
+base — the `.kr32` header's base field, or the address of the `.kr16`'s first
 section — and rejects a payload that records a different value. A payload that
 records zero predates the field and is accepted unchanged, so the write of the
 field does not invalidate an older image. No version bump and no record type is
@@ -197,8 +197,8 @@ paths are unchanged.
 
 ## Tooling
 
-- `krc --dump-symbols image.k32` prints canonical text for a `.k32` or `.kex`.
-- `krc --dump-symbols --json image.kex` prints the stable JSON form.
+- `krc --dump-symbols image.kr32` prints canonical text for a `.kr32` or `.kr16`.
+- `krc --dump-symbols --json image.kr16` prints the stable JSON form.
 - `krld` builds `.kdbg` from `.debug_info` after linking.
 - `include/krc/debug/kdbg.h` is the shared reader/writer; `krc::debug` packages it.
 

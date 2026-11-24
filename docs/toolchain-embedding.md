@@ -63,14 +63,14 @@ int main() {
                   << built.error << '\n';
         return 1;
     }
-    std::ofstream image("hello.k32", std::ios::binary);
+    std::ofstream image("hello.kr32", std::ios::binary);
     image.write(reinterpret_cast<const char*>(built.image.data()),
                 static_cast<std::streamsize>(built.image.size()));
 }
 ```
 
 `build` compiles every source in order, assembles each one and links the objects;
-the result is a `.k32` for `Target::Kr32` and a `.kex` for `Target::Kr16`. It
+the result is a `.kr32` for `Target::Kr32` and a `.kr16` for `Target::Kr16`. It
 links exactly the sources it was given. A runnable image also needs the target
 runtime and startup object: read those bytes, wrap them in
 `krc::toolchain::Object`, and call `link`, or assemble `targets/kr32/runtime/crt0.s`
@@ -164,7 +164,7 @@ or build tree is needed.
 
 A KR32 or KR16 compile produces the textual `.debug_info` bridge (`debug_info`),
 and `link` converts it to `.kdbg` for the image. `krc::debug::find_kdbg_section`
-locates `.kdbg` in a `.k32` or `.kex` and reports the container's load base;
+locates `.kdbg` in a `.kr32` or `.kr16` and reports the container's load base;
 `decode_kdbg_image` finds, decodes and rejects a payload whose recorded image
 base differs from that base. `encode_kdbg`, `decode_kdbg` and the text/JSON
 dumpers work on bytes and need no toolchain library.

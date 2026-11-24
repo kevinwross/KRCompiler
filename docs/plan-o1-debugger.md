@@ -9,8 +9,8 @@ twins); W4–W6 are not. `implementation.md` carries the measurements.
 ## What exists, measured today
 
 The container is documented in `docs/object.md` — *"KRO object and executable container"* — and it is
-a two-stage pipeline: `krc -c` writes a relocatable `.kro`, `krld` writes a `.k32` executable that
-carries `.text`, `.data`, `.cpp_except`, `.debug_info` and `.kdbg`. The VM loads the `.k32`.
+a two-stage pipeline: `krc -c` writes a relocatable `.kro`, `krld` writes a `.kr32` executable that
+carries `.text`, `.data`, `.cpp_except`, `.debug_info` and `.kdbg`. The VM loads the `.kr32`.
 
 The VM's debug interface is not one thing (`vm/krc_kr32.exe --help`):
 
@@ -51,7 +51,7 @@ in its frame slot, and that is the property a debugger depends on.
 - `-O1` images carry complete function, variable and type records, and 99.6% of the line records.
 - The suite pins the debug data at the default level: `krc_debug_c_variable`, `krc_debug_cxx_class`,
   `krc_debug_cxx_members`, `krc_debug_names`, `krc_debug_paths_relative` — all via `--dump-symbols` on
-  a linked `.k32`.
+  a linked `.kr32`.
 
 ## The gaps
 
