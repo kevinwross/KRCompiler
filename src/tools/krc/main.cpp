@@ -757,7 +757,20 @@ int main(int argc, char** argv) {
                                        emit_object;
         if (emit_assembly && !suppress_assembly) {
             if (output_path.empty()) {
-                std::cout << compiled.assembly;
+                // G8: generated assembly is a file named for its target, so
+                // prog.c produces prog.kr32.s rather than a stream a caller has
+                // to redirect. An explicit -o still wins.
+                const std::string target_label(
+                    krc::target::get_target(*target_id).name);
+                const std::filesystem::path generated =
+                    std::filesystem::path(std::filesystem::path(input).filename())
+                        .replace_extension("." + target_label + ".s");
+                if (!write_text_file(generated, compiled.assembly, error)) {
+                    diagnostics.push_back(
+                        error_diagnostic("cannot open assembly output '" +
+                                         generated.string() + "'"));
+                    failed = true;
+                }
             } else if (!write_text_file(output_path, compiled.assembly, error)) {
                 diagnostics.push_back(
                     error_diagnostic("cannot open assembly output '" +

@@ -20,12 +20,18 @@ endif()
 file(MAKE_DIRECTORY "${WORK}")
 
 # The assembly carries the frame record.
-execute_process(COMMAND "${KRC}" -S --target kr232 "${FIXTURE}"
+execute_process(COMMAND "${KRC}" -S --target kr232 "${FIXTURE}" -o "${WORK}/frame.s"
                 OUTPUT_VARIABLE assembly ERROR_VARIABLE assembly_error
                 RESULT_VARIABLE assembled)
 if(NOT assembled EQUAL 0)
     message(FATAL_ERROR "emitting assembly failed:\n${assembly_error}")
 endif()
+# -S writes a file named for the target unless -o names one; the records are
+# read from that file rather than from stdout.
+if(NOT EXISTS "${WORK}/frame.s")
+    message(FATAL_ERROR "krc -S wrote no ${WORK}/frame.s")
+endif()
+file(READ "${WORK}/frame.s" assembly)
 
 string(REGEX MATCHALL ".debug_var [^\n]*" records "${assembly}")
 if(records STREQUAL "")

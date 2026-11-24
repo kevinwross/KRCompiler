@@ -48,18 +48,22 @@ message(STATUS "both builds hash ${first}")
 
 # The assembly text must be identical too: byte-identical images are meaningless
 # if the text that produced them is not reproducible.
-execute_process(COMMAND "${KRC}" -S --target kr232 "${SOURCE}"
-                OUTPUT_VARIABLE first_assembly ERROR_VARIABLE assembly_error
+# -S writes a file named for the target, so the two runs name their outputs
+# explicitly and the comparison reads the files rather than stdout.
+execute_process(COMMAND "${KRC}" -S --target kr232 "${SOURCE}" -o "${WORK}/first.s"
+                OUTPUT_VARIABLE first_ignored ERROR_VARIABLE assembly_error
                 RESULT_VARIABLE assembly_result)
 if(NOT assembly_result EQUAL 0)
     message(FATAL_ERROR "emitting assembly failed: ${assembly_error}")
 endif()
-execute_process(COMMAND "${KRC}" -S --target kr232 "${SOURCE}"
-                OUTPUT_VARIABLE second_assembly ERROR_VARIABLE assembly_error
+execute_process(COMMAND "${KRC}" -S --target kr232 "${SOURCE}" -o "${WORK}/second.s"
+                OUTPUT_VARIABLE second_ignored ERROR_VARIABLE assembly_error
                 RESULT_VARIABLE assembly_result)
 if(NOT assembly_result EQUAL 0)
     message(FATAL_ERROR "emitting assembly failed: ${assembly_error}")
 endif()
+file(READ "${WORK}/first.s" first_assembly)
+file(READ "${WORK}/second.s" second_assembly)
 if(NOT first_assembly STREQUAL second_assembly)
     message(FATAL_ERROR "two -S runs differ")
 endif()

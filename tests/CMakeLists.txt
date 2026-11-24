@@ -121,8 +121,9 @@ if(TARGET krc)
         PASS_REGULAR_EXPRESSION "kr232  register  pointer=32  data=ilp32  backend=yes")
 
     add_test(NAME krc_kr232_prologue
-        COMMAND $<TARGET_FILE:krc> --target=kr232 -S
-                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_min.c")
+        COMMAND ${CMAKE_COMMAND} "-DKRC=$<TARGET_FILE:krc>"
+                "-DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_min.c"
+                -DTARGET=kr232 -P "${CMAKE_CURRENT_SOURCE_DIR}/emit_asm.cmake")
     set_tests_properties(krc_kr232_prologue PROPERTIES
         PASS_REGULAR_EXPRESSION "enter #0, #0")
 
@@ -137,8 +138,9 @@ if(TARGET krc)
     # A frame-size check at the boundary: one int local is one 4-byte slot, so the
     # prologue's ENTER immediate must be 4.
     add_test(NAME krc_kr232_frame
-        COMMAND $<TARGET_FILE:krc> --target=kr232 -S
-                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_frame.c")
+        COMMAND ${CMAKE_COMMAND} "-DKRC=$<TARGET_FILE:krc>"
+                "-DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr232_frame.c"
+                -DTARGET=kr232 -P "${CMAKE_CURRENT_SOURCE_DIR}/emit_asm.cmake")
     set_tests_properties(krc_kr232_frame PROPERTIES
         PASS_REGULAR_EXPRESSION "enter #0, #0")
 
@@ -582,8 +584,9 @@ if(TARGET krc)
     set_tests_properties(krc_kr16_ir PROPERTIES PASS_REGULAR_EXPRESSION "; target: kr16")
 
     add_test(NAME krc_kr16_assembly
-        COMMAND $<TARGET_FILE:krc> -S --target=kr16
-                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c")
+        COMMAND ${CMAKE_COMMAND} "-DKRC=$<TARGET_FILE:krc>"
+                "-DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr16_sum.c"
+                -DTARGET=kr16 -P "${CMAKE_CURRENT_SOURCE_DIR}/emit_asm.cmake")
     # A call target is an address, not a sixteen-bit immediate: the assembler
     # cannot resolve a symbol to one, so the call materialises it with LEA.
     set_tests_properties(krc_kr16_assembly PROPERTIES
@@ -2186,13 +2189,15 @@ if(TARGET krc)
     set_tests_properties(krc_c_dump_ir PROPERTIES PASS_REGULAR_EXPRESSION "define i32 @main")
 
     add_test(NAME krc_c_emit_hello_asm
-        COMMAND $<TARGET_FILE:krc> -S
-                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c")
+        COMMAND ${CMAKE_COMMAND} "-DKRC=$<TARGET_FILE:krc>"
+                "-DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/hello.c"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/emit_asm.cmake")
     set_tests_properties(krc_c_emit_hello_asm PROPERTIES PASS_REGULAR_EXPRESSION "CALL putchar")
 
     add_test(NAME krc_c_emit_mainentry_asm
-        COMMAND $<TARGET_FILE:krc> -S
-                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/mainentry.c")
+        COMMAND ${CMAKE_COMMAND} "-DKRC=$<TARGET_FILE:krc>"
+                "-DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/mainentry.c"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/emit_asm.cmake")
     set_tests_properties(krc_c_emit_mainentry_asm PROPERTIES PASS_REGULAR_EXPRESSION "CALL printf")
 
     add_test(NAME krc_c_emit_conflict
