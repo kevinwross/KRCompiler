@@ -88,12 +88,17 @@ fi
 echo "kr-mirror: $source_root -> $mirror"
 if [ -n "$extra" ]; then
     echo "kr-mirror: extra exclusions from $extra"
-    rsync -a --delete \
+    # --checksum --no-times: compare content, and stamp a transferred file with the
+    # current time. With -t the mirror keeps the source's mtime, so a refreshed
+    # file can look older than the object built from its previous version and
+    # ninja skips it -- which is how a stale krc kept rejecting .GLOBL after the
+    # source had been fixed and synced.
+    rsync -a --checksum --no-times --delete \
         --exclude 'build/' --exclude '.git/' --exclude '*.tmp' \
         --exclude-from "$extra" \
         "$source_root"/ "$mirror"/
 else
-    rsync -a --delete \
+    rsync -a --checksum --no-times --delete \
         --exclude 'build/' --exclude '.git/' --exclude '*.tmp' \
         --exclude 'third_party/' \
         "$source_root"/ "$mirror"/
