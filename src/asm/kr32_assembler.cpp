@@ -342,6 +342,7 @@ bool parse_memory(std::string_view text, MemoryOperand& memory, std::string& err
 
     std::string_view base_text = text;
     std::string_view rest;
+    std::int64_t absolute_value = 0;
     const auto plus = text.find_first_of("+-");
     if (plus != std::string_view::npos) {
         base_text = trim(text.substr(0, plus));
@@ -360,6 +361,16 @@ bool parse_memory(std::string_view text, MemoryOperand& memory, std::string& err
             memory.mode = 5;
             memory.symbol = std::string(base_text);
             memory.has_symbol = true;
+            memory.base = 0;
+            return true;
+        } else if (rest.empty() && parse_integer(base_text, absolute_value)) {
+            // `[0x1100]` is an absolute address too: the kr32os sources reach a
+            // vector slot through a constant, which the parser has already
+            // substituted, so the numeric form has to mean what the symbolic one
+            // does rather than falling through to "invalid base".
+            memory.mode = 5;
+            memory.displacement = static_cast<std::int32_t>(absolute_value);
+            memory.has_symbol = false;
             memory.base = 0;
             return true;
         } else {
