@@ -677,6 +677,9 @@ private:
     std::unordered_set<std::string> external_names_;
     std::unordered_map<std::string, std::uint32_t> addresses_;
     std::unordered_map<std::string, Section> labels_;
+    // `.equ NAME, VALUE` constants, substituted into operands as they are parsed:
+    // the kr32os sources define offsets this way and then use them in immediates.
+    std::unordered_map<std::string, std::int64_t> constants_;
     std::size_t text_size_ = 0;
     std::size_t data_size_ = 0;
     std::size_t exception_size_ = 0;
@@ -685,6 +688,7 @@ private:
 
 bool Assembler::parse(std::string_view source, std::string& error) {
     Section section = Section::Text;
+    bool debug_info_section = false;
     std::size_t line_number = 0;
     std::size_t position = 0;
     while (position <= source.size()) {
@@ -755,6 +759,79 @@ bool Assembler::parse(std::string_view source, std::string& error) {
                 item.text = std::string(line);
                 item.operands.push_back(std::to_string(value));
                 items_.push_back(std::move(item));
+            } else if (directive == ".RODATA" || directive == ".BSS") {
+                // kr32os names its read-only and zero-filled data separately; both
+                // land in the data section, which is what the old assembler's
+                // `.rodata`/`.bss` produced before the linker saw them.
+                section = Section::Data;
+            } else if (directive == ".DEBUG_INFO") {
+                // The sources carry debug strings for the retired toolchain's KDBG.
+                // This compiler builds KDBG from its own bridge, so the directive is
+                // accepted and its contents are not emitted.
+                debug_info_section = true;
+            } else if (directive == ".SECTION") {
+                const auto name = trim(rest);
+                if (name == ".text") {
+                    section = Section::Text;
+                    debug_info_section = false;
+                } else if (name == ".data" || name == ".rodata" || name == ".bss") {
+                    section = Section::Data;
+                    debug_info_section = false;
+                } else if (name == ".debug_info") {
+                    debug_info_section = true;
+                } else {
+                    error = "line " + std::to_string(line_number) + ": unsupported section " +
+                            std::string(name);
+                    return false;
+                }
+            } else if (directive == ".FILE") {
+                // A source-name hint for debuggers; this toolchain reads the path
+                // from the file it was given.
+            } else if (directive == ".EQU") {
+                const auto comma = rest.find(',');
+                if (comma == std::string_view::npos) {
+                    error = "line " + std::to_string(line_number) + ": .equ expects NAME, VALUE";
+                    return false;
+                }
+                const auto name = std::string(trim(rest.substr(0, comma)));
+                std::int64_t value = 0;
+                if (name.empty() || !parse_integer(trim(rest.substr(comma + 1)), value)) {
+                    error = "line " + std::to_string(line_number) + ": invalid .equ";
+                    return false;
+                }
+                constants_[name] = value;
+            } else if (directive == ".ASCIZ") {
+                auto text = trim(rest);
+                if (text.size() >= 2 && text.front() == '"' && text.back() == '"') {
+                    text = text.substr(1, text.size() - 2);
+                }
+                if (!debug_info_section) {
+                    Item item;
+                    item.kind = ItemKind::Bytes;
+                    item.section = section;
+                    item.line = line_number;
+                    item.text = std::string(line);
+                    for (const auto character : text) {
+                        item.operands.push_back(std::to_string(static_cast<unsigned char>(character)));
+                    }
+                    item.operands.push_back("0");
+                    items_.push_back(std::move(item));
+                }
+            } else if (directive == ".SPACE") {
+                std::int64_t size = 0;
+                if (!parse_integer(rest, size) || size < 0) {
+                    error = "line " + std::to_string(line_number) + ": invalid .space";
+                    return false;
+                }
+                if (!debug_info_section) {
+                    Item item;
+                    item.kind = ItemKind::Zero;
+                    item.section = section;
+                    item.line = line_number;
+                    item.text = std::string(line);
+                    item.operands.push_back(std::to_string(size));
+                    items_.push_back(std::move(item));
+                }
             } else if (directive == ".BYTE" || directive == ".WORD" || directive == ".ZERO") {
                 Item item;
                 item.kind = directive == ".BYTE" ? ItemKind::Bytes
