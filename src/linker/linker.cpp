@@ -407,7 +407,7 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
         // the whole address space is 64 KiB and the merged `.debug_info` for a
         // runtime exceeds it, which overflowed a relocation's 16-bit width.
         // `__heap_start` must stay the byte after the loaded image as well.
-        if (section.type == KroSectionType::Debug) {
+        if ((section.flags & 0x0001u) == 0) {
             output.address = 0;
         } else {
             const auto placement = options.section_addresses.find(section.name);

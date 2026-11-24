@@ -65,7 +65,7 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
             error = "a section alignment is not a power of two";
             return false;
         }
-        if (section.flags == 0) {
+        if ((section.flags & 0x0001u) == 0) {
             continue;  // unallocated, such as a debug section
         }
         const std::uint64_t start = section.address;
