@@ -87,4 +87,19 @@ struct TargetProfile {
 [[nodiscard]] const TargetProfile& get_target(TargetId id);
 [[nodiscard]] std::span<const TargetProfile> target_profiles() noexcept;
 
+// The extension a runnable image of `id` carries: ".kr32", ".kr16", ".kr64",
+// ".kr216", ".kr232". This is the one table; a tool that needs the name asks
+// here rather than carrying its own list. Objects add ".kro" after the same
+// stem, and raw link output is ".flat".
+[[nodiscard]] std::string_view image_extension(TargetId id) noexcept;
+
+// The target a *known* image extension names, or nothing for any other suffix.
+// A caller uses this to decide whether a name contradicts an image header: an
+// unknown suffix names no target and must be accepted, because people write
+// program.kr32.backup and mean it.
+[[nodiscard]] std::optional<TargetId> target_for_extension(std::string_view extension) noexcept;
+
+// True when `extension` is a known image extension, with or without its dot.
+[[nodiscard]] bool is_image_extension(std::string_view extension) noexcept;
+
 }  // namespace krc::target

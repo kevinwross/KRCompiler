@@ -258,5 +258,48 @@ const TargetProfile& get_target(TargetId id) {
 }
 
 std::span<const TargetProfile> target_profiles() noexcept { return kProfiles; }
+namespace {
+
+struct ExtensionRow {
+    std::string_view extension;
+    TargetId id;
+};
+
+// One row per runnable target. A target without a row is a target whose images
+// cannot be named, which the unit test treats as a defect rather than a default.
+constexpr std::array<ExtensionRow, 5> kExtensions{{
+    {".kr32", TargetId::Kr32},
+    {".kr16", TargetId::Kr16},
+    {".kr64", TargetId::Kr64},
+    {".kr216", TargetId::Kr216},
+    {".kr232", TargetId::Kr232},
+}};
+
+}  // namespace
+
+std::string_view image_extension(TargetId id) noexcept {
+    for (const auto& row : kExtensions) {
+        if (row.id == id) {
+            return row.extension;
+        }
+    }
+    return {};
+}
+
+std::optional<TargetId> target_for_extension(std::string_view extension) noexcept {
+    if (!extension.empty() && extension.front() != '.') {
+        return std::nullopt;
+    }
+    for (const auto& row : kExtensions) {
+        if (row.extension == extension) {
+            return row.id;
+        }
+    }
+    return std::nullopt;
+}
+
+bool is_image_extension(std::string_view extension) noexcept {
+    return target_for_extension(extension).has_value();
+}
 
 }  // namespace krc::target

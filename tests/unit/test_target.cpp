@@ -117,3 +117,24 @@ TEST_CASE("target names parse and enumerate") {
     CHECK_FALSE(parse_target("unknown").has_value());
     CHECK(target_profiles().size() == 5);
 }
+TEST_CASE("the extension table names every runnable target") {
+    // G1 of the build cleanup plan: one table owns the extensions, so no tool
+    // carries its own list and a new target cannot ship without a name.
+    for (const TargetProfile& profile : target_profiles()) {
+        const auto extension = krc::target::image_extension(profile.id);
+        REQUIRE_FALSE(extension.empty());
+        CHECK(extension.front() == '.');
+        CHECK(krc::target::target_for_extension(extension) == profile.id);
+        CHECK(krc::target::is_image_extension(extension));
+    }
+    CHECK(krc::target::image_extension(TargetId::Kr32) == ".kr32");
+    CHECK(krc::target::image_extension(TargetId::Kr216) == ".kr216");
+    CHECK(krc::target::image_extension(TargetId::Kr232) == ".kr232");
+
+    // An unknown suffix names no target, which is what makes oddball names legal.
+    CHECK_FALSE(krc::target::target_for_extension(".backup").has_value());
+    CHECK_FALSE(krc::target::target_for_extension(".k32").has_value());
+    CHECK_FALSE(krc::target::target_for_extension("kr32").has_value());
+    CHECK_FALSE(krc::target::target_for_extension("").has_value());
+    CHECK_FALSE(krc::target::is_image_extension(".kex"));
+}
