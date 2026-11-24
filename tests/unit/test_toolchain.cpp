@@ -256,7 +256,7 @@ TEST_CASE("The facade compiles, assembles and links a debuggable KR16 image") {
     // function is `add`.
     CHECK(built.entry > built.base);
 
-    // 4.10: a krc-built `.kex` decodes with sources, lines, functions and a
+    // 4.10: a krc-built `.kr16` decodes with sources, lines, functions and a
     // variable, and the payload records the base it was built for.
     krc::debug::KdbgImage image;
     std::string error;

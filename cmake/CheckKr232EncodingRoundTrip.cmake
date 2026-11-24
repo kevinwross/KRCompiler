@@ -58,12 +58,12 @@ if(NOT compiled EQUAL 0)
     message(FATAL_ERROR "assembling the spellings failed:\n${compile_error}")
 endif()
 execute_process(COMMAND "${KRLD}" --entry=_start "${WORK}/roundtrip.o"
-                        -o "${WORK}/roundtrip.k232"
+                        -o "${WORK}/roundtrip.kr232"
                 RESULT_VARIABLE linked ERROR_VARIABLE link_error)
 if(NOT linked EQUAL 0)
     message(FATAL_ERROR "linking the spellings failed:\n${link_error}")
 endif()
-execute_process(COMMAND "${DIS}" "${WORK}/roundtrip.k232"
+execute_process(COMMAND "${DIS}" "${WORK}/roundtrip.kr232"
                 OUTPUT_VARIABLE disassembly ERROR_VARIABLE dis_error
                 RESULT_VARIABLE disassembled)
 if(NOT disassembled EQUAL 0)

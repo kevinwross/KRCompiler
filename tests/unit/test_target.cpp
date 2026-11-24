@@ -133,8 +133,12 @@ TEST_CASE("the extension table names every runnable target") {
 
     // An unknown suffix names no target, which is what makes oddball names legal.
     CHECK_FALSE(krc::target::target_for_extension(".backup").has_value());
+    // G2 deleted the old names, so they are unknown now: the four that used to
+    // be extensions name no target, and neither does a bare stem without a dot.
     CHECK_FALSE(krc::target::target_for_extension(".k32").has_value());
-    CHECK_FALSE(krc::target::target_for_extension("kr32").has_value());
+    CHECK_FALSE(krc::target::target_for_extension("k32").has_value());
     CHECK_FALSE(krc::target::target_for_extension("").has_value());
     CHECK_FALSE(krc::target::is_image_extension(".kex"));
+    CHECK_FALSE(krc::target::is_image_extension(".k232"));
+    CHECK_FALSE(krc::target::is_image_extension(".k216"));
 }

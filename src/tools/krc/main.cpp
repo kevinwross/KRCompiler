@@ -40,17 +40,17 @@ void print_usage(std::ostream& out) {
         << "  --dump-stats           Print IR instruction and block counts per function\n"
         << "  -O0                    Straightforward lowering (the default)\n"
         << "  -O1                    The optimiser passes plan.md 8.8 lists\n"
-        << "  --dump-symbols FILE    Dump KDBG symbols from a .k32 or .kex image\n"
+        << "  --dump-symbols FILE    Dump KDBG symbols from a .kr32 or .kr16 image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
         << "  -S                     Emit KR32 assembly to stdout, or to -o FILE\n"
         << "  -c                     Emit a relocatable KRO object\n"
-        << "  --emit-object          Write a KR16 KRO object instead of .kex\n"
+        << "  --emit-object          Write a KR16 KRO object instead of .kr16\n"
         << "  -o FILE                Output path for -S or -c\n"
         << "  -I DIR                 Add an include search directory\n"
         << "  --sysroot DIR          Use DIR as the target sysroot\n"
         << "\n"
         << "KR32 code generation is complete for the implemented C and C++ subset;\n"
-        << "KR16 compiles C to a .kex image or a KRO object, and KR64 has no backend.\n";
+        << "KR16 compiles C to a .kr16 image or a KRO object, and KR64 has no backend.\n";
 }
 
 int fail(std::string_view message) {
@@ -581,7 +581,7 @@ int main(int argc, char** argv) {
             return fail(error);
         }
         krc::debug::KdbgImage image;
-        // A `.k232` container is not a KDBG image: its debug payload is the
+        // A `.kr232` container is not a KDBG image: its debug payload is the
         // `.kdbg` section, which is decoded directly.
         const bool is_container = bytes.size() >= 4 && bytes[0] == 'K' && bytes[1] == '2' &&
                                   bytes[2] == '3' && bytes[3] == '2';
@@ -836,7 +836,7 @@ int main(int argc, char** argv) {
                     failed = true;
                     continue;
                 }
-                if (!write_binary_file(emit_path(".kex"), linked.image, error)) {
+                if (!write_binary_file(emit_path(".kr16"), linked.image, error)) {
                     diagnostics.push_back(error_diagnostic(error));
                     failed = true;
                 }

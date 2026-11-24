@@ -7,7 +7,7 @@
 
 namespace krc::image {
 
-// Reads one section's payload out of a `.k232` container (ADR 0058) by name. A
+// Reads one section's payload out of a `.kr232` container (ADR 0058) by name. A
 // tool that only needs the debug payload — `krc --dump-symbols` — uses this
 // rather than a full image loader. False when the magic is not K232, when the
 // section table runs past the buffer, or when the section is absent; each error

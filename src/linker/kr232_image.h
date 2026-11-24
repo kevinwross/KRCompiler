@@ -8,7 +8,7 @@
 
 namespace krc::linker {
 
-// The `.k232` container of ADR 0058: a 64-byte header, the section payloads, a
+// The `.kr232` container of ADR 0058: a 64-byte header, the section payloads, a
 // table of 32-byte section records, and a string table.
 struct Kr232Section {
     std::string name;

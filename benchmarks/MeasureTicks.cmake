@@ -50,7 +50,7 @@ foreach(program IN LISTS PROGRAMS)
     file(TO_NATIVE_PATH "${program}" source_native)
 
     # KR32: the image links against the staged runtime through the same script the tests use.
-    set(image32 "${WORK_DIR}/${name}.k32")
+    set(image32 "${WORK_DIR}/${name}.kr32")
     file(TO_NATIVE_PATH "${image32}" image32_native)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"
@@ -76,8 +76,8 @@ foreach(program IN LISTS PROGRAMS)
         file(APPEND "${OUT}" "${name}\tkr32\t-\t-\tno-vm\n")
     endif()
 
-    # KR16: host-linked .kex through its own script, as the tests do.
-    set(image16 "${WORK_DIR}/${name}.kex")
+    # KR16: host-linked .kr16 through its own script, as the tests do.
+    set(image16 "${WORK_DIR}/${name}.kr16")
     file(TO_NATIVE_PATH "${image16}" image16_native)
     execute_process(
         COMMAND "${CMAKE_COMMAND}"

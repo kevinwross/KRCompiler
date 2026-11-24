@@ -80,7 +80,7 @@ if(DEFINED EXTRA AND NOT EXTRA STREQUAL "")
 endif()
 
 execute_process(COMMAND "${KRLD}" --entry=_start ${link_inputs}
-                        -o "${WORK}/kr232_program.k232"
+                        -o "${WORK}/kr232_program.kr232"
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "linking failed: ${output}${error}")
@@ -96,7 +96,7 @@ if(DEFINED EXPECT_FRAME AND NOT EXPECT_FRAME STREQUAL "")
     list(APPEND run_args --frame-hash)
 endif()
 
-execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.k232" --max-steps 200000
+execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.kr232" --max-steps 200000
                         ${run_args}
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(DEFINED EXPECT_EXIT AND NOT EXPECT_EXIT STREQUAL "" AND NOT result EQUAL EXPECT_EXIT)

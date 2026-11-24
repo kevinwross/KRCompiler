@@ -9,7 +9,7 @@
 
 namespace krc::linker {
 
-// Writes a minimal KR16 EXEC container (.kex) containing one allocated text
+// Writes a minimal KR16 EXEC container (.kr16) containing one allocated text
 // section and the shared string table. Symbols and debug sections are omitted
 // until the KR16 linker can produce them.
 [[nodiscard]] bool write_kr16_image(const std::vector<std::uint8_t>& text,

@@ -31,15 +31,15 @@ foreach(round 1 2)
     endif()
     execute_process(COMMAND "${KRLD}" --entry=_start
                             "${WORK}/det_crt0_${round}.o" "${WORK}/det_program_${round}.o"
-                            -o "${WORK}/det_${round}.k232"
+                            -o "${WORK}/det_${round}.kr232"
                     RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
     if(NOT result EQUAL 0)
         message(FATAL_ERROR "linking failed: ${output}${error}")
     endif()
 endforeach()
 
-file(SHA256 "${WORK}/det_1.k232" first)
-file(SHA256 "${WORK}/det_2.k232" second)
+file(SHA256 "${WORK}/det_1.kr232" first)
+file(SHA256 "${WORK}/det_2.kr232" second)
 if(NOT first STREQUAL second)
     message(FATAL_ERROR "two builds differ: ${first} vs ${second}")
 endif()

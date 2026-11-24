@@ -737,7 +737,7 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
     kdbg.target_id = image.target_id;
     kdbg.abi_version = 1;
     // The payload's addresses are absolute in the image's load space, and a
-    // `.kex` is mapped at its section addresses rather than relocated. Recording
+    // `.kr16` is mapped at its section addresses rather than relocated. Recording
     // the base lets a reader reject a payload built for a different image
     // instead of placing breakpoints at addresses that mean nothing.
     //

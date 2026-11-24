@@ -259,8 +259,8 @@ struct BuildResult {
                                       std::string_view debug_info,
                                       const Options& options);
 
-// Links object bytes into the target's executable container: a `.k32` image for
-// KR32 and a `.kex` image for KR16. The target and the base default are inferred
+// Links object bytes into the target's executable container: a `.kr32` image for
+// KR32 and a `.kr16` image for KR16. The target and the base default are inferred
 // from the objects; `options.target` does not override the objects.
 [[nodiscard]] LinkResult link(std::span<const Object> objects,
                               const Options& options);

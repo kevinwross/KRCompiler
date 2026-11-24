@@ -104,12 +104,12 @@ if(NOT object_state EQUAL 0)
     message(FATAL_ERROR "compiling the fixture failed:\n${object_error}")
 endif()
 execute_process(COMMAND "${KRLD}" --entry=_start "${WORK}/crt0.o" "${WORK}/frame.o"
-                        -o "${WORK}/frame.k232"
+                        -o "${WORK}/frame.kr232"
                 RESULT_VARIABLE link_state ERROR_VARIABLE link_error)
 if(NOT link_state EQUAL 0)
     message(FATAL_ERROR "linking the fixture failed:\n${link_error}")
 endif()
-execute_process(COMMAND "${VM}" vm "${WORK}/frame.k232"
+execute_process(COMMAND "${VM}" vm "${WORK}/frame.kr232"
                 OUTPUT_VARIABLE output ERROR_VARIABLE error
                 RESULT_VARIABLE result)
 if(NOT result EQUAL EXPECT_EXIT)

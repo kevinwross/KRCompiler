@@ -24,7 +24,7 @@ class Kr16Backend {
     [[nodiscard]] std::optional<std::string> emit(std::string& error) const;
     // The textual `.debug_info` bridge for the functions this backend emitted.
     // Same record format as Kr32Backend's; `attach_kdbg` converts it while
-    // linking, and a `.kex` carries the result as `.kdbg`.
+    // linking, and a `.kr16` carries the result as `.kdbg`.
     [[nodiscard]] const std::string& debug_info() const { return debug_info_; }
     // The frame this function needs, in bytes, for `--dump-stats` (S4's metric).
     [[nodiscard]] std::uint32_t frame_bytes(const ir::Function& function) const;

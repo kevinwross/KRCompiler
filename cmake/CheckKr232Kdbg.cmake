@@ -27,12 +27,12 @@ if(NOT result EQUAL 0)
 endif()
 execute_process(COMMAND "${KRLD}" --entry=_start
                         "${WORK}/kdbg_crt0.o" "${WORK}/kdbg_program.o"
-                        -o "${WORK}/kdbg.k232"
+                        -o "${WORK}/kdbg.kr232"
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "linking failed: ${output}${error}")
 endif()
-execute_process(COMMAND "${KRC}" --dump-symbols "${WORK}/kdbg.k232"
+execute_process(COMMAND "${KRC}" --dump-symbols "${WORK}/kdbg.kr232"
                 RESULT_VARIABLE result OUTPUT_VARIABLE dump ERROR_VARIABLE error)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "the dump failed: ${output}${error}")

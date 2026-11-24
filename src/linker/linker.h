@@ -59,7 +59,7 @@ struct LinkedImage {
 [[nodiscard]] bool link_objects(std::span<const KroObject> objects, const LinkOptions& options,
                                 LinkedImage& image, std::string& error);
 
-// Writes a KR32 `.k32` executable image from the linked model.
+// Writes a KR32 `.kr32` executable image from the linked model.
 [[nodiscard]] bool write_kr32_executable(const LinkedImage& image,
                                          std::vector<std::uint8_t>& bytes,
                                          std::string& error);
