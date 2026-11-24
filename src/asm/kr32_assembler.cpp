@@ -137,6 +137,26 @@ std::vector<std::string> split_operands(std::string_view text) {
     return result;
 }
 
+// `CRn` names one of the sixteen control registers, which RDCR and WRCR carry in
+// the field bits rather than in a general register.
+bool parse_control_register(std::string_view text, std::uint8_t& reg) {
+    if (text.size() < 3 || (text[0] != 'C' && text[0] != 'c') ||
+        (text[1] != 'R' && text[1] != 'r')) {
+        return false;
+    }
+    int value = 0;
+    for (std::size_t index = 2; index < text.size(); ++index) {
+        if (!std::isdigit(static_cast<unsigned char>(text[index]))) {
+            return false;
+        }
+        value = value * 10 + (text[index] - '0');
+        if (value > 15) {
+            return false;
+        }
+    }
+    reg = static_cast<std::uint8_t>(value);
+    return true;
+}
 bool parse_register(std::string_view text, std::uint8_t& reg) {
     if (text.size() < 2 || (text[0] != 'R' && text[0] != 'r')) {
         return false;
@@ -560,6 +580,21 @@ bool instruction_layout(const Item& item, bool& extension, std::string& error) {
         extension = !parse_register(operands[0], target_register);
         return operands.size() == 1;
     }
+    if (mnemonic == "BRK" || mnemonic == "IRET" || mnemonic == "PUSHR" ||
+        mnemonic == "POPR") {
+        return operands.empty();
+    }
+    if (mnemonic == "WRCR" && operands.size() == 2) {
+        std::uint8_t control = 0;
+        std::uint8_t data = 0;
+        return parse_control_register(operands[0], control) && parse_register(operands[1], data);
+    }
+    if (mnemonic == "RDCR" && operands.size() == 2) {
+        std::uint8_t control = 0;
+        std::uint8_t destination = 0;
+        return parse_register(operands[0], destination) &&
+               parse_control_register(operands[1], control);
+    }
     if (mnemonic == "RET" || mnemonic == "HALT") {
         return operands.empty();
     }
@@ -680,6 +715,30 @@ private:
     // `.equ NAME, VALUE` constants, substituted into operands as they are parsed:
     // the kr32os sources define offsets this way and then use them in immediates.
     std::unordered_map<std::string, std::int64_t> constants_;
+    // Replaces every identifier that names a constant with its value. Identifiers
+    // that are not constants are left alone, so labels and registers pass through.
+    std::string substitute_constants(std::string_view text) const {
+        std::string out;
+        std::size_t index = 0;
+        while (index < text.size()) {
+            const auto character = text[index];
+            if (std::isalpha(static_cast<unsigned char>(character)) || character == '_') {
+                std::size_t end = index;
+                while (end < text.size() &&
+                       (std::isalnum(static_cast<unsigned char>(text[end])) || text[end] == '_')) {
+                    ++end;
+                }
+                const std::string name(text.substr(index, end - index));
+                const auto found = constants_.find(name);
+                out += found == constants_.end() ? name : std::to_string(found->second);
+                index = end;
+                continue;
+            }
+            out.push_back(character);
+            ++index;
+        }
+        return out;
+    }
     std::size_t text_size_ = 0;
     std::size_t data_size_ = 0;
     std::size_t exception_size_ = 0;
@@ -819,7 +878,7 @@ bool Assembler::parse(std::string_view source, std::string& error) {
                 }
             } else if (directive == ".SPACE") {
                 std::int64_t size = 0;
-                if (!parse_integer(rest, size) || size < 0) {
+                if (!parse_integer(substitute_constants(rest), size) || size < 0) {
                     error = "line " + std::to_string(line_number) + ": invalid .space";
                     return false;
                 }
@@ -848,7 +907,9 @@ bool Assembler::parse(std::string_view source, std::string& error) {
                     }
                     item.operands.push_back(parts.front());
                 } else {
-                    item.operands = parts;
+                    for (const auto& part : parts) {
+                        item.operands.push_back(substitute_constants(part));
+                    }
                 }
                 items_.push_back(std::move(item));
             } else {
@@ -870,9 +931,11 @@ bool Assembler::parse(std::string_view source, std::string& error) {
         item.text = std::string(line);
         item.mnemonic = std::string(space == std::string_view::npos ? line
                                                                     : line.substr(0, space));
-        item.operands = space == std::string_view::npos
-                            ? std::vector<std::string>{}
-                            : split_operands(line.substr(space + 1));
+        if (space != std::string_view::npos) {
+            for (const auto& operand : split_operands(line.substr(space + 1))) {
+                item.operands.push_back(substitute_constants(operand));
+            }
+        }
         items_.push_back(std::move(item));
         if (end == source.size()) {
             break;
@@ -1076,7 +1139,8 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
         std::uint8_t rd = 0;
         if (!operands.empty() && !parse_register(operands[0], rd) && mnemonic != "RET" &&
             mnemonic != "HALT" && mnemonic != "ADJSP" && mnemonic != "JMP" &&
-            mnemonic != "CALL" && mnemonic != "SYSCALL" &&
+            mnemonic != "CALL" && mnemonic != "SYSCALL" && mnemonic != "WRCR" &&
+            mnemonic != "RDCR" &&
             condition_for(mnemonic) == std::nullopt && !fp_function(mnemonic) &&
             !is_tile_operation(mnemonic) &&
             mnemonic.rfind("FLOAD", 0) != 0 && mnemonic.rfind("FSTORE", 0) != 0) {
@@ -1268,6 +1332,26 @@ bool Assembler::encode_items(AssemblyResult& result, std::string& error) {
                                      false, 0, false, 0);
         } else if (mnemonic == "WRSP") {
             encoded = encode_or_fail(Opcode::Wrsp, rd, 0, 0, false, 0, false, 0);
+        } else if (mnemonic == "BRK") {
+            encoded = encode_or_fail(Opcode::Brk, 0, 0, 0, false, 0, false, 0);
+        } else if (mnemonic == "IRET") {
+            encoded = encode_or_fail(Opcode::Iret, 0, 0, 0, false, 0, false, 0);
+        } else if (mnemonic == "PUSHR") {
+            encoded = encode_or_fail(Opcode::PushR, 0, 0, 0, false, 0, false, 0);
+        } else if (mnemonic == "POPR") {
+            encoded = encode_or_fail(Opcode::PopR, 0, 0, 0, false, 0, false, 0);
+        } else if (mnemonic == "WRCR") {
+            std::uint8_t control = 0;
+            std::uint8_t data = 0;
+            parse_control_register(operands[0], control);
+            parse_register(operands[1], data);
+            encoded = encode_or_fail(Opcode::WrCr, data, 0, control, false, 0, false, 0);
+        } else if (mnemonic == "RDCR") {
+            std::uint8_t control = 0;
+            std::uint8_t destination = 0;
+            parse_register(operands[0], destination);
+            parse_control_register(operands[1], control);
+            encoded = encode_or_fail(Opcode::RdCr, destination, 0, control, false, 0, false, 0);
         } else if (mnemonic == "SETSP") {
             encoded = encode_or_fail(Opcode::Setsp, 0, rd, 0, false, 0, false, 0);
         } else if (mnemonic == "JMP" || mnemonic == "CALL" || condition_for(mnemonic)) {
