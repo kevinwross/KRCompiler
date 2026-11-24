@@ -49,7 +49,16 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
     const std::uint32_t high = image.image_base == 0 ? kKernelLimit : kUserLimit;
 
     // Allocated sections must not overlap, and the entry must be executable.
-    std::vector<std::pair<std::uint64_t, std::uint64_t>> allocated;
+    // The names travel with the ranges: an overlap the caller cannot identify is
+    // a puzzle rather than a diagnostic.
+    struct Placed {
+        std::uint64_t start;
+        std::uint64_t end;
+        std::string name;
+        std::uint16_t flags;
+        int type;
+    };
+    std::vector<Placed> allocated;
     bool entry_is_executable = false;
     for (const Kr232Section& section : image.sections) {
         if (!is_power_of_two(section.alignment)) {
@@ -65,7 +74,8 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
             error = "a section leaves the image's half of the memory map";
             return false;
         }
-        allocated.emplace_back(start, end);
+        allocated.push_back(
+            Placed{start, end, section.name, section.flags, static_cast<int>(section.type)});
         if ((section.flags & 4u) != 0 && image.entry >= start && image.entry < end) {
             entry_is_executable = true;
         }
@@ -74,10 +84,17 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
         error = "the entry is outside every executable section";
         return false;
     }
-    std::sort(allocated.begin(), allocated.end());
+    std::sort(allocated.begin(), allocated.end(),
+              [](const Placed& left, const Placed& right) { return left.start < right.start; });
     for (std::size_t i = 1; i < allocated.size(); ++i) {
-        if (allocated[i].first < allocated[i - 1].second) {
-            error = "two allocated sections overlap";
+        if (allocated[i].start < allocated[i - 1].end) {
+            error = "two allocated sections overlap: '" + allocated[i - 1].name + "' (flags " +
+                    std::to_string(allocated[i - 1].flags) + ", type " +
+                    std::to_string(allocated[i - 1].type) + ") ends at " +
+                    std::to_string(allocated[i - 1].end) + ", '" + allocated[i].name +
+                    "' (flags " + std::to_string(allocated[i].flags) + ", type " +
+                    std::to_string(allocated[i].type) + ") starts at " +
+                    std::to_string(allocated[i].start);
             return false;
         }
     }
