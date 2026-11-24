@@ -44,7 +44,7 @@ void write_u32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32
 }
 
 bool write_value(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint64_t value,
-                 std::uint8_t width, std::string& error) {
+                 std::uint8_t width, bool pc_relative, std::string& error) {
     if (offset + width > bytes.size()) {
         error = "link relocation is outside its section";
         return false;
@@ -62,12 +62,20 @@ bool write_value(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint
         const auto signed_max = (1LL << (width * 8 - 1)) - 1;
         const auto as_signed = static_cast<std::int64_t>(value);
         if (value > limit && (as_signed < signed_min || as_signed > signed_max)) {
-            char detail[128] = {};
+            char detail[256] = {};
+            // Name the remedy for the one case that has one: a call or branch the
+            // displacement cannot reach is linked wide with `--far-calls`, and a
+            // message that only reports the overflow leaves the reader to discover
+            // the flag. Other relocations have no such option, so they say nothing.
             std::snprintf(detail, sizeof(detail),
                           "link relocation overflows its width (value 0x%llX, width %u, "
-                          "offset %zu)",
+                          "offset %zu)%s",
                           static_cast<unsigned long long>(value),
-                          static_cast<unsigned>(width), offset);
+                          static_cast<unsigned>(width), offset,
+                          pc_relative
+                              ? "; a call or branch this far from its target needs "
+                                "--far-calls (krc -c --far-calls)"
+                              : "");
             error = detail;
             return false;
         }
@@ -682,7 +690,12 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
                 error = "relocation cannot target bss";
                 return false;
             }
-            if (!write_value(section.data, offset, value, relocation.width, error)) {
+            const bool pc_relative = relocation.type == KroRelocationType::PcRel32 ||
+                                     relocation.type == KroRelocationType::PcRel64 ||
+                                     relocation.type == KroRelocationType::PcRel16 ||
+                                     relocation.type == KroRelocationType::PcRel8;
+            if (!write_value(section.data, offset, value, relocation.width, pc_relative,
+                             error)) {
                 return false;
             }
         }
