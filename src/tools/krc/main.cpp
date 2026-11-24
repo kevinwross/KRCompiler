@@ -766,10 +766,20 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        // G2: an object is named for the target it was assembled for --
+        // prog.kr32.kro -- because one source is routinely built for several
+        // targets in one directory. Images keep their single-extension names.
         const auto emit_path = [&](std::string_view extension) {
-            return output_path.empty()
-                       ? std::filesystem::path(input).replace_extension(extension)
-                       : std::filesystem::path(output_path);
+            if (!output_path.empty()) {
+                return std::filesystem::path(output_path);
+            }
+            if (extension == ".kro") {
+                const std::string target_label(
+                    krc::target::get_target(*target_id).name);
+                return std::filesystem::path(input).replace_extension(
+                    "." + target_label + ".kro");
+            }
+            return std::filesystem::path(input).replace_extension(extension);
         };
 
         // For KR16, `-c` owns the output: the old driver printed the assembly
