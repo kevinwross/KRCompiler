@@ -52,7 +52,9 @@ esac
 # The job count lives here because a test preset cannot compute one; the same rule
 # is in scripts/gate-windows.ps1.
 CORES="$(nproc 2>/dev/null || echo 4)"
-JOBS=$(( CORES * 8 / 10 ))
+# The family gate runs every repository at once and hands each one a share of the
+# machine; alone, this takes 80%.
+JOBS="${FAMILY_JOBS:-$(( CORES * 8 / 10 ))}"
 [ "$JOBS" -lt 1 ] && JOBS=1
 
 PRESETS="linux-gcc-debug linux-gcc-release"

@@ -38,7 +38,8 @@ if (-not (Test-Path $cmake)) { $cmake = 'cmake'; $ctest = 'ctest' }
 # The job count lives here because a test preset cannot compute one; the same rule
 # is in scripts/gate-linux.sh.
 $cores = if ($env:NUMBER_OF_PROCESSORS) { [int]$env:NUMBER_OF_PROCESSORS } else { [Environment]::ProcessorCount }
-$jobs = [Math]::Max(1, [Math]::Floor($cores * 0.8))
+# The family gate can hand down a share of the machine; alone, this takes 80%.
+$jobs = if ($env:FAMILY_JOBS) { [Math]::Max(1, [int]$env:FAMILY_JOBS) } else { [Math]::Max(1, [Math]::Floor($cores * 0.8)) }
 
 $presets = if ($Preset) { @($Preset) } else { @('windows-msvc-debug', 'windows-msvc-release') }
 $failed = 0
@@ -65,7 +66,9 @@ foreach ($name in $presets) {
     Step "$name build" { & $cmake --build --preset $name --parallel $jobs }
     if (-not $script:ok) { continue }
     if (-not $SkipTests) {
-        Step "$name ctest" { & $ctest --preset $name --output-on-failure --no-tests=error }
+        # -j: the suite is 968 rows of short tests, and running them one at a time
+        # was the longest single step in the family matrix.
+        Step "$name ctest" { & $ctest --preset $name --parallel $jobs --output-on-failure --no-tests=error }
         if (-not $script:ok) { continue }
         # krc_tests is a binary, not a ctest row.
         $config = if ($name -match 'release') { 'Release' } else { 'Debug' }
