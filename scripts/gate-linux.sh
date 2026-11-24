@@ -66,6 +66,32 @@ for name in $PRESETS; do
     fi
 done
 
+# The staged sysroot is what the install ships, and a header missing from it is
+# invisible until a consumer includes one: stdarg.h was absent from both installed
+# prefixes because the staging target only ran when named. Every source header
+# must reach the stage.
+echo
+echo "== staged sysroot carries every source header"
+stage="$ROOT/build/linux-gcc-debug/stage/sysroot"
+if [ ! -d "$stage" ]; then
+    echo "   FAIL: no staged sysroot at $stage"
+    failed=1
+else
+    missing=""
+    while IFS= read -r file; do
+        rel="${file#$ROOT/sysroot/}"
+        [ -e "$stage/$rel" ] || missing="$missing $rel"
+    done <<EOF
+$(find "$ROOT/sysroot" -type f \( -name '*.h' -o -name '*.hpp' \))
+EOF
+    if [ -n "$missing" ]; then
+        echo "   FAIL: headers missing from the stage:$missing"
+        failed=1
+    else
+        echo "   every source header is staged"
+    fi
+fi
+
 echo
 if [ "$failed" -ne 0 ]; then
     echo "GATE LINUX: FAIL"

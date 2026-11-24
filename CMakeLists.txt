@@ -225,7 +225,10 @@ if(KRC_BUILD_TOOLS)
     krc_apply_warnings(krc_gen_sysroot_bits)
     krc_apply_sanitizers(krc_gen_sysroot_bits)
 
-    add_custom_target(krc_stage_sysroot
+    # `ALL`: a stage that only refreshes when this target is named by hand goes
+    # stale the first time someone adds a header, and the install then ships a
+    # sysroot missing it -- which is how stdarg.h was absent from both prefixes.
+    add_custom_target(krc_stage_sysroot ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory "${KRC_STAGE_SYSROOT}"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/sysroot/include"

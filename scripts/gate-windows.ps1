@@ -68,6 +68,33 @@ foreach ($name in $presets) {
     }
 }
 
+# The staged sysroot is what the install ships, and a header missing from it is
+# invisible until a consumer includes one: stdarg.h was absent from both installed
+# prefixes for exactly that reason, because the staging target only ran when named.
+# Every source header must reach the stage.
+Write-Output ''
+Write-Output '== staged sysroot carries every source header'
+$stageRoot = Join-Path $root 'build/windows-msvc-debug/stage/sysroot'
+if (-not (Test-Path $stageRoot)) {
+    Write-Host "   FAIL: no staged sysroot at $stageRoot"
+    $failed = 1
+} else {
+    $sourceRoot = (Resolve-Path (Join-Path $root 'sysroot')).Path
+    $missing = @()
+    # Headers only: sysroot/ also holds a README, which is not installed.
+    foreach ($file in Get-ChildItem $sourceRoot -Recurse -File -Include '*.h','*.hpp') {
+        $relative = $file.FullName.Substring($sourceRoot.Length).TrimStart('\', '/')
+        if (-not (Test-Path (Join-Path $stageRoot $relative))) { $missing += $relative }
+    }
+    if ($missing.Count -gt 0) {
+        Write-Host "   FAIL: $($missing.Count) header(s) missing from the stage:"
+        $missing | ForEach-Object { Write-Host "        $_" }
+        $failed = 1
+    } else {
+        Write-Host '   every source header is staged'
+    }
+}
+
 Write-Output ''
 if ($failed -ne 0) {
     Write-Output 'GATE WINDOWS: FAIL'
