@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Approved 0.2** — the owner approved this plan on 2026-11-23 as the implementation basis for P0–P7, after answering every open question. Implementation is serial by the owner's decision: one repository and one phase at a time, with each phase's gate run before the next begins |
+| Status | **Approved 0.3** — the owner approved this plan on 2026-11-23 as the implementation basis for P0–P7, after answering every open question. Implementation is serial by the owner's decision: one repository and one phase at a time, with each phase's gate run before the next begins |
 | Date | 2026-11-23 |
 | Basis | Measured state of the six trees at `krcompiler 322b92f`, `kr232 50924c8`, `krdbg 760e837`, `kr16 45f5ca9`, plus `kr32` and `kr216` as found; evidence cited inline |
 | Authoritative for | Build structure, tool surfaces, and the embedded-artefact pipeline across the VM family |
@@ -14,6 +14,7 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-11-23 | First draft: measured current state, five decisions, six workstreams, six phases, a checklist for adding a VM, and risks. |
+| 0.3 | 2026-11-23 | A4 changed during P0: `--source-id` is dropped rather than added, because source ids are assigned by the backends and renumbered by the linker, and no consumer reads a specific value. |
 | 0.2 | 2026-11-23 | Owner answered every open question: Ninja gate with Visual Studio presets kept, the plan moves here, `--source-id` added, no fifth architecture committed, `.flat` for raw output, objects named `<stem>.krNN.kro`, a provenance manifest for checked-in binaries. Added D7–D11, workstreams G–J, phases P6–P7. |
 
 ## 1. Purpose
@@ -153,7 +154,7 @@ Each item names its acceptance check. "Green" means the command was run and its 
 | A1 `krld --flat` writes raw bytes at `--base` without a container header | `krcompiler/src/linker`, `src/tools/krld` | a unit test linking a two-section object and checking the byte offsets; kr32's boot path loads the result |
 | A2 `krld --sym FILE` writes the symbol sidecar the OS reads | same | sidecar parses with the consumer in `kr32/include/kr32/os/symbols.h` |
 | A3 `krc image` takes many objects, `--target`, `--base`, `--flat`, `--sym`, `--map`, `-o` | `krcompiler/src/tools/krc` | builds `bios.k32` and `kernel.k32` byte-identically to today's committed files, or the difference is explained |
-| A4 `--source-id N` on `krc -c`, carrying the per-file debug id the OS build already passes | `krcompiler` | a kr32os source compiled with an id appears under that id in the KDBG payload |
+| A4 `--source-id` is dropped, not added: the backends number sources sequentially and the linker renumbers them by path, so an id given at compile time cannot survive to the image, and nothing reads a specific number -- the kr32 debugger resolves ids from the payload it just loaded. The OS build drops the flag and the payload stays self-consistent | krcompiler, kr32 | `kr32os/build.ps1` passes no `--source-id`, and `krc --dump-symbols` still names every source |
 | A5 `krc`/`krld` version reporting used by the VM gates (`krc --version` and a required minimum) | `krcompiler` | a VM with an older installed package fails the configure with a sentence naming the versions |
 
 ### B — Embedded artefacts produced by the toolchain
@@ -326,7 +327,7 @@ Every question was answered by the owner on 2026-11-23. The decisions they produ
 |---|---|---|
 | Which Windows generator? | Ninja is the gate; Visual Studio presets are kept for IDE debugging, because debug information comes from `cl.exe` either way and only the project files differ | D3 |
 | Where does the plan live? | `krcompiler/docs/build-cleanup-plan.md` — the compiler owns the toolchain, the extension table and the ABI | this file |
-| `--source-id`? | Add it to `krc -c`, carrying the per-file debug id the OS build already passes | A4 |
+| `--source-id`? | Dropped after investigation: ids are assigned twice, sequentially per backend and then renumbered by the linker debug merger, so a compile-time id cannot reach the image, and nothing reads a specific number | A4 |
 | Which architecture is fifth? | Not decided. §6 stays generic and is rehearsed on whichever comes first | §6, P7 |
 | Raw output suffix? | `.flat`, keeping "which machine" and "container or raw" as separate axes | D5, G2 |
 | Object naming? | `<stem>.krNN.kro`, the same shape as images, so a directory listing never mixes targets | D5, G2 |
