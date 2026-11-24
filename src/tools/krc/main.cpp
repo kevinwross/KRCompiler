@@ -572,6 +572,23 @@ int main(int argc, char** argv) {
         } else if (!krc::debug::decode_kdbg_image(bytes, image, error)) {
             return fail(error);
         }
+        // A known suffix that contradicts the payload is refused and both values
+        // are named, because that is what catches a renamed or mixed-up image. An
+        // unknown suffix names nothing and is accepted: program.kr32.backup is a
+        // person being deliberate, not an error.
+        const auto suffix = std::filesystem::path(inputs.front()).extension().string();
+        if (const auto named = krc::target::target_for_extension(suffix)) {
+            // Container and KDBG target ids are 1-5 in the order KR32, KR16, KR64,
+            // KR216, KR232 (ADR 0057); the enum carries the same order.
+            const auto expected = static_cast<std::uint32_t>(*named) + 1;
+            if (image.target_id != expected) {
+                return fail(std::string("the file name says ") + suffix +
+                            " but the image carries target " +
+                            std::to_string(image.target_id) + ", so it is a " +
+                            std::string(krc::target::to_string(*named)) +
+                            " image only by name");
+            }
+        }
         std::cout << (json_output ? krc::debug::dump_kdbg_json(image)
                                   : krc::debug::dump_kdbg_text(image));
         return 0;
