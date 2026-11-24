@@ -1,0 +1,20 @@
+; krc listing
+; crt0.s
+; target kr16
+
+; .text
+00000000  00F0 0000            MOV R0, #main
+00000004  0083                 CALL R0
+00000006  0088                 HLT
+00000008  0088                 HLT
+0000000A  40F0 00F0            MOV R2, #0xF000
+0000000E  4040                 LDB R0, [R1]
+00000010  8010                 CMP R0, #0
+00000012  0370                 BEQ .Lputs_done
+00000014  8060                 STB [R2], R0
+00000016  0112                 ADD R1, #1
+00000018  FA7E                 BRA .Lputs_loop
+0000001A  8A11                 MOV R0, #10
+0000001C  8060                 STB [R2], R0
+0000001E  8011                 MOV R0, #0
+00000020  0084                 RET

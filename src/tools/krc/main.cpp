@@ -723,7 +723,8 @@ int main(int argc, char** argv) {
     // names a file. The old fall-through printed the front-end-only message after
     // the backend existed.
     if (target_id == krc::target::TargetId::Kr216 && options.stage == toolchain::Stage::Syntax &&
-        !syntax_only && !preprocess_only && !dump_ast && !dump_ir && !dump_stats) {
+        !syntax_only && !preprocess_only && !dump_ast && !dump_ir && !dump_stats &&
+        !want_listing) {
         options.stage = toolchain::Stage::Assembly;
         if (output_path.empty()) {
             emit_assembly = true;

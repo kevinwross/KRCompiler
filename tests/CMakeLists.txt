@@ -8214,6 +8214,20 @@ endif()
     set_tests_properties(krc_image_output_extension PROPERTIES
         PASS_REGULAR_EXPRESSION "container\\.kr32")
 
+    # H5: one committed listing per target, rebuilt from that target's runtime
+    # source and compared byte for byte. Editing the committed listing by hand
+    # fails here, which is what makes it a description of the machine rather than
+    # a note somebody once wrote down.
+    foreach(listing_target IN ITEMS kr16 kr32)
+        add_test(NAME krc_listing_drift_${listing_target}
+            COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DTARGET=${listing_target}
+                -DSOURCE=${CMAKE_SOURCE_DIR}/targets/${listing_target}/runtime/crt0.s
+                -DEXPECT=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/listing/${listing_target}-crt0.lst
+                -DWORK=${KRC_TEST_OUTPUT_DIR}/listing-${listing_target}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/CheckListingDrift.cmake)
+    endforeach()
     # H2/H3: a listing is a file, and its name follows D5. Three rows, one per
     # naming rule: bare -l beside the source, -l with an explicit name, and -c -l
     # with an output name, which takes the output name plus .lst.
