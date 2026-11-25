@@ -347,6 +347,7 @@ std::string forward_frame_loads(std::string_view assembly) {
                     forget_register(destination);
                     register_valid[destination] = true;
                     value_ids[destination] = value_ids[source];
+                    slot_register[-slot] = static_cast<int>(destination);
                     result += "  mov r";
                     result += std::to_string(destination);
                     result += ", r";
@@ -359,6 +360,12 @@ std::string forward_frame_loads(std::string_view assembly) {
                 parse_register(text.substr(mnemonic.size(), comma - mnemonic.size()),
                                destination)) {
                 forget_register(destination);
+                int loaded_slot = 0;
+                if (parse_frame_slot(text.substr(comma + 1), loaded_slot) &&
+                    destination != 13 && destination != 15) {
+                    slot_register[-loaded_slot] = static_cast<int>(destination);
+                    register_valid[destination] = true;
+                }
             } else {
                 forget_all();
             }

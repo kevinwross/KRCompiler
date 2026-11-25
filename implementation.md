@@ -7425,3 +7425,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-25T09:02:00-08:00** — **KR216 removes redundant jumps.** A `JMP` whose target is the next non-debug label is deleted at `-O1`; the label remains. This removes 71 jumps from `game.cpp`, taking its KR216 assembly from 6814 to 6743 lines. Full `windows-msvc-debug` suite: 1005/1005.
 
 - **2026-11-25T09:15:00-08:00** — **KR216 inverts branch diamonds.** `Bcc target; JMP body; target:` becomes `Binverse body`, deleting the unconditional jump when the false target immediately follows it. This removes 53 diamonds from `game.cpp` KR216, moving it from 6743 to 6690 lines. The inverse mapping covers equality, ordering, carry, overflow and unsigned comparisons. Full `windows-msvc-debug` suite: 1005/1005.
+
+- **2026-11-25T09:13:00-08:00** — **KR232 reuses a register loaded from a frame slot.** After `ld rX,[slot]`, the pass records that rX holds the slot value, so a later load of the same slot into rX is deleted. Stores continue to seed the same map. `game.cpp` KR232 moved from 6746 to 6732 lines and `ship.cpp` from 976 to 970. Full `windows-msvc-debug` suite: 1005/1005.
