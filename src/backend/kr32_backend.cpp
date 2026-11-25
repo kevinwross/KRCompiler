@@ -1078,6 +1078,7 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     auto text = peephole(out);
     if (level_ == OptimizationLevel::O1) {
         text = forward_store_loads(text);
+        text = coalesce_store_addresses(text);
         text = combine_move_arithmetic(text);
         text = coalesce_store_sources(text);
         text = propagate_copies(text);

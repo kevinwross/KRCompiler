@@ -195,6 +195,178 @@ std::string forward_store_loads(std::string_view assembly) {
     return result;
 }
 
+std::string coalesce_store_addresses(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto register_name = [](std::string_view text, std::string& reg) {
+        text = trim(text);
+        if (text.size() < 2 || text.front() != 'R') {
+            return false;
+        }
+        for (std::size_t index = 1; index < text.size(); ++index) {
+            if (text[index] < '0' || text[index] > '9') {
+                return false;
+            }
+        }
+        reg = std::string(text);
+        return true;
+    };
+    const auto mention_count = [](std::string_view text, std::string_view reg) {
+        std::size_t count = 0;
+        for (auto at = text.find(reg); at != std::string_view::npos;
+             at = text.find(reg, at + reg.size())) {
+            const bool before_ok =
+                at == 0 || !(text[at - 1] >= '0' && text[at - 1] <= '9');
+            const auto after = at + reg.size();
+            const bool after_ok =
+                after >= text.size() || !(text[after] >= '0' && text[after] <= '9');
+            if (before_ok && after_ok) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto move = trim(lines[index]);
+        if (move.rfind("MOV ", 0) != 0) {
+            continue;
+        }
+        const auto move_comma = move.find(',');
+        if (move_comma == std::string_view::npos) {
+            continue;
+        }
+        std::string destination;
+        std::string source;
+        if (!register_name(move.substr(4, move_comma - 4), destination) ||
+            !register_name(move.substr(move_comma + 1), source)) {
+            continue;
+        }
+        std::size_t store = index + 1;
+        while (store < lines.size()) {
+            const auto candidate = trim(lines[store]);
+            if (candidate.empty() || is_comment(candidate) ||
+                (is_label(candidate) &&
+                 label_name(candidate).rfind(".Ldbg.", 0) == 0)) {
+                ++store;
+                continue;
+            }
+            break;
+        }
+        if (store >= lines.size()) {
+            continue;
+        }
+        const auto text = trim(lines[store]);
+        if (text.rfind("STORE ", 0) != 0) {
+            continue;
+        }
+        const auto comma = text.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        const auto value = trim(text.substr(6, comma - 6));
+        auto address = trim(text.substr(comma + 1));
+        if (address.size() < 2 || address.front() != '[') {
+            continue;
+        }
+        std::string store_value(value);
+        bool changed = false;
+        if (store_value == destination) {
+            store_value = source;
+            changed = true;
+        }
+        std::string rewritten_address(address);
+        for (auto at = rewritten_address.find(destination);
+             at != std::string::npos;
+             at = rewritten_address.find(destination, at + source.size())) {
+            const bool before_ok = at == 0 || rewritten_address[at - 1] != 'R';
+            const auto after = at + destination.size();
+            const bool after_ok =
+                after >= rewritten_address.size() ||
+                !(rewritten_address[after] >= '0' && rewritten_address[after] <= '9');
+            if (before_ok && after_ok) {
+                rewritten_address.replace(at, destination.size(), source);
+                changed = true;
+            }
+        }
+        if (!changed) {
+            continue;
+        }
+        bool safe = false;
+        for (std::size_t next = store + 1; next < lines.size(); ++next) {
+            const auto candidate = trim(lines[next]);
+            if (candidate.empty() || is_comment(candidate) ||
+                (is_label(candidate) &&
+                 label_name(candidate).rfind(".Ldbg.", 0) == 0)) {
+                continue;
+            }
+            if (is_label(candidate)) {
+                break;
+            }
+            const auto space = candidate.find_first_of(" \t");
+            const auto mnemonic =
+                space == std::string_view::npos ? candidate
+                                                : candidate.substr(0, space);
+            if (mnemonic == "RET" || mnemonic == "HALT") {
+                safe = destination != "R0";
+                break;
+            }
+            if (mnemonic == "CALL" || mnemonic == "BRA" ||
+                (mnemonic.size() > 1 && mnemonic.front() == 'J')) {
+                break;
+            }
+            if (!mention_count(candidate, destination)) {
+                continue;
+            }
+            if (mention_count(candidate, destination) != 1) {
+                break;
+            }
+            if (mnemonic == "MOV" || mnemonic == "LOAD" ||
+                mnemonic == "LOAD8U" || mnemonic == "LOAD8S" ||
+                mnemonic == "LOAD16U" || mnemonic == "LOAD16S" ||
+                mnemonic == "LEA" || mnemonic == "ADD" || mnemonic == "SUB" ||
+                mnemonic == "MUL" || mnemonic == "AND" || mnemonic == "OR" ||
+                mnemonic == "XOR" || mnemonic == "SHL" || mnemonic == "SHR" ||
+                mnemonic == "SAR" || mnemonic == "NEG" || mnemonic == "NOT" ||
+                mnemonic == "POP") {
+                const auto first_comma = candidate.find(',');
+                const auto first_operand = trim(candidate.substr(
+                    mnemonic.size(), first_comma == std::string_view::npos
+                                          ? std::string_view::npos
+                                          : first_comma - mnemonic.size()));
+                std::string written;
+                safe = register_name(first_operand, written) &&
+                       written == destination;
+            }
+            break;
+        }
+        if (safe) {
+            dead[index] = true;
+        }
+        replacements[store] = "        STORE " + store_value + ", " +
+                              rewritten_address;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
 std::string combine_move_arithmetic(std::string_view assembly) {
     std::istringstream input{std::string(assembly)};
     std::string line;
@@ -385,10 +557,11 @@ std::string coalesce_store_sources(std::string_view assembly) {
                 space == std::string_view::npos ? candidate
                                                 : candidate.substr(0, space);
             if (mnemonic == "RET" || mnemonic == "HALT") {
-                safe = true;
+                safe = destination != "R0";
                 break;
             }
-            if (mnemonic == "CALL" || mnemonic == "JMP" || mnemonic == "BRA" ||
+            if (mnemonic == "CALL" || mnemonic == "BRA" ||
+                (mnemonic.size() > 1 && mnemonic.front() == 'J') ||
                 is_label(candidate)) {
                 break;
             }
