@@ -670,8 +670,8 @@ krc image [options] objects... -o image
 | `--dump-ast` | Print the parsed AST |
 | `--dump-ir` | Lower to typed SSA IR and print it |
 | `--dump-stats` | Print per-function IR instruction and block counts |
-| `-O0` | No optimiser passes; the default |
-| `-O1`, `-O` | Run the optimiser passes documented in [optimize.md](optimize.md) |
+| `-O0` | No optimiser passes; every value lives in a frame slot |
+| `-O1`, `-O` | Run the optimiser passes documented in [optimize.md](optimize.md); the default |
 | `-S` | Emit target assembly |
 | `-c` | Emit a relocatable object, or a complete image on KR16 |
 | `--emit-object` | With `-c`: write a `.kro` instead of a KR16 image |
@@ -796,7 +796,7 @@ ranges and scopes.
 The same inputs produce byte-identical objects and images. There are no
 timestamps in the output; recorded source paths are the ones passed to `krc`,
 optionally rewritten by `--source-root` at link time. A build without `-O` and
-one with `-O0` are byte-identical; `-O1` changes instructions, not the ABI.
+one with `-O1` are byte-identical; `-O0` changes instructions, not the ABI.
 
 ### Listings and maps
 

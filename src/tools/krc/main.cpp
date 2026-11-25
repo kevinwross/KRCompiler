@@ -40,8 +40,8 @@ void print_usage(std::ostream& out) {
         << "  --dump-ast             Print the parsed AST\n"
         << "  --dump-ir              Lower to typed SSA IR and print it\n"
         << "  --dump-stats           Print IR instruction and block counts per function\n"
-        << "  -O0                    Straightforward lowering (the default)\n"
-        << "  -O1, -O                Enable the optimiser\n"
+        << "  -O0                    Straightforward lowering\n"
+        << "  -O1, -O                Enable the optimiser (the default)\n"
         << "  --dump-symbols FILE    Dump KDBG symbols from a target image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
         << "  -S                     Emit assembly (FILE.<target>.s, or -o FILE)\n"
@@ -463,7 +463,7 @@ int main(int argc, char** argv) {
     bool dump_ast = false;
     bool dump_ir = false;
     bool dump_stats = false;
-    int optimization = 0;
+    int optimization = 1;
     bool emit_assembly = false;
     bool want_listing = false;
     std::string listing_path;
@@ -545,9 +545,9 @@ int main(int argc, char** argv) {
             continue;
         }
         // `-O0` is straightforward lowering; `-O1` adds the optimiser passes
-        // plan.md §8.8 lists. The level is not inferred from anywhere else, so
-        // a build without the flag is `-O0` and stays byte-identical to one that
-        // names it.
+        // plan.md §8.8 lists and is the default. The level is not inferred from
+        // anywhere else, so a build without the flag is `-O1` and stays
+        // byte-identical to one that names it.
         if (argument == "-O0") {
             optimization = 0;
             continue;

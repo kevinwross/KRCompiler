@@ -57,16 +57,16 @@ absent. `AGENTS.local.md` records the environment assumptions, and
 
 ## Optimisation levels
 
-`krc` has two levels. **`-O0` is the default** and is what a build with no flag
-produces: every value lives in a frame slot, and full debug information names
-each source variable.
-
-**`-O1` is opt-in** and runs the pass list in [`docs/optimize.md`](optimize.md)
-§7: constant folding, local common-subexpression elimination, dead code
+`krc` has two levels. **`-O1` is the default** and is what a build with no flag
+produces: it runs the pass list in [`docs/optimize.md`](optimize.md) §7 —
+constant folding, local common-subexpression elimination, dead code
 elimination, single-block and cross-block (`phi`) alloca promotion, empty-block
 elimination, and a register allocator that keeps a value in a register rather
-than a frame slot. The emitted code is ABI-compatible with `-O0`; only the
-instructions differ.
+than a frame slot.
+
+**`-O0` is opt-in** and is every value in a frame slot: it is the level to use
+when a debugger needs a slot per source variable. The emitted code is
+ABI-compatible between the two levels; only the instructions differ.
 
 Measured against the pre-optimiser compiler, on the corpus the benchmarks record
 in `benchmarks/size.tsv` and `benchmarks/ticks.tsv`:

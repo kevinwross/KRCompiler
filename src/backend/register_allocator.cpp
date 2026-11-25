@@ -251,6 +251,7 @@ bool allocate_registers(const ir::Function& function,
 
 void keep_local_allocations(const ir::Function& function,
                             const RegisterAllocation& allocation,
+                            const std::unordered_set<const ir::Value*>& call_like,
                             std::unordered_map<const ir::Value*, std::uint32_t>& kept) {
     kept.clear();
     for (const auto& block : function.blocks) {
@@ -300,6 +301,8 @@ void keep_local_allocations(const ir::Function& function,
             }
             // ...and no call may sit between the definition and its last use,
             // because nothing saves a register across a call on either target.
+            // `call_like` adds the operations the target lowers to a call, such
+            // as a wide integer division.
             std::size_t last_use = index;
             for (std::size_t user_index = 0; user_index < block->instructions.size();
                  ++user_index) {
@@ -317,7 +320,8 @@ void keep_local_allocations(const ir::Function& function,
             for (std::size_t between = index; between < last_use; ++between) {
                 const auto& user = block->instructions[between];
                 if (user && (user->opcode == ir::Opcode::Call ||
-                             user->opcode == ir::Opcode::Invoke)) {
+                             user->opcode == ir::Opcode::Invoke ||
+                             call_like.find(user.get()) != call_like.end())) {
                     crosses_call = true;
                 }
             }

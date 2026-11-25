@@ -1917,6 +1917,19 @@ if(TARGET krc)
                 -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
                 -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_linked.kr32
                 -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    # The runtime built at -O1 used to miscompile lldiv: the allocator kept the
+    # result address in a register across the __krc_sdivdi3 helper call. This row
+    # links the same program against an -O1 runtime and must still exit 42.
+    add_test(NAME krc_link_div_and_vsprintf_o1_runtime
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/div_and_vsprintf.cpp
+                -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr32/runtime/libc.c
+                -DLIBC_LEVEL=-O1
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_o1_runtime.kr32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
     add_test(NAME krc_kr16_link_heap
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>
@@ -2603,6 +2616,16 @@ if(TARGET krc)
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
         set_tests_properties(krc_run_div_and_vsprintf PROPERTIES
             DEPENDS krc_link_div_and_vsprintf)
+        krc_configure_fs_root(div_and_vsprintf_o1_runtime)
+        add_test(NAME krc_run_div_and_vsprintf_o1_runtime
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/div_and_vsprintf_o1_runtime.kr32
+                    -DFS_ROOT=${KRC_FS_ROOT}
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_div_and_vsprintf_o1_runtime PROPERTIES
+            DEPENDS krc_link_div_and_vsprintf_o1_runtime)
         add_test(NAME krc_run_unique_ptr
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR32_VM}
@@ -6815,8 +6838,8 @@ add_test(NAME krc_cxx_value_parameter_deduced
                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/corpus/extracted/tier0/functions.c
                 -DOUT_DEFAULT=${KRC_TEST_OUTPUT_DIR}/level_default.s
                 -DOUT_O0=${KRC_TEST_OUTPUT_DIR}/level_o0.s
-                -DOUT_O0_AGAIN=${KRC_TEST_OUTPUT_DIR}/level_o0b.s
                 -DOUT_O1=${KRC_TEST_OUTPUT_DIR}/level_o1.s
+                -DOUT_O1_AGAIN=${KRC_TEST_OUTPUT_DIR}/level_o1b.s
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckLevelIdentity.cmake)
 
     add_test(NAME krc_determinism_object
@@ -7498,6 +7521,7 @@ add_test(NAME krc_link_debug_folded_lines_o0
     COMMAND ${CMAKE_COMMAND}
             -DKRC=$<TARGET_FILE:krc>
             -DKRLD=$<TARGET_FILE:krld>
+            -DLEVEL=-O0
             -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/debug_folded_lines.c
             -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
             -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
@@ -8339,3 +8363,84 @@ endif()
                 "-DARGS=image;--target=kr32;--entry=entry;${CMAKE_CURRENT_SOURCE_DIR}/fixtures/asm/globl_alias.s;-o;${KRC_TEST_OUTPUT_DIR}/wrong.kr16"
                 "-DEXPECT=says kr16 but --target is kr32"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/expect_refusal.cmake")
+
+    # krc-test-compiler: examples/krc-test-compiler.c is a krc-only example, so
+    # every row compiles it with krc, never a host compiler. The program and the
+    # KR32 runtime are each built at -O0 and -O1, giving four images; all four
+    # are executed and the assembly each one emits must be byte-identical. That
+    # makes the example an optimiser regression for both halves at once rather
+    # than a smoke test. Every run uses the same guest argument names, so the
+    # argument comments in the four outputs also match.
+    set(test_compiler_suffixes)
+    foreach(test_compiler_combo IN ITEMS o0-o0 o1-o0 o0-o1 o1-o1)
+        string(REPLACE "-" ";" test_compiler_parts "${test_compiler_combo}")
+        list(GET test_compiler_parts 0 test_compiler_program)
+        list(GET test_compiler_parts 1 test_compiler_runtime)
+        if(test_compiler_program STREQUAL "o1")
+            set(test_compiler_program_flag "-O1")
+        else()
+            set(test_compiler_program_flag "-O0")
+        endif()
+        if(test_compiler_runtime STREQUAL "o1")
+            set(test_compiler_libc ${CMAKE_SOURCE_DIR}/targets/kr32/runtime/libc.c)
+            set(test_compiler_libc_level "-O1")
+        else()
+            set(test_compiler_libc ${KRC_STAGE_RUNTIME}/libkrcrt.kro)
+            set(test_compiler_libc_level "")
+        endif()
+        set(test_compiler_suffix prog_${test_compiler_program}_rt_${test_compiler_runtime})
+        list(APPEND test_compiler_suffixes "${test_compiler_suffix}")
+        set(test_compiler_program_flag_${test_compiler_suffix} "${test_compiler_program_flag}")
+        set(test_compiler_libc_${test_compiler_suffix} "${test_compiler_libc}")
+        set(test_compiler_libc_level_${test_compiler_suffix} "${test_compiler_libc_level}")
+    endforeach()
+
+    foreach(test_compiler_suffix IN LISTS test_compiler_suffixes)
+        add_test(NAME krc_link_test_compiler_${test_compiler_suffix}
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DSOURCE=${CMAKE_SOURCE_DIR}/examples/krc-test-compiler.c
+                    -DLIBC=${test_compiler_libc_${test_compiler_suffix}}
+                    -DLIBC_LEVEL=${test_compiler_libc_level_${test_compiler_suffix}}
+                    -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                    -DLEVEL=${test_compiler_program_flag_${test_compiler_suffix}}
+                    -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/test_compiler_${test_compiler_suffix}_linked.kr32
+                    -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    endforeach()
+
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        foreach(test_compiler_suffix IN LISTS test_compiler_suffixes)
+            krc_configure_fs_root(test_compiler_${test_compiler_suffix})
+            set(test_compiler_root_${test_compiler_suffix} "${KRC_FS_ROOT}")
+            file(COPY
+                 "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/krc-test-compiler-input.c"
+                 DESTINATION "${KRC_FS_ROOT}")
+            add_test(NAME krc_run_test_compiler_${test_compiler_suffix}
+                COMMAND ${CMAKE_COMMAND}
+                        -DVM=${KRC_KR32_VM}
+                        -DIMAGE=${KRC_TEST_OUTPUT_DIR}/test_compiler_${test_compiler_suffix}_linked.kr32
+                        -DFS_ROOT=${KRC_FS_ROOT}
+                        "-DARGS=krc-test-compiler-input.c;-o;compiled.s"
+                        -DEXPECT_EXIT=0
+                        "-DEXPECT_OUTPUT=wrote compiled[.]s"
+                        -DEXPECT_FILE=${KRC_FS_ROOT}/compiled.s
+                        "-DEXPECT_FILE_TEXT=[.]global fact"
+                        -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+            set_tests_properties(krc_run_test_compiler_${test_compiler_suffix} PROPERTIES
+                DEPENDS krc_link_test_compiler_${test_compiler_suffix})
+        endforeach()
+        # The program-only and runtime-only rows are compared against the baseline
+        # that uses neither -O1, so each half's contribution is pinned separately.
+        foreach(test_compiler_suffix IN LISTS test_compiler_suffixes)
+            if(NOT test_compiler_suffix STREQUAL "prog_o0_rt_o0")
+                add_test(NAME krc_test_compiler_${test_compiler_suffix}_matches_baseline
+                    COMMAND ${CMAKE_COMMAND} -E compare_files
+                            ${test_compiler_root_prog_o0_rt_o0}/compiled.s
+                            ${test_compiler_root_${test_compiler_suffix}}/compiled.s)
+                set_tests_properties(
+                    krc_test_compiler_${test_compiler_suffix}_matches_baseline PROPERTIES
+                    DEPENDS "krc_run_test_compiler_prog_o0_rt_o0;krc_run_test_compiler_${test_compiler_suffix}")
+            endif()
+        endforeach()
+    endif()

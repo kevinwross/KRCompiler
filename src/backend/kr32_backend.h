@@ -20,8 +20,9 @@ namespace krc::backend {
 
 class Kr32Backend {
 public:
-    // The level defaults to `-O0`, which is the output a build without the flag
-    // produces: no caller has to pass it to mean "the default".
+    // The constructor's default is `-O0` so a direct caller can request the
+    // unoptimised path without naming it. `krc` passes the level explicitly, and
+    // its own default is `-O1` (ADR 0060).
     Kr32Backend(const ir::Module& module, const target::TargetProfile& profile,
                 OptimizationLevel level = OptimizationLevel::O0);
 

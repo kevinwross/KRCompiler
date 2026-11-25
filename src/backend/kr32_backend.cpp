@@ -1419,7 +1419,8 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
             if (ir::is_terminator(instruction->opcode)) {
                 emit_phi_copies(out, function, layout, *block, *instruction);
             }
-            if (instruction->debug.valid()) {                auto source = debug_sources_.find(instruction->debug.file);
+            if (instruction->debug.valid()) {
+                auto source = debug_sources_.find(instruction->debug.file);
                 if (source == debug_sources_.end()) {
                     const auto id = next_debug_source_++;
                     source = debug_sources_.emplace(instruction->debug.file, id).first;
@@ -1565,11 +1566,15 @@ void Kr32Backend::compute_allocation(const ir::Function& function) const {
     if (level_ != OptimizationLevel::O1) {
         return;
     }
-    // R0-R2 carry expression results and arguments, R4/R5 aggregates and
-    // returns, R7 is the frame pointer. R8-R15 are untouched by the emitter, so
-    // allocating one cannot collide with a sequence the backend writes by hand.
+    // R0-R2 carry expression results and arguments, R4/R5 aggregates and returns,
+    // R7 is the frame pointer, and R8-R11 are callee-saved (R11 is the thread
+    // pointer). The filter keeps a value only inside one block with no call
+    // between its definition and last use, so the register never has to survive a
+    // call; R12-R15 are the caller-saved scratch registers the emitter never
+    // writes itself. Allocating only those avoids a save/restore prologue and
+    // leaves the callee-saved set and the thread pointer untouched.
     std::vector<std::uint32_t> allowed;
-    for (std::uint32_t index = 8; index <= 15; ++index) {
+    for (std::uint32_t index = 12; index <= 15; ++index) {
         allowed.push_back(index);
     }
     RegisterAllocation allocation;
@@ -1577,7 +1582,31 @@ void Kr32Backend::compute_allocation(const ir::Function& function) const {
     if (!allocate_registers(function, allowed, allocation, error)) {
         return;
     }
-    keep_local_allocations(function, allocation, allocated_registers_);
+    // A wide integer division or remainder is not an IR call, but it lowers to
+    // one of the __krc_*di3 helpers. The filter has to treat it as a call or it
+    // will keep a value in a register across that call.
+    std::unordered_set<const ir::Value*> call_like;
+    for (const auto& block : function.blocks) {
+        if (!block) {
+            continue;
+        }
+        for (const auto& instruction : block->instructions) {
+            if (!instruction || !is_wide(instruction->type)) {
+                continue;
+            }
+            switch (instruction->opcode) {
+            case ir::Opcode::UDiv:
+            case ir::Opcode::SDiv:
+            case ir::Opcode::URem:
+            case ir::Opcode::SRem:
+                call_like.insert(instruction.get());
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    keep_local_allocations(function, allocation, call_like, allocated_registers_);
 }
 
 
@@ -1634,8 +1663,37 @@ void Kr32Backend::emit_phi_copies(std::string& out, const ir::Function& function
                     out += "        HALT ; phi on a critical edge: split the edge first\n";
                     continue;
                 }
-                load_value(out, function, layout, incoming.first, "R0");
-                store_value(out, function, layout, *instruction, "R0");
+                const auto type = instruction->type;
+                if (type && ir::is_float(type)) {
+                    // A double is two words; copying it through R0 would move
+                    // only the low word and leave the high word stale.
+                    load_fp(out, function, layout, incoming.first, "F0");
+                    store_fp(out, function, layout, *instruction, "F0");
+                } else if (is_wide(type)) {
+                    load_wide(out, function, layout, incoming.first);
+                    store_wide(out, function, layout, *instruction);
+                } else if (type && (type->kind == ir::TypeKind::Struct ||
+                                    type->kind == ir::TypeKind::Union ||
+                                    type->kind == ir::TypeKind::Array)) {
+                    std::string error;
+                    const auto size = size_of(type, error);
+                    const auto source = value_slot(function, layout, incoming.first, error);
+                    const auto destination =
+                        value_slot(function, layout, &*instruction, error);
+                    if (!error.empty() || !source || !destination) {
+                        out += "        HALT ; phi aggregate copy unavailable\n";
+                        continue;
+                    }
+                    for (std::uint64_t offset = 0; offset < size; offset += 4) {
+                        out += "        LOAD R0, [R7 + " +
+                               std::to_string(*source + offset) + "]\n";
+                        out += "        STORE R0, [R7 + " +
+                               std::to_string(*destination + offset) + "]\n";
+                    }
+                } else {
+                    load_value(out, function, layout, incoming.first, "R0");
+                    store_value(out, function, layout, *instruction, "R0");
+                }
             }
         }
     }

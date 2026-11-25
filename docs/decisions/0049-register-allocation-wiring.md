@@ -1,6 +1,7 @@
 # 0049 — Wiring the register allocator
 
-**Status:** accepted 2026-11-18, after operator review.
+**Status:** accepted 2026-11-18, after operator review; point 2 superseded by
+[ADR 0060](0060-o1-default.md) on 2026-11-24.
 **Date:** 2026-11-18.
 **Relates to:** `D-049` (optimisation contract), [ADR 0016](0016-kr16-scalar-abi.md),
 `src/backend/register_allocator.cpp`.
@@ -33,6 +34,7 @@ Wire the allocator as follows.
    change must produce identical bytes, and that comparison is the guard against silent `-O0` drift.
 2. **`-O1` is not the default.** `-O0` remains the default until the optimiser gate (OG5 in
    `docs/optimize.md`) is met. Nothing in the test suite's default configuration changes behaviour.
+   **Superseded by [ADR 0060](0060-o1-default.md): `-O1` became the default once the gate was met.**
 3. **It is measured before it is trusted.** `--dump-stats` lands first (`D-049`), and the allocator's effect
    is recorded as a before/after size and tick comparison from `benchmarks/`, per target. A change that
    makes code larger on KR16 — where the metric is image bytes on a 64 KiB target — is a regression

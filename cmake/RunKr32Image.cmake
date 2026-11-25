@@ -7,7 +7,10 @@
 # Required: VM, IMAGE, EXPECT_EXIT
 # Optional: MAX_STEPS (default 20000000), FS_ROOT (the host filesystem sandbox
 #           root; without it the VM defaults to ./sandbox and an open fails),
-#           EXPECT_OUTPUT (a regular expression matched against stdout)
+#           ARGS (a ;-separated list of guest arguments, each passed as --arg),
+#           EXPECT_OUTPUT (a regular expression matched against stdout),
+#           EXPECT_FILE (a host file the run must write, non-empty),
+#           EXPECT_FILE_TEXT (a regular expression the file must match)
 
 if(NOT DEFINED VM OR NOT DEFINED IMAGE OR NOT DEFINED EXPECT_EXIT)
     message(FATAL_ERROR "VM, IMAGE, and EXPECT_EXIT are required")
@@ -25,6 +28,16 @@ endif()
 set(vm_args)
 if(DEFINED FS_ROOT AND NOT FS_ROOT STREQUAL "")
     list(APPEND vm_args --fs-root "${FS_ROOT}")
+endif()
+if(DEFINED ARGS AND NOT ARGS STREQUAL "")
+    foreach(argument IN LISTS ARGS)
+        list(APPEND vm_args --arg "${argument}")
+    endforeach()
+endif()
+# A run that fails to write its file would pass on a stale one from an earlier
+# invocation, so the expected path is removed before the program starts.
+if(DEFINED EXPECT_FILE AND NOT EXPECT_FILE STREQUAL "")
+    file(REMOVE "${EXPECT_FILE}")
 endif()
 execute_process(
     COMMAND "${VM}" vm "${IMAGE}" --max-steps ${MAX_STEPS} ${vm_args}
@@ -44,5 +57,23 @@ if(DEFINED EXPECT_OUTPUT AND NOT EXPECT_OUTPUT STREQUAL "")
     if(NOT flattened MATCHES "${EXPECT_OUTPUT}")
         message(FATAL_ERROR
             "expected output matching '${EXPECT_OUTPUT}', got: ${flattened}")
+    endif()
+endif()
+
+# An exit status says nothing about a file the program was asked to write.
+if(DEFINED EXPECT_FILE AND NOT EXPECT_FILE STREQUAL "")
+    if(NOT EXISTS "${EXPECT_FILE}")
+        message(FATAL_ERROR "expected file not written: ${EXPECT_FILE}")
+    endif()
+    file(SIZE "${EXPECT_FILE}" expected_file_size)
+    if(expected_file_size EQUAL 0)
+        message(FATAL_ERROR "expected file is empty: ${EXPECT_FILE}")
+    endif()
+    if(DEFINED EXPECT_FILE_TEXT AND NOT EXPECT_FILE_TEXT STREQUAL "")
+        file(READ "${EXPECT_FILE}" expected_file_text)
+        if(NOT expected_file_text MATCHES "${EXPECT_FILE_TEXT}")
+            message(FATAL_ERROR
+                "${EXPECT_FILE} does not match '${EXPECT_FILE_TEXT}':\n${expected_file_text}")
+        endif()
     endif()
 endif()

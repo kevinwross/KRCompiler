@@ -38,6 +38,12 @@ struct RegisterAllocation {
 // needed at all. Word-sized integers and pointers qualify; a wide value travels
 // as a register pair and an aggregate is copied word by word, so neither does.
 //
+// `call_like` names the instructions, besides `Call` and `Invoke`, that the
+// target lowers to a call and therefore clobbers registers — on KR32 that is a
+// wide integer division or remainder, which becomes a helper call. The backend
+// knows its own lowering; this helper does not, so the set is passed in rather
+// than guessed.
+//
 // The KR32 backend derives its candidate set this way, so the safety argument
 // lives here rather than being restated in an emitter. KR16 does not use it: that
 // target has one spare register, a two-operand ALU and four scratch registers
@@ -47,5 +53,6 @@ struct RegisterAllocation {
 // assumption, per ADR 0049 point 4.
 void keep_local_allocations(const ir::Function& function,
                             const RegisterAllocation& allocation,
+                            const std::unordered_set<const ir::Value*>& call_like,
                             std::unordered_map<const ir::Value*, std::uint32_t>& kept);
 }  // namespace krc::backend

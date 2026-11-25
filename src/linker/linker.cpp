@@ -930,6 +930,20 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
         }
     }
 
+    // A line label sits before the instruction it describes. When a peephole
+    // removes that instruction — an -O1 jump to the next label, for example —
+    // the label can resolve to the function's end address. A function range is
+    // half-open, so such a line belongs to no function and no consumer can
+    // place a breakpoint at it; dropping it keeps the image's line table
+    // coherent without changing any executable byte.
+    std::erase_if(kdbg.lines, [&](const debug::KdbgLine& line) {
+        return std::none_of(kdbg.functions.begin(), kdbg.functions.end(),
+                            [&](const debug::KdbgFunction& function) {
+                                return line.address >= function.start &&
+                                       line.address < function.end;
+                            });
+    });
+
     const auto bytes = debug::encode_kdbg(kdbg);
     LinkedSection section;
     section.name = ".kdbg";

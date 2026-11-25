@@ -84,8 +84,9 @@ struct Options {
     // input `attach_kdbg` converts while linking, and the bridge remains until
     // the debuggers consume KDBG directly (ADR 0008, ADR 0009).
     bool debug = true;
-    // 0 or 1, matching `-O0` and `-O1`. No other level exists.
-    int optimize = 0;
+    // 0 or 1, matching `-O0` and `-O1`. No other level exists, and `-O1` is the
+    // default.
+    int optimize = 1;
     Stage stage = Stage::Assembly;
     // Output assembly, IR or AST text on the result when the stage reaches it.
     // They are returned as data; the facade never prints.

@@ -644,11 +644,15 @@ CompileResult compile(const Source& source, const Options& options) {
         auto change = ir::constant_folding(*module);
         // E6 before every other promotion pass: it creates the phis, so the
         // edges they write on are split first and the passes below then see SSA
-        // values where a slot round trip used to be.
-        const auto edges = ir::split_critical_edges(*module);
-        change.edges_split += edges.edges_split;
-        const auto across = ir::promote_cross_block_allocas(*module);
-        change.instructions_removed += across.instructions_removed;
+        // values where a slot round trip used to be. Only the KR32 and KR16
+        // backends lower phi nodes; KR216 and KR232 keep the alloca round trip
+        // until theirs do, and every pass below is independent of it.
+        if (id == target::TargetId::Kr32 || id == target::TargetId::Kr16) {
+            const auto edges = ir::split_critical_edges(*module);
+            change.edges_split += edges.edges_split;
+            const auto across = ir::promote_cross_block_allocas(*module);
+            change.instructions_removed += across.instructions_removed;
+        }
         // Promotion runs before CSE deliberately: E2 shares only expressions
         // whose operands are identical SSA values, and until the alloca round
         // trips are gone every variable read is a distinct load.
