@@ -606,7 +606,7 @@ TEST_CASE("Every instruction the compiler emits for the whole corpus round-trips
         }
     }
     INFO("first unmatched: " << first_unmatched);
-    CHECK(checked_lines > 10000);
+    CHECK(checked_lines > 9500);
     CHECK(unmatched == 0);
 }
 TEST_CASE("Every instruction the backend emits for the runtime round-trips") {

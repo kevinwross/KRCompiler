@@ -8514,4 +8514,98 @@ endif()
                     -DEXPECT_EXIT=0
                     "-DEXPECT_TRANSCRIPT=global f"
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
+        add_test(NAME krc_run_startrek_kr232
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_SOURCE_DIR}/examples/startrek.kr232.c
+                    -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/libc_full.c
+                    -DEXTRA=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/fileio_full.s
+                    -DFAR_CALLS=1
+                    -DMAX_STEPS=5000000
+                    "-DINPUT=xxx"
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/startrek_kr232
+                    -DEXPECT_EXIT=0
+                    "-DEXPECT_TRANSCRIPT=Super Star Trek"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+    endif()
+
+    # A class declared in a header with its members defined in another
+    # translation unit. The caller must see the declarations and link to the
+    # out-of-line definitions.
+    add_test(NAME krc_link_cross_tu_member_declaration
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/cpp/cross_tu_member/main.cpp
+                -DEXTRA_SOURCES=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/cpp/cross_tu_member/device.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/cross_tu_member.kr32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    if(KRC_KR32_VM)
+        add_test(NAME krc_run_cross_tu_member_declaration
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/cross_tu_member.kr32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_cross_tu_member_declaration PROPERTIES
+            DEPENDS krc_link_cross_tu_member_declaration)
+    endif()
+
+    # A polymorphic class declared in a header, implemented in a second
+    # translation unit, and used through a base pointer in a third.
+    add_test(NAME krc_link_cross_tu_virtual_dispatch
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/cpp/cross_tu_virtual/main.cpp
+                -DEXTRA_SOURCES=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/cpp/cross_tu_virtual/sensor.cpp
+                -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/cross_tu_virtual.kr32
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    if(KRC_KR32_VM)
+        add_test(NAME krc_run_cross_tu_virtual_dispatch
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/cross_tu_virtual.kr32
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_cross_tu_virtual_dispatch PROPERTIES
+            DEPENDS krc_link_cross_tu_virtual_dispatch)
+    endif()
+
+    # The multi-file OO game, driven by its 4096-byte script. The script runs
+    # every computer report, scans, damage, shields, navigation and weapons.
+    add_test(NAME krc_run_startrekng_kr32_script
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DVM_TARGET=kr32
+                -DRUN_MAIN=main_script.cpp
+                -DSOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/startrekng
+                -DWORK=${KRC_TEST_OUTPUT_DIR}/startrekng_kr32
+                -DKRC_STAGE_RUNTIME=${KRC_STAGE_RUNTIME}
+                -DVM=${KRC_KR32_VM}
+                -DMAX_STEPS=50000000
+                "-DEXPECT=Mission ended"
+                -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunStartrekng.cmake)
+    if(KRC_KR232_VM)
+        add_test(NAME krc_run_startrekng_kr232_script
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM_TARGET=kr232
+                    -DRUN_MAIN=main_script.cpp
+                    -DSOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/startrekng
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/startrekng_kr232
+                    -DVM=${KRC_KR232_VM}
+                    -DMAX_STEPS=200000000
+                    "-DEXPECT=Mission ended"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunStartrekng.cmake)
     endif()

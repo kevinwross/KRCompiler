@@ -74,6 +74,10 @@ std::string load_opcode(ir::TypePtr type) {
         return "LOAD";
     }
     switch (type->bits) {
+    case 1:
+        // A bool is one byte, never a word: a word load would fold the
+        // neighbouring padding bytes into the value.
+        return "LOAD8U";
     case 8:
         return type->is_signed ? "LOAD8S" : "LOAD8U";
     case 16:
@@ -88,6 +92,8 @@ std::string store_opcode(ir::TypePtr type) {
         return "STORE";
     }
     switch (type->bits) {
+    case 1:
+        return "STORE8";
     case 8:
         return "STORE8";
     case 16:
@@ -351,6 +357,11 @@ Kr32Backend::FrameLayout Kr32Backend::layout_function(const ir::Function& functi
                 std::max<std::uint64_t>(ir::is_float(instruction->type) ? 8 : 4,
                                         size_of(instruction->type, error)));
         }
+    }
+    for (std::size_t index = 0; index < callee_saved_.size() && index < 3; ++index) {
+        offset = static_cast<std::uint32_t>(round_up(offset, 4));
+        layout.callee_saved_offsets[index] = offset;
+        offset += 4;
     }
     layout.frame_size = static_cast<std::uint32_t>(round_up(offset, 8));
     return layout;
@@ -1066,6 +1077,10 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     // pass runs on top of it.
     auto text = peephole(out);
     if (level_ == OptimizationLevel::O1) {
+        text = forward_store_loads(text);
+        text = combine_move_arithmetic(text);
+        text = coalesce_store_sources(text);
+        text = propagate_copies(text);
         text = remove_redundant_jumps(text);
     }
     return text;
@@ -1312,6 +1327,14 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     if (layout.has_return_pointer) {
         out += "        STORE R4, [R7 + " + std::to_string(layout.return_pointer) + "]\n";
     }
+    for (std::size_t index = 0; index < callee_saved_.size() && index < 3; ++index) {
+        machine::Instruction save;
+        save.opcode = machine::Opcode::Store;
+        save.operands = {machine::Operand::physical(callee_saved_[index]),
+                         machine::Operand::frame_offset(
+                             layout.callee_saved_offsets[index])};
+        emit_machine(out, save);
+    }
 
     std::size_t debug_label_counter = 0;
     std::size_t integer_parameter = 0;
@@ -1543,6 +1566,14 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
     }
 
     out += ".L" + function.name + ".ret:\n";
+    for (std::size_t index = callee_saved_.size(); index > 0; --index) {
+        machine::Instruction restore;
+        restore.opcode = machine::Opcode::Load;
+        restore.operands = {machine::Operand::physical(callee_saved_[index - 1]),
+                            machine::Operand::frame_offset(
+                                layout.callee_saved_offsets[index - 1])};
+        emit_machine(out, restore);
+    }
     machine::Instruction release;
     release.opcode = machine::Opcode::AdjustStack;
     release.operands = {
@@ -1577,6 +1608,7 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
 
 void Kr32Backend::compute_allocation(const ir::Function& function) const {
     allocated_registers_.clear();
+    callee_saved_.clear();
     if (level_ != OptimizationLevel::O1) {
         return;
     }
@@ -1621,6 +1653,223 @@ void Kr32Backend::compute_allocation(const ir::Function& function) const {
         }
     }
     keep_local_allocations(function, allocation, call_like, allocated_registers_);
+    coalesce_call_arguments(function);
+    allocate_callee_saved(function);
+}
+
+void Kr32Backend::allocate_callee_saved(const ir::Function& function) const {
+    callee_saved_.clear();
+    if (function.blocks.empty() || !function.blocks.front()) {
+        return;
+    }
+    bool has_call = false;
+    bool has_exception_edge = false;
+    for (const auto& block : function.blocks) {
+        if (!block) {
+            continue;
+        }
+        for (const auto& instruction : block->instructions) {
+            if (!instruction) {
+                continue;
+            }
+            if (instruction->opcode == ir::Opcode::Call) {
+                has_call = true;
+            }
+            if (instruction->opcode == ir::Opcode::Invoke ||
+                instruction->opcode == ir::Opcode::LandingPad) {
+                has_exception_edge = true;
+            }
+        }
+    }
+    if (!has_call || has_exception_edge) {
+        return;
+    }
+    std::unordered_map<const ir::Value*, std::size_t> uses;
+    for (const auto& block : function.blocks) {
+        if (!block) {
+            continue;
+        }
+        for (const auto& instruction : block->instructions) {
+            if (!instruction) {
+                continue;
+            }
+            for (const auto* operand : instruction->operands) {
+                if (operand != nullptr) {
+                    ++uses[operand];
+                }
+            }
+        }
+    }
+    struct Candidate {
+        const ir::Instruction* value;
+        std::size_t uses;
+        std::size_t order;
+    };
+    std::vector<Candidate> candidates;
+    const auto* entry = function.blocks.front().get();
+    std::size_t order = 0;
+    for (const auto& instruction : entry->instructions) {
+        ++order;
+        if (!instruction || allocated_registers_.count(instruction.get()) != 0) {
+            continue;
+        }
+        switch (instruction->opcode) {
+        case ir::Opcode::Alloca:
+        case ir::Opcode::Call:
+        case ir::Opcode::Invoke:
+        case ir::Opcode::Phi:
+            continue;
+        default:
+            break;
+        }
+        if (!instruction->type || is_wide(instruction->type) ||
+            (instruction->type->kind != ir::TypeKind::Integer &&
+             instruction->type->kind != ir::TypeKind::Pointer)) {
+            continue;
+        }
+        const auto use = uses.find(instruction.get());
+        if (use == uses.end() || use->second < 2) {
+            continue;
+        }
+        bool crosses_call = false;
+        for (const auto& block : function.blocks) {
+            if (!block) {
+                continue;
+            }
+            for (std::size_t index = 0; index < block->instructions.size(); ++index) {
+                const auto& other = block->instructions[index];
+                if (!other) {
+                    continue;
+                }
+                bool mentions = false;
+                for (const auto* operand : other->operands) {
+                    if (operand == instruction.get()) {
+                        mentions = true;
+                    }
+                }
+                if (!mentions) {
+                    continue;
+                }
+                if (block.get() != entry) {
+                    crosses_call = true;
+                    break;
+                }
+                // `order` is the definition's one-based position in the entry
+                // block. A call between it and this use makes the value
+                // callee-saved; a use before any call is a local allocation.
+                for (std::size_t between = order; between < index; ++between) {
+                    const auto* candidate_call = entry->instructions[between].get();
+                    if (candidate_call &&
+                        (candidate_call->opcode == ir::Opcode::Call ||
+                         candidate_call->opcode == ir::Opcode::Invoke)) {
+                        crosses_call = true;
+                        break;
+                    }
+                }
+                if (crosses_call) {
+                    break;
+                }
+            }
+            if (crosses_call) {
+                break;
+            }
+        }
+        if (!crosses_call) {
+            continue;
+        }
+        candidates.push_back({instruction.get(), use->second, order});
+    }
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [](const Candidate& left, const Candidate& right) {
+                         return left.uses > right.uses;
+                     });
+    for (std::size_t index = 0;
+         index < candidates.size() && index < 3; ++index) {
+        allocated_registers_[candidates[index].value] =
+            static_cast<std::uint32_t>(8 + index);
+        callee_saved_.push_back(static_cast<unsigned>(8 + index));
+    }
+}
+
+void Kr32Backend::coalesce_call_arguments(const ir::Function& function) const {
+    std::unordered_map<const ir::Value*, std::size_t> uses;
+    for (const auto& block : function.blocks) {
+        if (!block) {
+            continue;
+        }
+        for (const auto& instruction : block->instructions) {
+            if (!instruction) {
+                continue;
+            }
+            for (const auto* operand : instruction->operands) {
+                if (operand != nullptr) {
+                    ++uses[operand];
+                }
+            }
+        }
+    }
+    for (const auto& block : function.blocks) {
+        if (!block) {
+            continue;
+        }
+        for (std::size_t index = 1; index < block->instructions.size(); ++index) {
+            const auto* call = block->instructions[index].get();
+            if (!call || (call->opcode != ir::Opcode::Call &&
+                          call->opcode != ir::Opcode::Invoke) ||
+                call->operands.size() < 2) {
+                continue;
+            }
+            auto callee_type = call->operands[0]->type;
+            if (callee_type && callee_type->kind == ir::TypeKind::Pointer) {
+                callee_type = callee_type->element;
+            }
+            if (!callee_type || callee_type->kind != ir::TypeKind::Function ||
+                callee_type->variadic) {
+                continue;
+            }
+            bool register_class_arguments = true;
+            for (std::size_t argument_index = 1;
+                 argument_index < call->operands.size(); ++argument_index) {
+                const auto* argument_type = call->operands[argument_index]->type;
+                if (!argument_type ||
+                    (argument_type->kind != ir::TypeKind::Integer &&
+                     argument_type->kind != ir::TypeKind::Pointer) ||
+                    is_wide(argument_type) ||
+                    argument_type->kind == ir::TypeKind::Struct) {
+                    register_class_arguments = false;
+                }
+            }
+            if (!register_class_arguments) {
+                continue;
+            }
+            const auto* argument = call->operands[1];
+            if (argument == nullptr ||
+                argument->kind != ir::ValueKind::Instruction) {
+                continue;
+            }
+            const auto* definition = static_cast<const ir::Instruction*>(argument);
+            if (definition->opcode == ir::Opcode::Alloca ||
+                definition->opcode == ir::Opcode::Call ||
+                definition->opcode == ir::Opcode::Invoke ||
+                definition->opcode == ir::Opcode::Load ||
+                is_wide(definition->type) || !definition->type ||
+                (definition->type->kind != ir::TypeKind::Integer &&
+                 definition->type->kind != ir::TypeKind::Pointer)) {
+                continue;
+            }
+            // The first argument is loaded into R0 before every other argument,
+            // and those later loads write R1-R4, never R0. Keeping its
+            // definition in R0 therefore survives the rest of the argument
+            // setup as long as nothing but `.Ldbg` labels separates them.
+            if (block->instructions[index - 1].get() != definition) {
+                continue;
+            }
+            if (uses[argument] != 1) {
+                continue;
+            }
+            allocated_registers_[argument] = 0;
+        }
+    }
 }
 
 

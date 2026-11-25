@@ -102,7 +102,14 @@ if(DEFINED INPUT AND NOT INPUT STREQUAL "")
     list(APPEND input_args --input "${INPUT}")
 endif()
 
-execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.kr232" --max-steps 200000
+# Optional: MAX_STEPS overrides the 200,000-instruction budget, for a program
+# whose startup or scripted session needs longer.
+set(step_limit 200000)
+if(DEFINED MAX_STEPS AND NOT MAX_STEPS STREQUAL "")
+    set(step_limit "${MAX_STEPS}")
+endif()
+
+execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.kr232" --max-steps ${step_limit}
                         ${input_args} ${run_args}
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(DEFINED EXPECT_EXIT AND NOT EXPECT_EXIT STREQUAL "" AND NOT result EQUAL EXPECT_EXIT)

@@ -859,3 +859,101 @@ int main(int argc, char *argv[]) {
     };
     CHECK(has_symbol("printf"));
 }
+
+TEST_CASE("A constructor does not address every scalar member") {
+    const auto generated = generate_cxx(R"SRC(
+class S {
+public:
+    int a;
+    int b;
+    int c;
+    int d;
+    int e;
+    int f;
+    int g;
+    int h;
+    S() { a = 1; }
+};
+int main() { S s; return s.a; }
+)SRC");
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    const auto begin = text.find("define weak void @S_ctor_0_value");
+    REQUIRE(begin != std::string::npos);
+    const auto end = text.find("\n}", begin);
+    REQUIRE(end != std::string::npos);
+    const auto body = text.substr(begin, end - begin);
+    std::size_t geps = 0;
+    for (auto at = body.find("getelementptr i8"); at != std::string::npos;
+         at = body.find("getelementptr i8", at + 1)) {
+        ++geps;
+    }
+    // One address for `a = 1`; the other seven scalar members need none.
+    CHECK(geps <= 2);
+}
+
+TEST_CASE("A method loads this once for all member assignments") {
+    const auto generated = generate_cxx(R"SRC(
+class S {
+public:
+    int a;
+    int b;
+    int c;
+    int d;
+    void clear() { a = 0; b = 0; c = 0; d = 0; }
+};
+int main() { S s; s.clear(); return s.a; }
+)SRC");
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    const auto begin = text.find("define weak void @S_clear");
+    REQUIRE(begin != std::string::npos);
+    const auto end = text.find("\n}", begin);
+    REQUIRE(end != std::string::npos);
+    const auto body = text.substr(begin, end - begin);
+    std::size_t loads = 0;
+    for (auto at = body.find("load ptr<%S>, %this.addr"); at != std::string::npos;
+         at = body.find("load ptr<%S>, %this.addr", at + 1)) {
+        ++loads;
+    }
+    CHECK(loads == 1);
+    std::size_t bitcasts = 0;
+    for (auto at = body.find("bitcast ptr<%S>"); at != std::string::npos;
+         at = body.find("bitcast ptr<%S>", at + 1)) {
+        ++bitcasts;
+    }
+    CHECK(bitcasts == 1);
+}
+
+TEST_CASE("alloca load forwarding removes the this slot round trip") {
+    const auto generated = generate_cxx(R"SRC(
+class S {
+public:
+    int a;
+    void clear() { a = 0; }
+};
+int main() { S s; s.clear(); return s.a; }
+)SRC");
+    REQUIRE(generated.module);
+    const auto forwarded = krc::ir::forward_alloca_loads(*generated.module);
+    CHECK(forwarded.instructions_removed > 0);
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    const auto begin = text.find("define weak void @S_clear");
+    REQUIRE(begin != std::string::npos);
+    const auto end = text.find("\n}", begin);
+    REQUIRE(end != std::string::npos);
+    const auto body = text.substr(begin, end - begin);
+    CHECK(body.find("load ptr<%S>, %this.addr") == std::string::npos);
+    CHECK(body.find("store ptr<%S> %this, %this.addr") != std::string::npos);
+}

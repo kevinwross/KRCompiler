@@ -1476,9 +1476,15 @@ bool Verifier::verify(const Module& module, std::string& error) const {
         }
         if (constant->kind == ValueKind::ConstantDataArray) {
             const auto& data = *static_cast<const ConstantDataArray*>(constant.get());
+            const bool integer_elements =
+                constant->type && constant->type->element &&
+                is_integer(constant->type->element);
+            const auto element_bytes =
+                integer_elements ? constant->type->element->bits / 8 : 0;
             if (!constant->type || constant->type->kind != TypeKind::Array ||
-                !is_integer(constant->type->element) || constant->type->element->bits != 8 ||
-                data.bytes.size() != constant->type->count) {
+                !integer_elements || element_bytes == 0 ||
+                data.bytes.size() !=
+                    constant->type->count * element_bytes) {
                 return fail("data-array constant has an invalid type or length");
             }
         }
@@ -1490,9 +1496,15 @@ bool Verifier::verify(const Module& module, std::string& error) const {
             // 12 has to hold on every target the module names).
             const auto pointer_bits =
                 target::get_target(module.target()).pointer_bits;
+            const bool word_elements =
+                constant->type && constant->type->element &&
+                is_integer(constant->type->element) &&
+                constant->type->element->bits == pointer_bits;
+            const bool pointer_elements =
+                constant->type && constant->type->element &&
+                constant->type->element->kind == TypeKind::Pointer;
             if (!constant->type || constant->type->kind != TypeKind::Array ||
-                !is_integer(constant->type->element) ||
-                constant->type->element->bits != pointer_bits ||
+                (!word_elements && !pointer_elements) ||
                 addresses.elements.size() != constant->type->count) {
                 return fail("address-array constant has an invalid type or length");
             }

@@ -46,7 +46,10 @@ bool make_object(const Program& program, const target::TargetProfile& profile,
         out.value = symbol.offset;
         out.size = symbol.size;
         out.binding =
-            symbol.global ? linker::KroSymbolBinding::Global : linker::KroSymbolBinding::Local;
+            symbol.weak
+                ? linker::KroSymbolBinding::Weak
+                : (symbol.global ? linker::KroSymbolBinding::Global
+                                 : linker::KroSymbolBinding::Local);
         object.symbols.push_back(std::move(out));
     }
     // A relocation naming a symbol this object does not define becomes an external

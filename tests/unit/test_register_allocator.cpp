@@ -91,3 +91,90 @@ TEST_CASE("peephole removes identity and zero-strength operations") {
     CHECK(output.find("ADD R3, R3, #2") != std::string::npos);
     CHECK(output.find("SHL R4, R4, #1") != std::string::npos);
 }
+
+TEST_CASE("copy propagation removes a redundant move chain") {
+    const auto input = std::string("        MOV R0, R13\n"
+                                   ".Ldbg.f.0:\n"
+                                   "        MOV R13, R0\n"
+                                   "        MOV R14, R13\n"
+                                   "        MOV R0, R14\n"
+                                   "        CALL f\n"
+                                   "        MOV R0, R13\n"
+                                   "        RET\n");
+    const auto output = krc::backend::propagate_copies(input);
+    CHECK(output.find("MOV R13, R0") == std::string::npos);
+    CHECK(output.find("MOV R0, R14") == std::string::npos);
+    std::size_t kept = 0;
+    for (auto at = output.find("MOV R0, R13"); at != std::string::npos;
+         at = output.find("MOV R0, R13", at + 1)) {
+        ++kept;
+    }
+    CHECK(kept == 2);
+}
+
+TEST_CASE("copy propagation invalidates an integer conversion destination") {
+    const auto input = std::string("        MOV R13, R0\n"
+                                   "        FCVT.W.D R0, F0\n"
+                                   "        MOV R13, R0\n");
+    const auto output = krc::backend::propagate_copies(input);
+    std::size_t kept = 0;
+    for (auto at = output.find("MOV R13, R0"); at != std::string::npos;
+         at = output.find("MOV R13, R0", at + 1)) {
+        ++kept;
+    }
+    CHECK(kept == 2);
+}
+
+TEST_CASE("store-to-load forwarding drops a frame reload") {
+    const auto input = std::string("        STORE R0, [R7 + 104]\n"
+                                   ".Ldbg.f.1:\n"
+                                   "        LOAD R0, [R7 + 104]\n"
+                                   "        STORE R1, [R7 + 108]\n"
+                                   ".Lf.bb1:\n"
+                                   "        LOAD R1, [R7 + 108]\n");
+    const auto output = krc::backend::forward_store_loads(input);
+    CHECK(output.find("LOAD R0, [R7 + 104]") == std::string::npos);
+    CHECK(output.find("LOAD R1, [R7 + 108]") != std::string::npos);
+    CHECK(output.find("STORE R0, [R7 + 104]") != std::string::npos);
+}
+
+TEST_CASE("store-to-load forwarding rewrites a cross-register reload") {
+    const auto input = std::string("        STORE R0, [R7 + 104]\n"
+                                   ".Ldbg.f.1:\n"
+                                   "        LOAD R1, [R7 + 104]\n");
+    const auto output = krc::backend::forward_store_loads(input);
+    CHECK(output.find("LOAD R1, [R7 + 104]") == std::string::npos);
+    CHECK(output.find("MOV R1, R0") != std::string::npos);
+}
+
+TEST_CASE("store-source coalescing removes a dead move into R0") {
+    const auto input = std::string("        MOV R0, R15\n"
+                                   "        STORE R0, [R7 + 4]\n"
+                                   "        MOV R0, #1\n"
+                                   "        MOV R0, R14\n"
+                                   "        STORE R0, [R7 + 8]\n"
+                                   "        MOV R1, R0\n");
+    const auto output = krc::backend::coalesce_store_sources(input);
+    CHECK(output.find("STORE R15, [R7 + 4]") != std::string::npos);
+    CHECK(output.find("STORE R14, [R7 + 8]") == std::string::npos);
+    CHECK(output.find("MOV R0, R14") != std::string::npos);
+}
+
+TEST_CASE("move-arithmetic combining folds the two-address form") {
+    const auto input = std::string("        MOV R0, R8\n"
+                                   ".Ldbg.f.1:\n"
+                                   "        ADD R0, R0, #12\n"
+                                   "        MOV R1, R9\n"
+                                   "        ADD R2, R2, R1\n");
+    const auto output = krc::backend::combine_move_arithmetic(input);
+    CHECK(output.find("MOV R0, R8") == std::string::npos);
+    CHECK(output.find("ADD R0, R8, #12") != std::string::npos);
+    CHECK(output.find("MOV R1, R9") != std::string::npos);
+}
+
+TEST_CASE("move-arithmetic combining rewrites a repeated destination operand") {
+    const auto input = std::string("        MOV R0, R8\n"
+                                   "        ADD R0, R0, R0\n");
+    const auto output = krc::backend::combine_move_arithmetic(input);
+    CHECK(output.find("ADD R0, R8, R8") != std::string::npos);
+}

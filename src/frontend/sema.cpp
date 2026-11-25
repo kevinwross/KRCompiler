@@ -1323,6 +1323,31 @@ std::optional<Sema::GlobalSymbol> Sema::global_symbol(std::string_view name) con
     return result;
 }
 
+namespace {
+
+std::uint64_t string_literal_length(std::string_view text) {
+    while (text.size() >= 2 && (text[0] == 'u' || text[0] == 'U' || text[0] == 'L')) {
+        text.remove_prefix(text[0] == 'u' && text.size() >= 3 && text[1] == '8' ? 2 : 1);
+    }
+    if (text.size() < 2 || text.front() != '"') {
+        return 0;
+    }
+    text.remove_prefix(1);
+    if (!text.empty() && text.back() == '"') {
+        text.remove_suffix(1);
+    }
+    std::uint64_t count = 0;
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        if (text[index] == '\\' && index + 1 < text.size()) {
+            ++index;
+        }
+        ++count;
+    }
+    return count;
+}
+
+}  // namespace
+
 TypePtr Sema::declaration_type(const AstNode& specifiers, const AstNode* declarator) {
     if (declarator != nullptr) {
         if (const auto recorded = declarator_types_.find(declarator);
@@ -2798,6 +2823,27 @@ void Sema::analyze_declaration(const AstNode& declaration) {
             declaration_base = analyze_initializer(*init->children[1], nullptr);
         }
         auto type = build_declarator_type(*declarator, declaration_base);
+        // An array declared without a bound takes its length from the
+        // initializer. Completing the type here makes a later sizeof see the
+        // real length; before this the count stayed zero and a global
+        // `static const int n = sizeof(array)` initialized to zero.
+        if (type && type->kind == TypeKind::Array && type->element &&
+            !type->array_has_count && has_initializer &&
+            init->children.size() > 1 && init->children[1]) {
+            const auto* initializer = init->children[1].get();
+            std::uint64_t inferred = 0;
+            if (initializer->kind == AstKind::StringLiteral) {
+                inferred = string_literal_length(initializer->text) + 1;
+            } else if (initializer->kind == AstKind::InitializerList) {
+                inferred = initializer->children.size();
+            }
+            if (inferred > 0) {
+                auto completed = std::make_shared<Type>(*type);
+                completed->array_count = inferred;
+                completed->array_has_count = true;
+                type = std::move(completed);
+            }
+        }
         // Recorded while the bindings are active, for a later reader that would
         // otherwise see the pattern's stub (ADR 0035).
         declarator_types_.emplace(declarator, type);

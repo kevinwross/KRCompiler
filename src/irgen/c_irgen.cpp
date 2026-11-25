@@ -55,6 +55,10 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     const auto previous_destructor = in_destructor_;
     const auto previous_constructor = in_constructor_;
     const auto previous_static_method = in_static_method_;
+    const auto previous_this = current_this_;
+    const auto previous_this_byte = current_this_byte_;
+    current_this_ = nullptr;
+    current_this_byte_ = nullptr;
     const auto class_found = function_classes_.find(function);
     current_class_ = class_found == function_classes_.end() ? nullptr : class_found->second;
     in_static_method_ = static_methods_.contains(function);
@@ -110,6 +114,19 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
         declare_local(parameter->name,
                       LocalBinding{address, storage_type, parameter_type});
     }
+    if (current_class_) {
+        if (auto* self = lookup_local("this");
+            self && self->type && self->type->kind == ir::TypeKind::Pointer) {
+            current_this_ = builder_.create_load(self->type, self->address, false, 0,
+                                                 "this.value");
+            if (current_this_) {
+                auto* byte_type = module_->types().int_type(8, false);
+                current_this_byte_ = builder_.create(
+                    ir::Opcode::BitCast, module_->types().pointer_type(byte_type),
+                    {current_this_}, "this.byte.value");
+            }
+        }
+    }
 
     std::unordered_set<std::string> explicit_member_initializers;
     if (definition.children.size() > 3 && definition.children[3] &&
@@ -161,6 +178,13 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                     address.value, address.type);
                 continue;
             }
+            // Only a class-type member needs a constructor call here. Emitting
+            // its address for a scalar member first left a dead `load this` in
+            // the constructor for every int, bool and array field.
+            if (!member.type || member.type->kind != frontend::TypeKind::Record ||
+                !member.type->record) {
+                continue;
+            }
             auto address = emit_implicit_member_lvalue(member.name);
             if (!address.value || !address.type ||
                 address.type->kind != ir::TypeKind::Struct) {
@@ -171,6 +195,9 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
                 continue;
             }
             auto* constructor = select_constructor(record->second->tag, 0);
+            if (!constructor) {
+                constructor = ensure_default_constructor(record->second);
+            }
             if (!constructor) {
                 continue;
             }
@@ -377,6 +404,8 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     in_destructor_ = previous_destructor;
     in_constructor_ = previous_constructor;
     in_static_method_ = previous_static_method;
+    current_this_ = previous_this;
+    current_this_byte_ = previous_this_byte;
 }
 
 void CIRGen::emit_statement(const frontend::AstNode& statement) {
@@ -2141,6 +2170,74 @@ void CIRGen::emit_declaration(const frontend::AstNode& declaration) {
             }
         }
     }
+}
+
+bool CIRGen::emit_constant_global_initializer(const frontend::AstNode& initializer,
+                                              ir::GlobalVariable* global) {
+    if (!global || !global->element_type ||
+        global->element_type->kind != ir::TypeKind::Array) {
+        return false;
+    }
+    if (initializer.kind != frontend::AstKind::InitializerList) {
+        return false;
+    }
+    const auto array_type = global->element_type;
+    const auto element_type = array_type->element;
+    if (!element_type) {
+        return false;
+    }
+    const bool pointer_elements = element_type->kind == ir::TypeKind::Pointer;
+    const bool integer_elements = ir::is_integer(element_type);
+    if (!pointer_elements && !integer_elements) {
+        return false;
+    }
+    std::vector<ir::Value*> addresses;
+    std::vector<std::uint8_t> bytes;
+    for (std::size_t index = 0; index < array_type->count; ++index) {
+        const auto* item = index < initializer.children.size()
+                               ? initializer.children[index].get()
+                               : nullptr;
+        if (pointer_elements) {
+            if (item && item->kind == frontend::AstKind::StringLiteral) {
+                auto text = decode_string(item->text);
+                text.push_back(0);
+                const auto string_type = module_->types().array_type(
+                    module_->types().int_type(8, true), text.size());
+                auto* string_global = module_->add_global(
+                    ".str." + std::to_string(string_counter_++), string_type, true, 1);
+                string_global->initializer = module_->constant_data_array(
+                    string_type,
+                    std::vector<std::uint8_t>(text.begin(), text.end()));
+                addresses.push_back(string_global);
+                continue;
+            }
+            long long value = 0;
+            if (item && !sema_.evaluate_constant_expression(*item, value)) {
+                return false;
+            }
+            if (value != 0) {
+                return false;
+            }
+            addresses.push_back(module_->constant_int(int_type(), 0));
+            continue;
+        }
+        long long value = 0;
+        if (item && !sema_.evaluate_constant_expression(*item, value)) {
+            return false;
+        }
+        for (std::uint32_t byte = 0; byte < element_type->bits / 8; ++byte) {
+            bytes.push_back(static_cast<std::uint8_t>(
+                (static_cast<unsigned long long>(value) >> (byte * 8)) & 0xFF));
+        }
+    }
+    if (pointer_elements) {
+        global->initializer =
+            module_->constant_address_array(array_type, std::move(addresses));
+    } else {
+        global->initializer =
+            module_->constant_data_array(array_type, std::move(bytes));
+    }
+    return true;
 }
 
 void CIRGen::emit_initializer(const frontend::AstNode& initializer, ir::Value* address,

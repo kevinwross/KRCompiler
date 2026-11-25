@@ -2151,7 +2151,14 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                         }
                         if (!argument.value) {
                             auto value = emit_expression(*argument_nodes[index]);
-                            if (value.value && value.type) {
+                            if (value.value && value.type &&
+                                value.type->kind == ir::TypeKind::Pointer) {
+                                // A reference parameter holds the address the
+                                // callee wants; copying the referent would
+                                // duplicate the whole object.
+                                argument.value = value.value;
+                                argument.type = value.type;
+                            } else if (value.value && value.type) {
                                 auto* storage =
                                     builder_.create_alloca(value.type, 0,
                                                        "argument.temporary");
@@ -2404,13 +2411,17 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
     // machine word, so storing the loaded value loses everything past it -- a
     // three-byte record arrived as two bytes on KR16 while KR32's four-byte word hid
     // it. `copy_record_fields` is the field-by-field copy that keeps every byte.
+    ir::Function* metadata_function = direct_function;
+    if (!metadata_function) {
+        metadata_function = dynamic_cast<ir::Function*>(callee.value);
+    }
     for (std::size_t index = 0; index < argument_nodes.size(); ++index) {
         if (!argument_nodes[index]) {
             continue;
         }
         bool reference_parameter = false;
-        if (direct_function) {
-            const auto ast_type = function_ast_types_.find(direct_function);
+        if (metadata_function) {
+            const auto ast_type = function_ast_types_.find(metadata_function);
             if (ast_type != function_ast_types_.end() && ast_type->second &&
                 index < ast_type->second->parameters.size() &&
                 ast_type->second->parameters[index] &&
@@ -2462,7 +2473,11 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
                 }
                 if (!argument.value) {
                     auto value = emit_expression(*argument_nodes[index]);
-                    if (value.value && value.type) {
+                    if (value.value && value.type &&
+                        value.type->kind == ir::TypeKind::Pointer) {
+                        argument.value = value.value;
+                        argument.type = value.type;
+                    } else if (value.value && value.type) {
                         auto* storage = builder_.create_alloca(value.type, 0,
                                                              "argument.temporary");
                         builder_.create_store(value.value, storage);
@@ -2481,11 +2496,32 @@ CIRGen::Expression CIRGen::emit_call(const frontend::AstNode& expression) {
         }
         if (index < function_type->parameters.size()) {
             const auto parameter_type = function_type->parameters[index];
+            // A reference parameter already holds the address its caller wants
+            // to pass on; loading the referent and copying it would duplicate a
+            // whole object for every call.
+            const auto* argument_node = argument_nodes[index].get();
+            const auto* reference_local =
+                argument_node->kind == frontend::AstKind::Identifier
+                    ? lookup_local(argument_node->text)
+                    : nullptr;
+            if (parameter_type && parameter_type->kind == ir::TypeKind::Pointer &&
+                parameter_type->element &&
+                parameter_type->element->kind == ir::TypeKind::Struct &&
+                reference_local && reference_local->frontend_type &&
+                reference_local->frontend_type->is_reference) {
+                auto direct = emit_expression(*argument_node);
+                if (direct.value) {
+                    arguments.push_back(
+                        promote(direct.value, direct.type, parameter_type));
+                    continue;
+                }
+            }
             // A by-value memory-class aggregate: build the caller's copy here, from
             // the argument's address, and pass the copy. The pointer type means
             // create_call_instruction leaves it alone instead of storing the value
             // as one word.
-            if (parameter_type && parameter_type->kind == ir::TypeKind::Pointer &&
+            if (!reference_parameter && parameter_type &&
+                parameter_type->kind == ir::TypeKind::Pointer &&
                 parameter_type->element &&
                 parameter_type->element->kind == ir::TypeKind::Struct &&
                 argument.type && argument.type->kind == ir::TypeKind::Struct) {
@@ -2750,12 +2786,18 @@ CIRGen::Expression CIRGen::emit_implicit_member_lvalue(std::string_view name) {
         return {};
     }
     const auto offsets = sema_.record_member_offsets(*owner);
-    auto* self_value =
-        builder_.create_load(self->type, self->address, false, 0, "this.load");
+    auto* self_value = current_this_;
+    if (self_value == nullptr) {
+        self_value =
+            builder_.create_load(self->type, self->address, false, 0, "this.load");
+    }
     auto* byte_type = module_->types().int_type(8, false);
-    auto* byte_pointer = builder_.create(
-        ir::Opcode::BitCast, module_->types().pointer_type(byte_type), {self_value},
-        "this.byte");
+    auto* byte_pointer = current_this_byte_;
+    if (byte_pointer == nullptr) {
+        byte_pointer = builder_.create(
+            ir::Opcode::BitCast, module_->types().pointer_type(byte_type), {self_value},
+            "this.byte");
+    }
     auto* offset =
         module_->constant_int(int_type(), static_cast<std::int64_t>(offsets[index]));
     auto* address =
@@ -2957,7 +2999,17 @@ ir::Function* CIRGen::vtable_slot_implementation(const frontend::RecordInfo& rec
         }
         const auto found = methods->second.find(std::string(slot));
         if (found != methods->second.end()) {
-            return found->second->declaration ? nullptr : found->second;
+            if (found->second->declaration) {
+                for (const auto& method : current->methods) {
+                    if (method.name == slot && method.is_pure) {
+                        return nullptr;
+                    }
+                }
+            }
+            // A declaration may be defined in another translation unit. The
+            // vtable references it so the linker resolves the slot; treating it
+            // as absent emitted a null slot and made the call jump to zero.
+            return found->second;
         }
         if (destructor_slot) {
             for (const auto& candidate : methods->second) {

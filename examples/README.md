@@ -60,6 +60,34 @@ The input scripts are under `tests/fixtures/games/`. `cmake/RunKr32Image.cmake`
 gained an optional `INPUT_FILE` for these rows; its contents are passed to the
 VM as `--input`.
 
+### KR232: startrek
+
+[startrek.kr232.c](startrek.kr232.c) is the same game for KR232. Its file-scope
+tables are filled by `init_tables` at startup: each C object's global initialiser
+is emitted under the same name, so a second object with initialisers collides
+with `libc_full`'s. The 8x8 galaxy is a three-dimensional array, which also
+exercises a stride wider than the 2/4/8 the backend used to shift.
+
+```powershell
+$krc  = "build\windows-msvc-debug\host\bin\Debug\krc.exe"
+$krld = "build\windows-msvc-debug\host\bin\Debug\krld.exe"
+$vm   = "..\kr232\build\windows-msvc\kr232.exe"
+
+& $krc -c --target=kr232 --far-calls examples\startrek.kr232.c -o build\startrek.kr232.kro
+& $krc -c --target=kr232 --far-calls targets\kr232\runtime\libc_full.c -o build\libc_full.kro
+& $krc -c --target=kr232 --far-calls targets\kr232\runtime\fileio_full.s -o build\fileio_full.kro
+& $krc -c --target=kr232 --far-calls targets\kr232\runtime\crt0.s -o build\crt0.kro
+& $krld --entry=_start build\crt0.kro build\startrek.kr232.kro `
+        build\libc_full.kro build\fileio_full.kro -o build\startrek.kr232
+
+& $vm vm build\startrek.kr232 --console
+```
+
+`--input` is capped by the emulator's 16-byte console queue, so a longer
+scripted session uses `--console` and pipes the commands. The CTest row
+`krc_run_startrek_kr232` builds it and resigns (`xxx`) under a 5,000,000
+instruction budget.
+
 ## krc-test-compiler
 
 `krc-test-compiler.c` is a small C-to-assembly compiler written in C and built

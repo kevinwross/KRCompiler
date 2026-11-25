@@ -186,6 +186,256 @@ std::string fp_label(double value) {
 }
 
 }  // namespace
+
+namespace {
+
+std::string_view trim_text(std::string_view text) {
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
+bool parse_register(std::string_view text, unsigned& reg) {
+    text = trim_text(text);
+    if (text.size() < 2 || text.front() != 'r') {
+        return false;
+    }
+    unsigned value = 0;
+    for (std::size_t index = 1; index < text.size(); ++index) {
+        if (text[index] < '0' || text[index] > '9') {
+            return false;
+        }
+        value = value * 10 + static_cast<unsigned>(text[index] - '0');
+    }
+    if (value >= 16) {
+        return false;
+    }
+    reg = value;
+    return true;
+}
+
+bool parse_frame_slot(std::string_view text, int& slot) {
+    text = trim_text(text);
+    if (text.size() < 6 || text.front() != '[' || text.back() != ']' ||
+        text.substr(1, 4) != "r13-") {
+        return false;
+    }
+    int value = 0;
+    const auto body = text.substr(5, text.size() - 6);
+    if (body.empty()) {
+        return false;
+    }
+    for (const char character : body) {
+        if (character < '0' || character > '9') {
+            return false;
+        }
+        value = value * 10 + (character - '0');
+    }
+    slot = -value;
+    return true;
+}
+
+bool is_branch(std::string_view mnemonic) {
+    return mnemonic == "bra" || mnemonic == "jmp" || mnemonic == "beq" ||
+           mnemonic == "bne" || mnemonic == "blt" || mnemonic == "bgt" ||
+           mnemonic == "ble" || mnemonic == "bge" || mnemonic == "bcs" ||
+           mnemonic == "bcc";
+}
+
+bool writes_register(std::string_view mnemonic) {
+    return mnemonic == "mov" || mnemonic == "ld" || mnemonic == "ldbu" ||
+           mnemonic == "ldbs" || mnemonic == "ldhu" || mnemonic == "ldhs" ||
+           mnemonic == "add" || mnemonic == "sub" || mnemonic == "mul" ||
+           mnemonic == "div" || mnemonic == "mod" || mnemonic == "and" ||
+           mnemonic == "or" || mnemonic == "xor" || mnemonic == "shl" ||
+           mnemonic == "shr" || mnemonic == "sar" || mnemonic == "neg" ||
+           mnemonic == "not" || mnemonic == "pop";
+}
+
+// Replaces a frame load with the register that last stored the slot. The pass
+// is conservative: labels, branches, calls and any store through an unknown
+// pointer forget every fact. A register is valid only until something writes it.
+std::string forward_frame_loads(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::string result;
+    std::unordered_map<int, int> slot_register;
+    bool register_valid[16] = {};
+    int value_ids[16] = {};
+    int next_value = 1;
+    const auto forget_all = [&]() {
+        slot_register.clear();
+        for (std::size_t index = 0; index < 16; ++index) {
+            register_valid[index] = false;
+            value_ids[index] = next_value++;
+        }
+    };
+    const auto forget_register = [&](unsigned reg) {
+        register_valid[reg] = false;
+        value_ids[reg] = next_value++;
+        for (auto entry = slot_register.begin(); entry != slot_register.end();) {
+            if (entry->second == static_cast<int>(reg)) {
+                entry = slot_register.erase(entry);
+            } else {
+                ++entry;
+            }
+        }
+    };
+    forget_all();
+    while (std::getline(input, line)) {
+        const auto text = trim_text(line);
+        if (text.empty() || text.front() == ';') {
+            result += line;
+            result += '\n';
+            continue;
+        }
+        if (text.back() == ':') {
+            // `.Ldbg` only names a source line; a real label can be a target.
+            if (text.rfind(".Ldbg.", 0) != 0) {
+                forget_all();
+            }
+            result += line;
+            result += '\n';
+            continue;
+        }
+        const auto space = text.find_first_of(" \t");
+        const auto mnemonic =
+            space == std::string_view::npos ? text : text.substr(0, space);
+        if (mnemonic == "st" || mnemonic == "stb" || mnemonic == "stw") {
+            const auto open = text.find('[');
+            const auto close = text.find(']');
+            const auto comma = text.find(',', close == std::string_view::npos ? 0 : close);
+            if (open != std::string_view::npos && close != std::string_view::npos &&
+                comma != std::string_view::npos) {
+                int slot = 0;
+                unsigned source = 0;
+                if (parse_frame_slot(text.substr(open, close - open + 1), slot) &&
+                    parse_register(text.substr(comma + 1), source)) {
+                    slot_register[-slot] = static_cast<int>(source);
+                    register_valid[source] = true;
+                } else {
+                    forget_all();
+                }
+            } else {
+                forget_all();
+            }
+            result += line;
+            result += '\n';
+            continue;
+        }
+        if (mnemonic == "ld" || mnemonic == "ldbu" || mnemonic == "ldbs" ||
+            mnemonic == "ldhu" || mnemonic == "ldhs") {
+            const auto comma = text.find(',');
+            unsigned destination = 0;
+            int slot = 0;
+            if (comma != std::string_view::npos &&
+                parse_register(text.substr(mnemonic.size(), comma - mnemonic.size()),
+                               destination) &&
+                parse_frame_slot(text.substr(comma + 1), slot)) {
+                const auto found_slot = slot_register.find(-slot);
+                const int source =
+                    found_slot == slot_register.end() ? -1 : found_slot->second;
+                if (source >= 0 && register_valid[static_cast<unsigned>(source)] &&
+                    destination != 13 && destination != 15) {
+                    if (static_cast<unsigned>(source) == destination) {
+                        continue;
+                    }
+                    forget_register(destination);
+                    register_valid[destination] = true;
+                    value_ids[destination] = value_ids[source];
+                    result += "  mov r";
+                    result += std::to_string(destination);
+                    result += ", r";
+                    result += std::to_string(source);
+                    result += '\n';
+                    continue;
+                }
+            }
+            if (comma != std::string_view::npos &&
+                parse_register(text.substr(mnemonic.size(), comma - mnemonic.size()),
+                               destination)) {
+                forget_register(destination);
+            } else {
+                forget_all();
+            }
+            result += line;
+            result += '\n';
+            continue;
+        }
+        if (mnemonic == "mov") {
+            const auto comma = text.find(',');
+            unsigned destination = 0;
+            unsigned source = 0;
+            if (comma != std::string_view::npos &&
+                parse_register(text.substr(mnemonic.size(), comma - mnemonic.size()),
+                               destination) &&
+                parse_register(text.substr(comma + 1), source)) {
+                if (value_ids[destination] == value_ids[source]) {
+                    continue;
+                }
+                forget_register(destination);
+                register_valid[destination] = register_valid[source];
+                value_ids[destination] = value_ids[source];
+            } else {
+                forget_all();
+            }
+            result += line;
+            result += '\n';
+            continue;
+        }
+        if (mnemonic == "call" || mnemonic == "enter" || mnemonic == "leave" ||
+            mnemonic == "ret" || is_branch(mnemonic)) {
+            forget_all();
+            result += line;
+            result += '\n';
+            continue;
+        }
+        if (mnemonic == "cmp" || mnemonic == "push") {
+            result += line;
+            result += '\n';
+            continue;
+        }
+        if (mnemonic.size() > 1 && mnemonic.front() == 'f') {
+            // Normally an F-register operation, but `f2i r6, f0` writes an
+            // integer destination.
+            const auto comma = text.find(',');
+            unsigned destination = 0;
+            if (comma != std::string_view::npos &&
+                parse_register(text.substr(mnemonic.size(), comma - mnemonic.size()),
+                               destination)) {
+                forget_register(destination);
+            }
+            result += line;
+            result += '\n';
+            continue;
+        }
+        if (writes_register(mnemonic)) {
+            const auto comma = text.find(',');
+            unsigned destination = 0;
+            if (comma != std::string_view::npos &&
+                parse_register(text.substr(mnemonic.size(), comma - mnemonic.size()),
+                               destination)) {
+                forget_register(destination);
+            } else {
+                forget_all();
+            }
+            result += line;
+            result += '\n';
+            continue;
+        }
+        forget_all();
+        result += line;
+        result += '\n';
+    }
+    return result;
+}
+
+}  // namespace
+
 std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     debug_info_.clear();
     std::ostringstream out;
@@ -227,6 +477,13 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             if (global->external) {
                 continue;
             }
+            if (!global->name.empty() && global->name.front() != '.') {
+                if (global->weak) {
+                    out << ".weak " << global->name << "\n";
+                } else if (!global->internal) {
+                    out << ".globl " << global->name << "\n";
+                }
+            }
             out << global->name << ":\n";
             // A table of addresses is what a vtable is: one relocated word per
             // element, naming the function or object it points at.
@@ -258,6 +515,14 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             if (bytes != nullptr && !bytes->bytes.empty()) {
                 for (const std::uint8_t byte : bytes->bytes) {
                     out << "  .byte " << static_cast<unsigned>(byte) << "\n";
+                }
+            } else if (const auto* integer =
+                           dynamic_cast<const ir::ConstantInt*>(global->initializer)) {
+                const auto bits = static_cast<std::uint64_t>(integer->value);
+                out << "  .word " << (bits & 0xFFFFFFFFu) << "\n";
+                if (global->element_type && global->element_type->kind == ir::TypeKind::Integer &&
+                    global->element_type->bits > 32) {
+                    out << "  .word " << ((bits >> 32) & 0xFFFFFFFFu) << "\n";
                 }
             } else {
                 // A global with no initialiser still occupies its whole type. One
@@ -291,7 +556,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         // which is how cons_puts lost its loop while its code was byte-identical
         // to a working one.
         const std::string label_tag = ".Lf" + std::to_string(next_function_label++) + "_";
-        out << ".globl " << name << "\n";
+        if (function->linkage == ir::Linkage::Weak) {
+            out << ".weak " << name << "\n";
+        } else if (function->linkage != ir::Linkage::Internal) {
+            out << ".globl " << name << "\n";
+        }
         out << ".text\n";
         out << name << ":\n";
         // The entry label precedes the prologue so a disassembly has one stable
@@ -469,13 +738,15 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         // first at [FP+8], because the caller pushed them instead of filling
         // registers (ADR 0057, variadic convention).
         const bool variadic_function = function->type != nullptr && function->type->variadic;
+        const bool stack_arguments =
+            variadic_function || function->parameters.size() > 4;
         std::size_t integer_argument = 0;
         std::size_t float_argument = 0;
         for (std::size_t i = 0; i < function->parameters.size(); ++i) {
             const auto slot = slot_of.at(function->parameters[i].get());
             const ir::Type* type = function->parameters[i]->type;
             const bool is_float = type != nullptr && type->kind == ir::TypeKind::Float;
-            if (variadic_function) {
+            if (stack_arguments) {
                 const std::uint32_t incoming = 8u + 8u * static_cast<std::uint32_t>(i);
                 if (is_float) {
                     out << "  fld f0, [r13+" << incoming << "]\n";
@@ -495,6 +766,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
 
         std::uint32_t next_compare = 0;
         std::uint32_t next_indirect = 0;
+        std::uint32_t next_copy = 0;
         std::unordered_map<const ir::BasicBlock*, std::size_t> block_index;
         for (std::size_t i = 0; i < function->blocks.size(); ++i) {
             block_index.emplace(function->blocks[i].get(), i);
@@ -675,15 +947,23 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                 continue;
                             }
                             operand(i, kSecondReg);
-                            if (element == 2) {
-                                out << "  shl r" << kSecondReg << ", #1\n";
-                            } else if (stride == 4) {
-                                out << "  shl r" << kSecondReg << ", #2\n";
-                            } else if (stride == 8) {
-                                out << "  shl r" << kSecondReg << ", #3\n";
-                            } else if (stride != 1) {
-                                error = "kr232 backend: an element size that is not a power of two";
-                                return std::nullopt;
+                            if (stride > 1) {
+                                // Any power-of-two stride is a shift, not only
+                                // 2, 4, and 8: a three-dimensional array steps by
+                                // the whole inner array, which is 64 here.
+                                std::uint32_t shift = 0;
+                                std::uint32_t remaining = stride;
+                                while ((remaining & 1u) == 0 && remaining > 1) {
+                                    remaining >>= 1;
+                                    ++shift;
+                                }
+                                if (remaining != 1) {
+                                    error = "kr232 backend: element size " +
+                                            std::to_string(stride) +
+                                            " is not a power of two in " + name;
+                                    return std::nullopt;
+                                }
+                                out << "  shl r" << kSecondReg << ", #" << shift << "\n";
                             }
                             out << "  add r" << kValueReg << ", r" << kSecondReg << "\n";
                         }
@@ -760,11 +1040,22 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                 type_bytes(instruction->operands[0]->type);
                             materialize(instruction->operands[1], kSecondReg);  // destination
                             materialize(instruction->operands[0], kValueReg);   // source
-                            for (std::uint32_t i = 0; i < bytes; ++i) {
-                                out << "  ldbu r" << kAddressReg << ", [r" << kValueReg << "+" << i
-                                    << "]\n";
-                                out << "  stb [r" << kSecondReg << "+" << i << "], r"
+                            // Copy in a loop rather than unrolling: a 9 KiB
+                            // aggregate otherwise emits tens of thousands of
+                            // instructions and overruns the branch range.
+                            if (bytes > 0) {
+                                const std::string copy_loop =
+                                    label_tag + "copy" + std::to_string(next_copy++);
+                                out << "  ld r5, #" << bytes << "\n";
+                                out << copy_loop << ":\n";
+                                out << "  ldbu r" << kAddressReg << ", [r"
+                                    << kValueReg << "]\n";
+                                out << "  stb [r" << kSecondReg << "], r"
                                     << kAddressReg << "\n";
+                                out << "  add r" << kValueReg << ", #1\n";
+                                out << "  add r" << kSecondReg << ", #1\n";
+                                out << "  sub r5, #1\n";
+                                out << "  bne " << copy_loop << "\n";
                             }
                             break;
                         }
@@ -1087,28 +1378,29 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             break;
                         }
                         // A variadic callee has no register limit: every argument
-                        // is pushed in an eight-byte slot below.
+                        // is pushed in an eight-byte slot below. A fixed function
+                        // with more than four parameters uses the same stack form,
+                        // with the callee reading every parameter from the stack.
                         const bool callee_variadic =
                             callee->type != nullptr && callee->type->variadic;
-                        if (instruction->operands.size() > 5 && !callee_variadic) {
-                            error = "kr232 backend: more than four arguments needs the stack form";
-                            return std::nullopt;
-                        }
-                        for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
-                            const ir::Value* argument = instruction->operands[i];
-                            if (argument->type != nullptr &&
-                                argument->type->kind == ir::TypeKind::Float) {
-                                materialize_float(argument, float_arguments++);
-                            } else {
-                                materialize(argument, 2u + integer_arguments++);
+                        const bool stack_call =
+                            callee_variadic ||
+                            (callee->type != nullptr &&
+                             callee->type->parameters.size() > 4);
+                        if (!stack_call) {
+                            for (std::size_t i = 1; i < instruction->operands.size(); ++i) {
+                                const ir::Value* argument = instruction->operands[i];
+                                if (argument->type != nullptr &&
+                                    argument->type->kind == ir::TypeKind::Float) {
+                                    materialize_float(argument, float_arguments++);
+                                } else {
+                                    materialize(argument, 2u + integer_arguments++);
+                                }
                             }
                         }
-                        // A variadic callee reads every argument from the stack, so
-                        // the caller pushes them as eight-byte slots, last first:
-                        // the first then sits at [FP+8] in the callee.
-                        const bool variadic_call =
-                            callee->type != nullptr && callee->type->variadic;
-                        if (variadic_call) {
+                        // Every stack argument is an eight-byte slot, pushed last
+                        // first so the first sits at [FP+8] in the callee.
+                        if (stack_call) {
                             for (std::size_t i = instruction->operands.size(); i-- > 1;) {
                                 const ir::Value* argument = instruction->operands[i];
                                 const bool argument_float =
@@ -1137,7 +1429,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             out << "  sub r6, #" << (4u + 4u * destination->second) << "\n";
                         }
                         out << "  call " << callee->name << "\n";
-                        if (variadic_call) {
+                        if (stack_call) {
                             out << "  add r15, #"
                                 << (8u * static_cast<unsigned>(
                                               instruction->operands.size() - 1))
@@ -1173,11 +1465,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             materialize(instruction->operands[0], kValueReg);
                             frame_load("ld", return_pointer_slot,
                                        "r" + std::to_string(kSecondReg));
-                            for (std::uint32_t i = 0; i < bytes; ++i) {
-                                out << "  ldbu r" << kAddressReg << ", [r" << kValueReg << "+" << i
-                                    << "]\n";
-                                out << "  stb [r" << kSecondReg << "+" << i << "], r"
-                                    << kAddressReg << "\n";
+                            // Copy in a loop rather than unrolling: a 9 KiB
+                            // aggregate otherwise emits tens of thousands of
+                            // instructions and overruns the branch range.
+                            if (bytes > 0) {
+                                const std::string copy_loop =
+                                    label_tag + "copy" + std::to_string(next_copy++);
+                                // R7 stays the destination base because it is
+                                // returned in R2; R4 is the write cursor.
+                                out << "  mov r4, r" << kSecondReg << "\n";
+                                out << "  ld r5, #" << bytes << "\n";
+                                out << copy_loop << ":\n";
+                                out << "  ldbu r" << kAddressReg << ", [r"
+                                    << kValueReg << "]\n";
+                                out << "  stb [r4], r" << kAddressReg << "\n";
+                                out << "  add r" << kValueReg << ", #1\n";
+                                out << "  add r4, #1\n";
+                                out << "  sub r5, #1\n";
+                                out << "  bne " << copy_loop << "\n";
                             }
                             out << "  mov r2, r" << kSecondReg << "\n";
                         } else {
@@ -1196,7 +1501,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             }
         }
     }
-    return out.str();
+    std::string text = out.str();
+    if (level_ == OptimizationLevel::O1) {
+        text = forward_frame_loads(text);
+    }
+    return text;
 }
 
 }  // namespace krc::backend

@@ -81,6 +81,10 @@ private:
     void emit_compound(const frontend::AstNode& compound);
     void emit_initializer(const frontend::AstNode& initializer, ir::Value* address,
                           ir::TypePtr type, bool is_volatile = false);
+    // Builds a constant initializer for a global array whose elements are all
+    // literals or string literals, so no runtime __krc_init_globals is needed.
+    bool emit_constant_global_initializer(const frontend::AstNode& initializer,
+                                          ir::GlobalVariable* global);
     void emit_zero_initializer(ir::Value* address, ir::TypePtr type);
     void emit_vtable_init(ir::Value* object, ir::TypePtr type);
     [[nodiscard]] std::vector<std::string> virtual_slots(
@@ -357,6 +361,10 @@ private:
     };
     std::vector<LocalCleanup> local_cleanups_;    std::vector<std::size_t> cleanup_marks_;
     const frontend::RecordInfo* current_class_ = nullptr;
+    // The immutable `this` pointer, loaded once in the entry block and reused
+    // for every member lvalue.
+    ir::Value* current_this_ = nullptr;
+    ir::Value* current_this_byte_ = nullptr;
     bool in_static_method_ = false;
     bool in_destructor_ = false;
     bool in_constructor_ = false;

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <optional>
 #include <utility>
@@ -352,6 +353,196 @@ bool is_promotable(const Instruction& alloca, const BasicBlock& block,
 }
 
 }  // namespace
+
+PassChange forward_alloca_loads(Module& module) {
+    PassChange change;
+    for (const auto& function : module.functions()) {
+        if (!function || function->declaration || function->blocks.empty()) {
+            continue;
+        }
+        std::unordered_set<const Instruction*> candidates;
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            for (const auto& instruction : block->instructions) {
+                if (!instruction || instruction->opcode != Opcode::Alloca ||
+                    instruction->is_volatile || !instruction->allocated_type ||
+                    (instruction->allocated_type->kind != TypeKind::Integer &&
+                     instruction->allocated_type->kind != TypeKind::Float &&
+                     instruction->allocated_type->kind != TypeKind::Pointer)) {
+                    continue;
+                }
+                bool escapes = false;
+                for (const auto& other_block : function->blocks) {
+                    if (!other_block) {
+                        continue;
+                    }
+                    for (const auto& other : other_block->instructions) {
+                        if (!other) {
+                            continue;
+                        }
+                        for (const auto* operand : other->operands) {
+                            if (operand != instruction.get()) {
+                                continue;
+                            }
+                            const bool load = other->opcode == Opcode::Load &&
+                                              other->operands[0] == instruction.get();
+                            const bool store = other->opcode == Opcode::Store &&
+                                               other->operands[1] == instruction.get();
+                            if ((!load && !store) || other->is_volatile) {
+                                escapes = true;
+                            }
+                        }
+                    }
+                }
+                if (!escapes) {
+                    candidates.insert(instruction.get());
+                }
+            }
+        }
+        if (candidates.empty()) {
+            continue;
+        }
+        const auto* entry = function->blocks.front().get();
+        std::unordered_map<const Instruction*, const Value*> single_store;
+        for (const auto* candidate : candidates) {
+            std::size_t stores = 0;
+            const Value* value = nullptr;
+            const BasicBlock* store_block = nullptr;
+            for (const auto& block : function->blocks) {
+                if (!block) {
+                    continue;
+                }
+                for (std::size_t index = 0; index < block->instructions.size(); ++index) {
+                    const auto& instruction = block->instructions[index];
+                    if (!instruction || instruction->opcode != Opcode::Store ||
+                        instruction->operands.size() < 2 ||
+                        instruction->operands[1] != candidate) {
+                        continue;
+                    }
+                    ++stores;
+                    value = instruction->operands[0];
+                    store_block = block.get();
+                }
+            }
+            const bool computed_unsafe =
+                value != nullptr && value->kind == ValueKind::Instruction &&
+                value->type != nullptr &&
+                value->type->kind == TypeKind::Pointer;
+            if (stores == 1 && store_block == entry && !computed_unsafe) {
+                single_store[candidate] = value;
+            }
+        }
+        std::unordered_map<const Instruction*, const Value*> replacements;
+        const auto candidate_value = [&](const Value* value) -> const Instruction* {
+            if (value == nullptr || value->kind != ValueKind::Instruction) {
+                return nullptr;
+            }
+            const auto* instruction = static_cast<const Instruction*>(value);
+            return candidates.count(instruction) != 0 ? instruction : nullptr;
+        };
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            std::unordered_map<const Instruction*, const Value*> current;
+            for (std::size_t index = 0; index < block->instructions.size(); ++index) {
+                const auto& instruction = block->instructions[index];
+                if (!instruction) {
+                    continue;
+                }
+                if (instruction->opcode == Opcode::Store &&
+                    instruction->operands.size() >= 2) {
+                    if (const auto* alloca = candidate_value(instruction->operands[1])) {
+                        const auto* value = instruction->operands[0];
+                        const bool computed_unsafe =
+                            value != nullptr &&
+                            value->kind == ValueKind::Instruction &&
+                            value->type != nullptr &&
+                            value->type->kind == TypeKind::Pointer;
+                        if (!computed_unsafe) {
+                            current[alloca] = value;
+                        }
+                    }
+                    continue;
+                }
+                if (instruction->opcode == Opcode::Load &&
+                    instruction->operands.size() >= 1) {
+                    const auto* alloca = candidate_value(instruction->operands[0]);
+                    if (alloca == nullptr) {
+                        continue;
+                    }
+                    const auto global = single_store.find(alloca);
+                    if (global != single_store.end() && block.get() != entry &&
+                        instruction->type && global->second->type &&
+                        instruction->type == global->second->type) {
+                        replacements[instruction.get()] = global->second;
+                        continue;
+                    }
+                    const auto found = current.find(alloca);
+                    if (found != current.end() && instruction->type &&
+                        found->second->type &&
+                        instruction->type == found->second->type) {
+                        replacements[instruction.get()] = found->second;
+                    }
+                }
+            }
+        }
+        if (replacements.empty()) {
+            continue;
+        }
+        const auto resolve = [&](const Value* value) {
+            for (int step = 0; step < 8 && value != nullptr; ++step) {
+                if (value->kind != ValueKind::Instruction) {
+                    break;
+                }
+                const auto found =
+                    replacements.find(static_cast<const Instruction*>(value));
+                if (found == replacements.end()) {
+                    break;
+                }
+                value = found->second;
+            }
+            return value;
+        };
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            for (const auto& instruction : block->instructions) {
+                if (!instruction) {
+                    continue;
+                }
+                for (auto*& operand : instruction->operands) {
+                    if (operand != nullptr) {
+                        operand = const_cast<Value*>(resolve(operand));
+                    }
+                }
+                for (auto& incoming : instruction->incoming) {
+                    if (incoming.first != nullptr) {
+                        incoming.first = const_cast<Value*>(resolve(incoming.first));
+                    }
+                }
+            }
+        }
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            const auto removed = std::remove_if(
+                block->instructions.begin(), block->instructions.end(),
+                [&](const std::unique_ptr<Instruction>& instruction) {
+                    return instruction && instruction->opcode == Opcode::Load &&
+                           replacements.count(instruction.get()) != 0;
+                });
+            change.instructions_removed +=
+                static_cast<std::size_t>(std::distance(removed, block->instructions.end()));
+            block->instructions.erase(removed, block->instructions.end());
+        }
+    }
+    return change;
+}
 
 PassChange alloca_promotion(Module& module) {
     PassChange change;

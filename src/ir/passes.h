@@ -54,6 +54,13 @@ struct PassChange {
 // merging cannot move a reported line forward.
 [[nodiscard]] PassChange copy_propagation(Module& module);
 
+// Forwards a load from a non-escaping alloca to the value most recently stored
+// there. The alloca and its stores stay in place, so a recorded `<variable>.addr`
+// keeps the debugger's location; only the redundant loads disappear. A
+// single-store alloca whose store is in the entry block forwards across blocks;
+// an alloca with several stores forwards inside each block.
+[[nodiscard]] PassChange forward_alloca_loads(Module& module);
+
 // E4: single-block alloca promotion. An `alloca` whose address is named by no
 // `V` record and whose only uses are a load or a store in its own block is not
 // an object the program can observe — it is a temporary the emitter introduced —

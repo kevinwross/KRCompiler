@@ -101,6 +101,7 @@ bool assemble_once(std::string_view source, std::string_view file_name,
     std::map<std::string, std::uint32_t> labels;   // label -> offset in its section
     std::map<std::string, std::uint32_t> label_section;
     std::map<std::string, bool> globals;
+    std::map<std::string, bool> weaks;
     std::vector<Fixup> fixups;
     std::vector<std::string> variable_records;
     std::uint32_t data_offset = 0;
@@ -129,6 +130,12 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         }
         if (line.rfind(".globl", 0) == 0) {
             globals[trim(line.substr(6))] = true;
+            continue;
+        }
+        if (line.rfind(".weak", 0) == 0) {
+            const std::string name = trim(line.substr(5));
+            globals[name] = true;
+            weaks[name] = true;
             continue;
         }
         // A variable record for the debug bridge: `V <function> <name> <offset>
@@ -472,6 +479,7 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         symbol.offset = offset;
         symbol.size = symbol_sizes[{symbol.section, static_cast<std::uint32_t>(offset)}];
         symbol.global = global;
+        symbol.weak = weaks.count(name) != 0;
         out.program.symbols.push_back(std::move(symbol));
     }
 

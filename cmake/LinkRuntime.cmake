@@ -24,6 +24,23 @@ execute_process(COMMAND "${KRC}" -c ${level_args} "${SOURCE}" -o "${object}"
 if(NOT compile_result EQUAL 0)
     message(FATAL_ERROR "krc -c failed with ${compile_result}")
 endif()
+set(program_objects "${object}")
+# Optional: EXTRA_SOURCES are additional translation units linked with SOURCE.
+if(DEFINED EXTRA_SOURCES AND NOT EXTRA_SOURCES STREQUAL "")
+    set(extra_index 0)
+    foreach(extra_source IN LISTS EXTRA_SOURCES)
+        set(extra_object "${OUTPUT}.${extra_index}.kro")
+        file(REMOVE "${extra_object}")
+        execute_process(COMMAND "${KRC}" -c ${level_args} "${extra_source}"
+                                -o "${extra_object}"
+                        RESULT_VARIABLE extra_result)
+        if(NOT extra_result EQUAL 0)
+            message(FATAL_ERROR "krc -c extra source failed with ${extra_result}")
+        endif()
+        list(APPEND program_objects "${extra_object}")
+        math(EXPR extra_index "${extra_index} + 1")
+    endforeach()
+endif()
 set(extra_objects)
 if(DEFINED LIBC AND NOT LIBC STREQUAL "")
     if(LIBC MATCHES "\\.kro$")
@@ -54,7 +71,7 @@ if(EXISTS "${root}/targets/kr32/runtime/eh.s")
     list(APPEND extra_objects "${root}/targets/kr32/runtime/eh.s")
 endif()
 get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-execute_process(COMMAND "${KRLD}" "${object}" ${extra_objects} "${RUNTIME}"
+execute_process(COMMAND "${KRLD}" ${program_objects} ${extra_objects} "${RUNTIME}"
                         "--source-root=${root}" -o "${OUTPUT}"
                 RESULT_VARIABLE link_result)
 if(NOT link_result EQUAL 0)

@@ -53,6 +53,9 @@ private:
         // typeinfo into (ADR 0026).
         std::uint32_t eh_scratch = 0;
         bool has_eh_scratch = false;
+        // Where R8, R9 and R10 are saved for a function that keeps a value in
+        // one of them across a call.
+        std::uint32_t callee_saved_offsets[3] = {0, 0, 0};
         std::uint32_t frame_size = 0;
     };
 
@@ -133,6 +136,8 @@ private:
     // Empty at `-O0`, which is what keeps that level's output byte-identical
     // (ADR 0049). Filled per function by `compute_allocation`.
     mutable std::unordered_map<const ir::Value*, std::uint32_t> allocated_registers_;
+    // R8-R10 assigned to values that must survive calls, saved in frame slots.
+    mutable std::vector<unsigned> callee_saved_;
     // Machine instructions recorded while emitting, per function symbol. See
     // `machine_function`.
     mutable std::map<std::string, machine::Function> machine_functions_;
@@ -199,6 +204,8 @@ private:
     // definition and every use are in one block with no call between them — the
     // case where no cross-block or call-clobber reasoning is needed at all.
     void compute_allocation(const ir::Function& function) const;
+    void coalesce_call_arguments(const ir::Function& function) const;
+    void allocate_callee_saved(const ir::Function& function) const;
     // The register an instruction's result belongs in: its allocated register at
     // `-O1`, `R0` otherwise. An operation that writes it directly saves the move
     // that would otherwise carry the result out of `R0`, which is the whole

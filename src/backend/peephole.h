@@ -20,6 +20,25 @@ enum class OptimizationLevel {
 // that the KR32 backend emits. This is lowering, so it runs at every level.
 [[nodiscard]] std::string peephole(std::string_view assembly);
 
+// Removes a `LOAD Rx, [frame]` that reads back the value `STORE Rx, [frame]`
+// just wrote, when only `.Ldbg` line labels sit between them. No other
+// instruction, label or branch may intervene.
+[[nodiscard]] std::string forward_store_loads(std::string_view assembly);
+
+// Folds `MOV D, S; OP D, D, X` into `OP D, S, X`, for the two-address integer
+// operations the emitter produces after a move into the result register.
+[[nodiscard]] std::string combine_move_arithmetic(std::string_view assembly);
+
+// Replaces `MOV R0, Rn; STORE R0, [frame]` with `STORE Rn, [frame]` when R0 is
+// written again before it is read, so the move has no other consumer.
+[[nodiscard]] std::string coalesce_store_sources(std::string_view assembly);
+
+// Removes a move whose destination already holds the source's value, within a
+// straight-line run. Register equalities are tracked as value ids; labels,
+// branches, calls and unknown instructions reset them, so no fact crosses a
+// control-flow edge or a clobber.
+[[nodiscard]] std::string propagate_copies(std::string_view assembly);
+
 // Removes an unconditional branch whose target is the label that follows it: the
 // branch sets the program counter to where control already falls through to.
 // `JMP` (KR32) and `BRA` (KR16) are the forms; a conditional branch is never

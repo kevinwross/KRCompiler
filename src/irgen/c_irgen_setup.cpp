@@ -38,19 +38,6 @@ std::unique_ptr<ir::Module> CIRGen::generate() {
     collect_declarations();
     clone_inherited_methods();
     for (const auto& [function, definition] : method_bodies_) {
-        const auto class_found = function_classes_.find(function);
-        if (class_found != function_classes_.end() && class_found->second) {
-            const auto& record = *class_found->second;
-            const bool pure =
-                std::any_of(record.methods.begin(), record.methods.end(),
-                            [](const frontend::RecordMethod& method) {
-                                return method.is_pure;
-                            });
-            if (pure && function->name.find("_ctor_") == std::string::npos) {
-                function->declaration = true;
-                continue;
-            }
-        }
         // Constructors and destructors stay eager: an object's lifetime is
         // reached through cleanup and member-destructor helpers that are
         // themselves created while other bodies are being built, so a later
@@ -978,8 +965,19 @@ void CIRGen::generate_global_constructors() {
             continue;
         }
         if (info.expression->kind == frontend::AstKind::InitializerList) {
+            if (emit_constant_global_initializer(*info.expression, info.global)) {
+                continue;
+            }
             emit_initializer(*info.expression, info.global,
                              info.global->element_type);
+            continue;
+        }
+        long long constant = 0;
+        if (info.global->element_type &&
+            ir::is_integer(info.global->element_type) &&
+            sema_.evaluate_constant_expression(*info.expression, constant)) {
+            info.global->initializer =
+                module_->constant_int(info.global->element_type, constant);
             continue;
         }
         auto value = emit_expression(*info.expression);
@@ -1440,32 +1438,6 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
         frontend_type->variadic);
     const bool is_constructor = method_name == class_name;
     const auto parameter_count = frontend_type->parameters.size();
-    const std::string mangled =
-        is_constructor
-            ? record_name + "_ctor_" + std::to_string(parameter_count) + "_value"
-            : mangle_method(record_name, method_name);
-    auto* function = module_->add_function(mangled, ir_type, ir::Linkage::Weak,
-                                           false);
-    function->debug_name =
-        is_constructor ? record_name + "::" + class_name : record_name + "::" + method_name;
-    function->add_parameter(module_->types().pointer_type(class_type), "this");
-    const auto* function_declarator = find_function_declarator(*definition.children[1]);
-    std::size_t parameter_index = 0;
-    if (function_declarator) {
-        for (std::size_t index = 1; index < function_declarator->children.size();
-             ++index) {
-            const auto* parameter = function_declarator->children[index].get();
-            if (!parameter ||
-                parameter->kind != frontend::AstKind::ParameterDeclaration ||
-                parameter_index >= frontend_type->parameters.size()) {
-                continue;
-            }
-            function->add_parameter(
-                parameter_ir_type(map_type(frontend_type->parameters[parameter_index])),
-                parameter_name(*parameter, parameter_index));
-            parameter_index++;
-        }
-    }
     const bool is_incdec = method_name == "operator++" ||
                            method_name == "operator--";
     const auto method_key =
@@ -1474,9 +1446,57 @@ void CIRGen::collect_out_of_line_method(const frontend::AstNode& definition) {
             : is_incdec
                   ? method_name + "#" + std::to_string(parameter_count)
                   : method_name;
-    class_methods_[record_name][method_key] = function;
+    auto& method_map = class_methods_[record_name];
+    const auto existing = method_map.find(method_key);
+    const bool reused_declaration =
+        existing != method_map.end() && existing->second &&
+        existing->second->declaration;
+    ir::Function* function = nullptr;
+    if (reused_declaration) {
+        // The header declared this method for a caller in this translation
+        // unit; the out-of-line definition now supplies its body.
+        function = existing->second;
+        function->declaration = false;
+        function->linkage = ir::Linkage::Weak;
+    } else {
+        const std::string mangled =
+            is_constructor
+                ? record_name + "_ctor_" + std::to_string(parameter_count) + "_value"
+                : mangle_method(record_name, method_name);
+        function = module_->add_function(mangled, ir_type, ir::Linkage::Weak, false);
+        function->debug_name =
+            is_constructor ? record_name + "::" + class_name
+                           : record_name + "::" + method_name;
+        function->add_parameter(module_->types().pointer_type(class_type), "this");
+        const auto* function_declarator =
+            find_function_declarator(*definition.children[1]);
+        std::size_t parameter_index = 0;
+        if (function_declarator) {
+            for (std::size_t index = 1; index < function_declarator->children.size();
+                 ++index) {
+                const auto* parameter = function_declarator->children[index].get();
+                if (!parameter ||
+                    parameter->kind != frontend::AstKind::ParameterDeclaration ||
+                    parameter_index >= frontend_type->parameters.size()) {
+                    continue;
+                }
+                function->add_parameter(
+                    parameter_ir_type(map_type(frontend_type->parameters[parameter_index])),
+                    parameter_name(*parameter, parameter_index));
+                parameter_index++;
+            }
+        }
+        method_map[method_key] = function;
+    }
+    if (has_label(*definition.children[0], "static")) {
+        static_methods_.insert(function);
+    }
     if (is_constructor) {
-        class_constructors_[record_name].push_back(function);
+        auto& constructors = class_constructors_[record_name];
+        if (std::find(constructors.begin(), constructors.end(), function) ==
+            constructors.end()) {
+            constructors.push_back(function);
+        }
     } else if (is_incdec) {
         class_incdec_[record_name].push_back(function);
     }
@@ -1529,6 +1549,92 @@ void CIRGen::collect_class_methods(const frontend::AstNode& specifiers) {
                     declarator_name(*member->children[1]);
                 collect_global(*member->children[0], declarator,
                                member->children[2]->children.front().get());
+            }
+            // A member function declared without a body still has to exist as
+            // an external IR function: its definition may live in another
+            // translation unit, and a caller here must be able to call it.
+            if (member && member->kind == frontend::AstKind::MemberDeclaration &&
+                member->children.size() >= 2 && member->children[0] &&
+                member->children[1] &&
+                find_function_declarator(*member->children[1]) != nullptr) {
+                const auto declared_name = declarator_name(*member->children[1]);
+                const bool is_pure =
+                    std::find(member->labels.begin(), member->labels.end(), "pure") !=
+                    member->labels.end();
+                const bool is_constructor = declared_name == record->tag;
+                auto declared_type = sema_.declaration_type(
+                    *member->children[0], member->children[1].get());
+                const auto declared_parameters =
+                    declared_type && declared_type->kind == frontend::TypeKind::Function
+                        ? declared_type->parameters.size()
+                        : 0;
+                const std::string declared_key =
+                    is_constructor
+                        ? declared_name + "#" +
+                              std::to_string(declared_parameters) + "#value"
+                        : declared_name;
+                const bool defaulted_or_deleted =
+                    std::find(member->labels.begin(), member->labels.end(),
+                              "defaulted") != member->labels.end() ||
+                    std::find(member->labels.begin(), member->labels.end(),
+                              "deleted") != member->labels.end();
+                if (!declared_name.empty() && !declared_name.starts_with("~") &&
+                    !is_pure &&
+                    !(is_constructor && defaulted_or_deleted) &&
+                    methods.find(declared_key) == methods.end()) {
+                    if (declared_type && declared_type->kind == frontend::TypeKind::Function) {
+                        std::vector<ir::TypePtr> parameters;
+                        parameters.push_back(module_->types().pointer_type(class_type));
+                        for (const auto& parameter : declared_type->parameters) {
+                            parameters.push_back(
+                                parameter_ir_type(map_type(parameter)));
+                        }
+                        const auto ir_type = module_->types().function_type(
+                            map_type(declared_type->return_type), std::move(parameters),
+                            declared_type->variadic);
+                        const std::string mangled =
+                            is_constructor
+                                ? record->tag + "_ctor_" +
+                                      std::to_string(declared_parameters) + "_value"
+                                : mangle_method(record->tag, declared_name);
+                        auto* declaration = module_->add_function(
+                            mangled, ir_type, ir::Linkage::External, true);
+                        declaration->debug_name = record->tag + "::" + declared_name;
+                        if (has_label(*member->children[0], "static")) {
+                            static_methods_.insert(declaration);
+                        }
+                        declaration->add_parameter(
+                            module_->types().pointer_type(class_type), "this");
+                        const auto* declared_declarator =
+                            find_function_declarator(*member->children[1]);
+                        std::size_t declared_parameter = 0;
+                        if (declared_declarator) {
+                            for (std::size_t index = 1;
+                                 index < declared_declarator->children.size(); ++index) {
+                                const auto* parameter =
+                                    declared_declarator->children[index].get();
+                                if (!parameter ||
+                                    parameter->kind !=
+                                        frontend::AstKind::ParameterDeclaration ||
+                                    declared_parameter >= declared_type->parameters.size()) {
+                                    continue;
+                                }
+                                declaration->add_parameter(
+                                    parameter_ir_type(map_type(
+                                        declared_type->parameters[declared_parameter])),
+                                    parameter_name(*parameter, declared_parameter));
+                                declared_parameter++;
+                            }
+                        }
+                        class_methods_[record->tag][declared_key] = declaration;
+                        if (is_constructor) {
+                            class_constructors_[record->tag].push_back(declaration);
+                        }
+                        function_ast_types_[declaration] = declared_type;
+                        function_source_names_[declaration] = declared_name;
+                        function_classes_[declaration] = record;
+                    }
+                }
             }
             if (!member || member->kind != frontend::AstKind::FunctionDefinition ||
                 member->children.size() < 3 || !member->children[0] ||

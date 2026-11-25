@@ -28,6 +28,9 @@ struct Symbol {
     // guessing from its neighbours. Last, so the four-field aggregate the tests
     // and other callers already use keeps its meaning.
     std::uint64_t size = 0;
+    // A weak definition may be replaced by another object's definition; inline
+    // methods, vtables and type information are emitted that way.
+    bool weak = false;
 };
 
 struct Program {

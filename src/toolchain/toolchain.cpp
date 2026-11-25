@@ -642,6 +642,8 @@ CompileResult compile(const Source& source, const Options& options) {
     }
     if (options.optimize > 0 && !diagnostics.has_errors()) {
         auto change = ir::constant_folding(*module);
+        const auto forwarded = ir::forward_alloca_loads(*module);
+        change.instructions_removed += forwarded.instructions_removed;
         // E6 before every other promotion pass: it creates the phis, so the
         // edges they write on are split first and the passes below then see SSA
         // values where a slot round trip used to be. Only the KR32 and KR16
