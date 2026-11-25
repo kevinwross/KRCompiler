@@ -7429,3 +7429,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-25T09:13:00-08:00** — **KR232 reuses a register loaded from a frame slot.** After `ld rX,[slot]`, the pass records that rX holds the slot value, so a later load of the same slot into rX is deleted. Stores continue to seed the same map. `game.cpp` KR232 moved from 6746 to 6732 lines and `ship.cpp` from 976 to 970. Full `windows-msvc-debug` suite: 1005/1005.
 
 - **2026-11-25T09:20:00-08:00** — **KR216 folds stack addresses across a call.** The address liveness scan now treats a later `CALL` as killing the caller-saved R3, so `MOV R3,SP; ADD R3,#N; LD/ST [R3]` folds to `[SP+N]` when no setup reads R3 first. `game.cpp` KR216 moved from 6690 to 6684 lines. Full `windows-msvc-debug` suite: 1005/1005.
+
+- **2026-11-25T09:26:00-08:00** — **KR216 forwards a moved value into a store.** `MOV D,S; ST [addr],D` becomes `ST [addr],S`, dropping the move when D is dead after the store. This removes 26 such moves from `game.cpp`, taking KR216 from 6684 to 6658 lines. Full `windows-msvc-debug` suite: 1005/1005.

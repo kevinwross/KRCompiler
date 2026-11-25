@@ -1679,6 +1679,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
 }
 
 std::string fold_frame_addresses(std::string_view assembly);
+std::string coalesce_store_values(std::string_view assembly);
 std::string invert_branch_diamonds(std::string_view assembly);
 std::string remove_kr216_redundant_jumps(std::string_view assembly);
 
@@ -1819,10 +1820,135 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     }
     if (level_ == OptimizationLevel::O1) {
         out = fold_frame_addresses(out);
+        out = coalesce_store_values(out);
         out = invert_branch_diamonds(out);
         out = remove_kr216_redundant_jumps(out);
     }
     return out;
+}
+
+std::string coalesce_store_values(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto trim = [](std::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto move = trim(lines[index]);
+        if (move.rfind("MOV ", 0) != 0) {
+            continue;
+        }
+        const auto move_comma = move.find(',');
+        if (move_comma == std::string_view::npos) {
+            continue;
+        }
+        const auto destination = trim(move.substr(4, move_comma - 4));
+        const auto source = trim(move.substr(move_comma + 1));
+        if (destination.empty() || source.empty()) {
+            continue;
+        }
+        std::size_t store = index + 1;
+        while (store < lines.size()) {
+            const auto candidate = trim(lines[store]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++store;
+                continue;
+            }
+            break;
+        }
+        if (store >= lines.size()) {
+            continue;
+        }
+        const auto store_text = trim(lines[store]);
+        const auto space = store_text.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = store_text.substr(0, space);
+        if (mnemonic != "ST" && mnemonic != "STB" && mnemonic != "STW") {
+            continue;
+        }
+        const auto comma = store_text.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        const auto address = trim(store_text.substr(
+            mnemonic.size(), comma - mnemonic.size()));
+        const auto value = trim(store_text.substr(comma + 1));
+        if (value != destination || address.empty() || address.front() != '[') {
+            continue;
+        }
+        bool safe = false;
+        for (std::size_t after = store + 1; after < lines.size(); ++after) {
+            const auto candidate = trim(lines[after]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                continue;
+            }
+            if (candidate.back() == ':') {
+                break;
+            }
+            const auto candidate_space = candidate.find_first_of(" \t");
+            const auto candidate_mnemonic =
+                candidate_space == std::string_view::npos
+                    ? candidate
+                    : candidate.substr(0, candidate_space);
+            if (candidate_mnemonic == "RET" || candidate_mnemonic == "HLT") {
+                safe = true;
+                break;
+            }
+            if (candidate_mnemonic == "CALL" || candidate_mnemonic == "JMP" ||
+                (candidate_mnemonic.size() > 1 &&
+                 candidate_mnemonic[0] == 'B')) {
+                break;
+            }
+            if (candidate.find(destination) == std::string_view::npos) {
+                continue;
+            }
+            const auto candidate_comma = candidate.find(',');
+            const auto first = trim(candidate.substr(
+                candidate_mnemonic.size(),
+                candidate_comma == std::string_view::npos
+                    ? std::string_view::npos
+                    : candidate_comma - candidate_mnemonic.size()));
+            safe = first == destination;
+            break;
+        }
+        if (safe) {
+            dead[index] = true;
+        }
+        replacements[store] = "    " + std::string(mnemonic) + " " +
+                              std::string(address) + ", " + std::string(source);
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
 }
 
 std::string invert_branch_diamonds(std::string_view assembly) {
