@@ -178,3 +178,17 @@ TEST_CASE("move-arithmetic combining rewrites a repeated destination operand") {
     const auto output = krc::backend::combine_move_arithmetic(input);
     CHECK(output.find("ADD R0, R8, R8") != std::string::npos);
 }
+
+TEST_CASE("address coalescing forwards into a load") {
+    const auto input = std::string("        MOV R1, R14\n"
+                                   "        LOAD R0, [R1 + 4]\n"
+                                   "        MOV R2, R15\n"
+                                   "        LOAD R3, [R2]\n"
+                                   "        ADD R4, R2, #0\n"
+                                   "        RET\n");
+    const auto output = krc::backend::coalesce_store_addresses(input);
+    CHECK(output.find("LOAD R0, [R14 + 4]") != std::string::npos);
+    CHECK(output.find("MOV R1, R14") == std::string::npos);
+    CHECK(output.find("MOV R2, R15") != std::string::npos);
+    CHECK(output.find("LOAD R3, [R15]") != std::string::npos);
+}

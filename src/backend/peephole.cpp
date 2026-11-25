@@ -262,21 +262,42 @@ std::string coalesce_store_addresses(std::string_view assembly) {
             continue;
         }
         const auto text = trim(lines[store]);
-        if (text.rfind("STORE ", 0) != 0) {
+        const bool is_store = text.rfind("STORE ", 0) == 0;
+        const bool is_load = text.rfind("LOAD", 0) == 0;
+        if (!is_store && !is_load) {
+            continue;
+        }
+        const auto operation_space = text.find_first_of(" \t");
+        const auto operation_mnemonic =
+            operation_space == std::string_view::npos
+                ? text
+                : text.substr(0, operation_space);
+        if (is_load && operation_mnemonic != "LOAD" &&
+            operation_mnemonic != "LOAD8U" &&
+            operation_mnemonic != "LOAD8S" &&
+            operation_mnemonic != "LOAD16U" &&
+            operation_mnemonic != "LOAD16S") {
             continue;
         }
         const auto comma = text.find(',');
         if (comma == std::string_view::npos) {
             continue;
         }
-        const auto value = trim(text.substr(6, comma - 6));
+        std::string store_value;
+        std::string load_destination;
+        if (is_store) {
+            store_value = std::string(trim(text.substr(6, comma - 6)));
+        } else {
+            load_destination = std::string(trim(text.substr(
+                operation_mnemonic.size(),
+                comma - operation_mnemonic.size())));
+        }
         auto address = trim(text.substr(comma + 1));
         if (address.size() < 2 || address.front() != '[') {
             continue;
         }
-        std::string store_value(value);
         bool changed = false;
-        if (store_value == destination) {
+        if (is_store && store_value == destination) {
             store_value = source;
             changed = true;
         }
@@ -348,8 +369,12 @@ std::string coalesce_store_addresses(std::string_view assembly) {
         if (safe) {
             dead[index] = true;
         }
-        replacements[store] = "        STORE " + store_value + ", " +
-                              rewritten_address;
+        replacements[store] = is_store
+                                  ? "        STORE " + store_value + ", " +
+                                        rewritten_address
+                                  : "        " + std::string(operation_mnemonic) +
+                                        " " + load_destination + ", " +
+                                        rewritten_address;
     }
     std::string result;
     for (std::size_t index = 0; index < lines.size(); ++index) {
