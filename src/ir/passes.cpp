@@ -544,6 +544,117 @@ PassChange forward_alloca_loads(Module& module) {
     return change;
 }
 
+PassChange eliminate_dead_alloca_stores(Module& module) {
+    PassChange change;
+    for (const auto& function : module.functions()) {
+        if (!function || function->declaration) {
+            continue;
+        }
+        std::vector<Instruction*> dead_stores;
+        std::vector<Instruction*> dead_allocas;
+        for (const auto& block : function->blocks) {
+            if (!block) {
+                continue;
+            }
+            for (const auto& alloca : block->instructions) {
+                if (!alloca || alloca->opcode != Opcode::Alloca ||
+                    alloca->is_volatile) {
+                    continue;
+                }
+                const auto& name = alloca->name;
+                if (name.size() >= 5 &&
+                    name.compare(name.size() - 5, 5, ".addr") == 0) {
+                    continue;
+                }
+                bool escaped = false;
+                bool has_load = false;
+                std::vector<Instruction*> stores;
+                for (const auto& other_block : function->blocks) {
+                    if (!other_block) {
+                        continue;
+                    }
+                    for (const auto& instruction : other_block->instructions) {
+                        if (!instruction) {
+                            continue;
+                        }
+                        for (const auto* operand : instruction->operands) {
+                            if (operand != alloca.get()) {
+                                continue;
+                            }
+                            const bool load = instruction->opcode == Opcode::Load &&
+                                              instruction->operands[0] == alloca.get();
+                            const bool store = instruction->opcode == Opcode::Store &&
+                                               instruction->operands[1] == alloca.get();
+                            if (load && !instruction->is_volatile) {
+                                has_load = true;
+                            } else if (store && !instruction->is_volatile) {
+                                stores.push_back(instruction.get());
+                            } else {
+                                escaped = true;
+                            }
+                        }
+                    }
+                }
+                if (escaped || has_load) {
+                    continue;
+                }
+                dead_stores.insert(dead_stores.end(), stores.begin(), stores.end());
+                dead_allocas.push_back(alloca.get());
+            }
+        }
+        for (const auto* dead : dead_stores) {
+            for (const auto& block : function->blocks) {
+                if (!block) {
+                    continue;
+                }
+                const auto removed = std::remove_if(
+                    block->instructions.begin(), block->instructions.end(),
+                    [&](const std::unique_ptr<Instruction>& instruction) {
+                        return instruction.get() == dead;
+                    });
+                change.instructions_removed += static_cast<std::size_t>(
+                    std::distance(removed, block->instructions.end()));
+                block->instructions.erase(removed, block->instructions.end());
+            }
+        }
+        for (const auto* dead : dead_allocas) {
+            bool used = false;
+            for (const auto& block : function->blocks) {
+                if (!block) {
+                    continue;
+                }
+                for (const auto& instruction : block->instructions) {
+                    if (!instruction) {
+                        continue;
+                    }
+                    for (const auto* operand : instruction->operands) {
+                        if (operand == dead) {
+                            used = true;
+                        }
+                    }
+                }
+            }
+            if (used) {
+                continue;
+            }
+            for (const auto& block : function->blocks) {
+                if (!block) {
+                    continue;
+                }
+                const auto removed = std::remove_if(
+                    block->instructions.begin(), block->instructions.end(),
+                    [&](const std::unique_ptr<Instruction>& instruction) {
+                        return instruction.get() == dead;
+                    });
+                change.instructions_removed += static_cast<std::size_t>(
+                    std::distance(removed, block->instructions.end()));
+                block->instructions.erase(removed, block->instructions.end());
+            }
+        }
+    }
+    return change;
+}
+
 PassChange alloca_promotion(Module& module) {
     PassChange change;
     for (const auto& function : module.functions()) {

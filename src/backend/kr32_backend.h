@@ -211,6 +211,13 @@ private:
     // that would otherwise carry the result out of `R0`, which is the whole
     // reason allocation is worth wiring.
     [[nodiscard]] std::string result_register(const ir::Instruction& instruction) const;
+    // Materializes a compare operand in its allocated register when it has one,
+    // otherwise in `fallback`; returns the operand a CMP can name directly.
+    [[nodiscard]] machine::Operand compare_operand(std::string& out,
+                                                   const ir::Function& function,
+                                                   const FrameLayout& layout,
+                                                   const ir::Value* value,
+                                                   int fallback) const;
 
     // Adds an L record for `label`, registering its file in the source table on
     // first use. The function entry and every statement use the same path.

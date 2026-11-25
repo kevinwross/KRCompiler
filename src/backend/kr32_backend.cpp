@@ -1881,6 +1881,21 @@ std::string Kr32Backend::result_register(const ir::Instruction& instruction) con
     return register_name(found->second);
 }
 
+machine::Operand Kr32Backend::compare_operand(std::string& out,
+                                              const ir::Function& function,
+                                              const FrameLayout& layout,
+                                              const ir::Value* value,
+                                              int fallback) const {
+    if (value != nullptr) {
+        const auto allocated = allocated_registers_.find(value);
+        if (allocated != allocated_registers_.end()) {
+            return machine::Operand::physical(allocated->second);
+        }
+    }
+    load_value(out, function, layout, value, register_name(fallback));
+    return machine::Operand::physical(fallback);
+}
+
 void Kr32Backend::emit_phi_copies(std::string& out, const ir::Function& function,
                                   const FrameLayout& layout, const ir::BasicBlock& block,
                                   const ir::Instruction& terminator) const {
@@ -2385,13 +2400,14 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
             emit_wide_icmp(out, function, layout, instruction);
             break;
         }
-        load_value(out, function, layout, instruction.operands[0], "R0");
+        const auto left = compare_operand(out, function, layout,
+                                          instruction.operands[0], 0);
         if (const auto* literal = inline_literal(instruction.operands[1])) {
-            emit_compare(out, machine::Operand::physical(0),
-                         machine::Operand::immediate(literal->value));
+            emit_compare(out, left, machine::Operand::immediate(literal->value));
         } else {
-            load_value(out, function, layout, instruction.operands[1], "R1");
-            emit_compare(out, machine::Operand::physical(0), machine::Operand::physical(1));
+            const auto right = compare_operand(out, function, layout,
+                                               instruction.operands[1], 1);
+            emit_compare(out, left, right);
         }
         emit_move(out, machine::Operand::physical(2), machine::Operand::immediate(0));
         const auto serial = compare_label_counter_++;
@@ -2432,13 +2448,14 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         if (const auto* condition =
                 dynamic_cast<const ir::Instruction*>(instruction.operands[0]);
             condition && folded_conditions_.count(condition) != 0) {
-            load_value(out, function, layout, condition->operands[0], "R0");
+            const auto left = compare_operand(out, function, layout,
+                                              condition->operands[0], 0);
             if (const auto* literal = inline_literal(condition->operands[1])) {
-                emit_compare(out, machine::Operand::physical(0),
-                         machine::Operand::immediate(literal->value));
+                emit_compare(out, left, machine::Operand::immediate(literal->value));
             } else {
-                load_value(out, function, layout, condition->operands[1], "R1");
-                emit_compare(out, machine::Operand::physical(0), machine::Operand::physical(1));
+                const auto right = compare_operand(out, function, layout,
+                                                   condition->operands[1], 1);
+                emit_compare(out, left, right);
             }
             if (const auto opcode = machine::mnemonic_to_opcode(
                     condition_for(condition->icmp_predicate))) {

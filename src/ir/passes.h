@@ -61,6 +61,11 @@ struct PassChange {
 // an alloca with several stores forwards inside each block.
 [[nodiscard]] PassChange forward_alloca_loads(Module& module);
 
+// Removes stores to a non-escaping temporary alloca that no longer has any
+// loads, then removes the alloca. An alloca named `<variable>.addr` is kept: its
+// store is the debugger's value even when the program never reads it.
+[[nodiscard]] PassChange eliminate_dead_alloca_stores(Module& module);
+
 // E4: single-block alloca promotion. An `alloca` whose address is named by no
 // `V` record and whose only uses are a load or a store in its own block is not
 // an object the program can observe — it is a temporary the emitter introduced —
