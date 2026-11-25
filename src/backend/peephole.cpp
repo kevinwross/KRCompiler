@@ -195,6 +195,180 @@ std::string forward_store_loads(std::string_view assembly) {
     return result;
 }
 
+std::string coalesce_load_moves(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto register_name = [](std::string_view text, std::string& reg) {
+        text = trim(text);
+        if (text.size() < 2 || text.front() != 'R') {
+            return false;
+        }
+        for (std::size_t index = 1; index < text.size(); ++index) {
+            if (text[index] < '0' || text[index] > '9') {
+                return false;
+            }
+        }
+        reg = std::string(text);
+        return true;
+    };
+    const auto mention_count = [](std::string_view text, std::string_view reg) {
+        std::size_t count = 0;
+        for (auto at = text.find(reg); at != std::string_view::npos;
+             at = text.find(reg, at + reg.size())) {
+            const bool before_ok =
+                at == 0 || !(text[at - 1] >= '0' && text[at - 1] <= '9');
+            const auto after = at + reg.size();
+            const bool after_ok =
+                after >= text.size() || !(text[after] >= '0' && text[after] <= '9');
+            if (before_ok && after_ok) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto load = trim(lines[index]);
+        if (load.rfind("LOAD", 0) != 0) {
+            continue;
+        }
+        const auto space = load.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = load.substr(0, space);
+        if (mnemonic != "LOAD" && mnemonic != "LOAD8U" &&
+            mnemonic != "LOAD8S" && mnemonic != "LOAD16U" &&
+            mnemonic != "LOAD16S") {
+            continue;
+        }
+        const auto comma = load.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        std::string destination;
+        if (!register_name(load.substr(space, comma - space), destination)) {
+            continue;
+        }
+        const auto address = std::string(trim(load.substr(comma + 1)));
+        std::size_t next = index + 1;
+        while (next < lines.size()) {
+            const auto candidate = trim(lines[next]);
+            if (candidate.empty() || is_comment(candidate) ||
+                (is_label(candidate) &&
+                 label_name(candidate).rfind(".Ldbg.", 0) == 0)) {
+                ++next;
+                continue;
+            }
+            break;
+        }
+        if (next >= lines.size()) {
+            continue;
+        }
+        const auto move = trim(lines[next]);
+        if (move.rfind("MOV ", 0) != 0) {
+            continue;
+        }
+        const auto move_comma = move.find(',');
+        if (move_comma == std::string_view::npos) {
+            continue;
+        }
+        std::string move_destination;
+        std::string move_source;
+        if (!register_name(move.substr(4, move_comma - 4), move_destination) ||
+            !register_name(move.substr(move_comma + 1), move_source) ||
+            move_source != destination) {
+            continue;
+        }
+        if (move_destination == destination) {
+            dead[next] = true;
+            continue;
+        }
+        bool safe = false;
+        for (std::size_t after = next + 1; after < lines.size(); ++after) {
+            const auto candidate = trim(lines[after]);
+            if (candidate.empty() || is_comment(candidate) ||
+                (is_label(candidate) &&
+                 label_name(candidate).rfind(".Ldbg.", 0) == 0)) {
+                continue;
+            }
+            if (is_label(candidate)) {
+                break;
+            }
+            const auto candidate_space = candidate.find_first_of(" \t");
+            const auto candidate_mnemonic =
+                candidate_space == std::string_view::npos
+                    ? candidate
+                    : candidate.substr(0, candidate_space);
+            if (candidate_mnemonic == "RET" || candidate_mnemonic == "HALT") {
+                safe = destination != "R0";
+                break;
+            }
+            if (candidate_mnemonic == "CALL" || candidate_mnemonic == "BRA" ||
+                (candidate_mnemonic.size() > 1 &&
+                 candidate_mnemonic.front() == 'J')) {
+                break;
+            }
+            const auto count = mention_count(candidate, destination);
+            if (count == 0) {
+                continue;
+            }
+            if (count != 1) {
+                break;
+            }
+            const bool writes =
+                candidate_mnemonic == "MOV" || candidate_mnemonic == "LOAD" ||
+                candidate_mnemonic == "LOAD8U" || candidate_mnemonic == "LOAD8S" ||
+                candidate_mnemonic == "LOAD16U" ||
+                candidate_mnemonic == "LOAD16S" || candidate_mnemonic == "LEA" ||
+                candidate_mnemonic == "ADD" || candidate_mnemonic == "SUB" ||
+                candidate_mnemonic == "MUL" || candidate_mnemonic == "AND" ||
+                candidate_mnemonic == "OR" || candidate_mnemonic == "XOR" ||
+                candidate_mnemonic == "SHL" || candidate_mnemonic == "SHR" ||
+                candidate_mnemonic == "SAR" || candidate_mnemonic == "NEG" ||
+                candidate_mnemonic == "NOT" || candidate_mnemonic == "POP";
+            if (!writes) {
+                break;
+            }
+            const auto first_comma = candidate.find(',');
+            const auto first_operand = trim(candidate.substr(
+                candidate_mnemonic.size(),
+                first_comma == std::string_view::npos
+                    ? std::string_view::npos
+                    : first_comma - candidate_mnemonic.size()));
+            std::string written;
+            safe = register_name(first_operand, written) &&
+                   written == destination;
+            break;
+        }
+        if (!safe) {
+            continue;
+        }
+        replacements[index] = "        " + std::string(mnemonic) + " " +
+                              move_destination + ", " + address;
+        dead[next] = true;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
 std::string coalesce_store_addresses(std::string_view assembly) {
     std::istringstream input{std::string(assembly)};
     std::string line;

@@ -25,6 +25,10 @@ enum class OptimizationLevel {
 // instruction, label or branch may intervene.
 [[nodiscard]] std::string forward_store_loads(std::string_view assembly);
 
+// Rewrites `LOAD D,[addr]; MOV E,D` to `LOAD E,[addr]` when D is dead after the
+// move.
+[[nodiscard]] std::string coalesce_load_moves(std::string_view assembly);
+
 // Rewrites `MOV D,S; STORE V,[D+off]` to `STORE V,[S+off]`, dropping the move
 // when D is written again before it is read.
 [[nodiscard]] std::string coalesce_store_addresses(std::string_view assembly);

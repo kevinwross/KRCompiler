@@ -192,3 +192,16 @@ TEST_CASE("address coalescing forwards into a load") {
     CHECK(output.find("MOV R2, R15") != std::string::npos);
     CHECK(output.find("LOAD R3, [R15]") != std::string::npos);
 }
+
+TEST_CASE("load coalescing loads directly into a dead move destination") {
+    const auto input = std::string("        LOAD R12, [R7 + 8]\n"
+                                   "        MOV R8, R12\n"
+                                   "        LOAD R1, [R7 + 12]\n"
+                                   "        MOV R9, R1\n"
+                                   "        CMP R1, #0\n"
+                                   "        RET\n");
+    const auto output = krc::backend::coalesce_load_moves(input);
+    CHECK(output.find("LOAD R8, [R7 + 8]") != std::string::npos);
+    CHECK(output.find("LOAD R9, [R7 + 12]") == std::string::npos);
+    CHECK(output.find("MOV R9, R1") != std::string::npos);
+}
