@@ -227,3 +227,12 @@ TEST_CASE("load coalescing includes arithmetic results") {
     CHECK(output.find("MOV R12, R10") == std::string::npos);
     CHECK(output.find("MOV R14, R13") != std::string::npos);
 }
+
+TEST_CASE("address coalescing covers sized stores") {
+    const auto input = std::string("        MOV R1, R14\n"
+                                   "        STORE8 R0, [R1]\n"
+                                   "        RET\n");
+    const auto output = krc::backend::coalesce_store_addresses(input);
+    CHECK(output.find("STORE8 R0, [R14]") != std::string::npos);
+    CHECK(output.find("MOV R1, R14") == std::string::npos);
+}
