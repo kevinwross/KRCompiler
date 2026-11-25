@@ -7407,3 +7407,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-25T07:35:00-08:00** — **KR32 address forwarding also covers loads.** `MOV D,S; LOAD* E,[D+off]` becomes `LOAD* E,[S+off]`, dropping the move when D is dead. This removes 12 lines from `game.cpp` (4571 to 4559) and 9 from `console.cpp` (1848 to 1839). A unit test covers both a dead intermediate and one that is still used. Full `windows-msvc-debug` suite: 1005/1005.
 
 - **2026-11-25T07:42:00-08:00** — **KR32 loads directly into a move's destination.** `LOAD D,[addr]; MOV E,D` becomes `LOAD E,[addr]` when D is dead after the move. `game.cpp` KR32 assembly moved from 4559 to 4543 lines, and `console.cpp` from 1839 to 1836. A unit test covers a dead intermediate and one that is still read. Full `windows-msvc-debug` suite: 1005/1005.
+
+- **2026-11-25T07:50:00-08:00** — **KR32 coalesces a copied address computation.** `LEA D,[addr]; MOV E,D` becomes `LEA E,[addr]` when D is dead after the move, completing the load-result shape already handled. `game.cpp` KR32 assembly moved from 4543 to 4533 lines. A unit test covers the LEA form; the full `windows-msvc-debug` suite is 1005/1005.

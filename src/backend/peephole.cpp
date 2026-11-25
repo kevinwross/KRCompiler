@@ -234,7 +234,8 @@ std::string coalesce_load_moves(std::string_view assembly) {
     std::vector<std::string> replacements(lines.size());
     for (std::size_t index = 0; index < lines.size(); ++index) {
         const auto load = trim(lines[index]);
-        if (load.rfind("LOAD", 0) != 0) {
+        const bool is_lea = load.rfind("LEA ", 0) == 0;
+        if (load.rfind("LOAD", 0) != 0 && !is_lea) {
             continue;
         }
         const auto space = load.find_first_of(" \t");
@@ -242,7 +243,7 @@ std::string coalesce_load_moves(std::string_view assembly) {
             continue;
         }
         const auto mnemonic = load.substr(0, space);
-        if (mnemonic != "LOAD" && mnemonic != "LOAD8U" &&
+        if (!is_lea && mnemonic != "LOAD" && mnemonic != "LOAD8U" &&
             mnemonic != "LOAD8S" && mnemonic != "LOAD16U" &&
             mnemonic != "LOAD16S") {
             continue;

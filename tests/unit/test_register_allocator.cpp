@@ -205,3 +205,12 @@ TEST_CASE("load coalescing loads directly into a dead move destination") {
     CHECK(output.find("LOAD R9, [R7 + 12]") == std::string::npos);
     CHECK(output.find("MOV R9, R1") != std::string::npos);
 }
+
+TEST_CASE("load coalescing includes address materialisation") {
+    const auto input = std::string("        LEA R10, [R7 + 4]\n"
+                                   "        MOV R11, R10\n"
+                                   "        RET\n");
+    const auto output = krc::backend::coalesce_load_moves(input);
+    CHECK(output.find("LEA R11, [R7 + 4]") != std::string::npos);
+    CHECK(output.find("MOV R11, R10") == std::string::npos);
+}
