@@ -1,5 +1,7 @@
 #include "kr232_backend.h"
 
+#include "kr232_cfg.h"
+
 #include <algorithm>
 #include <cstring>
 #include <sstream>
@@ -2256,6 +2258,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         text = reuse_frame_addresses(text);
         text = coalesce_argument_moves(text);
         text = coalesce_address_moves(text);
+        text = eliminate_dead_register_definitions(text);
     }
     return text;
 }

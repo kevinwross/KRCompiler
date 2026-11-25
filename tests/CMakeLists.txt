@@ -11,6 +11,7 @@ add_executable(krc_tests
     unit/test_machine_ir.cpp
     unit/test_machine_liveness.cpp
     unit/test_machine_cfg.cpp
+    unit/test_kr232_cfg.cpp
     unit/test_mem2reg.cpp
     unit/test_kr32_encoder.cpp
     unit/test_kr16_encoder.cpp
