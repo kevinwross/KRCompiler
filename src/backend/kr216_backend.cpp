@@ -1679,6 +1679,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
 }
 
 std::string fold_frame_addresses(std::string_view assembly);
+std::string remove_kr216_redundant_jumps(std::string_view assembly);
 
 std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     static_cast<void>(profile_);
@@ -1817,8 +1818,65 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     }
     if (level_ == OptimizationLevel::O1) {
         out = fold_frame_addresses(out);
+        out = remove_kr216_redundant_jumps(out);
     }
     return out;
+}
+
+std::string remove_kr216_redundant_jumps(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto trim = [](std::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto text = trim(lines[index]);
+        if (text.rfind("JMP ", 0) != 0) {
+            continue;
+        }
+        const auto target = trim(text.substr(4));
+        std::size_t next = index + 1;
+        while (next < lines.size()) {
+            const auto candidate = trim(lines[next]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++next;
+                continue;
+            }
+            break;
+        }
+        if (next >= lines.size()) {
+            continue;
+        }
+        const auto candidate = trim(lines[next]);
+        if (candidate.back() != ':' || candidate.size() <= target.size()) {
+            continue;
+        }
+        if (candidate.substr(0, candidate.size() - 1) == target) {
+            dead[index] = true;
+        }
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
 }
 
 std::string fold_frame_addresses(std::string_view assembly) {
