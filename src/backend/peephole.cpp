@@ -195,6 +195,111 @@ std::string forward_store_loads(std::string_view assembly) {
     return result;
 }
 
+std::string remove_dead_moves(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto register_name = [](std::string_view text, std::string& reg) {
+        text = trim(text);
+        if (text.size() < 2 || text.front() != 'R') {
+            return false;
+        }
+        for (std::size_t index = 1; index < text.size(); ++index) {
+            if (text[index] < '0' || text[index] > '9') {
+                return false;
+            }
+        }
+        reg = std::string(text);
+        return true;
+    };
+    const auto mention_count = [](std::string_view text, std::string_view reg) {
+        std::size_t count = 0;
+        for (auto at = text.find(reg); at != std::string_view::npos;
+             at = text.find(reg, at + reg.size())) {
+            const bool before_ok =
+                at == 0 || !(text[at - 1] >= '0' && text[at - 1] <= '9');
+            const auto after = at + reg.size();
+            const bool after_ok =
+                after >= text.size() || !(text[after] >= '0' && text[after] <= '9');
+            if (before_ok && after_ok) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto move = trim(lines[index]);
+        if (move.rfind("MOV ", 0) != 0) {
+            continue;
+        }
+        const auto comma = move.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        std::string destination;
+        std::string source;
+        if (!register_name(move.substr(4, comma - 4), destination) ||
+            !register_name(move.substr(comma + 1), source)) {
+            continue;
+        }
+        std::size_t next = index + 1;
+        while (next < lines.size()) {
+            const auto candidate = trim(lines[next]);
+            if (candidate.empty() || is_comment(candidate) ||
+                (is_label(candidate) &&
+                 label_name(candidate).rfind(".Ldbg.", 0) == 0)) {
+                ++next;
+                continue;
+            }
+            break;
+        }
+        if (next >= lines.size()) {
+            continue;
+        }
+        const auto operation = trim(lines[next]);
+        const auto space = operation.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = operation.substr(0, space);
+        const bool writes =
+            mnemonic == "MOV" || mnemonic == "LOAD" ||
+            mnemonic == "LOAD8U" || mnemonic == "LOAD8S" ||
+            mnemonic == "LOAD16U" || mnemonic == "LOAD16S" ||
+            mnemonic == "LEA" || mnemonic == "ADD" || mnemonic == "SUB" ||
+            mnemonic == "MUL" || mnemonic == "DIVS" || mnemonic == "DIVU" ||
+            mnemonic == "MODS" || mnemonic == "MODU" || mnemonic == "AND" ||
+            mnemonic == "OR" || mnemonic == "XOR" || mnemonic == "SHL" ||
+            mnemonic == "SHR" || mnemonic == "SAR" || mnemonic == "NEG" ||
+            mnemonic == "NOT" || mnemonic == "POP";
+        if (!writes || mention_count(operation, destination) != 1) {
+            continue;
+        }
+        const auto operation_comma = operation.find(',');
+        const auto first_operand = trim(operation.substr(
+            mnemonic.size(), operation_comma == std::string_view::npos
+                                  ? std::string_view::npos
+                                  : operation_comma - mnemonic.size()));
+        std::string written;
+        if (register_name(first_operand, written) && written == destination) {
+            dead[index] = true;
+        }
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
 std::string coalesce_load_moves(std::string_view assembly) {
     std::istringstream input{std::string(assembly)};
     std::string line;

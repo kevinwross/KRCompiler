@@ -236,3 +236,14 @@ TEST_CASE("address coalescing covers sized stores") {
     CHECK(output.find("STORE8 R0, [R14]") != std::string::npos);
     CHECK(output.find("MOV R1, R14") == std::string::npos);
 }
+
+TEST_CASE("dead move removal sees an overwrite before any read") {
+    const auto input = std::string("        MOV R13, R0\n"
+                                   "        ADD R13, R8, #4\n"
+                                   "        MOV R14, R0\n"
+                                   "        ADD R15, R14, #4\n"
+                                   "        RET\n");
+    const auto output = krc::backend::remove_dead_moves(input);
+    CHECK(output.find("MOV R13, R0") == std::string::npos);
+    CHECK(output.find("MOV R14, R0") != std::string::npos);
+}

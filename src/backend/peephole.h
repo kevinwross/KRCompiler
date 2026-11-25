@@ -25,6 +25,9 @@ enum class OptimizationLevel {
 // instruction, label or branch may intervene.
 [[nodiscard]] std::string forward_store_loads(std::string_view assembly);
 
+// Removes `MOV D,S` when the next instruction overwrites D without reading it.
+[[nodiscard]] std::string remove_dead_moves(std::string_view assembly);
+
 // Rewrites `LOAD D,[addr]; MOV E,D` or `LEA D,[addr]; MOV E,D` to the same
 // operation with E as its destination, when D is dead after the move.
 [[nodiscard]] std::string coalesce_load_moves(std::string_view assembly);
