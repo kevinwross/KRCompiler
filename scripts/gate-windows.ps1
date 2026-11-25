@@ -11,7 +11,11 @@
 # Usage: pwsh -File scripts/gate-windows.ps1 [-Preset <name>] [-SkipTests]
 param(
     [string]$Preset = '',
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    # Discard the CMake cache before configuring. The executed rows depend on sibling
+    # VM binaries discovered at configure time, so a cache written when those binaries
+    # did not exist silently registers fewer rows.
+    [switch]$Fresh
 )
 
 # J5: ask the doctor first, so a missing tool fails with a sentence naming the
@@ -61,7 +65,9 @@ function Step([string]$label, [scriptblock]$action) {
 foreach ($name in $presets) {
     Write-Output ''
     Write-Output "== preset $name"
-    Step "$name configure" { & $cmake --preset $name }
+    $configureArgs = @("--preset", $name)
+        if ($Fresh) { $configureArgs += "--fresh" }
+        Step "$name configure" { & $cmake @configureArgs }
     if (-not $script:ok) { continue }
     Step "$name build" { & $cmake --build --preset $name --parallel $jobs }
     if (-not $script:ok) { continue }
