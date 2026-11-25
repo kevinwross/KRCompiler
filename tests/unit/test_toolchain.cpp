@@ -322,8 +322,8 @@ TEST_CASE("A KR16 declaration does not take the next statement's line") {
     }
     CHECK_FALSE(saw_line_2);
     CHECK(saw_line_3);
-    // The first line-bearing instruction of `main` is the store, not the
-    // declaration: the function's start is the prologue.
+    // The entry record names the definition's line (1). The declaration on line
+    // 2 still produces no record, so the first body record is line 3.
     std::uint64_t first_line_address = 0;
     std::uint32_t first_line = 0;
     for (const auto& function : image.functions) {
@@ -340,7 +340,7 @@ TEST_CASE("A KR16 declaration does not take the next statement's line") {
             }
         }
     }
-    CHECK_EQ(first_line, 3);
+    CHECK_EQ(first_line, 1);
 }
 TEST_CASE("flatten places allocated sections at their linked addresses") {
     // A1 of the build cleanup plan: the flat image is what a boot loader reads,
@@ -463,4 +463,50 @@ TEST_CASE("the symbol sidecar carries the image symbols and a CRC of the flat fo
         }
     }
     CHECK(found);
+}
+
+TEST_CASE("A function's definition line maps to its entry address") {
+    const std::string text =
+        "int add(int a, int b) {\n"
+        "    return a + b;\n"
+        "}\n"
+        "\n"
+        "int main(void) {\n"
+        "    return add(1, 2);\n"
+        "}\n";
+    for (const auto target : {krc::toolchain::Target::Kr32,
+                              krc::toolchain::Target::Kr16,
+                              krc::toolchain::Target::Kr216}) {
+        krc::toolchain::Options options;
+        options.target = target;
+        const auto compiled = krc::toolchain::compile(source("entry.c", text), options);
+        REQUIRE_MESSAGE(compiled.ok, compiled.error);
+        const auto begin = compiled.assembly.find(".Ladd.begin:");
+        const auto entry_block = compiled.assembly.find(".Ladd.entry:");
+        REQUIRE(begin != std::string::npos);
+        REQUIRE(entry_block != std::string::npos);
+        CHECK(begin < entry_block);
+
+        const auto built = krc::toolchain::build(
+            std::vector<krc::toolchain::Source>{source("entry.c", text)}, options);
+        REQUIRE_MESSAGE(built.ok, built.error);
+        krc::debug::KdbgImage image;
+        std::string error;
+        REQUIRE_MESSAGE(krc::debug::decode_kdbg_image(built.image, image, error), error);
+
+        const krc::debug::KdbgFunction* add = nullptr;
+        for (const auto& function : image.functions) {
+            if (function.name == "add") {
+                add = &function;
+            }
+        }
+        REQUIRE(add != nullptr);
+        bool at_entry = false;
+        for (const auto& line : image.lines) {
+            if (line.address == add->start && line.line == 1) {
+                at_entry = true;
+            }
+        }
+        CHECK_MESSAGE(at_entry, "target " << static_cast<int>(target));
+    }
 }

@@ -35,6 +35,17 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
         function = found->second;
     }
     function->declaration = false;
+    // The definition's own line is front-end knowledge; the backends cannot
+    // recover it from the first statement, which is a later line. A synthesized
+    // body has no location and leaves the field empty (ADR 0061).
+    if (definition.location.valid()) {
+        const auto location =
+            diagnostics_.source_manager().line_column(definition.location);
+        function->definition.file =
+            std::string(diagnostics_.source_manager().file_name(definition.location));
+        function->definition.line = location.line;
+        function->definition.column = location.column;
+    }
     if (!function->blocks.empty()) {
         error(definition.location, "function '" + name + "' already has a body");
         return;

@@ -103,7 +103,7 @@ Exceptions: `invoke` is a call with two successors — the normal edge and the l
 
 ## Debug information
 
-Every instruction may carry `{file, line, column}`. Variables are represented in debug metadata, not as IR values: frame offset, register, address, TLS offset, or location expression. `-O0` uses frame slots; `-O1` may use registers, but v1 guarantees line and function mapping only.
+Every instruction may carry `{file, line, column}`. Variables are represented in debug metadata, not as IR values: frame offset, register, address, TLS offset, or location expression. `-O0` uses frame slots; `-O1` may use registers, but v1 guarantees line and function mapping only. A function also carries the source location of its definition, which a backend emits as an entry label and a line record before the prologue ([ADR 0061](decisions/0061-function-definition-location.md)).
 
 ## Verifier rules
 

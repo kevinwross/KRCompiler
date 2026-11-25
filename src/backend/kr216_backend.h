@@ -42,6 +42,9 @@ private:
     void emit_function(std::string& out, const ir::Function& function,
                        const FrameLayout& layout, std::string& error) const;
     void add_debug_type(ir::TypePtr type) const;
+    // Adds an L record for `label`, registering its file in the source table on
+    // first use.
+    void add_debug_line(const std::string& label, const ir::DebugLocation& location) const;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;

@@ -49,6 +49,9 @@ class Kr16Backend {
     // Adds a T record, and a C record with its M members for a record type, once
     // per type name.
     void add_debug_type(ir::TypePtr type) const;
+    // Adds an L record for `label`, registering its file in the source table on
+    // first use.
+    void add_debug_line(const std::string& label, const ir::DebugLocation& location) const;
 
     const ir::Module& module_;
     const target::TargetProfile& profile_;

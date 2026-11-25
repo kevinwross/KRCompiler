@@ -329,6 +329,11 @@ struct Function final : Value {
     // The name a debugger shows, such as `Animal::legs`. Empty means the symbol
     // name is the display name. Only the backend reads this.
     std::string debug_name;
+    // The source location of the function's definition, when IRGen has one.
+    // Backends emit an entry label at this address and a line record for it, so a
+    // debugger can stop before the prologue (ADR 0061). Empty for a synthesized
+    // function.
+    DebugLocation definition;
     std::vector<std::unique_ptr<Parameter>> parameters;
     std::vector<std::unique_ptr<BasicBlock>> blocks;
 

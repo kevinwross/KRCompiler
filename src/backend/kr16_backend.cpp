@@ -345,6 +345,20 @@ void Kr16Backend::add_debug_type(ir::TypePtr type) const {
     }
 }
 
+void Kr16Backend::add_debug_line(const std::string& label,
+                                 const ir::DebugLocation& location) const {
+    auto source = debug_sources_.find(location.file);
+    if (source == debug_sources_.end()) {
+        const auto id = next_debug_source_++;
+        source = debug_sources_.emplace(location.file, id).first;
+        debug_info_ += "S " + std::to_string(id) + " " + location.file +
+                       std::string(1, '\0');
+    }
+    debug_info_ += "L " + label + " " + std::to_string(source->second) + " " +
+                   std::to_string(location.line) + " " +
+                   std::to_string(location.column) + std::string(1, '\0');
+}
+
 void Kr16Backend::emit_function(std::string& out,
                                 const ir::Function& function,
                                 const FrameLayout& layout,
@@ -432,6 +446,13 @@ void Kr16Backend::emit_function(std::string& out,
         out += ".weak " + function.name + "\n";
     }
     out += function.name + ":\n";
+    // The entry label precedes the prologue so a breakpoint on the definition's
+    // line stops before the frame is created (ADR 0061).
+    const std::string begin_label = ".L" + function.name + ".begin";
+    out += begin_label + ":\n";
+    if (function.definition.valid()) {
+        add_debug_line(begin_label, function.definition);
+    }
     out += "    PUSH R4\n";
     out += "    MOV R4, SP\n";
     out += "    LEA SP, [R4-" + std::to_string(layout.frame_size) + "]\n";
@@ -578,21 +599,10 @@ void Kr16Backend::emit_function(std::string& out,
             // there would report the declaration's line for the statement. That
             // is why `int local;` on line 2 used to shadow `local = 7;` on line 3.
             if (instruction->opcode != ir::Opcode::Alloca && instruction->debug.valid()) {
-                auto source = debug_sources_.find(instruction->debug.file);
-                if (source == debug_sources_.end()) {
-                    const auto id = next_debug_source_++;
-                    source = debug_sources_.emplace(instruction->debug.file, id).first;
-                    debug_info_ += "S " + std::to_string(id) + " " +
-                                   instruction->debug.file + std::string(1, '\0');
-                }
                 const auto label = ".Ldbg." + function.name + "." +
                                    std::to_string(debug_label_counter++);
                 out += label + ":\n";
-                debug_info_ += "L " + label + " " +
-                               std::to_string(source->second) + " " +
-                               std::to_string(instruction->debug.line) + " " +
-                               std::to_string(instruction->debug.column) +
-                               std::string(1, '\0');
+                add_debug_line(label, instruction->debug);
             }
             switch (instruction->opcode) {
             case ir::Opcode::Alloca:

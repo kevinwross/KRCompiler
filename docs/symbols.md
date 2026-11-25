@@ -69,6 +69,14 @@ name is not unique, so anything that resolves keeps using the symbol. Records ar
 emitted deterministically: sources, lines, functions, symbols, variables, types,
 then build metadata.
 
+Every function's entry address carries a line record for the source line of its
+definition. The bridge labels it `.L<symbol>.begin`; the label and the function
+symbol are at the same address, so the line record and the Function record's
+`start` agree. A breakpoint on the definition line therefore binds before the
+prologue. KR232's assembler builds its bridge from the assembly text and does not
+yet carry source line records, so that target has the label but no definition-line
+record ([ADR 0061](decisions/0061-function-definition-location.md)).
+
 ## v1.1 additions
 
 v1.1 is **additive**. A v1 record keeps its tag and its exact payload; every new

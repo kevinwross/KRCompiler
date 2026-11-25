@@ -205,6 +205,10 @@ private:
     // reason allocation is worth wiring.
     [[nodiscard]] std::string result_register(const ir::Instruction& instruction) const;
 
+    // Adds an L record for `label`, registering its file in the source table on
+    // first use. The function entry and every statement use the same path.
+    void add_debug_line(const std::string& label, const ir::DebugLocation& location) const;
+
     const ir::Module& module_;
     const target::TargetProfile& profile_;
     OptimizationLevel level_ = OptimizationLevel::O0;

@@ -1246,6 +1246,21 @@ void Kr32Backend::emit_machine(std::string& out,
         recording_->blocks.back().instructions.push_back(instruction);
     }
 }
+
+void Kr32Backend::add_debug_line(const std::string& label,
+                                 const ir::DebugLocation& location) const {
+    auto source = debug_sources_.find(location.file);
+    if (source == debug_sources_.end()) {
+        const auto id = next_debug_source_++;
+        source = debug_sources_.emplace(location.file, id).first;
+        debug_info_ += "S " + std::to_string(id) + " " + location.file +
+                       std::string(1, '\0');
+    }
+    debug_info_ += "L " + label + " " + std::to_string(source->second) + " " +
+                   std::to_string(location.line) + " " +
+                   std::to_string(location.column) + std::string(1, '\0');
+}
+
 void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                                 const FrameLayout& layout) const {
     compute_allocation(function);
@@ -1255,6 +1270,14 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
         out += "        .weak " + function.name + "\n";
     }
     out += function.name + ":\n";
+    // The entry label sits before the prologue, so a breakpoint on the
+    // definition's line stops before the frame is created. The symbol and this
+    // label share an address (ADR 0061).
+    const std::string begin_label = ".L" + function.name + ".begin";
+    out += begin_label + ":\n";
+    if (function.definition.valid()) {
+        add_debug_line(begin_label, function.definition);
+    }
     // The first converted emit site. The machine instructions are built and printed by
     // one call each, so the text and the recorded form cannot drift; the prologue is
     // converted first because every function has one and it is short enough to check
@@ -1420,19 +1443,10 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
                 emit_phi_copies(out, function, layout, *block, *instruction);
             }
             if (instruction->debug.valid()) {
-                auto source = debug_sources_.find(instruction->debug.file);
-                if (source == debug_sources_.end()) {
-                    const auto id = next_debug_source_++;
-                    source = debug_sources_.emplace(instruction->debug.file, id).first;
-                    debug_info_ += "S " + std::to_string(id) + " " + instruction->debug.file +
-                                   std::string(1, '\0');
-                }
                 const auto label = ".Ldbg." + function.name + "." +
                                    std::to_string(debug_label_counter++);
                 out += label + ":\n";
-                debug_info_ += "L " + label + " " + std::to_string(source->second) + " " +
-                               std::to_string(instruction->debug.line) + " " +
-                               std::to_string(instruction->debug.column) + std::string(1, '\0');
+                add_debug_line(label, instruction->debug);
             }
             emit_instruction(out, function, layout, *instruction);
         }

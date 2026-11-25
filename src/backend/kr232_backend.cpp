@@ -294,6 +294,10 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         out << ".globl " << name << "\n";
         out << ".text\n";
         out << name << ":\n";
+        // The entry label precedes the prologue so a disassembly has one stable
+        // marker at the definition. This assembler builds its bridge from the
+        // assembly text, so it has no definition-line record yet (ADR 0061).
+        out << ".L" << name << ".begin:\n";
 
         // Slots: allocas first (their address is FP-relative), then one slot per
         // value, then one per parameter. An f64 takes two slots and starts on an

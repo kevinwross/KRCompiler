@@ -793,6 +793,13 @@ of a program linked with `libkrcrt.kro` is dominated by `printf`, `malloc`, and
 the other runtime functions. The image's own functions appear with their source
 ranges and scopes.
 
+On KR32, KR16, and KR216, each function's first line record is its definition
+line, at the function symbol's address. A breakpoint on
+`int add(int a, int b) {` stops before the prologue, so the saved frame pointer,
+the stack adjustment, and the parameter stores are the instructions that follow.
+KR232's assembler-built bridge does not carry C source lines yet, so its entry
+label is visible in a disassembly but cannot carry a breakpoint at the definition.
+
 The same inputs produce byte-identical objects and images. There are no
 timestamps in the output; recorded source paths are the ones passed to `krc`,
 optionally rewritten by `--source-root` at link time. A build without `-O` and
