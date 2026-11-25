@@ -214,3 +214,16 @@ TEST_CASE("load coalescing includes address materialisation") {
     CHECK(output.find("LEA R11, [R7 + 4]") != std::string::npos);
     CHECK(output.find("MOV R11, R10") == std::string::npos);
 }
+
+TEST_CASE("load coalescing includes arithmetic results") {
+    const auto input = std::string("        ADD R10, R11, #4\n"
+                                   "        MOV R12, R10\n"
+                                   "        ADD R13, R11, #8\n"
+                                   "        MOV R14, R13\n"
+                                   "        CMP R13, #0\n"
+                                   "        RET\n");
+    const auto output = krc::backend::coalesce_load_moves(input);
+    CHECK(output.find("ADD R12, R11, #4") != std::string::npos);
+    CHECK(output.find("MOV R12, R10") == std::string::npos);
+    CHECK(output.find("MOV R14, R13") != std::string::npos);
+}

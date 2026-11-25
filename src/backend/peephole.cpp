@@ -234,18 +234,22 @@ std::string coalesce_load_moves(std::string_view assembly) {
     std::vector<std::string> replacements(lines.size());
     for (std::size_t index = 0; index < lines.size(); ++index) {
         const auto load = trim(lines[index]);
-        const bool is_lea = load.rfind("LEA ", 0) == 0;
-        if (load.rfind("LOAD", 0) != 0 && !is_lea) {
-            continue;
-        }
         const auto space = load.find_first_of(" \t");
         if (space == std::string_view::npos) {
             continue;
         }
         const auto mnemonic = load.substr(0, space);
-        if (!is_lea && mnemonic != "LOAD" && mnemonic != "LOAD8U" &&
-            mnemonic != "LOAD8S" && mnemonic != "LOAD16U" &&
-            mnemonic != "LOAD16S") {
+        const bool is_load = mnemonic == "LOAD" || mnemonic == "LOAD8U" ||
+                             mnemonic == "LOAD8S" || mnemonic == "LOAD16U" ||
+                             mnemonic == "LOAD16S";
+        const bool is_lea = mnemonic == "LEA";
+        const bool is_alu =
+            mnemonic == "ADD" || mnemonic == "SUB" || mnemonic == "MUL" ||
+            mnemonic == "DIVS" || mnemonic == "DIVU" || mnemonic == "MODS" ||
+            mnemonic == "MODU" || mnemonic == "AND" || mnemonic == "OR" ||
+            mnemonic == "XOR" || mnemonic == "SHL" || mnemonic == "SHR" ||
+            mnemonic == "SAR" || mnemonic == "NEG" || mnemonic == "NOT";
+        if (!is_load && !is_lea && !is_alu) {
             continue;
         }
         const auto comma = load.find(',');
