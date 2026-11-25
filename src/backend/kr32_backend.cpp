@@ -2433,7 +2433,7 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
         emit_jump(out, machine::Opcode::Jump,
                   block_label(function, *instruction.successors.front()));
         break;
-    case ir::Opcode::CondBr:
+    case ir::Opcode::CondBr: {
         if (is_wide(instruction.operands[0]->type)) {
             load_wide(out, function, layout, instruction.operands[0]);
             emit_binary(out, machine::Opcode::Or, machine::Operand::physical(0),
@@ -2468,13 +2468,15 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                       block_label(function, *instruction.successors[1]));
             break;
         }
-        load_value(out, function, layout, instruction.operands[0], "R0");
-        emit_compare(out, machine::Operand::physical(0), machine::Operand::immediate(0));
+        const auto branch_value =
+            compare_operand(out, function, layout, instruction.operands[0], 0);
+        emit_compare(out, branch_value, machine::Operand::immediate(0));
         emit_jump(out, machine::Opcode::JumpIfNotZero,
                   block_label(function, *instruction.successors[0]));
         emit_jump(out, machine::Opcode::Jump,
                   block_label(function, *instruction.successors[1]));
         break;
+    }
     case ir::Opcode::Ret:
         if (!instruction.operands.empty()) {
             if (ir::is_float(instruction.operands[0]->type)) {
