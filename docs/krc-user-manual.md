@@ -614,8 +614,9 @@ error: target 'kr64' has no code generator yet
 ### The language subset
 
 The front end implements a C++17 subset: classes, single inheritance, virtual
-functions and dispatch, RTTI, exceptions on KR32 (class types only),
-constructors, destructors with block-scope cleanup, `new`/`delete` including
+functions and dispatch, RTTI, exceptions within each target's ABI (KR16 has
+neither; a KR32 exception must be a class type), constructors, destructors with
+block-scope cleanup, `new`/`delete` including
 arrays, default copy construction and assignment, references, `nullptr`, `auto`,
 `decltype`, range-`for`, scoped enums, `constexpr`, and function, class, and
 non-type template parameters. [release-notes.md](release-notes.md) lists what the
@@ -761,7 +762,7 @@ krld: objects have different target IDs
 | `.flat` | `krld --flat`, `krc image --flat` | a loader that reads a raw image |
 | `.lst` | `krc -l`, `krc image -l` | you |
 | `.map` | `krld --map`, `krc image --map` | you |
-| `.sym` | `krld --sym` (KR32 only) | the KR32 OS symbol loader |
+| `.sym` | `krld --sym`, `krc image --sym` (KR32 only) | the KR32 OS symbol loader |
 
 ### Default names
 
@@ -811,8 +812,7 @@ section with its address and size, and every symbol with its address.
 ## 13. Diagnostics and troubleshooting
 
 `krc` reports source diagnostics as `file:line:column: error: message`, quotes
-the line, and marks the column. Linker errors are one-line `krld:` messages. A
-compile error writes no object, and a link error writes no image.
+the line, and marks the column. Linker errors are one-line `krld:` messages.
 
 | Message | Cause | Action |
 |---|---|---|
@@ -850,9 +850,9 @@ A missing file input is reported before compilation:
   tracking and rebuild decisions belong to the build system around it.
 - **No host C library.** The target sees only the sysroot headers and the
   runtime objects it links; the host's headers and libraries are not visible.
-- **No implicit runtime.** `krc -c` never links; the only implicit link is the
-  KR16 image built by `krc -c --target=kr16`, and it carries only the `puts`
-  stub.
+- **No implicit runtime.** `krc -c` does not link for KR32, KR216, or KR232; the
+  only implicit link is the KR16 image built by `krc -c --target=kr16`, and it
+  carries only the `puts` stub.
 
 ## 15. Where the detail lives
 
