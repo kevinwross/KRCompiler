@@ -148,7 +148,7 @@ checkout typically builds them at:
 ```
 ..\kr32\build\windows-msvc\Debug\kr32.exe
 ..\kr16\build\windows-ninja\kr16.exe
-..\kr232\build\gate-kernel\kr232-emu.exe
+..\kr232\build\gate-kernel\kr232.exe
 ```
 
 The command shape used by the test suite, and by this manual, is:
@@ -156,7 +156,7 @@ The command shape used by the test suite, and by this manual, is:
 ```powershell
 $vm32  = "..\kr32\build\windows-msvc\Debug\kr32.exe"
 $vm16  = "..\kr16\build\windows-ninja\kr16.exe"
-$vm232 = "..\kr232\build\gate-kernel\kr232-emu.exe"
+$vm232 = "..\kr232\build\gate-kernel\kr232.exe"
 
 & $vm32 vm program.kr32 --max-steps 20000000 --fs-root .
 & $vm16 vm program.kr16 --max-cycles 20000000 --fs-root .
@@ -674,7 +674,7 @@ krc image [options] objects... -o image
 | `-O1`, `-O` | Run the optimiser passes documented in [optimize.md](optimize.md) |
 | `-S` | Emit target assembly |
 | `-c` | Emit a relocatable object, or a complete image on KR16 |
-| `--emit-object` | KR16, KR216, KR232: write a `.kro` object |
+| `--emit-object` | With `-c`: write a `.kro` instead of a KR16 image |
 | `--far-calls` | KR232: emit calls in the wide form; needed for a large runtime |
 | `-o FILE` | Output path |
 | `-I DIR`, `-IDIR` | Add an include directory, before the sysroot |

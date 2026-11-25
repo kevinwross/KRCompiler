@@ -122,7 +122,7 @@ if(NOT KRC_KR16_VM)
     endif()
 endif()
 
-# The kr232 emulator is the sibling repository's `kr232-emu`, by the same rule as
+# The kr232 emulator is the sibling repository's `kr232`, by the same rule as
 # the other two: a copy kept in this tree is preferred, the sibling checkout is a
 # Windows-only fallback, and an empty result registers no run test so a host
 # without the emulator stays green.
@@ -134,14 +134,14 @@ if(NOT KRC_KR232_VM)
     foreach(_krc_vm_dir IN ITEMS
             "${CMAKE_CURRENT_SOURCE_DIR}/vm"
             "${CMAKE_CURRENT_SOURCE_DIR}/build/vm")
-        if(NOT KRC_KR232_VM AND EXISTS "${_krc_vm_dir}/kr232-emu${CMAKE_EXECUTABLE_SUFFIX}")
-            set(KRC_KR232_VM "${_krc_vm_dir}/kr232-emu${CMAKE_EXECUTABLE_SUFFIX}"
+        if(NOT KRC_KR232_VM AND EXISTS "${_krc_vm_dir}/kr232${CMAKE_EXECUTABLE_SUFFIX}")
+            set(KRC_KR232_VM "${_krc_vm_dir}/kr232${CMAKE_EXECUTABLE_SUFFIX}"
                 CACHE FILEPATH "Path to a kr232 VM binary for the executed tests" FORCE)
         endif()
     endforeach()
     if(WIN32 AND NOT KRC_KR232_VM)
         set(_krc_sibling_vm
-            "${CMAKE_CURRENT_SOURCE_DIR}/../kr232/build/windows-msvc/kr232-emu.exe")
+            "${CMAKE_CURRENT_SOURCE_DIR}/../kr232/build/windows-msvc/kr232.exe")
         if(EXISTS "${_krc_sibling_vm}")
             set(KRC_KR232_VM "${_krc_sibling_vm}" CACHE FILEPATH
                 "Path to a kr232 VM binary for the executed tests" FORCE)

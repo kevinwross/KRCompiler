@@ -9,7 +9,7 @@
 
 `kr232-plan.md` §5 requires a second ADR beside the target profile, because the
 image crosses two repositories: the writer lands in krcompiler and the loader in
-kr232-emu, and neither can be tested against the other's reading. ADR 0054 did
+kr232, and neither can be tested against the other's reading. ADR 0054 did
 the same for `K216`, and the kr232 drafts fix what the bytes must carry: the
 reset word at `0x0100` (ISA §2.4, §12), the sixteen vectors that follow it, and
 a `.kdbg` payload whose `image_base` krdbg validates against the container.

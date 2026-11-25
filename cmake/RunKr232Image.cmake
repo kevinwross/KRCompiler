@@ -1,7 +1,7 @@
 # Runs a linked kr232 image under the sibling emulator and checks its exit status.
 #
 # A link-only test cannot catch a defect in generated code that the program only
-# shows when executed, so this rule launches `kr232-emu vm IMAGE`. The emulator
+# shows when executed, so this rule launches `kr232 vm IMAGE`. The emulator
 # returns the program's `SYS exit` status as its own process status, which is the
 # contract kr232-plan §6 fixes and the reason the check reads the process code.
 #
