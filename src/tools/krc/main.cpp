@@ -30,28 +30,38 @@ void print_usage(std::ostream& out) {
         << "\n"
         << "Options:\n"
         << "  --version              Print the compiler version\n"
-        << "  --help                 Print this help\n"
+        << "  --help, -h             Print this help\n"
         << "  --list-targets         List target profiles\n"
-        << "  --target=NAME          Select kr32, kr16, or kr64\n"
-        << "  -std=c11               Select the C dialect (C++ starts later)\n"
+        << "  --target=NAME          Select kr32, kr16, kr216, kr232, or kr64\n"
+        << "  -std=c11               Compile as C11 (the default)\n"
+        << "  -std=c++17             Compile as C++ (also c++11, c++14)\n"
         << "  -fsyntax-only          Preprocess, parse, and check only\n"
-        << "  -E                     Preprocess only\n"
-        << "  --dump-ast             Print the parsed C AST\n"
+        << "  -E                     Preprocess only, to stdout\n"
+        << "  --dump-ast             Print the parsed AST\n"
         << "  --dump-ir              Lower to typed SSA IR and print it\n"
         << "  --dump-stats           Print IR instruction and block counts per function\n"
         << "  -O0                    Straightforward lowering (the default)\n"
-        << "  -O1                    The optimiser passes plan.md 8.8 lists\n"
-        << "  --dump-symbols FILE    Dump KDBG symbols from a .kr32 or .kr16 image\n"
+        << "  -O1, -O                Enable the optimiser\n"
+        << "  --dump-symbols FILE    Dump KDBG symbols from a target image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
-        << "  -S                     Emit KR32 assembly to stdout, or to -o FILE\n"
-        << "  -c                     Emit a relocatable KRO object\n"
-        << "  --emit-object          Write a KR16 KRO object instead of .kr16\n"
-        << "  -o FILE                Output path for -S or -c\n"
-        << "  -I DIR                 Add an include search directory\n"
+        << "  -S                     Emit assembly (FILE.<target>.s, or -o FILE)\n"
+        << "  -c                     Emit an object, or a KR16 image\n"
+        << "  --emit-object          With -c, write a .kro instead of a KR16 image\n"
+        << "  --far-calls            KR232: emit wide calls for a large runtime\n"
+        << "  -l [FILE]              Write a listing (default: output or source + .lst)\n"
+        << "  --listing=FILE         Name the listing file\n"
+        << "  -o FILE                Output path\n"
+        << "  -I DIR, -IDIR          Add an include search directory\n"
         << "  --sysroot DIR          Use DIR as the target sysroot\n"
         << "\n"
-        << "KR32 code generation is complete for the implemented C and C++ subset;\n"
-        << "KR16 compiles C to a .kr16 image or a KRO object, and KR64 has no backend.\n";
+        << "Targets:\n"
+        << "  kr32                   ILP32; C and C++\n"
+        << "  kr16                   IP16; C and C++ within the profile\n"
+        << "  kr216                  IP16 with 32-bit long; C and C++\n"
+        << "  kr232                  ILP32 without a 64-bit integer; C and C++\n"
+        << "  kr64                   LP64 profile only; no code generation\n"
+        << "\n"
+        << "Run 'krc image --help' for the link options.\n";
 }
 
 int fail(std::string_view message) {
@@ -209,15 +219,17 @@ int run_image(int argc, char** argv) {
         const std::string_view argument = argv[index];
         if (argument == "--help" || argument == "-h") {
             std::cout << "usage: krc image [options] objects... -o image\n"
-                         "  --target=NAME   kr32, kr16, kr64, kr216 or kr232 (default kr32)\n"
-                         "  --base=ADDR     Image base\n"
-                         "  --entry=NAME    Entry symbol (default _start)\n"
-                         "  --flat          Write the raw image instead of a container\n"
-            "  --source-root=DIR  Emit debug source paths relative to DIR\n"
-                         "  --map=FILE      Write the deterministic image map\n"
-                         "  --sym=FILE      Write the kr32 symbol sidecar\n"
-                         "  -l [FILE]       Write a listing (default <output>.lst)\n"
-                         "  -o FILE         Output image\n";
+                         "  --target=NAME      kr32, kr16, kr216, kr232, or kr64 (default kr32)\n"
+                         "  --base=ADDR        Image base (default: the target's load address)\n"
+                         "  --entry=NAME       Entry symbol (default _start)\n"
+                         "  --flat             Write the raw image instead of a container\n"
+                         "  --source-root=DIR  Emit debug source paths relative to DIR\n"
+                         "  --map=FILE         Write the deterministic image map\n"
+                         "  --sym=FILE         Write the kr32 symbol sidecar\n"
+                         "  -l [FILE]          Write a listing (default <output>.lst)\n"
+                         "  --listing=FILE     Name the listing file\n"
+                         "  -o FILE            Output image\n"
+                         "  --help, -h         Print this help\n";
             return 0;
         }
         if (argument == "-l") {
@@ -624,7 +636,8 @@ int main(int argc, char** argv) {
 
     const auto target_id = krc::target::parse_target(target_name);
     if (!target_id) {
-        return fail("unknown target '" + target_name + "' (expected kr32, kr16, or kr64)");
+        return fail("unknown target '" + target_name +
+                    "' (expected kr32, kr16, kr216, kr232, or kr64)");
     }
     const auto& profile = krc::target::get_target(*target_id);
 
@@ -1074,7 +1087,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    std::cerr << "krc: the " << profile.name
-              << " front end parsed the input and built IR; code generation is not implemented yet\n";
+    std::cerr << "krc: no output requested for the " << profile.name
+              << " target; pass -S or -c to emit code, or -fsyntax-only to check only\n";
     return 2;
 }
