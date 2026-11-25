@@ -8,6 +8,7 @@
 # Optional: MAX_STEPS (default 20000000), FS_ROOT (the host filesystem sandbox
 #           root; without it the VM defaults to ./sandbox and an open fails),
 #           ARGS (a ;-separated list of guest arguments, each passed as --arg),
+#           INPUT_FILE (a text file whose contents become the VM's --input),
 #           EXPECT_OUTPUT (a regular expression matched against stdout),
 #           EXPECT_FILE (a host file the run must write, non-empty),
 #           EXPECT_FILE_TEXT (a regular expression the file must match)
@@ -33,6 +34,15 @@ if(DEFINED ARGS AND NOT ARGS STREQUAL "")
     foreach(argument IN LISTS ARGS)
         list(APPEND vm_args --arg "${argument}")
     endforeach()
+endif()
+# The VM consumes --input as text, one byte per getchar. A file keeps a long
+# scripted session readable in the test source tree instead of in a command line.
+if(DEFINED INPUT_FILE AND NOT INPUT_FILE STREQUAL "")
+    if(NOT EXISTS "${INPUT_FILE}")
+        message(FATAL_ERROR "input file not found: ${INPUT_FILE}")
+    endif()
+    file(READ "${INPUT_FILE}" scripted_input)
+    list(APPEND vm_args --input "${scripted_input}")
 endif()
 # A run that fails to write its file would pass on a stale one from an earlier
 # invocation, so the expected path is removed before the program starts.

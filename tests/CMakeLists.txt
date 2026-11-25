@@ -8444,3 +8444,74 @@ endif()
             endif()
         endforeach()
     endif()
+
+    # The example games. Each source is compiled and linked by krc for KR32 and
+    # then run with a scripted session; no host compiler sees them. The games
+    # seed themselves with a constant, so the hand and galaxy are the same on
+    # every run and the input file pins the commands, not the cards.
+    foreach(game IN ITEMS tictactoe blackjack startrek)
+        add_test(NAME krc_link_${game}
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DSOURCE=${CMAKE_SOURCE_DIR}/examples/${game}.cpp
+                    -DLIBC=${KRC_STAGE_RUNTIME}/libkrcrt.kro
+                    -DRUNTIME=${KRC_STAGE_RUNTIME}/crt0.s
+                    -DOUTPUT=${KRC_TEST_OUTPUT_DIR}/game_${game}.kr32
+                    -P ${CMAKE_SOURCE_DIR}/cmake/LinkRuntime.cmake)
+    endforeach()
+
+    if(KRC_KR32_VM AND EXISTS "${KRC_KR32_VM}")
+        add_test(NAME krc_run_tictactoe
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/game_tictactoe.kr32
+                    -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/games/tictactoe.txt
+                    -DEXPECT_EXIT=0
+                    "-DEXPECT_OUTPUT=The computer wins[.].*Thanks for playing[.]"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_tictactoe PROPERTIES DEPENDS krc_link_tictactoe)
+
+        add_test(NAME krc_run_blackjack
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/game_blackjack.kr32
+                    -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/games/blackjack.txt
+                    -DEXPECT_EXIT=0
+                    "-DEXPECT_OUTPUT=Bet doubled to .20[.]00.*Dealer busts[.] You win[.]"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_blackjack PROPERTIES DEPENDS krc_link_blackjack)
+
+        add_test(NAME krc_run_startrek
+            COMMAND ${CMAKE_COMMAND}
+                    -DVM=${KRC_KR32_VM}
+                    -DIMAGE=${KRC_TEST_OUTPUT_DIR}/game_startrek.kr32
+                    -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/games/startrek.txt
+                    -DMAX_STEPS=50000000
+                    -DEXPECT_EXIT=0
+                    "-DEXPECT_OUTPUT=Klingons remaining 20.*Status report.*Shields now at 100.*You have resigned"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/RunKr32Image.cmake)
+        set_tests_properties(krc_run_startrek PROPERTIES DEPENDS krc_link_startrek)
+    endif()
+
+    # krc-test-compiler on KR232. The VM gives a guest no files and no command
+    # line, so the example's console mode reads this source and prints the
+    # assembly to the console. The emulator queues only 16 input bytes, which is
+    # exactly the source below; KR16 and KR216 cannot link the compiler at all.
+    if(KRC_KR232_VM AND EXISTS "${KRC_KR232_VM}")
+        add_test(NAME krc_run_test_compiler_kr232
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_SOURCE_DIR}/examples/krc-test-compiler.c
+                    -DLIBC=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/libc_full.c
+                    -DEXTRA=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/fileio_full.s
+                    -DFAR_CALLS=1
+                    "-DINPUT=int f(){}"
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_test_compiler_kr232
+                    -DEXPECT_EXIT=0
+                    "-DEXPECT_TRANSCRIPT=global f"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+    endif()

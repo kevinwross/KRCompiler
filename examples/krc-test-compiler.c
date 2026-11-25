@@ -4,6 +4,8 @@
  * Input:  a source file, read in refillable chunks into a bounded buffer.
  * Output: <input-base>.s, or the path after -o, in the VM sandbox.
  * Startup: prints each command-line argument as an assembler comment.
+ * On KR232, whose VM has no files or command line, the source is read from the
+ * console and the assembly is written to it instead.
  *
  * Supported subset: int/char, locals, globals, one-dimensional arrays,
  * arithmetic/comparison/bitwise/logical expressions, if/else, while, for,
@@ -43,7 +45,88 @@ static int cfu_fprintf(FILE *stream, const char *format, ...) {
 #define fprintf cfu_fprintf
 #endif
 
-char source[4096];
+/*
+ * The KR232 VM gives a guest no files and no command line: it exposes a console
+ * only. In that mode the compiler reads its source from the console and writes
+ * the assembly to the console, so the VM's console stream is the output. KR32
+ * and KR16 keep the file and argument path above. KR16 and KR216 cannot run the
+ * compiler at all: it does not fit their 64 KiB address spaces.
+ */
+#ifdef __kr232__
+#define KRC_CONSOLE_MODE 1
+#endif
+
+#ifdef KRC_CONSOLE_MODE
+#include <stdarg.h>
+
+/*
+ * KR232's fprintf/fwrite path writes nothing to the console while putchar works.
+ * The compiler uses only %d and %s, so a formatter over putchar is enough.
+ */
+static void cfu_put_int(int value) {
+    char buffer[12];
+    int i;
+    unsigned int magnitude;
+    if (value < 0) {
+        putchar('-');
+        magnitude = (unsigned int)(0 - value);
+    } else {
+        magnitude = (unsigned int)value;
+    }
+    if (magnitude == 0) {
+        putchar('0');
+        return;
+    }
+    i = 0;
+    while (magnitude > 0) {
+        buffer[i] = (char)('0' + (int)(magnitude % 10));
+        magnitude = magnitude / 10;
+        i = i + 1;
+    }
+    while (i > 0) {
+        i = i - 1;
+        putchar(buffer[i]);
+    }
+}
+
+static int cfu_console_printf(const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    while (*format != 0) {
+        if (*format == '%') {
+            format = format + 1;
+            if (*format == 'd') {
+                cfu_put_int(va_arg(arguments, int));
+            } else if (*format == 's') {
+                const char *text = va_arg(arguments, const char *);
+                while (*text != 0) {
+                    putchar(*text);
+                    text = text + 1;
+                }
+            }
+            if (*format != 0) format = format + 1;
+        } else {
+            putchar(*format);
+            format = format + 1;
+        }
+    }
+    va_end(arguments);
+    return 0;
+}
+
+#define printf cfu_console_printf
+#define fprintf(stream, ...) cfu_console_printf(__VA_ARGS__)
+#endif
+
+#define SOURCE_MAX 4096
+#define MAX_TOKENS 384
+#define MAX_NAMES 64
+#define MAX_GLOBALS 16
+#define MAX_FUNCS 16
+#define MAX_CALLS 32
+#define MAX_STRINGS 8
+
+char source[SOURCE_MAX];
 FILE *outfile;
 
 #define T_EOF 1
@@ -76,36 +159,41 @@ FILE *outfile;
 #define T_ADDASSIGN 310
 #define T_SUBASSIGN 311
 
-#define MAX_TOKENS 384
 #define READ_CHUNK 128
 
 int *tkind;
 int *tval;
+#ifdef KRC_CONSOLE_MODE
+char ttext[SOURCE_MAX + MAX_TOKENS];
+int toff[MAX_TOKENS];
+int tused;
+#else
 char *ttext;
+#endif
 int *tlen;
 int tcount;
 int tpos;
 
-char names[1536];
-int noff[64];
-int ntype[64];
-int nelem[64];
-int nsize[64];
+char names[MAX_NAMES * 24];
+int noff[MAX_NAMES];
+int ntype[MAX_NAMES];
+int nelem[MAX_NAMES];
+int nsize[MAX_NAMES];
 int ncount;
 int frame_off;
 
-char gnames[384];
-int gtype[16];
-int gelem[16];
-int gsize[16];
+char gnames[MAX_GLOBALS * 24];
+int gtype[MAX_GLOBALS];
+int gelem[MAX_GLOBALS];
+int gsize[MAX_GLOBALS];
 int gcount;
 
-char funcs[384];
+char funcs[MAX_FUNCS * 24];
 int fcount;
-char calls[768];
+char calls[MAX_CALLS * 24];
 int ccount;
 
-char strtab[640];
+char strtab[MAX_STRINGS * 80];
 int scount;
 
 char current[24];
@@ -218,26 +306,47 @@ int build_args(void) {
 #endif
 
 void err(char *m) {
+#ifndef KRC_CONSOLE_MODE
     if (outfile != 0) {
         fclose(outfile);
         outfile = 0;
     }
+#endif
     fprintf(stderr, "; krc-test-compiler error: %s\n", m);
+#ifdef __kr232__
+    fflush(stderr);
+    if (outfile != 0) fflush(outfile);
+#endif
     exit(1);
 }
 
 char *tok_text(int i) {
+#ifdef KRC_CONSOLE_MODE
+    return ttext + toff[i];
+#else
     return ttext + i * 32;
+#endif
 }
 
 void addtok(int kind, int value, char *text, int n) {
     char *d;
     int i;
+#ifdef KRC_CONSOLE_MODE
+    int copy;
+#endif
     if (tcount >= MAX_TOKENS) err("too many tokens");
     tkind[tcount] = kind;
     tval[tcount] = value;
     tlen[tcount] = n;
+#ifdef KRC_CONSOLE_MODE
+    copy = n < 31 ? n : 31;
+    if (tused + copy + 1 > SOURCE_MAX + MAX_TOKENS) err("too many token characters");
+    toff[tcount] = tused;
+    d = ttext + tused;
+    tused = tused + copy + 1;
+#else
     d = ttext + tcount * 32;
+#endif
     i = 0;
     while (i < n && i < 31) {
         d[i] = text[i];
@@ -383,7 +492,7 @@ int find_global(char *name) {
 }
 
 void add_local(char *name, int type, int elem, int size) {
-    if (ncount >= 64) err("too many locals");
+    if (ncount >= MAX_NAMES) err("too many locals");
     if (frame_off % 2 != 0) frame_off = frame_off + 1;
     copy_name(names + ncount * 24, name, 24);
     noff[ncount] = frame_off;
@@ -395,7 +504,7 @@ void add_local(char *name, int type, int elem, int size) {
 }
 
 void add_global(char *name, int type, int elem, int size) {
-    if (gcount >= 16) err("too many globals");
+    if (gcount >= MAX_GLOBALS) err("too many globals");
     copy_name(gnames + gcount * 24, name, 24);
     gtype[gcount] = type;
     gelem[gcount] = elem;
@@ -410,7 +519,7 @@ void add_func(char *name) {
         if (same(funcs + i * 24, name)) return;
         i = i + 1;
     }
-    if (fcount >= 16) err("too many functions");
+    if (fcount >= MAX_FUNCS) err("too many functions");
     copy_name(funcs + fcount * 24, name, 24);
     fcount = fcount + 1;
 }
@@ -422,14 +531,14 @@ void add_call(char *name) {
         if (same(calls + i * 24, name)) return;
         i = i + 1;
     }
-    if (ccount >= 32) err("too many calls");
+    if (ccount >= MAX_CALLS) err("too many calls");
     copy_name(calls + ccount * 24, name, 24);
     ccount = ccount + 1;
 }
 
 int add_string(char *s, int n) {
     int i;
-    if (scount >= 8) err("too many strings");
+    if (scount >= MAX_STRINGS) err("too many strings");
     copy_name(strtab + scount * 80, s, 80);
     i = scount;
     scount = scount + 1;
@@ -1411,6 +1520,19 @@ void emit_strings(void) {
 }
 
 void read_source(char *path) {
+#ifdef KRC_CONSOLE_MODE
+    int total;
+    int c;
+    (void)path;
+    total = 0;
+    while ((c = getchar()) != -1) {
+        if (total >= SOURCE_MAX - 1) err("input too large");
+        source[total] = (char)c;
+        total = total + 1;
+    }
+    source[total] = 0;
+    if (total == 0) err("input is empty");
+#else
     FILE *in;
     char chunk[READ_CHUNK];
     int total;
@@ -1443,6 +1565,7 @@ void read_source(char *path) {
     fclose(in);
     source[total] = 0;
     if (total == 0) err("input file is empty");
+#endif
 }
 
 void make_output_name(char *input, char *output) {
@@ -1476,6 +1599,12 @@ int main(int argc, char *argv[]) {
     argv = argvec;
 #endif
 
+#ifdef KRC_CONSOLE_MODE
+    (void)argc;
+    (void)argv;
+    input = "console";
+    output = "console";
+#else
     input = 0;
     output = 0;
     argi = 1;
@@ -1507,27 +1636,40 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "; krc-test-compiler error: input and output are the same file\n");
         return 1;
     }
+#endif
 
     read_source(input);
+#ifdef KRC_CONSOLE_MODE
+    outfile = stdout;
+#else
     outfile = fopen(output, "w");
     if (outfile == 0) {
         fprintf(stderr, "; krc-test-compiler error: cannot create %s\n", output);
         return 1;
     }
+#endif
 
+#ifndef KRC_CONSOLE_MODE
     for (argi = 0; argi < argc; argi = argi + 1) {
         fprintf(outfile, "; argv[%d] = %s\n", argi, argv[argi]);
     }
+#endif
     tkind = (int *)malloc(MAX_TOKENS * sizeof(int));
     tval = (int *)malloc(MAX_TOKENS * sizeof(int));
+#ifndef KRC_CONSOLE_MODE
     ttext = (char *)malloc(MAX_TOKENS * 32);
+#endif
     tlen = (int *)malloc(MAX_TOKENS * sizeof(int));
+    if (tkind == 0 || tval == 0 || tlen == 0) err("out of memory");
     tcount = 0;
     tpos = 0;
     label_n = 0;
     has_main = 0;
     loop_depth = 0;
     scount = 0;
+#ifdef KRC_CONSOLE_MODE
+    tused = 0;
+#endif
     lex_source();
     fprintf(outfile, ".text\n");
     parse_program();
@@ -1538,13 +1680,24 @@ int main(int argc, char *argv[]) {
     emit_strings();
     free(tkind);
     free(tval);
+#ifndef KRC_CONSOLE_MODE
     free(ttext);
+#endif
     free(tlen);
+#ifndef KRC_CONSOLE_MODE
     if (ferror(outfile)) err("output write error");
     fclose(outfile);
+#endif
+#ifdef __kr232__
+    fflush(outfile);
+#endif
     outfile = 0;
+#ifdef KRC_CONSOLE_MODE
+    return 0;
+#else
     printf("; wrote %s\n", output);
     return 0;
+#endif
 }
 
 

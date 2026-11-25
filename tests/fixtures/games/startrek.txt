@@ -1,0 +1,13 @@
+srs
+lrs
+com
+1
+com
+0
+she
+100
+nav
+3
+1
+dam
+xxx

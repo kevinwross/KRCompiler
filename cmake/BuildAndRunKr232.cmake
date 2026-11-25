@@ -96,8 +96,14 @@ if(DEFINED EXPECT_FRAME AND NOT EXPECT_FRAME STREQUAL "")
     list(APPEND run_args --frame-hash)
 endif()
 
+# Optional: INPUT is text queued on the guest console before the run.
+set(input_args)
+if(DEFINED INPUT AND NOT INPUT STREQUAL "")
+    list(APPEND input_args --input "${INPUT}")
+endif()
+
 execute_process(COMMAND "${VM}" vm "${WORK}/kr232_program.kr232" --max-steps 200000
-                        ${run_args}
+                        ${input_args} ${run_args}
                 RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE error)
 if(DEFINED EXPECT_EXIT AND NOT EXPECT_EXIT STREQUAL "" AND NOT result EQUAL EXPECT_EXIT)
     message(FATAL_ERROR "expected exit ${EXPECT_EXIT}, got ${result}\n${output}${error}")
