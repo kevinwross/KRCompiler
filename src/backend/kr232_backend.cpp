@@ -441,6 +441,103 @@ std::string forward_frame_loads(std::string_view assembly) {
     return result;
 }
 
+std::string coalesce_argument_moves(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (trim_text(lines[index]) != "mov r2, r6") {
+            continue;
+        }
+        std::vector<std::size_t> stores;
+        std::size_t at = index;
+        while (at > 0) {
+            --at;
+            const auto candidate = trim_text(lines[at]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                continue;
+            }
+            const auto space = candidate.find_first_of(" \t");
+            const auto mnemonic =
+                space == std::string_view::npos ? candidate
+                                                : candidate.substr(0, space);
+            if (mnemonic != "st" && mnemonic != "stb" && mnemonic != "stw") {
+                break;
+            }
+            const auto comma = candidate.find(',');
+            if (comma == std::string_view::npos ||
+                trim_text(candidate.substr(comma + 1)) != "r6") {
+                stores.clear();
+                break;
+            }
+            const auto address = trim_text(candidate.substr(
+                mnemonic.size(), comma - mnemonic.size()));
+            if (address.find("r2") != std::string_view::npos) {
+                stores.clear();
+                break;
+            }
+            stores.push_back(at);
+        }
+        if (stores.empty() || at == 0) {
+            continue;
+        }
+        const auto producer = trim_text(lines[at]);
+        const auto producer_space = producer.find_first_of(" \t");
+        if (producer_space == std::string_view::npos) {
+            continue;
+        }
+        const auto producer_mnemonic = producer.substr(0, producer_space);
+        const bool is_load = producer_mnemonic == "ld" ||
+                             producer_mnemonic == "ldbu" ||
+                             producer_mnemonic == "ldbs" ||
+                             producer_mnemonic == "ldhu" ||
+                             producer_mnemonic == "ldhs";
+        if (!is_load && producer_mnemonic != "mov") {
+            continue;
+        }
+        const auto producer_comma = producer.find(',');
+        if (producer_comma == std::string_view::npos ||
+            trim_text(producer.substr(producer_space,
+                                      producer_comma - producer_space)) != "r6") {
+            continue;
+        }
+        const auto rest = std::string(trim_text(producer.substr(producer_comma + 1)));
+        replacements[at] = "  " + std::string(producer_mnemonic) + " r2, " + rest;
+        for (const auto store : stores) {
+            const auto store_text = trim_text(lines[store]);
+            const auto store_space = store_text.find_first_of(" \t");
+            const auto store_mnemonic = store_text.substr(0, store_space);
+            const auto store_comma = store_text.find(',');
+            const auto address = trim_text(store_text.substr(
+                store_mnemonic.size(), store_comma - store_mnemonic.size()));
+            replacements[store] = "  " + std::string(store_mnemonic) + " " +
+                                  std::string(address) + ", r2";
+        }
+        dead[index] = true;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
 std::string reuse_frame_addresses(std::string_view assembly) {
     std::istringstream input{std::string(assembly)};
     std::string line;
@@ -2087,6 +2184,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         text = forward_frame_loads(text);
         text = fold_frame_addresses(text);
         text = reuse_frame_addresses(text);
+        text = coalesce_argument_moves(text);
         text = coalesce_address_moves(text);
     }
     return text;

@@ -7431,3 +7431,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-25T09:20:00-08:00** — **KR216 folds stack addresses across a call.** The address liveness scan now treats a later `CALL` as killing the caller-saved R3, so `MOV R3,SP; ADD R3,#N; LD/ST [R3]` folds to `[SP+N]` when no setup reads R3 first. `game.cpp` KR216 moved from 6690 to 6684 lines. Full `windows-msvc-debug` suite: 1005/1005.
 
 - **2026-11-25T09:26:00-08:00** — **KR216 forwards a moved value into a store.** `MOV D,S; ST [addr],D` becomes `ST [addr],S`, dropping the move when D is dead after the store. This removes 26 such moves from `game.cpp`, taking KR216 from 6684 to 6658 lines. Full `windows-msvc-debug` suite: 1005/1005.
+
+- **2026-11-25T09:35:00-08:00** — **KR232 builds a stored value directly in r2.** When `ld/mov r6,...` feeds one or more `st [addr],r6` and then `mov r2,r6`, the producer and stores are rewritten to r2 and the move is dropped. This removes 17 lines from `game.cpp` (6732 to 6715) and 11 from `ship.cpp` (970 to 959). Full `windows-msvc-debug` suite: 1005/1005.
