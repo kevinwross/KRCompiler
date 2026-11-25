@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -1675,6 +1678,8 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
     }
 }
 
+std::string fold_frame_addresses(std::string_view assembly);
+
 std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     static_cast<void>(profile_);
     static_cast<void>(level_);
@@ -1810,7 +1815,168 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         replace_all("    LD " + name + ", #1\n", "    MOV " + name + ", R1\n");
         replace_all("    ADD " + name + ", #0\n", "");
     }
+    if (level_ == OptimizationLevel::O1) {
+        out = fold_frame_addresses(out);
+    }
     return out;
+}
+
+std::string fold_frame_addresses(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto trim = [](std::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    };
+    const auto next_instruction = [&](std::size_t start) {
+        std::size_t at = start;
+        while (at < lines.size()) {
+            const auto candidate = trim(lines[at]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++at;
+                continue;
+            }
+            break;
+        }
+        return at;
+    };
+    const auto mentions_r3 = [](std::string_view text) {
+        for (auto at = text.find("R3"); at != std::string_view::npos;
+             at = text.find("R3", at + 2)) {
+            const auto after = at + 2;
+            if (after >= text.size() ||
+                !(text[after] >= '0' && text[after] <= '9')) {
+                return true;
+            }
+        }
+        return false;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (trim(lines[index]) != "MOV R3, SP") {
+            continue;
+        }
+        const auto arithmetic = next_instruction(index + 1);
+        if (arithmetic >= lines.size()) {
+            continue;
+        }
+        const auto arithmetic_text = trim(lines[arithmetic]);
+        if (arithmetic_text.rfind("ADD R3, #", 0) != 0) {
+            continue;
+        }
+        char* stop = nullptr;
+        const long offset = std::strtol(
+            std::string(arithmetic_text.substr(9)).c_str(), &stop, 0);
+        if (stop == nullptr || *stop != '\0') {
+            continue;
+        }
+        const auto access = next_instruction(arithmetic + 1);
+        if (access >= lines.size()) {
+            continue;
+        }
+        const auto access_text = trim(lines[access]);
+        const auto space = access_text.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = access_text.substr(0, space);
+        const bool is_load = mnemonic == "LD" || mnemonic == "LDB" ||
+                             mnemonic == "LDW";
+        const bool is_store = mnemonic == "ST" || mnemonic == "STB" ||
+                              mnemonic == "STW";
+        if (!is_load && !is_store) {
+            continue;
+        }
+        const auto comma = access_text.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        std::string load_destination;
+        std::string store_value;
+        auto address = trim(access_text.substr(comma + 1));
+        if (is_load) {
+            load_destination = std::string(trim(access_text.substr(
+                mnemonic.size(), comma - mnemonic.size())));
+        } else {
+            address = trim(access_text.substr(
+                mnemonic.size(), comma - mnemonic.size()));
+            store_value = std::string(trim(access_text.substr(comma + 1)));
+        }
+        if (address != "[R3]") {
+            continue;
+        }
+        bool safe = false;
+        for (std::size_t after = next_instruction(access + 1);
+             after < lines.size(); after = next_instruction(after + 1)) {
+            const auto candidate = trim(lines[after]);
+            if (candidate.back() == ':') {
+                break;
+            }
+            const auto candidate_space = candidate.find_first_of(" \t");
+            const auto candidate_mnemonic =
+                candidate_space == std::string_view::npos
+                    ? candidate
+                    : candidate.substr(0, candidate_space);
+            if (candidate_mnemonic == "RET" || candidate_mnemonic == "HLT") {
+                safe = true;
+                break;
+            }
+            if (candidate_mnemonic == "CALL" || candidate_mnemonic == "JMP" ||
+                (candidate_mnemonic.size() > 1 &&
+                 candidate_mnemonic[0] == 'B')) {
+                break;
+            }
+            if (!mentions_r3(candidate)) {
+                continue;
+            }
+            const auto comma_pos = candidate.find(',');
+            const auto first = trim(candidate.substr(
+                candidate_mnemonic.size(),
+                comma_pos == std::string_view::npos
+                    ? std::string_view::npos
+                    : comma_pos - candidate_mnemonic.size()));
+            safe = first == "R3";
+            break;
+        }
+        if (!safe) {
+            continue;
+        }
+        const auto frame_address =
+            "[SP+" + std::to_string(offset) + "]";
+        replacements[access] =
+            is_load ? "    " + std::string(mnemonic) + " " + load_destination +
+                          ", " + frame_address
+                    : "    " + std::string(mnemonic) + " " + frame_address +
+                          ", " + store_value;
+        dead[index] = true;
+        dead[arithmetic] = true;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
 }
 
 }  // namespace krc::backend
