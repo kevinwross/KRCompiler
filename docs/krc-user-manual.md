@@ -333,7 +333,7 @@ Useful link options:
 ```
 
 `--sym` writes a sidecar for KR32 only; another target reports
-`--sym is defined for kr32 images; this target wrote none`.
+`krld: --sym is defined for kr32 images; this target wrote none`.
 
 ### Running
 
@@ -557,7 +557,7 @@ calls `main` and exits with the status in `R2`. The default image base is
 KR216 has 16-bit pointers with 32-bit `long` and 64-bit integers, and it has
 floating point. The backend, assembler, and `K216` image container are
 implemented; this repository's test suite covers KR216 at the assembly and
-object level, and no KR216 VM is present to execute a program here.
+object level, and this tree does not include a KR216 VM to execute a program.
 
 Compile and link a C program:
 
@@ -582,8 +582,8 @@ inspected without running it:
 & $krc --dump-symbols hello.kr216
 ```
 
-C++ compiles for KR216 as well; the object and link steps are the same. Treat C++
-execution on KR216 as untested in this tree: there is no VM here to run it.
+C++ compiles for KR216 as well; link it with the same runtime objects. Execution
+of C++ on KR216 is untested in this tree because there is no VM here to run it.
 
 ## 9. KR64
 
@@ -622,8 +622,7 @@ non-type template parameters. [release-notes.md](release-notes.md) lists what th
 release leaves out; [cxx-front-end-gaps.md](cxx-front-end-gaps.md) records the
 rejected constructs with reproducers.
 
-Known limits, each with a reproducer in
-[cxx-front-end-gaps.md](cxx-front-end-gaps.md):
+Known limits:
 
 - `throw` of a scalar is rejected; throw a class type.
 - A `new` expression with a runtime bound is rejected; the bound must be a
@@ -701,7 +700,7 @@ krc image [options] objects... -o image
 |---|---|
 | `--target=NAME` | Target for `.s` inputs and for the output-extension check (default `kr32`) |
 | `--entry=NAME` | Entry symbol (default `_start`) |
-| `--base=ADDR` | Image base; `0` uses the target's default |
+| `--base=ADDR` | Image base; decimal or `0x` hex, and `0` uses the target's default |
 | `--flat` | Write a raw image instead of a container |
 | `--source-root=DIR` | Store debug source paths relative to `DIR` |
 | `--map=FILE` | Write the deterministic map |
@@ -729,7 +728,7 @@ krld [options] objects... -o image
 | `--help`, `-h` | Print usage |
 | `--target=NAME` | Target used to assemble `.s` inputs (default `kr32`); the linked objects determine the image target |
 | `--entry=NAME` | Entry symbol (default `_start`) |
-| `--base=ADDR` | Image base; default is per target: `0x10000` KR32/KR64, `0x100` KR16, `0x200` KR216/KR232 |
+| `--base=ADDR` | Image base, decimal or `0x` hex; default is per target: `0x10000` KR32/KR64, `0x100` KR16, `0x200` KR216/KR232 |
 | `-o FILE` | Output image; the name is used exactly, with no suffix appended |
 | `--flat` | Write the raw image: allocated sections at their addresses, no header |
 | `--map=FILE`, `--map FILE` | Write the deterministic image map |
@@ -813,7 +812,7 @@ section with its address and size, and every symbol with its address.
 
 `krc` reports source diagnostics as `file:line:column: error: message`, quotes
 the line, and marks the column. Linker errors are one-line `krld:` messages. A
-failing compile or link does not write its own output path.
+compile error writes no object, and a link error writes no image.
 
 | Message | Cause | Action |
 |---|---|---|
