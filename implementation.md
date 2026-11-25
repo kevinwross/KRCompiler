@@ -7423,3 +7423,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-25T09:05:00-08:00** — **KR216 frame-address folding begins.** `MOV R3, SP; ADD R3,#N; LD/ST [R3]` folds to `LD/ST [SP+N]` at `-O1`, dropping the address pair when R3 is not read afterward. `game.cpp` KR216 assembly moved from 6864 to 6814 lines. Full `windows-msvc-debug` suite: 1005/1005.
 
 - **2026-11-25T09:02:00-08:00** — **KR216 removes redundant jumps.** A `JMP` whose target is the next non-debug label is deleted at `-O1`; the label remains. This removes 71 jumps from `game.cpp`, taking its KR216 assembly from 6814 to 6743 lines. Full `windows-msvc-debug` suite: 1005/1005.
+
+- **2026-11-25T09:15:00-08:00** — **KR216 inverts branch diamonds.** `Bcc target; JMP body; target:` becomes `Binverse body`, deleting the unconditional jump when the false target immediately follows it. This removes 53 diamonds from `game.cpp` KR216, moving it from 6743 to 6690 lines. The inverse mapping covers equality, ordering, carry, overflow and unsigned comparisons. Full `windows-msvc-debug` suite: 1005/1005.

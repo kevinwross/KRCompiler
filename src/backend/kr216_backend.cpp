@@ -1679,6 +1679,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
 }
 
 std::string fold_frame_addresses(std::string_view assembly);
+std::string invert_branch_diamonds(std::string_view assembly);
 std::string remove_kr216_redundant_jumps(std::string_view assembly);
 
 std::optional<std::string> Kr216Backend::emit(std::string& error) const {
@@ -1818,9 +1819,115 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     }
     if (level_ == OptimizationLevel::O1) {
         out = fold_frame_addresses(out);
+        out = invert_branch_diamonds(out);
         out = remove_kr216_redundant_jumps(out);
     }
     return out;
+}
+
+std::string invert_branch_diamonds(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto trim = [](std::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    };
+    const auto inverse = [](std::string_view condition) -> std::string_view {
+        if (condition == "BEQ") return "BNE";
+        if (condition == "BNE") return "BEQ";
+        if (condition == "BLT") return "BGE";
+        if (condition == "BGE") return "BLT";
+        if (condition == "BGT") return "BLE";
+        if (condition == "BLE") return "BGT";
+        if (condition == "BCS") return "BCC";
+        if (condition == "BCC") return "BCS";
+        if (condition == "BMI") return "BPL";
+        if (condition == "BPL") return "BMI";
+        if (condition == "BVS") return "BVC";
+        if (condition == "BVC") return "BVS";
+        if (condition == "BHI") return "BLS";
+        if (condition == "BLS") return "BHI";
+        return {};
+    };
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto branch = trim(lines[index]);
+        const auto space = branch.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto condition = branch.substr(0, space);
+        const auto inverted = inverse(condition);
+        if (inverted.empty()) {
+            continue;
+        }
+        const auto target = trim(branch.substr(space));
+        std::size_t jump = index + 1;
+        while (jump < lines.size()) {
+            const auto candidate = trim(lines[jump]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++jump;
+                continue;
+            }
+            break;
+        }
+        if (jump >= lines.size()) {
+            continue;
+        }
+        const auto jump_text = trim(lines[jump]);
+        if (jump_text.rfind("JMP ", 0) != 0) {
+            continue;
+        }
+        const auto body = trim(jump_text.substr(4));
+        std::size_t label = jump + 1;
+        while (label < lines.size()) {
+            const auto candidate = trim(lines[label]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++label;
+                continue;
+            }
+            break;
+        }
+        if (label >= lines.size()) {
+            continue;
+        }
+        const auto label_text = trim(lines[label]);
+        if (label_text.back() != ':' ||
+            label_text.substr(0, label_text.size() - 1) != target) {
+            continue;
+        }
+        replacements[index] =
+            "    " + std::string(inverted) + " " + std::string(body);
+        dead[jump] = true;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
 }
 
 std::string remove_kr216_redundant_jumps(std::string_view assembly) {
