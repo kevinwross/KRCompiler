@@ -11,6 +11,10 @@ The plan is approved (2026-11-09). Specifications marked frozen are stable contr
 - [planning/source-tree-reorganization.md](planning/source-tree-reorganization.md) — source/build reorganization plan.
 - [planning/nemo-plan-review.md](planning/nemo-plan-review.md) — review findings and responses.
 
+## Guides
+
+- [krc-user-manual.md](krc-user-manual.md) — building and linking C and C++ programs for the KR VMs with `krc` and `krld`.
+
 ## Specifications
 
 - [toolchain-embedding.md](toolchain-embedding.md) — `krc::toolchain` and `krc::debug`: package, call sequence, ownership, errors, listing.
