@@ -434,6 +434,214 @@ std::string forward_frame_loads(std::string_view assembly) {
     return result;
 }
 
+std::string coalesce_address_moves(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto register_text = [](unsigned reg) {
+        return "r" + std::to_string(reg);
+    };
+    const auto count_register = [](std::string_view text, std::string_view reg) {
+        std::size_t count = 0;
+        for (auto at = text.find(reg); at != std::string_view::npos;
+             at = text.find(reg, at + reg.size())) {
+            const bool before_ok =
+                at == 0 || (!(text[at - 1] >= '0' && text[at - 1] <= '9') &&
+                            text[at - 1] != 'r');
+            const auto after = at + reg.size();
+            const bool after_ok =
+                after >= text.size() || !(text[after] >= '0' && text[after] <= '9');
+            if (before_ok && after_ok) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto move = trim_text(lines[index]);
+        if (move.rfind("mov ", 0) != 0) {
+            continue;
+        }
+        const auto move_comma = move.find(',');
+        if (move_comma == std::string_view::npos) {
+            continue;
+        }
+        unsigned destination = 0;
+        unsigned source = 0;
+        if (!parse_register(move.substr(4, move_comma - 4), destination) ||
+            !parse_register(move.substr(move_comma + 1), source) ||
+            destination == source || destination == 0 || destination == 1 ||
+            destination == 13 || destination == 14 || destination == 15) {
+            continue;
+        }
+        const auto destination_name = register_text(destination);
+        const auto source_name = register_text(source);
+        std::size_t next = index + 1;
+        while (next < lines.size()) {
+            const auto candidate = trim_text(lines[next]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++next;
+                continue;
+            }
+            break;
+        }
+        if (next >= lines.size()) {
+            continue;
+        }
+        const auto operation = trim_text(lines[next]);
+        const auto space = operation.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = operation.substr(0, space);
+        const bool is_load = mnemonic == "ld" || mnemonic == "ldbu" ||
+                             mnemonic == "ldbs" || mnemonic == "ldhu" ||
+                             mnemonic == "ldhs";
+        const bool is_store = mnemonic == "st" || mnemonic == "stb" ||
+                              mnemonic == "stw";
+        if (!is_load && !is_store) {
+            continue;
+        }
+        const auto comma = operation.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        std::string text_operand;
+        std::string value_operand;
+        auto address = trim_text(operation.substr(comma + 1));
+        if (is_load) {
+            text_operand = std::string(trim_text(operation.substr(
+                mnemonic.size(), comma - mnemonic.size())));
+        } else {
+            address = trim_text(operation.substr(
+                mnemonic.size(), comma - mnemonic.size()));
+            value_operand = std::string(trim_text(operation.substr(comma + 1)));
+        }
+        if (address.size() < 3 || address.front() != '[') {
+            continue;
+        }
+        std::string rewritten(address);
+        bool changed = false;
+        for (auto at = rewritten.find(destination_name);
+             at != std::string::npos;
+             at = rewritten.find(destination_name, at + source_name.size())) {
+            const bool before_ok = at == 0 || rewritten[at - 1] != 'r';
+            const auto after = at + destination_name.size();
+            const bool after_ok =
+                after >= rewritten.size() ||
+                !(rewritten[after] >= '0' && rewritten[after] <= '9');
+            if (before_ok && after_ok) {
+                rewritten.replace(at, destination_name.size(), source_name);
+                changed = true;
+            }
+        }
+        if (!changed) {
+            continue;
+        }
+        if (is_store && value_operand == destination_name) {
+            value_operand = source_name;
+        }
+        bool safe = is_load && text_operand == destination_name;
+        if (!safe) {
+            for (std::size_t after = next + 1; after < lines.size(); ++after) {
+                const auto candidate = trim_text(lines[after]);
+                if (candidate.empty() || candidate.front() == ';' ||
+                    (candidate.back() == ':' &&
+                     candidate.rfind(".Ldbg.", 0) == 0)) {
+                    continue;
+                }
+                if (candidate.back() == ':') {
+                    break;
+                }
+                const auto candidate_space = candidate.find_first_of(" \t");
+                const auto candidate_mnemonic =
+                    candidate_space == std::string_view::npos
+                        ? candidate
+                        : candidate.substr(0, candidate_space);
+                if (candidate_mnemonic == "ret" || candidate_mnemonic == "halt") {
+                    safe = destination_name != "r2";
+                    break;
+                }
+                if (candidate_mnemonic == "call" ||
+                    is_branch(candidate_mnemonic)) {
+                    break;
+                }
+                const auto count = count_register(candidate, destination_name);
+                if (count == 0) {
+                    continue;
+                }
+                if (count != 1) {
+                    break;
+                }
+                const bool writes =
+                    candidate_mnemonic == "mov" ||
+                    candidate_mnemonic == "ld" ||
+                    candidate_mnemonic == "ldbu" ||
+                    candidate_mnemonic == "ldbs" ||
+                    candidate_mnemonic == "ldhu" ||
+                    candidate_mnemonic == "ldhs" ||
+                    candidate_mnemonic == "add" ||
+                    candidate_mnemonic == "sub" ||
+                    candidate_mnemonic == "mul" ||
+                    candidate_mnemonic == "div" ||
+                    candidate_mnemonic == "mod" ||
+                    candidate_mnemonic == "and" ||
+                    candidate_mnemonic == "or" ||
+                    candidate_mnemonic == "xor" ||
+                    candidate_mnemonic == "shl" ||
+                    candidate_mnemonic == "shr" ||
+                    candidate_mnemonic == "sar" ||
+                    candidate_mnemonic == "neg" ||
+                    candidate_mnemonic == "not" ||
+                    candidate_mnemonic == "pop";
+                if (!writes) {
+                    break;
+                }
+                const auto candidate_comma = candidate.find(',');
+                const auto first_operand = trim_text(candidate.substr(
+                    candidate_mnemonic.size(),
+                    candidate_comma == std::string_view::npos
+                        ? std::string_view::npos
+                        : candidate_comma - candidate_mnemonic.size()));
+                unsigned written = 0;
+                safe = parse_register(first_operand, written) &&
+                       written == destination;
+                break;
+            }
+        }
+        if (safe) {
+            dead[index] = true;
+        }
+        replacements[next] =
+            is_load
+                ? "  " + std::string(mnemonic) + " " + text_operand + ", " +
+                      rewritten
+                : "  " + std::string(mnemonic) + " " + rewritten + ", " +
+                      value_operand;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
 }  // namespace
 
 std::optional<std::string> Kr232Backend::emit(std::string& error) const {
@@ -1504,6 +1712,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     std::string text = out.str();
     if (level_ == OptimizationLevel::O1) {
         text = forward_frame_loads(text);
+        text = coalesce_address_moves(text);
     }
     return text;
 }
