@@ -2058,7 +2058,8 @@ std::string fold_frame_addresses(std::string_view assembly) {
         }
         const auto mnemonic = access_text.substr(0, space);
         const bool is_load = mnemonic == "LD" || mnemonic == "LDB" ||
-                             mnemonic == "LDW";
+                             mnemonic == "LDW" || mnemonic == "LDBU" ||
+                             mnemonic == "LDBS";
         const bool is_store = mnemonic == "ST" || mnemonic == "STB" ||
                               mnemonic == "STW";
         if (!is_load && !is_store) {
@@ -2082,12 +2083,12 @@ std::string fold_frame_addresses(std::string_view assembly) {
         if (address != "[R3]") {
             continue;
         }
-        bool safe = false;
+        bool safe = true;
         for (std::size_t after = next_instruction(access + 1);
              after < lines.size(); after = next_instruction(after + 1)) {
             const auto candidate = trim(lines[after]);
             if (candidate.back() == ':') {
-                break;
+                continue;
             }
             const auto candidate_space = candidate.find_first_of(" \t");
             const auto candidate_mnemonic =
@@ -2098,9 +2099,16 @@ std::string fold_frame_addresses(std::string_view assembly) {
                 safe = true;
                 break;
             }
-            if (candidate_mnemonic == "CALL" || candidate_mnemonic == "JMP" ||
+            if (candidate_mnemonic == "CALL") {
+                // A call clobbers the caller-saved argument registers; any
+                // setup that reads R3 would have been seen before this line.
+                safe = true;
+                break;
+            }
+            if (candidate_mnemonic == "JMP" ||
                 (candidate_mnemonic.size() > 1 &&
                  candidate_mnemonic[0] == 'B')) {
+                safe = false;
                 break;
             }
             if (!mentions_r3(candidate)) {
