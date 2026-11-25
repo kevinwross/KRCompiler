@@ -451,7 +451,19 @@ std::string coalesce_argument_moves(std::string_view assembly) {
     std::vector<bool> dead(lines.size(), false);
     std::vector<std::string> replacements(lines.size());
     for (std::size_t index = 0; index < lines.size(); ++index) {
-        if (trim_text(lines[index]) != "mov r2, r6") {
+        const auto move = trim_text(lines[index]);
+        if (move.rfind("mov r", 0) != 0) {
+            continue;
+        }
+        const auto move_comma = move.find(',');
+        if (move_comma == std::string_view::npos) {
+            continue;
+        }
+        const auto target = std::string(trim_text(
+            move.substr(4, move_comma - 4)));
+        if (trim_text(move.substr(move_comma + 1)) != "r6" ||
+            (target != "r2" && target != "r3" && target != "r4" &&
+             target != "r5")) {
             continue;
         }
         std::vector<std::size_t> stores;
@@ -479,7 +491,7 @@ std::string coalesce_argument_moves(std::string_view assembly) {
             }
             const auto address = trim_text(candidate.substr(
                 mnemonic.size(), comma - mnemonic.size()));
-            if (address.find("r2") != std::string_view::npos) {
+            if (address.find(target) != std::string_view::npos) {
                 stores.clear();
                 break;
             }
@@ -494,22 +506,80 @@ std::string coalesce_argument_moves(std::string_view assembly) {
             continue;
         }
         const auto producer_mnemonic = producer.substr(0, producer_space);
-        const bool is_load = producer_mnemonic == "ld" ||
-                             producer_mnemonic == "ldbu" ||
-                             producer_mnemonic == "ldbs" ||
-                             producer_mnemonic == "ldhu" ||
-                             producer_mnemonic == "ldhs";
-        if (!is_load && producer_mnemonic != "mov") {
-            continue;
-        }
         const auto producer_comma = producer.find(',');
         if (producer_comma == std::string_view::npos ||
             trim_text(producer.substr(producer_space,
                                       producer_comma - producer_space)) != "r6") {
             continue;
         }
-        const auto rest = std::string(trim_text(producer.substr(producer_comma + 1)));
-        replacements[at] = "  " + std::string(producer_mnemonic) + " r2, " + rest;
+        const auto producer_rest =
+            std::string(trim_text(producer.substr(producer_comma + 1)));
+        const bool is_load = producer_mnemonic == "ld" ||
+                             producer_mnemonic == "ldbu" ||
+                             producer_mnemonic == "ldbs" ||
+                             producer_mnemonic == "ldhu" ||
+                             producer_mnemonic == "ldhs";
+        const bool is_two_address =
+            producer_mnemonic == "add" || producer_mnemonic == "sub" ||
+            producer_mnemonic == "and" || producer_mnemonic == "or" ||
+            producer_mnemonic == "xor" || producer_mnemonic == "shl" ||
+            producer_mnemonic == "shr" || producer_mnemonic == "sar" ||
+            producer_mnemonic == "neg" || producer_mnemonic == "not";
+        std::size_t base_index = at;
+        std::string base_mnemonic;
+        std::string base_rest;
+        if (is_two_address) {
+            if (producer_rest.find("r6") != std::string::npos) {
+                continue;
+            }
+            std::size_t base = at;
+            while (base > 0) {
+                --base;
+                const auto candidate = trim_text(lines[base]);
+                if (candidate.empty() || candidate.front() == ';' ||
+                    (candidate.back() == ':' &&
+                     candidate.rfind(".Ldbg.", 0) == 0)) {
+                    continue;
+                }
+                break;
+            }
+            if (base == at || base >= lines.size()) {
+                continue;
+            }
+            const auto base_text = trim_text(lines[base]);
+            const auto base_space = base_text.find_first_of(" \t");
+            if (base_space == std::string_view::npos) {
+                continue;
+            }
+            base_mnemonic = std::string(base_text.substr(0, base_space));
+            const auto base_load = base_mnemonic == "ld" ||
+                                   base_mnemonic == "ldbu" ||
+                                   base_mnemonic == "ldbs" ||
+                                   base_mnemonic == "ldhu" ||
+                                   base_mnemonic == "ldhs";
+            if (!base_load && base_mnemonic != "mov") {
+                continue;
+            }
+            const auto base_comma = base_text.find(',');
+            if (base_comma == std::string_view::npos ||
+                trim_text(base_text.substr(
+                    base_space, base_comma - base_space)) != "r6") {
+                continue;
+            }
+            base_rest = std::string(trim_text(base_text.substr(base_comma + 1)));
+            base_index = base;
+        } else if (!is_load && producer_mnemonic != "mov") {
+            continue;
+        }
+        if (base_index != at) {
+            replacements[base_index] = "  " + base_mnemonic + " " + target +
+                                       ", " + base_rest;
+            replacements[at] = "  " + std::string(producer_mnemonic) + " " +
+                               target + ", " + producer_rest;
+        } else {
+            replacements[at] = "  " + std::string(producer_mnemonic) + " " +
+                               target + ", " + producer_rest;
+        }
         for (const auto store : stores) {
             const auto store_text = trim_text(lines[store]);
             const auto store_space = store_text.find_first_of(" \t");
@@ -518,7 +588,7 @@ std::string coalesce_argument_moves(std::string_view assembly) {
             const auto address = trim_text(store_text.substr(
                 store_mnemonic.size(), store_comma - store_mnemonic.size()));
             replacements[store] = "  " + std::string(store_mnemonic) + " " +
-                                  std::string(address) + ", r2";
+                                  std::string(address) + ", " + target;
         }
         dead[index] = true;
     }

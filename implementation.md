@@ -7433,3 +7433,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-25T09:26:00-08:00** — **KR216 forwards a moved value into a store.** `MOV D,S; ST [addr],D` becomes `ST [addr],S`, dropping the move when D is dead after the store. This removes 26 such moves from `game.cpp`, taking KR216 from 6684 to 6658 lines. Full `windows-msvc-debug` suite: 1005/1005.
 
 - **2026-11-25T09:35:00-08:00** — **KR232 builds a stored value directly in r2.** When `ld/mov r6,...` feeds one or more `st [addr],r6` and then `mov r2,r6`, the producer and stores are rewritten to r2 and the move is dropped. This removes 17 lines from `game.cpp` (6732 to 6715) and 11 from `ship.cpp` (970 to 959). Full `windows-msvc-debug` suite: 1005/1005.
+
+- **2026-11-25T09:37:00-08:00** — **KR232 coalesces a two-instruction producer into r2.** `mov r6,X; add/sub r6,...; st [addr],r6; mov r2,r6` now produces the value in r2 and drops the final move; both the base and two-address step are rewritten. This removes 15 lines from `game.cpp`, taking KR232 from 6715 to 6700; `ship.cpp` remains 959. Full `windows-msvc-debug` suite: 1005/1005.
