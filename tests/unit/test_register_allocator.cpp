@@ -247,6 +247,30 @@ TEST_CASE("address coalescing forwards into a load") {
     CHECK(output.find("LOAD R3, [R15]") != std::string::npos);
 }
 
+TEST_CASE("address arithmetic folds into the store when the base survives") {
+    const auto input = std::string("        ADD R13, R12, #4\n"
+                                   "        MOV R0, #0\n"
+                                   "        STORE R0, [R13]\n"
+                                   "        ADD R13, R12, #8\n"
+                                   "        MOV R0, #0\n"
+                                   "        STORE R0, [R13]\n"
+                                   "        RET\n");
+    const auto output = krc::backend::fold_address_arithmetic(input);
+    CHECK(output.find("        STORE R0, [R12+4]") != std::string::npos);
+    CHECK(output.find("STORE R0, [R12+8]") != std::string::npos);
+    CHECK(output.find("ADD R13, R12, #4") == std::string::npos);
+    CHECK(output.find("ADD R13, R12, #8") == std::string::npos);
+}
+
+TEST_CASE("address arithmetic stays when the value clobbers the base") {
+    const auto input = std::string("        ADD R13, R0, #4\n"
+                                   "        MOV R0, #0\n"
+                                   "        STORE R0, [R13]\n");
+    const auto output = krc::backend::fold_address_arithmetic(input);
+    CHECK(output.find("ADD R13, R0, #4") != std::string::npos);
+    CHECK(output.find("STORE R0, [R13]") != std::string::npos);
+}
+
 TEST_CASE("load coalescing loads directly into a dead move destination") {
     const auto input = std::string("        LOAD R12, [R7 + 8]\n"
                                    "        MOV R8, R12\n"

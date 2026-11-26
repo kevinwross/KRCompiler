@@ -58,6 +58,11 @@ enum class OptimizationLevel {
 
 [[nodiscard]] std::string coalesce_store_addresses(std::string_view assembly);
 
+// Folds `MOV D,S` or `ADD D,S,#off`, followed only by constant moves that do
+// not touch S or D, into `LOAD/STORE ..., [S+off]`. The setup is removed only
+// when D is overwritten before it is read on the fallthrough path.
+[[nodiscard]] std::string fold_address_arithmetic(std::string_view assembly);
+
 // Folds `MOV D, S; OP D, D, X` into `OP D, S, X`, for the two-address integer
 // operations the emitter produces after a move into the result register.
 [[nodiscard]] std::string combine_move_arithmetic(std::string_view assembly);
