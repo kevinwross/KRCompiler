@@ -2256,8 +2256,12 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         text = forward_frame_loads(text);
         text = fold_frame_addresses(text);
         text = reuse_frame_addresses(text);
+        text = reuse_frame_addresses_across_blocks(text);
+        text = fold_frame_addresses_to_lea(text);
         text = coalesce_argument_moves(text);
         text = coalesce_address_moves(text);
+        text = forward_frame_loads_across_blocks(text);
+        text = eliminate_dead_frame_stores(text);
         text = eliminate_dead_register_definitions(text);
     }
     return text;
