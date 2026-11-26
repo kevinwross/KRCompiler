@@ -499,6 +499,17 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-25T19:42:00-08:00 — sanitizer check (WSL)
+Revision: 13c7154
+
+```
+linux-sanitize        PASS 758/758
+not verified: windows-msvc-release, native Linux x64, Linux ARM64
+```
+
+This covers KR32 subword store-source coalescing. The Windows suite at this
+revision passed 1011/1011.
+
 2026-11-25T19:29:00-08:00 — sanitizer check (WSL)
 Revision: 35a6c30
 
