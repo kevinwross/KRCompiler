@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -1786,6 +1787,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
 }
 
 std::string fold_frame_addresses(std::string_view assembly);
+std::string eliminate_kr216_dead_stores(std::string_view assembly);
 std::string coalesce_store_values(std::string_view assembly);
 std::string invert_branch_diamonds(std::string_view assembly);
 std::string remove_kr216_redundant_jumps(std::string_view assembly);
@@ -1928,6 +1930,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     if (level_ == OptimizationLevel::O1) {
         out = fold_frame_addresses(out);
         out = coalesce_store_values(out);
+        out = eliminate_kr216_dead_stores(out);
         out = invert_branch_diamonds(out);
         out = remove_kr216_redundant_jumps(out);
     }
@@ -2206,6 +2209,116 @@ std::string remove_kr216_redundant_jumps(std::string_view assembly) {
         }
         if (candidate.substr(0, candidate.size() - 1) == target) {
             dead[index] = true;
+        }
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
+std::string eliminate_kr216_dead_stores(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto trim = [](std::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    };
+    const auto frame_address = [&](std::string_view text, std::string& slot) {
+        text = trim(text);
+        if (text.rfind("[SP+", 0) != 0 || text.back() != ']') {
+            return false;
+        }
+        slot = std::string(text.substr(4, text.size() - 5));
+        return true;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto text = trim(lines[index]);
+        const auto space = text.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = text.substr(0, space);
+        if (mnemonic != "ST" && mnemonic != "STB" && mnemonic != "STW") {
+            continue;
+        }
+        const auto comma = text.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        std::string slot;
+        if (!frame_address(text.substr(mnemonic.size(),
+                                       comma - mnemonic.size()),
+                           slot)) {
+            continue;
+        }
+        for (std::size_t next = index + 1; next < lines.size(); ++next) {
+            const auto candidate = trim(lines[next]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                continue;
+            }
+            if (candidate.back() == ':') {
+                break;
+            }
+            const auto next_space = candidate.find_first_of(" \t");
+            const auto next_mnemonic =
+                next_space == std::string_view::npos
+                    ? candidate
+                    : candidate.substr(0, next_space);
+            if (next_mnemonic == "CALL" || next_mnemonic == "JMP" ||
+                next_mnemonic == "RET" || next_mnemonic == "HLT" ||
+                (next_mnemonic.size() > 1 && next_mnemonic.front() == 'B')) {
+                break;
+            }
+            if (next_mnemonic == "ST" || next_mnemonic == "STB" ||
+                next_mnemonic == "STW") {
+                const auto next_comma = candidate.find(',');
+                std::string next_slot;
+                if (next_comma != std::string_view::npos &&
+                    frame_address(candidate.substr(
+                                      next_mnemonic.size(),
+                                      next_comma - next_mnemonic.size()),
+                                  next_slot)) {
+                    if (next_slot == slot) {
+                        dead[index] = true;
+                    }
+                    break;
+                }
+                break;  // a store through a pointer may alias the frame slot
+            }
+            if (next_mnemonic == "LD" || next_mnemonic == "LDB" ||
+                next_mnemonic == "LDW" || next_mnemonic == "LDBU" ||
+                next_mnemonic == "LDBS") {
+                const auto next_comma = candidate.find(',');
+                std::string next_slot;
+                if (next_comma != std::string_view::npos &&
+                    frame_address(candidate.substr(
+                                      next_comma + 1),
+                                  next_slot)) {
+                    if (next_slot == slot) {
+                        break;
+                    }
+                    continue;
+                }
+                break;  // a pointer load may observe the frame slot
+            }
         }
     }
     std::string result;
