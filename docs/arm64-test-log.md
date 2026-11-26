@@ -209,3 +209,20 @@ This is the first gate on the default branch after `adopt-krc` was merged into i
 toolchain facade, `.kdbg` in `.kex`, KR16 directives, KR16 function sections and section-level GC, and the
 package install rules, and masters them all in one range. The suite is 915 tests, the same count the last
 `adopt-krc` gate ran, and the wall time (310 s) is back in the 265–310 s band.
+
+## 2026-11-26T11:05:24-08:00 — master @ e56510f
+
+- Host: BitWhiz (Raspberry Pi 5, Debian 13 trixie, aarch64)
+- Range: f8248a4..e56510f, 119 commits
+- Docs-only: no
+- Configure: linux-gcc-debug — ok, 0.2 s (clean: `build/linux-gcc-debug` removed first)
+- Build: linux-gcc-debug — ok, 92 s
+- Test: linux-gcc-debug — 973/973 passed, 5 min 12 s
+- Skipped: none
+- Next: nothing pending
+
+The first test pass after the clean build had 83 executed-image failures because
+`vm/krc_kr32` and `vm/krc_kr16` predated the compiler changes. Replacing them with
+the current ARM64 sibling builds (`kr32/build/arm64-gate/kr32` and
+`kr16/build/arm64-clean-krc/kr16`) and rerunning the same build gave 973/973. No
+source change was needed.
