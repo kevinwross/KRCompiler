@@ -1527,6 +1527,27 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 }
             }
         }
+        // A function that returns a record receives its destination in R6.
+        const bool returns_record = function->type != nullptr &&
+                                    function->type->return_type != nullptr &&
+                                    function->type->return_type->kind != ir::TypeKind::Void &&
+                                    (function->type->return_type->kind == ir::TypeKind::Struct ||
+                                     function->type->return_type->kind == ir::TypeKind::Union ||
+                                     function->type->return_type->kind == ir::TypeKind::Array);
+        std::uint32_t return_pointer_slot = 0;
+        if (returns_record) {
+            return_pointer_slot = next_slot++;
+        }
+        // Parameters live below ordinary values so a large function does not
+        // need an address pair for every argument access.
+        for (const auto& parameter : function->parameters) {
+            const std::uint32_t slots = slots_for(parameter->type);
+            if (slots == 2u && (next_slot % 2u) != 0u) {
+                ++next_slot;
+            }
+            slot_of.emplace(parameter.get(), next_slot);
+            next_slot += slots;
+        }
         const auto plan = plan_one_word_value_slots(*function, next_slot);
         for (const auto& [instruction, slot] : plan.slots) {
             slot_of.emplace(instruction, slot);
@@ -1573,14 +1594,6 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             return 4u + 4u * (slot->second + words - 1u);
         };
 
-        // A function that returns a record receives its destination in R6.
-        const bool returns_record = function->type != nullptr &&
-                                    function->type->return_type != nullptr &&
-                                    function->type->return_type->kind != ir::TypeKind::Void &&
-                                    (function->type->return_type->kind == ir::TypeKind::Struct ||
-                                     function->type->return_type->kind == ir::TypeKind::Union ||
-                                     function->type->return_type->kind == ir::TypeKind::Array);
-        std::uint32_t return_pointer_slot = 0;
         // A frame access that names its operand after any prologue it needs, so a
         // deep slot is reached through R8 instead of an unencodable displacement.
         const auto frame_load = [&](const char* opcode, std::uint32_t slot,
@@ -1617,17 +1630,6 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             }
             out << "  " << opcode << " [r13-" << offset << "], " << source << "\n";
         };
-        if (returns_record) {
-            return_pointer_slot = next_slot++;
-        }
-        for (const auto& parameter : function->parameters) {
-            const std::uint32_t slots = slots_for(parameter->type);
-            if (slots == 2u && (next_slot % 2u) != 0u) {
-                ++next_slot;
-            }
-            slot_of.emplace(parameter.get(), next_slot);
-            next_slot += slots;
-        }
         const std::uint32_t frame = align_frame(next_slot * 4u);
 
         out << "  enter #" << frame << ", #0\n";
