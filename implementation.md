@@ -499,6 +499,17 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-26T05:52:00-08:00 — sanitizer check (WSL)
+Revision: e8b9400
+
+```
+linux-sanitize        PASS 758/758
+not verified: native Linux x64, Linux ARM64
+```
+
+This covers entry-label store-to-load forwarding. The Windows suite at this
+revision passed 1011/1011.
+
 2026-11-26T04:49:00-08:00 — sanitizer check (WSL)
 Revision: 0334ead
 
