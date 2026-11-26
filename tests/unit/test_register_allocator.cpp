@@ -283,6 +283,20 @@ TEST_CASE("address fold moves a clobbering value to a dead scratch register") {
     CHECK(output.find("[R0 + 4]") != std::string::npos);
 }
 
+TEST_CASE("a repeated constant move is dropped while the register keeps it") {
+    const auto input = std::string("        MOV R0, #0\n"
+                                   "        STORE R0, [R12]\n"
+                                   "        MOV R0, #0\n"
+                                   "        STORE R0, [R12 + 4]\n"
+                                   "        RET\n");
+    const auto output = krc::backend::reuse_constant_registers(input);
+    CHECK(output.find("MOV R0, #0") != std::string::npos);
+    CHECK(output.find("STORE R0, [R12]") != std::string::npos);
+    CHECK(output.find("STORE R0, [R12 + 4]") != std::string::npos);
+    CHECK(output.find("MOV R0, #0\n        STORE R0, [R12 + 4]") ==
+          std::string::npos);
+}
+
 TEST_CASE("address arithmetic stays when the value clobbers the base") {
     const auto input = std::string("        ADD R13, R0, #4\n"
                                    "        MOV R0, #0\n"

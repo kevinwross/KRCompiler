@@ -1083,6 +1083,7 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
             text = forward_store_loads(text);
             text = remove_dead_moves(text);
             text = fold_address_arithmetic(text);
+            text = reuse_constant_registers(text);
             text = coalesce_store_addresses(text);
             text = combine_move_arithmetic(text);
             text = coalesce_load_moves(text);

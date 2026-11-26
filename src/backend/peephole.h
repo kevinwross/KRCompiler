@@ -63,6 +63,10 @@ enum class OptimizationLevel {
 // when D is overwritten before it is read on the fallthrough path.
 [[nodiscard]] std::string fold_address_arithmetic(std::string_view assembly);
 
+// Removes a `MOV Rd, #imm` when Rd already holds that constant on the
+// straight-line path. Labels, branches and calls reset the known constants.
+[[nodiscard]] std::string reuse_constant_registers(std::string_view assembly);
+
 // Folds `MOV D, S; OP D, D, X` into `OP D, S, X`, for the two-address integer
 // operations the emitter produces after a move into the result register.
 [[nodiscard]] std::string combine_move_arithmetic(std::string_view assembly);

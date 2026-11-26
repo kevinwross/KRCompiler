@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "backend/machine_cfg.h"
@@ -1263,6 +1264,108 @@ std::string fold_address_arithmetic(std::string_view assembly) {
         }
         result += replacement[index].empty() ? lines[index] : replacement[index];
         result += '\n';
+    }
+    return result;
+}
+
+std::string reuse_constant_registers(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto register_name = [](std::string_view text, std::string& reg) {
+        text = trim(text);
+        if (text.size() < 2 || text.front() != 'R') {
+            return false;
+        }
+        for (std::size_t index = 1; index < text.size(); ++index) {
+            if (text[index] < '0' || text[index] > '9') {
+                return false;
+            }
+        }
+        reg = std::string(text);
+        return true;
+    };
+    std::unordered_map<std::string, std::int64_t> known;
+    std::vector<bool> remove(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto text = trim(lines[index]);
+        if (text.empty() || is_comment(text)) {
+            continue;
+        }
+        if (is_label(text)) {
+            if (label_name(text).rfind(".Ldbg.", 0) != 0) {
+                known.clear();
+            }
+            continue;
+        }
+        const auto space = text.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            known.clear();
+            continue;
+        }
+        const auto mnemonic = text.substr(0, space);
+        if (mnemonic == "CALL" || mnemonic == "RET" || mnemonic == "HALT" ||
+            mnemonic == "BRA" || mnemonic == "SYSCALL" ||
+            (mnemonic.size() > 1 && mnemonic.front() == 'J')) {
+            known.clear();
+            continue;
+        }
+        if (mnemonic == "MOV") {
+            const auto comma = text.find(',');
+            if (comma == std::string_view::npos) {
+                known.clear();
+                continue;
+            }
+            std::string destination;
+            if (!register_name(text.substr(4, comma - 4), destination)) {
+                known.clear();
+                continue;
+            }
+            const auto source = trim(text.substr(comma + 1));
+            if (!source.empty() && source.front() == '#') {
+                const std::string immediate(source.substr(1));
+                char* end = nullptr;
+                const auto value = std::strtoll(immediate.c_str(), &end, 0);
+                if (end == nullptr || *end != '\0') {
+                    known.erase(destination);
+                    continue;
+                }
+                const auto existing = known.find(destination);
+                if (existing != known.end() && existing->second == value) {
+                    remove[index] = true;
+                } else {
+                    known[destination] = value;
+                }
+                continue;
+            }
+            std::string source_register;
+            if (register_name(source, source_register)) {
+                const auto source_value = known.find(source_register);
+                if (source_value != known.end()) {
+                    known[destination] = source_value->second;
+                } else {
+                    known.erase(destination);
+                }
+            } else {
+                known.erase(destination);
+            }
+            continue;
+        }
+        if (mnemonic == "STORE" || mnemonic == "STORE8" ||
+            mnemonic == "STORE16") {
+            continue;
+        }
+        known.clear();
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (!remove[index]) {
+            result += lines[index];
+            result += '\n';
+        }
     }
     return result;
 }
