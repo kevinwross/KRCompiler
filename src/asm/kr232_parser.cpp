@@ -204,6 +204,24 @@ bool setcc_condition(const std::string& mnemonic, unsigned& code) {
     return false;
 }
 
+// The Normal-or-generic half of the address ladder. The compact, absolute,
+// PC-relative and auto-increment forms are chosen before this is reached, so it
+// never sees a zero displacement that a compact form could carry: it selects
+// mode 5 inside d8, otherwise `F0` mode 6 for d16 or mode 7 for the rest. The
+// address is specifier 2 even for a store, whose source text names it first.
+std::optional<EncodedInstruction> encode_integer_address(unsigned normal_op, unsigned generic_op,
+                                                         unsigned data, unsigned base,
+                                                         std::int32_t displacement,
+                                                         std::string& error) {
+    if (displacement >= -128 && displacement <= 127) {
+        return encode_normal(normal_op, data, base, displacement, error);
+    }
+    const bool fits_d16 = displacement >= -32768 && displacement <= 32767;
+    const auto mode = static_cast<std::uint8_t>(fits_d16 ? 6 : 7);
+    return encode_generic(generic_op, {0, static_cast<std::uint8_t>(data), 0},
+                          {mode, static_cast<std::uint8_t>(base), displacement}, error);
+}
+
 }  // namespace
 
 std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::string& error) {
@@ -421,14 +439,16 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
     struct LoadStore {
         const char* name;
         unsigned normal_op;
+        unsigned generic_op;
         unsigned compact_op;
         unsigned long_op;
         unsigned wide_op;
     };
     constexpr LoadStore kLoadStores[] = {
-        {"ld", 0, 14, 0xFF, 6},   {"ldbu", 2, 16, 0, 7},   {"ldbs", 3, 17, 1, 8},
-        {"ldhu", 29, 255, 5, 9},  {"ldhs", 31, 255, 7, 0xFF}, {"st", 1, 15, 0xFF, 0xFF},
-        {"stb", 4, 18, 2, 0xFF},  {"sth", 30, 255, 6, 0xFF},
+        {"ld", 0, 0x0E, 14, 0xFF, 6},     {"ldbu", 2, 0x10, 16, 0, 7},
+        {"ldbs", 3, 0x11, 17, 1, 8},      {"ldhu", 29, 0x1C, 255, 5, 9},
+        {"ldhs", 31, 0x1D, 255, 7, 0xFF}, {"st", 1, 0x0F, 15, 0xFF, 0xFF},
+        {"stb", 4, 0x12, 18, 2, 0xFF},    {"sth", 30, 0x1E, 255, 6, 0xFF},
     };
     {
         Address address;
@@ -464,7 +484,8 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
                 if (address.disp == 0 && entry.compact_op != 255) {
                     return encode_compact_register(entry.compact_op, ra, address.base, error);
                 }
-                return encode_normal(entry.normal_op, ra, address.base, address.disp, error);
+                return encode_integer_address(entry.normal_op, entry.generic_op, ra, address.base,
+                                              address.disp, error);
             }
             if (mnemonic == "lea") {
                 if (address.absolute) {
@@ -478,7 +499,7 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
                     return encode_wide(address.sp ? 5 : 4, ra,
                                        static_cast<std::uint32_t>(address.disp), error);
                 }
-                return encode_normal(14, ra, address.base, address.disp, error);
+                return encode_integer_address(14, 0x13, ra, address.base, address.disp, error);
             }
         }
         Address store_address;
@@ -509,8 +530,8 @@ std::optional<EncodedInstruction> parse_instruction(std::string_view text, std::
                     return encode_compact_register(entry.compact_op, rb, store_address.base,
                                                    error);
                 }
-                return encode_normal(entry.normal_op, rb, store_address.base, store_address.disp,
-                                     error);
+                return encode_integer_address(entry.normal_op, entry.generic_op, rb,
+                                              store_address.base, store_address.disp, error);
             }
         }
     }

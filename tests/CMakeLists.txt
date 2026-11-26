@@ -208,11 +208,15 @@ if(TARGET krc)
                     -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_charload
                     -DEXPECT_EXIT=65
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
-        # The disassembler lives beside the emulator in the kr232 build; when it
-        # is not there the round trip cannot be read and the row is not added.
-        get_filename_component(kr232_bin_dir "${KRC_KR232_VM}" DIRECTORY)
-        set(kr232_dis "${kr232_bin_dir}/kr232-dis${CMAKE_EXECUTABLE_SUFFIX}")
-        if(EXISTS "${kr232_dis}")
+        # The round trip and the frame rows read the image back, so a configured
+        # emulator with no disassembler beside it is a configuration error rather
+        # than a suite that quietly registers fewer rows (ADR 0062). KRC_KR232_DIS
+        # defaults to `kr232-dis` beside the emulator and can be set explicitly.
+        if(NOT KRC_KR232_DIS OR NOT EXISTS "${KRC_KR232_DIS}")
+            message(FATAL_ERROR
+                "KRC_KR232_VM is '${KRC_KR232_VM}' but no kr232-dis was found; "
+                "set KRC_KR232_DIS or build kr232's disassembler.")
+        endif()
             # Every frame object must end at or below FP: read the compiler's own
         # frame record for a function holding an array, a double and a struct.
         add_test(NAME krc_kr232_frame_layout
@@ -341,10 +345,22 @@ if(TARGET krc)
                 COMMAND ${CMAKE_COMMAND}
                         -DKRC=$<TARGET_FILE:krc>
                         -DKRLD=$<TARGET_FILE:krld>
-                        -DDIS=${kr232_dis}
+                        -DDIS=${KRC_KR232_DIS}
                         -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_encoding_roundtrip/roundtrip
                         -P ${CMAKE_SOURCE_DIR}/cmake/CheckKr232EncodingRoundTrip.cmake)
-        endif()
+        # ADR 0062, executed: a base formed 128 bytes below a .data word, loaded
+        # through [r3+128]. The fixture cannot assemble before the fix, so this row
+        # shows the new form runs and not merely that it decodes.
+        add_test(NAME krc_kr232_run_offset_form
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232_offset_form.s
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_offset_form
+                    -DEXPECT_EXIT=42
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
         add_test(NAME krc_kr232_run_exit300
             COMMAND ${CMAKE_COMMAND}
                     -DKRC=$<TARGET_FILE:krc>

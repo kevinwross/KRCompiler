@@ -95,6 +95,14 @@ TEST_CASE("KR232 generic and long-integer forms encode as Appendix A shows") {
     // ld r2,[r3+8]: mode 5 carries a d8.
     expect_bytes(encode_generic(0x0E, {0, 2, 0}, {5, 3, 8}, error),
                  {0xF0, 0x0E, 0x02, 0x53, 0x08});
+    // The same load beyond d8: mode 6 carries a sign-extended d16, mode 7 a d32.
+    expect_bytes(encode_generic(0x0E, {0, 2, 0}, {6, 3, 0x1234}, error),
+                 {0xF0, 0x0E, 0x02, 0x63, 0x34, 0x12});
+    expect_bytes(encode_generic(0x0E, {0, 2, 0}, {7, 3, 0x1234}, error),
+                 {0xF0, 0x0E, 0x02, 0x73, 0x34, 0x12, 0x00, 0x00});
+    // A store keeps Rs in specifier 1 and the address in specifier 2.
+    expect_bytes(encode_generic(0x0F, {0, 2, 0}, {6, 3, -129}, error),
+                 {0xF0, 0x0F, 0x02, 0x63, 0x7F, 0xFF});
     // An absolute address is [R0+d32].
     expect_bytes(encode_generic(0x0E, {0, 2, 0}, {7, 0, 0x1234}, error),
                  {0xF0, 0x0E, 0x02, 0x70, 0x34, 0x12, 0x00, 0x00});

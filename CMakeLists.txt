@@ -149,6 +149,19 @@ if(NOT KRC_KR232_VM)
     endif()
 endif()
 
+# The disassembler that reads a kr232 image back. The round-trip and frame rows
+# need it, and the tests treat a configured emulator without one as an error
+# rather than silently registering fewer rows. It defaults to `kr232-dis` beside
+# the emulator, which is where the kr232 build puts it.
+set(KRC_KR232_DIS "" CACHE FILEPATH "Path to a kr232 disassembler for the round-trip tests")
+if(NOT KRC_KR232_DIS AND KRC_KR232_VM)
+    get_filename_component(_krc_kr232_dir "${KRC_KR232_VM}" DIRECTORY)
+    if(EXISTS "${_krc_kr232_dir}/kr232-dis${CMAKE_EXECUTABLE_SUFFIX}")
+        set(KRC_KR232_DIS "${_krc_kr232_dir}/kr232-dis${CMAKE_EXECUTABLE_SUFFIX}"
+            CACHE FILEPATH "Path to a kr232 disassembler for the round-trip tests" FORCE)
+    endif()
+endif()
+
 # The implementation is an object library, not an installable target. The public
 # surface is `krc::toolchain`, whose archive carries these objects; `krc_impl`
 # never appears in the exported package.

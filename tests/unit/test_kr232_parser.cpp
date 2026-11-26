@@ -119,3 +119,16 @@ TEST_CASE("KR232 parser refuses what it cannot encode yet") {
     CHECK(!parse_instruction("mov r16, r3", error).has_value());
     CHECK(!parse_instruction("frobnicate r2", error).has_value());
 }
+
+// ADR 0062: an integer address beyond the signed byte takes the F0 generic form,
+// the shortest one that fits. d8 stays Normal, so no existing encoding moves.
+TEST_CASE("KR232 integer addresses beyond d8 take the generic form") {
+    expect_parse("ld r2, [r3+127]", {0xC0, 0x23, 0x7F});
+    expect_parse("ld r2, [r3+128]", {0xF0, 0x0E, 0x02, 0x63, 0x80, 0x00});
+    expect_parse("ld r2, [r3-129]", {0xF0, 0x0E, 0x02, 0x63, 0x7F, 0xFF});
+    expect_parse("ld r2, [r3+32767]", {0xF0, 0x0E, 0x02, 0x63, 0xFF, 0x7F});
+    expect_parse("ld r2, [r3+32768]", {0xF0, 0x0E, 0x02, 0x73, 0x00, 0x80, 0x00, 0x00});
+    expect_parse("st [r3+128], r2", {0xF0, 0x0F, 0x02, 0x63, 0x80, 0x00});
+    expect_parse("lea r2, [r3+128]", {0xF0, 0x13, 0x02, 0x63, 0x80, 0x00});
+    expect_parse("ldhu r2, [r3+128]", {0xF0, 0x1C, 0x02, 0x63, 0x80, 0x00});
+}
