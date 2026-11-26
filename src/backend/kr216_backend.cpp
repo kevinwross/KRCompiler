@@ -2379,63 +2379,62 @@ std::string reuse_frame_addresses(std::string_view assembly) {
         return at;
     };
     std::vector<bool> dead(lines.size(), false);
+    std::optional<std::string> active;
     for (std::size_t index = 0; index < lines.size(); ++index) {
-        if (trim(lines[index]) != "MOV R7, SP") {
+        const auto text = trim(lines[index]);
+        if (text.empty() || text.front() == ';' ||
+            (text.back() == ':' && text.rfind(".Ldbg.", 0) == 0)) {
             continue;
         }
-        const auto load = next_instruction(index + 1);
-        if (load >= lines.size() ||
-            trim(lines[load]).rfind("LD R6, #", 0) != 0) {
-            continue;
-        }
-        const auto add = next_instruction(load + 1);
-        if (add >= lines.size() || trim(lines[add]) != "ADD R7, R6") {
-            continue;
-        }
-        const auto access = next_instruction(add + 1);
-        if (access >= lines.size()) {
-            continue;
-        }
-        const auto access_text = trim(lines[access]);
-        const auto space = access_text.find_first_of(" \t");
-        if (space == std::string_view::npos) {
-            continue;
-        }
-        const auto mnemonic = access_text.substr(0, space);
-        const bool is_load = mnemonic == "LD" || mnemonic == "LDB" ||
-                             mnemonic == "LDW" || mnemonic == "LDBU" ||
-                             mnemonic == "LDBS";
-        const bool is_store = mnemonic == "ST" || mnemonic == "STB" ||
-                              mnemonic == "STW";
-        if ((!is_load && !is_store) ||
-            access_text.find("[R7]") == std::string_view::npos) {
-            continue;
-        }
-        if (is_load) {
-            const auto comma = access_text.find(',');
-            if (comma != std::string_view::npos &&
-                trim(access_text.substr(space, comma - space)) == "R7") {
-                continue;
+        if (text == "MOV R7, SP") {
+            const auto load = next_instruction(index + 1);
+            if (load < lines.size() &&
+                trim(lines[load]).rfind("LD R6, #", 0) == 0) {
+                const auto add = next_instruction(load + 1);
+                if (add < lines.size() &&
+                    trim(lines[add]) == "ADD R7, R6") {
+                    const auto key = std::string(trim(lines[load]));
+                    if (active && *active == key) {
+                        dead[index] = true;
+                        dead[load] = true;
+                        dead[add] = true;
+                    } else {
+                        active = key;
+                    }
+                    index = add;
+                    continue;
+                }
             }
         }
-        const auto repeat = next_instruction(access + 1);
-        if (repeat >= lines.size() ||
-            trim(lines[repeat]) != "MOV R7, SP") {
+        if (!active) {
             continue;
         }
-        const auto repeat_load = next_instruction(repeat + 1);
-        if (repeat_load >= lines.size() ||
-            trim(lines[repeat_load]) != trim(lines[load])) {
+        if (text.back() == ':') {
+            active.reset();
             continue;
         }
-        const auto repeat_add = next_instruction(repeat_load + 1);
-        if (repeat_add >= lines.size() ||
-            trim(lines[repeat_add]) != "ADD R7, R6") {
+        const auto space = text.find_first_of(" \t");
+        const auto mnemonic =
+            space == std::string_view::npos ? text : text.substr(0, space);
+        if (mnemonic == "CALL" || mnemonic == "RET" || mnemonic == "HLT" ||
+            mnemonic == "ENTER" || mnemonic == "LEAVE" ||
+            mnemonic == "JMP" || mnemonic == "BRA" ||
+            (mnemonic.size() > 1 && mnemonic.front() == 'B')) {
+            active.reset();
             continue;
         }
-        dead[repeat] = true;
-        dead[repeat_load] = true;
-        dead[repeat_add] = true;
+        if (text.find("R7") == std::string_view::npos) {
+            continue;
+        }
+        const auto comma = text.find(',');
+        const auto first = trim(text.substr(
+            mnemonic.size(), comma == std::string_view::npos
+                                  ? std::string_view::npos
+                                  : comma - mnemonic.size()));
+        const bool access = text.find("[R7") != std::string_view::npos;
+        if (!access || first == "R7") {
+            active.reset();
+        }
     }
     std::string result;
     for (std::size_t index = 0; index < lines.size(); ++index) {
