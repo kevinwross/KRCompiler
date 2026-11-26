@@ -499,6 +499,21 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-26T08:50:00-08:00 — boundary matrix (Windows + WSL)
+Revision: 195973a
+
+```
+windows-msvc-debug    PASS 1011/1011
+windows-msvc-release  PASS 1011/1011
+linux-gcc-debug       PASS 758/758
+linux-clang-debug     PASS 758/758
+linux-sanitize        PASS 758/758
+not verified: native Linux x64, Linux ARM64
+```
+
+Covers constant boolean truncation and the GEP store folds. The rows were
+incremental builds, not clean gate builds.
+
 2026-11-26T08:15:00-08:00 — incremental host gate (Windows + WSL sanitizer)
 Revision: e366991
 
@@ -7799,3 +7814,4 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-26T07:55:00-08:00** — **KR232 computes single-use byte-GEP store addresses directly in R8.** The GEP writes `r8` instead of the value register and skips its frame slot; the following store consumes `[r8]`, so large offsets use an `add r8, #offset` with no spill/reload and small offsets need no d8 access. Only pure conversions may sit between the GEP and store. Galaxy O2 assembly falls from 3,805 to 3,802 lines. Full `windows-msvc-debug` suite: 1011/1011.
 
 - **2026-11-26T08:10:00-08:00** — **KR32 moves a clobbering store value to a dead scratch register.** When `MOV Rd,Rb; MOV Rb,#imm; STORE Rb,[Rd+off]` would destroy the base, the constant moves to a dead caller-saved register and the store uses `[Rb+off]`. The setup is removed only when Rd is dead after the store. Galaxy now emits `MOV R2,#0; STORE R2,[R0+9280]`. KR32 O2 `.text` falls from 1,069,100 to 1,069,064 bytes; image 2,708,151. Full `windows-msvc-debug` suite: 1011/1011.
+- **2026-11-26T08:50:00-08:00** — **Constant boolean truncation folds in IR.** `trunc i32 <literal> to i1` now becomes an `i1` constant, so `enterQuadrant(true)` and `enterQuadrant(false)` pass `MOV R1, #1` / `MOV R1, #0` directly instead of materializing `R0` and masking it with `AND ... #1`. KR32 startrekng O2 `.text` falls from 1,069,064 to 1,068,684 bytes; image 2,708,151 to 2,702,311. Full Windows debug/release and Linux GCC/Clang/sanitizer matrix: PASS.
