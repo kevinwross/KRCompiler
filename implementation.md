@@ -499,6 +499,18 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-25T17:46:00-08:00 — sanitizer check (WSL)
+Revision: c3aca30
+
+```
+linux-sanitize        PASS 757/757
+not verified: windows-msvc-release, native Linux x64, Linux ARM64
+```
+
+This covers the O2-only named-local promotion. The preceding Windows suite at
+this revision passed 1009/1009; the full Windows + Linux gate remains the one
+recorded at `c415264`.
+
 2026-11-25T17:30:30-08:00 — host gate (Windows + WSL)
 Revision: c415264
 
