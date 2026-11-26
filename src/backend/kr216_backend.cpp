@@ -2378,8 +2378,26 @@ std::string reuse_frame_addresses(std::string_view assembly) {
         }
         return at;
     };
+    const auto parse_offset = [](std::string_view text) -> int {
+        const auto hash = text.rfind('#');
+        if (hash == std::string_view::npos || hash + 1 >= text.size()) {
+            return -1;
+        }
+        int value = 0;
+        for (std::size_t index = hash + 1; index < text.size(); ++index) {
+            if (text[index] < '0' || text[index] > '9') {
+                return -1;
+            }
+            value = value * 10 + (text[index] - '0');
+            if (value > 0x7FFF) {
+                return -1;
+            }
+        }
+        return value;
+    };
     std::vector<bool> dead(lines.size(), false);
-    std::optional<std::string> active;
+    std::vector<std::string> replacements(lines.size());
+    std::optional<int> active;
     for (std::size_t index = 0; index < lines.size(); ++index) {
         const auto text = trim(lines[index]);
         if (text.empty() || text.front() == ';' ||
@@ -2393,14 +2411,31 @@ std::string reuse_frame_addresses(std::string_view assembly) {
                 const auto add = next_instruction(load + 1);
                 if (add < lines.size() &&
                     trim(lines[add]) == "ADD R7, R6") {
-                    const auto key = std::string(trim(lines[load]));
-                    if (active && *active == key) {
-                        dead[index] = true;
-                        dead[load] = true;
-                        dead[add] = true;
-                    } else {
-                        active = key;
+                    const int offset = parse_offset(trim(lines[load]));
+                    if (offset < 0) {
+                        active.reset();
+                        index = add;
+                        continue;
                     }
+                    if (active) {
+                        const int delta = offset - *active;
+                        if (delta == 0) {
+                            dead[index] = true;
+                            dead[load] = true;
+                            dead[add] = true;
+                        } else if (delta > 0 && delta <= 255) {
+                            dead[index] = true;
+                            dead[load] = true;
+                            replacements[add] = "    ADD R7, #" +
+                                                std::to_string(delta);
+                        } else if (delta < 0 && -delta <= 255) {
+                            dead[index] = true;
+                            dead[load] = true;
+                            replacements[add] = "    SUB R7, #" +
+                                                std::to_string(-delta);
+                        }
+                    }
+                    active = offset;
                     index = add;
                     continue;
                 }
@@ -2439,6 +2474,11 @@ std::string reuse_frame_addresses(std::string_view assembly) {
     std::string result;
     for (std::size_t index = 0; index < lines.size(); ++index) {
         if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
             continue;
         }
         result += lines[index];
