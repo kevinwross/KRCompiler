@@ -530,6 +530,60 @@ void Kr16Backend::emit_function(std::string& out,
             }
         }
     }
+    std::unordered_map<const ir::Value*, std::size_t> address_uses;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            for (const auto* operand : instruction->operands) {
+                if (operand) {
+                    ++address_uses[operand];
+                }
+            }
+        }
+    }
+    std::unordered_map<const ir::Instruction*,
+                       std::pair<const ir::Value*, std::int64_t>>
+        folded_geps;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Store) {
+                continue;
+            }
+            const auto* type = instruction->operands[0]->type;
+            if (!type || ir::is_float(type) ||
+                type->kind == ir::TypeKind::Struct ||
+                type->kind == ir::TypeKind::Union) {
+                continue;
+            }
+            const auto* gep = dynamic_cast<const ir::Instruction*>(
+                instruction->operands[1]);
+            if (!gep || gep->opcode != ir::Opcode::GetElementPtr ||
+                gep->operands.size() != 2 || !gep->source_type ||
+                address_uses[gep] != 1) {
+                continue;
+            }
+            const auto* index =
+                dynamic_cast<const ir::ConstantInt*>(gep->operands[1]);
+            if (!index || type_size(gep->source_type) != 1) {
+                continue;
+            }
+            const auto offset = static_cast<std::int64_t>(index->value);
+            if (offset < -128 || offset > 127) {
+                continue;
+            }
+            folded_geps.emplace(gep,
+                                std::make_pair(gep->operands[0], offset));
+        }
+    }
+    const auto memory_operand = [](std::string_view reg, std::int64_t offset) {
+        std::string address = "[";
+        address += reg;
+        if (offset != 0) {
+            address += offset > 0 ? "+" : "";
+            address += std::to_string(offset);
+        }
+        address += "]";
+        return address;
+    };
     std::size_t debug_label_counter = 0;
     for (const auto& block : function.blocks) {
         out += label_for(*block) + ":\n";
@@ -663,6 +717,23 @@ void Kr16Backend::emit_function(std::string& out,
                         out += "    ST [R1+" + std::to_string(offset) + "], R2\n";
                     }
                     break;
+                }
+                if (const auto* address =
+                        dynamic_cast<const ir::Instruction*>(
+                            instruction->operands[1])) {
+                    const auto folded = folded_geps.find(address);
+                    if (folded != folded_geps.end()) {
+                        load(folded->second.first, "R1");
+                        load(instruction->operands[0], "R0");
+                        const auto address_text =
+                            memory_operand("R1", folded->second.second);
+                        out += instruction->operands[0] &&
+                                       instruction->operands[0]->type &&
+                                       instruction->operands[0]->type->bits == 8
+                                   ? "    STB " + address_text + ", R0\n"
+                                   : "    ST " + address_text + ", R0\n";
+                        break;
+                    }
                 }
                 if (const auto object = frame_object(
                         instruction->operands[1],
@@ -979,6 +1050,9 @@ void Kr16Backend::emit_function(std::string& out,
                 break;
             }
             case ir::Opcode::GetElementPtr: {
+                if (folded_geps.count(instruction.get()) != 0) {
+                    break;
+                }
                 // Two forms reach here: [%i] selects from the source type and
                 // keeps its own lowering, and [0, %i] selects an element of an
                 // aggregate field, which is the shape a loop over an array
