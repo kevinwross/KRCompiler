@@ -93,7 +93,8 @@ struct PassChange {
 //  * a load before any store, because the memory then holds nothing this pass
 //    can name;
 //  * a `volatile` load or store, which §8.4 keeps in order and count.
-[[nodiscard]] PassChange alloca_promotion(Module& module);
+[[nodiscard]] PassChange alloca_promotion(Module& module,
+                                          bool promote_recorded = false);
 
 // E5: empty-block elimination. A block whose only instruction is an unconditional
 // branch is a jump to a jump: every predecessor can branch to its destination

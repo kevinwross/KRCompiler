@@ -670,7 +670,8 @@ CompileResult compile(const Source& source, const Options& options) {
         // Promotion runs before CSE deliberately: E2 shares only expressions
         // whose operands are identical SSA values, and until the alloca round
         // trips are gone every variable read is a distinct load.
-        const auto promoted = ir::alloca_promotion(*module);
+        const auto promoted =
+            ir::alloca_promotion(*module, options.optimize >= 2);
         change.instructions_removed += promoted.instructions_removed;
         if (options.optimize >= 2) {
             const auto inlined = ir::inline_small_functions(*module);

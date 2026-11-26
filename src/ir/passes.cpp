@@ -318,9 +318,10 @@ bool is_recorded_variable(const Instruction& alloca) {
 // True when every use of `alloca` is a load or a store in `block`, and none of
 // them is volatile: the address neither escapes nor is observed anywhere else.
 bool is_promotable(const Instruction& alloca, const BasicBlock& block,
-                   const Function& function) {
+                   const Function& function, bool promote_recorded) {
     if (alloca.opcode != Opcode::Alloca || alloca.is_volatile ||
-        !alloca.allocated_type || is_recorded_variable(alloca)) {
+        !alloca.allocated_type ||
+        (!promote_recorded && is_recorded_variable(alloca))) {
         return false;
     }
     for (const auto& candidate_block : function.blocks) {
@@ -655,7 +656,7 @@ PassChange eliminate_dead_alloca_stores(Module& module) {
     return change;
 }
 
-PassChange alloca_promotion(Module& module) {
+PassChange alloca_promotion(Module& module, bool promote_recorded) {
     PassChange change;
     for (const auto& function : module.functions()) {
         if (!function || function->declaration) {
@@ -674,7 +675,8 @@ PassChange alloca_promotion(Module& module) {
                 const Instruction* target = nullptr;
                 for (const auto& instruction : block->instructions) {
                     if (instruction &&
-                        is_promotable(*instruction, *block, *function)) {
+                        is_promotable(*instruction, *block, *function,
+                                      promote_recorded)) {
                         target = instruction.get();
                         break;
                     }
