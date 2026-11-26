@@ -499,6 +499,17 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-25T22:05:00-08:00 — sanitizer check (WSL)
+Revision: 747fdc2
+
+```
+linux-sanitize        PASS 758/758
+not verified: native Linux x64, Linux ARM64
+```
+
+This covers KR232 cross-block address deltas. The Windows suite at this
+revision passed 1011/1011.
+
 2026-11-25T21:51:00-08:00 — sanitizer check (WSL)
 Revision: 994df03
 
