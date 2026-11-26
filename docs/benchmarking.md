@@ -53,3 +53,18 @@ O1 retires 40.5% fewer instructions than O0. O2 is identical to O1 on this
 kernel: the benchmark has one hot loop and no calls or frame slots for the O2
 passes to remove.
 
+## Recorded run: startrekng on KR32
+
+The multi-file game's scripted mission was run under the KR32 VM at O1 and O2.
+The counts are the VM's final `ticks=` value; the transcript is too large for
+`BenchmarkImage.cmake`'s captured-output path.
+
+| Build | Retired instructions | Exit |
+|---|---:|---:|
+| `-O1` | 9,555,395 | 0 |
+| `-O2` | 9,514,595 | 0 |
+
+O2 retires 40,800 fewer instructions, a 0.43% reduction. The game is dominated
+by calls and address-taken objects, which limits the O2 promotion passes.
+
+
