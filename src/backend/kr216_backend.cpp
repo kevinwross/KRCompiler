@@ -203,6 +203,100 @@ std::vector<ArgClass> classify_arguments(const std::vector<const ir::Value*>& va
     return result;
 }
 
+struct ByteSlotPlan {
+    std::unordered_map<const ir::Instruction*, std::uint32_t> slots;
+    std::uint32_t next_offset = 0;
+};
+
+ByteSlotPlan plan_two_byte_value_slots(const ir::Function& function,
+                                       std::uint32_t base) {
+    std::unordered_map<const ir::Value*, std::size_t> first;
+    std::unordered_map<const ir::Value*, std::size_t> last;
+    std::size_t position = 0;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Alloca &&
+                instruction->type && !ir::is_void(instruction->type)) {
+                first[instruction.get()] = position;
+                last[instruction.get()] = position;
+            }
+            for (const auto* operand : instruction->operands) {
+                if (operand == nullptr) {
+                    continue;
+                }
+                const auto inserted = first.emplace(operand, position);
+                if (inserted.second) {
+                    last[operand] = position;
+                } else {
+                    last[operand] = std::max(last[operand], position);
+                }
+            }
+            for (const auto& incoming : instruction->incoming) {
+                if (incoming.first == nullptr) {
+                    continue;
+                }
+                const auto inserted = first.emplace(incoming.first, position);
+                if (inserted.second) {
+                    last[incoming.first] = position;
+                } else {
+                    last[incoming.first] =
+                        std::max(last[incoming.first], position);
+                }
+            }
+            ++position;
+        }
+    }
+
+    struct Interval {
+        const ir::Instruction* instruction;
+        std::size_t block;
+        std::size_t first;
+        std::size_t last;
+    };
+    std::vector<Interval> intervals;
+    for (std::size_t block_index = 0; block_index < function.blocks.size();
+         ++block_index) {
+        for (const auto& instruction : function.blocks[block_index]->instructions) {
+            if (instruction->opcode == ir::Opcode::Alloca ||
+                !instruction->type || ir::is_void(instruction->type) ||
+                type_size(instruction->type) != kSlotSize) {
+                continue;
+            }
+            intervals.push_back(
+                Interval{instruction.get(), block_index, first[instruction.get()],
+                         last[instruction.get()]});
+        }
+    }
+    std::stable_sort(intervals.begin(), intervals.end(),
+                     [](const Interval& left, const Interval& right) {
+                         return left.first < right.first;
+                     });
+
+    ByteSlotPlan plan;
+    plan.next_offset = base;
+    std::vector<std::size_t> expiry;
+    std::vector<std::size_t> slot_block;
+    for (const auto& interval : intervals) {
+        std::uint32_t assigned = plan.next_offset;
+        for (std::size_t slot = 0; slot < expiry.size(); ++slot) {
+            if (slot_block[slot] == interval.block &&
+                expiry[slot] < interval.first) {
+                assigned = base + static_cast<std::uint32_t>(slot * kSlotSize);
+                expiry[slot] = interval.last;
+                break;
+            }
+        }
+        if (assigned == plan.next_offset) {
+            expiry.push_back(interval.last);
+            slot_block.push_back(interval.block);
+            plan.next_offset =
+                base + static_cast<std::uint32_t>(expiry.size() * kSlotSize);
+        }
+        plan.slots[interval.instruction] = assigned;
+    }
+    return plan;
+}
+
 }  // namespace
 
 Kr216Backend::Kr216Backend(const ir::Module& module, const target::TargetProfile& profile,
@@ -215,20 +309,33 @@ Kr216Backend::FrameLayout Kr216Backend::layout_function(const ir::Function& func
     std::uint32_t offset = 0;
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
-            if (instruction->opcode == ir::Opcode::Alloca) {
-                const auto size = std::max<std::uint32_t>(
-                    kSlotSize, type_size(instruction->allocated_type));
-                offset = round_up(offset, 2);
-                layout.allocas[instruction.get()] = offset;
-                layout.slots[instruction.get()] = offset;
-                offset += size;
+            if (instruction->opcode != ir::Opcode::Alloca) {
                 continue;
             }
-            if (instruction->type && !ir::is_void(instruction->type)) {
-                offset = round_up(offset, 2);
-                layout.slots[instruction.get()] = offset;
-                offset += std::max<std::uint32_t>(kSlotSize, type_size(instruction->type));
+            const auto size = std::max<std::uint32_t>(
+                kSlotSize, type_size(instruction->allocated_type));
+            offset = round_up(offset, 2);
+            layout.allocas[instruction.get()] = offset;
+            layout.slots[instruction.get()] = offset;
+            offset += size;
+        }
+    }
+    const auto plan = plan_two_byte_value_slots(function, offset);
+    for (const auto& [instruction, slot] : plan.slots) {
+        layout.slots[instruction] = slot;
+    }
+    offset = plan.next_offset;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode == ir::Opcode::Alloca ||
+                !instruction->type || ir::is_void(instruction->type) ||
+                type_size(instruction->type) == kSlotSize) {
+                continue;
             }
+            offset = round_up(offset, 2);
+            layout.slots[instruction.get()] = offset;
+            offset += std::max<std::uint32_t>(kSlotSize,
+                                              type_size(instruction->type));
         }
     }
     if (returns_aggregate(function)) {
