@@ -175,6 +175,15 @@ TEST_CASE("argument producer coalescing rewrites both call arguments") {
     CHECK(output.find("MOV R1, R14") == std::string::npos);
 }
 
+TEST_CASE("store-source coalescing handles subword stores") {
+    const auto input = std::string("        MOV R0, R15\n"
+                                   "        STORE8 R0, [R7 + 4]\n"
+                                   "        MOV R0, #1\n");
+    const auto output = krc::backend::coalesce_store_sources(input);
+    CHECK(output.find("STORE8 R15, [R7 + 4]") != std::string::npos);
+    CHECK(output.find("MOV R0, R15") == std::string::npos);
+}
+
 TEST_CASE("move-arithmetic combining folds the two-address form") {
     const auto input = std::string("        MOV R0, R8\n"
                                    ".Ldbg.f.1:\n"

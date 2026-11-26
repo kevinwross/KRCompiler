@@ -1064,7 +1064,13 @@ std::string coalesce_store_sources(std::string_view assembly) {
             continue;
         }
         const auto store_text = trim(lines[store]);
-        if (store_text.rfind("STORE ", 0) != 0) {
+        const auto store_space = store_text.find_first_of(" \t");
+        if (store_space == std::string_view::npos) {
+            continue;
+        }
+        const auto store_mnemonic = store_text.substr(0, store_space);
+        if (store_mnemonic != "STORE" && store_mnemonic != "STORE8" &&
+            store_mnemonic != "STORE16" && store_mnemonic != "STORE32") {
             continue;
         }
         const auto store_comma = store_text.find(',');
@@ -1072,7 +1078,9 @@ std::string coalesce_store_sources(std::string_view assembly) {
             continue;
         }
         std::string store_register;
-        if (!register_name(store_text.substr(6, store_comma - 6), store_register) ||
+        if (!register_name(store_text.substr(
+                               store_space, store_comma - store_space),
+                           store_register) ||
             store_register != destination) {
             continue;
         }
@@ -1139,12 +1147,17 @@ std::string coalesce_store_sources(std::string_view assembly) {
             continue;
         }
         std::string rewritten = lines[store];
-        const auto position = rewritten.find("STORE " + destination);
+        const auto prefix = std::string(store_mnemonic) + " ";
+        const auto position = rewritten.find(prefix);
         if (position == std::string::npos) {
             continue;
         }
-        rewritten.replace(position, ("STORE " + destination).size(),
-                          "STORE " + source);
+        const auto source_position = position + prefix.size();
+        if (rewritten.compare(source_position, destination.size(),
+                              destination) != 0) {
+            continue;
+        }
+        rewritten.replace(source_position, destination.size(), source);
         replacements[store] = rewritten;
         dead[index] = true;
     }
