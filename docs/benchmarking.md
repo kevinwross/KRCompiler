@@ -36,3 +36,20 @@ forward-slash VM path on every host.
 The script fails if the image prints no step count. It is deliberately not a
 CTest case: a benchmark records a number, while a test needs an assertion. Use
 the recorded rows to compare `-O0`, `-O1`, `-O2` and `-Os` on the same source.
+
+## Recorded run: bench_loop on KR32
+
+Source: `tests/fixtures/c/bench_loop.c` (200,000 iterations). Images were linked
+with `cmake/LinkRuntime.cmake` against the staged KR32 runtime and run with the
+KR32 VM through `cmake/BenchmarkImage.cmake`.
+
+| Build | Retired instructions | Exit |
+|---|---:|---:|
+| `-O0` | 7,400,037 | 96 |
+| `-O1` | 4,400,030 | 96 |
+| `-O2` | 4,400,030 | 96 |
+
+O1 retires 40.5% fewer instructions than O0. O2 is identical to O1 on this
+kernel: the benchmark has one hot loop and no calls or frame slots for the O2
+passes to remove.
+
