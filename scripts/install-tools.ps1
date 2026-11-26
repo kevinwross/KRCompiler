@@ -8,6 +8,10 @@
     disassemblers and bench in kr216 and kr232, and two programs in krdbg. This script
     finds each of them for one configuration and copies them into a single directory.
 
+    kr32.exe also gets the SDL2.dll it links, copied beside it: Windows resolves that
+    DLL from the executable's own directory, so a directory holding the executable
+    alone contains a kr32 that cannot start.
+
     It reports what it found and what it did not, and exits non-zero when anything is
     missing: a partial PATH directory that looks complete is the failure this is meant
     to prevent. The directory is checked against PATH and the exact line needed is
@@ -95,13 +99,36 @@ foreach ($name in $layout.Keys) {
     }
 }
 
+# kr32.exe links SDL2 dynamically and Windows loads the DLL from beside the
+# executable, so copying the executable alone leaves a kr32 that cannot start --
+# the complete-looking directory this script exists to prevent. The DLL is taken
+# from the same build tree as the executable it belongs to.
+$sdl2Source = Join-Path (Join-Path $family $layout['kr32.exe']) 'SDL2.dll'
+$sdl2 = $null
+if ((Test-Path -LiteralPath (Join-Path $Dest 'kr32.exe')) -and
+    (Test-Path -LiteralPath $sdl2Source)) {
+    $sdl2Target = Join-Path $Dest 'SDL2.dll'
+    Copy-Item -LiteralPath $sdl2Source -Destination $sdl2Target -Force
+    $sdl2 = [pscustomobject]@{
+        Name = 'SDL2.dll'
+        Size = (Get-Item -LiteralPath $sdl2Target).Length
+    }
+}
+$noRuntime = -not $sdl2 -and (Test-Path -LiteralPath (Join-Path $Dest 'kr32.exe'))
+
 Write-Host ''
 Write-Host "install-tools: $($Config) into $Dest"
 foreach ($row in $copied) {
     Write-Host ("  copied  {0,-20} {1,9:N0} bytes" -f $row.Name, $row.Size)
 }
+if ($sdl2) {
+    Write-Host ("  copied  {0,-20} {1,9:N0} bytes  (kr32.exe runtime)" -f $sdl2.Name, $sdl2.Size)
+}
 foreach ($row in $missing) {
     Write-Host ("  MISSING {0,-20} {1}" -f $row.Name, $row.Expected) -ForegroundColor Red
+}
+if ($noRuntime) {
+    Write-Host ("  MISSING {0,-20} {1}" -f 'SDL2.dll', $sdl2Source) -ForegroundColor Red
 }
 
 # The directory has to be on PATH, or the copy has changed nothing about how a shell
@@ -130,5 +157,11 @@ if ($missing.Count -gt 0) {
         }
         Write-Host "    (cd $repo; cmake --preset $preset; cmake --build --preset $preset)"
     }
+    if (-not $AllowMissing) { exit 1 }
+}
+
+if ($noRuntime) {
+    Write-Host ''
+    Write-Host '  kr32.exe was copied without the SDL2.dll it links, so it will not start.' -ForegroundColor Red
     if (-not $AllowMissing) { exit 1 }
 }
