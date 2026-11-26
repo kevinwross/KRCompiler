@@ -1787,6 +1787,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
 }
 
 std::string fold_frame_addresses(std::string_view assembly);
+std::string fold_stack_self_address(std::string_view assembly);
 std::string fold_bool_stores(std::string_view assembly);
 std::string eliminate_kr216_dead_stores(std::string_view assembly);
 std::string coalesce_store_values(std::string_view assembly);
@@ -1933,6 +1934,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         for (int pass = 0; pass < passes; ++pass) {
             const auto before = out;
             out = fold_frame_addresses(out);
+            out = fold_stack_self_address(out);
             out = coalesce_store_values(out);
             out = fold_bool_stores(out);
             out = eliminate_kr216_dead_stores(out);
@@ -2333,6 +2335,138 @@ std::string eliminate_kr216_dead_stores(std::string_view assembly) {
     std::string result;
     for (std::size_t index = 0; index < lines.size(); ++index) {
         if (dead[index]) {
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
+std::string fold_stack_self_address(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto trim = [](std::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    };
+    const auto next_instruction = [&](std::size_t start) {
+        std::size_t at = start;
+        while (at < lines.size()) {
+            const auto candidate = trim(lines[at]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++at;
+                continue;
+            }
+            break;
+        }
+        return at;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (trim(lines[index]) != "MOV R3, SP") {
+            continue;
+        }
+        const auto access = next_instruction(index + 1);
+        if (access >= lines.size()) {
+            continue;
+        }
+        const auto text = trim(lines[access]);
+        const auto space = text.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = text.substr(0, space);
+        const bool is_load = mnemonic == "LD" || mnemonic == "LDB" ||
+                             mnemonic == "LDW" || mnemonic == "LDBU" ||
+                             mnemonic == "LDBS";
+        const bool is_store = mnemonic == "ST" || mnemonic == "STB" ||
+                              mnemonic == "STW";
+        if (!is_load && !is_store) {
+            continue;
+        }
+        const auto comma = text.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        std::string load_destination;
+        std::string store_value;
+        auto address = trim(text.substr(comma + 1));
+        if (is_load) {
+            load_destination =
+                std::string(trim(text.substr(mnemonic.size(),
+                                             comma - mnemonic.size())));
+        } else {
+            address = trim(text.substr(mnemonic.size(),
+                                       comma - mnemonic.size()));
+            store_value = std::string(trim(text.substr(comma + 1)));
+        }
+        if (address != "[R3]") {
+            continue;
+        }
+        bool safe = false;
+        for (auto after = next_instruction(access + 1); after < lines.size();
+             after = next_instruction(after + 1)) {
+            const auto candidate = trim(lines[after]);
+            if (candidate.back() == ':') {
+                continue;
+            }
+            const auto candidate_space = candidate.find_first_of(" \t");
+            const auto candidate_mnemonic =
+                candidate_space == std::string_view::npos
+                    ? candidate
+                    : candidate.substr(0, candidate_space);
+            if (candidate_mnemonic == "RET" || candidate_mnemonic == "HLT") {
+                safe = true;
+                break;
+            }
+            if (candidate_mnemonic == "CALL" || candidate_mnemonic == "JMP" ||
+                (candidate_mnemonic.size() > 1 &&
+                 candidate_mnemonic.front() == 'B')) {
+                break;
+            }
+            if (candidate.find("R3") == std::string_view::npos) {
+                continue;
+            }
+            const auto candidate_comma = candidate.find(',');
+            const auto first = trim(candidate.substr(
+                candidate_mnemonic.size(),
+                candidate_comma == std::string_view::npos
+                    ? std::string_view::npos
+                    : candidate_comma - candidate_mnemonic.size()));
+            safe = first == "R3";
+            break;
+        }
+        if (!safe) {
+            continue;
+        }
+        replacements[access] =
+            is_load ? "    " + std::string(mnemonic) + " " + load_destination +
+                          ", [SP]"
+                    : "    " + std::string(mnemonic) + " [SP], " +
+                          store_value;
+        dead[index] = true;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
             continue;
         }
         result += lines[index];
