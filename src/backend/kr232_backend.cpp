@@ -119,11 +119,17 @@ bool takes_two_slots(const ir::Type* type) {
            (type->bits + 7u) / 8u >= 8u;
 }
 
-// Values in descending order of how often the function reads them. The emitter
-// assigns the first value slot to the most-read value, which puts the hottest
-// temporaries in the signed-byte FP range and lets them use direct addressing
-// instead of materialising an address through R8.
-std::vector<const ir::Instruction*> values_by_frequency(const ir::Function& function) {
+struct SlotEntity {
+    const ir::Instruction* instruction = nullptr;
+    std::uint32_t slots = 1;
+    bool align_even = false;
+};
+
+// Frame-resident entities in descending order of how often the function reads
+// them. The emitter assigns the first slots to the hottest entities, which puts
+// them in the signed-byte FP range and lets them use direct addressing instead of
+// materialising an address through R8.
+std::vector<SlotEntity> slots_by_frequency(const ir::Function& function) {
     std::unordered_map<const ir::Value*, std::size_t> uses;
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
@@ -140,28 +146,137 @@ std::vector<const ir::Instruction*> values_by_frequency(const ir::Function& func
         }
     }
 
-    std::vector<const ir::Instruction*> values;
+    std::vector<SlotEntity> entities;
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
-            if (instruction->opcode == ir::Opcode::Alloca ||
-                instruction->type == nullptr ||
+            if (instruction->opcode == ir::Opcode::Alloca) {
+                entities.push_back(
+                    SlotEntity{instruction.get(),
+                               std::max<std::uint32_t>(
+                                   1u, align_frame(type_bytes(instruction->allocated_type)) /
+                                           4u),
+                               false});
+                continue;
+            }
+            if (instruction->type == nullptr ||
                 instruction->type->kind == ir::TypeKind::Void) {
                 continue;
             }
-            values.push_back(instruction.get());
+            const bool two_slots = takes_two_slots(instruction->type);
+            entities.push_back(
+                SlotEntity{instruction.get(), two_slots ? 2u : 1u, two_slots});
         }
     }
-    std::stable_sort(values.begin(), values.end(),
-                     [&](const ir::Instruction* left, const ir::Instruction* right) {
-                         const auto left_uses = uses.find(left);
-                         const auto right_uses = uses.find(right);
+    std::stable_sort(entities.begin(), entities.end(),
+                     [&](const SlotEntity& left, const SlotEntity& right) {
+                         const auto left_uses = uses.find(left.instruction);
+                         const auto right_uses = uses.find(right.instruction);
                          const std::size_t left_count =
                              left_uses == uses.end() ? 0 : left_uses->second;
                          const std::size_t right_count =
                              right_uses == uses.end() ? 0 : right_uses->second;
                          return left_count > right_count;
                      });
-    return values;
+    return entities;
+}
+
+struct ValueSlotPlan {
+    std::unordered_map<const ir::Instruction*, std::uint32_t> slots;
+    std::uint32_t next_slot = 0;
+};
+
+// First-fit slot coloring for one-word values. A value's interval starts at the
+// earliest position that reads it and ends at the latest; two intervals that do
+// not overlap may share a frame slot. Allocas are excluded because their
+// addresses can escape, and two-slot floating-point values are placed separately.
+ValueSlotPlan plan_one_word_value_slots(const ir::Function& function,
+                                        std::uint32_t base) {
+    std::unordered_map<const ir::Value*, std::size_t> first;
+    std::unordered_map<const ir::Value*, std::size_t> last;
+    std::size_t position = 0;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Alloca &&
+                instruction->type != nullptr &&
+                instruction->type->kind != ir::TypeKind::Void) {
+                first[instruction.get()] = position;
+                last[instruction.get()] = position;
+            }
+            for (const auto* operand : instruction->operands) {
+                if (operand == nullptr) {
+                    continue;
+                }
+                const auto inserted = first.emplace(operand, position);
+                if (inserted.second) {
+                    last[operand] = position;
+                } else {
+                    last[operand] = std::max(last[operand], position);
+                }
+            }
+            for (const auto& incoming : instruction->incoming) {
+                if (incoming.first == nullptr) {
+                    continue;
+                }
+                const auto inserted = first.emplace(incoming.first, position);
+                if (inserted.second) {
+                    last[incoming.first] = position;
+                } else {
+                    last[incoming.first] =
+                        std::max(last[incoming.first], position);
+                }
+            }
+            ++position;
+        }
+    }
+
+    struct Interval {
+        const ir::Instruction* instruction;
+        std::size_t block;
+        std::size_t first;
+        std::size_t last;
+    };
+    std::vector<Interval> intervals;
+    for (std::size_t block_index = 0; block_index < function.blocks.size();
+         ++block_index) {
+        for (const auto& instruction : function.blocks[block_index]->instructions) {
+            if (instruction->opcode == ir::Opcode::Alloca ||
+                instruction->type == nullptr ||
+                instruction->type->kind == ir::TypeKind::Void ||
+                takes_two_slots(instruction->type)) {
+                continue;
+            }
+            intervals.push_back(
+                Interval{instruction.get(), block_index, first[instruction.get()],
+                         last[instruction.get()]});
+        }
+    }
+    std::stable_sort(intervals.begin(), intervals.end(),
+                     [](const Interval& left, const Interval& right) {
+                         return left.first < right.first;
+                     });
+
+    ValueSlotPlan plan;
+    plan.next_slot = base;
+    std::vector<std::size_t> expiry;
+    std::vector<std::size_t> slot_block;
+    for (const auto& interval : intervals) {
+        std::uint32_t assigned = plan.next_slot;
+        for (std::size_t slot = 0; slot < expiry.size(); ++slot) {
+            if (slot_block[slot] == interval.block &&
+                expiry[slot] < interval.first) {
+                assigned = base + static_cast<std::uint32_t>(slot);
+                expiry[slot] = interval.last;
+                break;
+            }
+        }
+        if (assigned == plan.next_slot) {
+            expiry.push_back(interval.last);
+            slot_block.push_back(interval.block);
+            plan.next_slot = base + static_cast<std::uint32_t>(expiry.size());
+        }
+        plan.slots[interval.instruction] = assigned;
+    }
+    return plan;
 }
 
 }  // namespace
@@ -182,19 +297,39 @@ std::uint32_t Kr232Backend::frame_bytes(const ir::Function& function) const {
     // instead -- no rounding, no alignment, no two-slot values -- made ENTER
     // allocate less than the body wrote to, so a function's spills landed in its
     // caller's frame.
-    std::uint32_t next_slot = 0;
+    bool holds_eight_bytes = false;
     for (const auto& parameter : function.parameters) {
-        if (type_bytes(parameter->type) > 4u) {
-            next_slot = 1u;
-            break;
-        }
+        holds_eight_bytes = holds_eight_bytes || type_bytes(parameter->type) > 4u;
     }
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
-            if (instruction->opcode == ir::Opcode::Alloca) {
-                next_slot += align_frame(type_bytes(instruction->allocated_type)) / 4u;
+            if (instruction->opcode == ir::Opcode::Alloca &&
+                type_bytes(instruction->allocated_type) > 4u) {
+                holds_eight_bytes = true;
             }
         }
+    }
+    std::uint32_t next_slot = holds_eight_bytes ? 1u : 0u;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode == ir::Opcode::Alloca) {
+                next_slot +=
+                    std::max<std::uint32_t>(
+                        1u, align_frame(type_bytes(instruction->allocated_type)) / 4u);
+            }
+        }
+    }
+    const auto plan = plan_one_word_value_slots(function, next_slot);
+    next_slot = plan.next_slot;
+    for (const auto& entity : slots_by_frequency(function)) {
+        if (entity.instruction->opcode == ir::Opcode::Alloca ||
+            !takes_two_slots(entity.instruction->type)) {
+            continue;
+        }
+        if ((next_slot % 2u) != 0u) {
+            ++next_slot;
+        }
+        next_slot += 2u;
     }
     for (const auto& block : function.blocks) {
         for (const auto& instruction : block->instructions) {
@@ -205,14 +340,6 @@ std::uint32_t Kr232Backend::frame_bytes(const ir::Function& function) const {
                 next_slot += align_frame(type_bytes(instruction->type)) / 4u;
             }
         }
-    }
-    for (const auto* instruction : values_by_frequency(function)) {
-        const bool eight = takes_two_slots(instruction->type);
-        const std::uint32_t slots = eight ? 2u : 1u;
-        if (slots == 2u && (next_slot % 2u) != 0u) {
-            ++next_slot;
-        }
-        next_slot += slots;
     }
     return 4u + 4u * next_slot;
 }
@@ -1394,17 +1521,27 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             for (const auto& instruction : block->instructions) {
                 if (instruction->opcode == ir::Opcode::Alloca) {
                     slot_of.emplace(instruction.get(), next_slot);
-                    next_slot += align_frame(type_bytes(instruction->allocated_type)) / 4u;
+                    next_slot += std::max<std::uint32_t>(
+                        1u,
+                        align_frame(type_bytes(instruction->allocated_type)) / 4u);
                 }
             }
         }
-        for (const auto* instruction : values_by_frequency(*function)) {
-            const std::uint32_t slots = slots_for(instruction->type);
-            if (slots == 2u && (next_slot % 2u) != 0u) {
+        const auto plan = plan_one_word_value_slots(*function, next_slot);
+        for (const auto& [instruction, slot] : plan.slots) {
+            slot_of.emplace(instruction, slot);
+        }
+        next_slot = plan.next_slot;
+        for (const auto& entity : slots_by_frequency(*function)) {
+            if (entity.instruction->opcode == ir::Opcode::Alloca ||
+                !takes_two_slots(entity.instruction->type)) {
+                continue;
+            }
+            if ((next_slot % 2u) != 0u) {
                 ++next_slot;
             }
-            slot_of.emplace(instruction, next_slot);
-            next_slot += slots;
+            slot_of.emplace(entity.instruction, next_slot);
+            next_slot += 2u;
         }
         // A call that returns a record needs somewhere to put it: the callee copies
         // into a destination the caller names. Those destinations get their own
