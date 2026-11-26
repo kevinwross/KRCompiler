@@ -138,6 +138,17 @@ TEST_CASE("store-to-load forwarding drops a frame reload") {
     CHECK(output.find("STORE R0, [R7 + 104]") != std::string::npos);
 }
 
+TEST_CASE("store-to-load forwarding crosses the IR entry label") {
+    const auto input = std::string("        STORE R0, [R7 + 8]\n"
+                                   ".Lf.entry:\n"
+                                   ".Ldbg.f.0:\n"
+                                   "        LOAD R0, [R7 + 8]\n"
+                                   "        STORE R0, [R7 + 12]\n");
+    const auto output = krc::backend::forward_store_loads(input);
+    CHECK(output.find("LOAD R0, [R7 + 8]") == std::string::npos);
+    CHECK(output.find("STORE R0, [R7 + 12]") != std::string::npos);
+}
+
 TEST_CASE("store-to-load forwarding rewrites a cross-register reload") {
     const auto input = std::string("        STORE R0, [R7 + 104]\n"
                                    ".Ldbg.f.1:\n"

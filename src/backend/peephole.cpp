@@ -162,10 +162,22 @@ std::string forward_store_loads(std::string_view assembly) {
         std::size_t next = index + 1;
         while (next < lines.size()) {
             const auto text = trim(lines[next]);
-            if (text.empty() || is_comment(text) ||
-                (is_label(text) && label_name(text).rfind(".Ldbg.", 0) == 0)) {
+            if (text.empty() || is_comment(text)) {
                 ++next;
                 continue;
+            }
+            if (is_label(text)) {
+                const auto name = label_name(text);
+                // `.L<function>.entry` marks the IR entry block, which has no
+                // predecessors, so control reaches it only by falling through
+                // the prologue. A store there can be forwarded across it.
+                const bool entry_label =
+                    name.size() > 6 &&
+                    name.compare(name.size() - 6, 6, ".entry") == 0;
+                if (name.rfind(".Ldbg.", 0) == 0 || entry_label) {
+                    ++next;
+                    continue;
+                }
             }
             break;
         }
