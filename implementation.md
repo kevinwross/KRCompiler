@@ -499,6 +499,17 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-25T20:24:00-08:00 — sanitizer check (WSL)
+Revision: 9f5513f
+
+```
+linux-sanitize        PASS 758/758
+not verified: native Linux x64, Linux ARM64
+```
+
+This covers the KR232 alloca-last frame layout. The Windows suite at this
+revision passed 1011/1011.
+
 2026-11-25T20:13:00-08:00 — sanitizer check (WSL)
 Revision: b9732fd
 
