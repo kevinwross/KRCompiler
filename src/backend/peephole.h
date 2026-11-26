@@ -13,7 +13,21 @@ namespace krc::backend {
 enum class OptimizationLevel {
     O0,
     O1,
+    O2,
+    Os,
 };
+
+// Whether a level runs the optimizing pipeline at all.
+[[nodiscard]] constexpr bool optimizes(OptimizationLevel level) {
+    return level != OptimizationLevel::O0;
+}
+
+// Whether a level runs the pipeline to a second fixed point. Both the
+// performance and size tiers repeat, but the second pass is kept only when it
+// makes the text smaller, so repetition cannot inflate code.
+[[nodiscard]] constexpr bool is_aggressive(OptimizationLevel level) {
+    return level == OptimizationLevel::O2 || level == OptimizationLevel::Os;
+}
 
 // Removes identity and zero-strength operations from backend assembly. The pass
 // is deliberately textual: it only rewrites exact three-operand/immediate forms

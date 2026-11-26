@@ -6842,6 +6842,9 @@ add_test(NAME krc_cxx_value_parameter_deduced
                 -DOUT_O0=${KRC_TEST_OUTPUT_DIR}/level_o0.s
                 -DOUT_O1=${KRC_TEST_OUTPUT_DIR}/level_o1.s
                 -DOUT_O1_AGAIN=${KRC_TEST_OUTPUT_DIR}/level_o1b.s
+                -DOUT_O2=${KRC_TEST_OUTPUT_DIR}/level_o2.s
+                -DOUT_O2_AGAIN=${KRC_TEST_OUTPUT_DIR}/level_o2b.s
+                -DOUT_OS=${KRC_TEST_OUTPUT_DIR}/level_os.s
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckLevelIdentity.cmake)
 
     add_test(NAME krc_determinism_object

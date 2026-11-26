@@ -156,6 +156,12 @@ std::string format_stats(const ir::Module& module, const target::TargetProfile& 
 }
 
 backend::OptimizationLevel optimization_level(const Options& options) {
+    if (options.optimize >= 3) {
+        return backend::OptimizationLevel::Os;
+    }
+    if (options.optimize == 2) {
+        return backend::OptimizationLevel::O2;
+    }
     return options.optimize > 0 ? backend::OptimizationLevel::O1
                                 : backend::OptimizationLevel::O0;
 }

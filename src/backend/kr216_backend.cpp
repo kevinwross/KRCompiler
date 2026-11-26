@@ -1927,12 +1927,19 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         replace_all("    LD " + name + ", #1\n", "    MOV " + name + ", R1\n");
         replace_all("    ADD " + name + ", #0\n", "");
     }
-    if (level_ == OptimizationLevel::O1) {
-        out = fold_frame_addresses(out);
-        out = coalesce_store_values(out);
-        out = eliminate_kr216_dead_stores(out);
-        out = invert_branch_diamonds(out);
-        out = remove_kr216_redundant_jumps(out);
+    if (optimizes(level_)) {
+        const int passes = is_aggressive(level_) ? 2 : 1;
+        for (int pass = 0; pass < passes; ++pass) {
+            const auto before = out;
+            out = fold_frame_addresses(out);
+            out = coalesce_store_values(out);
+            out = eliminate_kr216_dead_stores(out);
+            out = invert_branch_diamonds(out);
+            out = remove_kr216_redundant_jumps(out);
+            if (pass > 0 && out.size() >= before.size()) {
+                out = before;
+            }
+        }
     }
     return out;
 }

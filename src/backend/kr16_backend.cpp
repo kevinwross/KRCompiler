@@ -1307,7 +1307,7 @@ std::optional<std::string> Kr16Backend::emit(std::string& error) const {
     }
     // `-O1` runs the text pass; `-O0` returns the emitter's text untouched, which
     // is what keeps the default level byte-identical to a build without the flag.
-    if (level_ == OptimizationLevel::O1) {
+    if (optimizes(level_)) {
         return remove_redundant_jumps(out);
     }
     return out;

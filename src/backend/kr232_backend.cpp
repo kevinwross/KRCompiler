@@ -2428,17 +2428,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         }
     }
     std::string text = out.str();
-    if (level_ == OptimizationLevel::O1) {
-        text = forward_frame_loads(text);
-        text = fold_frame_addresses(text);
-        text = reuse_frame_addresses(text);
-        text = reuse_frame_addresses_across_blocks(text);
-        text = fold_frame_addresses_to_lea(text);
-        text = coalesce_argument_moves(text);
-        text = coalesce_address_moves(text);
-        text = forward_frame_loads_across_blocks(text);
-        text = eliminate_dead_frame_stores(text);
-        text = eliminate_dead_register_definitions(text);
+    if (optimizes(level_)) {
+        const int passes = is_aggressive(level_) ? 2 : 1;
+        for (int pass = 0; pass < passes; ++pass) {
+            const auto before = text;
+            text = forward_frame_loads(text);
+            text = fold_frame_addresses(text);
+            text = reuse_frame_addresses(text);
+            text = reuse_frame_addresses_across_blocks(text);
+            text = fold_frame_addresses_to_lea(text);
+            text = coalesce_argument_moves(text);
+            text = coalesce_address_moves(text);
+            text = forward_frame_loads_across_blocks(text);
+            text = eliminate_dead_frame_stores(text);
+            text = eliminate_dead_register_definitions(text);
+            if (pass > 0 && text.size() >= before.size()) {
+                text = before;
+            }
+        }
     }
     return text;
 }

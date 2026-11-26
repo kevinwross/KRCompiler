@@ -42,6 +42,8 @@ void print_usage(std::ostream& out) {
         << "  --dump-stats           Print IR instruction and block counts per function\n"
         << "  -O0                    Straightforward lowering\n"
         << "  -O1, -O                Enable the optimiser (the default)\n"
+        << "  -O2                    Run the text pipeline to a second fixed point\n"
+        << "  -Os                    Size-oriented optimisation\n"
         << "  --dump-symbols FILE    Dump KDBG symbols from a target image\n"
         << "  --json                 Use JSON with --dump-symbols\n"
         << "  -S                     Emit assembly (FILE.<target>.s, or -o FILE)\n"
@@ -554,6 +556,14 @@ int main(int argc, char** argv) {
         }
         if (argument == "-O1" || argument == "-O") {
             optimization = 1;
+            continue;
+        }
+        if (argument == "-O2") {
+            optimization = 2;
+            continue;
+        }
+        if (argument == "-Os") {
+            optimization = 3;
             continue;
         }
         if (argument == "--dump-symbols") {

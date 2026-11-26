@@ -1076,15 +1076,22 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
     // Identity removal is lowering, so it runs at every level; the `-O1` text
     // pass runs on top of it.
     auto text = peephole(out);
-    if (level_ == OptimizationLevel::O1) {
-        text = forward_store_loads(text);
-        text = remove_dead_moves(text);
-        text = coalesce_store_addresses(text);
-        text = combine_move_arithmetic(text);
-        text = coalesce_load_moves(text);
-        text = coalesce_store_sources(text);
-        text = propagate_copies(text);
-        text = remove_redundant_jumps(text);
+    if (optimizes(level_)) {
+        const int passes = is_aggressive(level_) ? 2 : 1;
+        for (int pass = 0; pass < passes; ++pass) {
+            const auto before = text;
+            text = forward_store_loads(text);
+            text = remove_dead_moves(text);
+            text = coalesce_store_addresses(text);
+            text = combine_move_arithmetic(text);
+            text = coalesce_load_moves(text);
+            text = coalesce_store_sources(text);
+            text = propagate_copies(text);
+            text = remove_redundant_jumps(text);
+            if (pass > 0 && text.size() >= before.size()) {
+                text = before;
+            }
+        }
     }
     return text;
 }
@@ -1612,7 +1619,7 @@ void Kr32Backend::emit_function(std::string& out, const ir::Function& function,
 void Kr32Backend::compute_allocation(const ir::Function& function) const {
     allocated_registers_.clear();
     callee_saved_.clear();
-    if (level_ != OptimizationLevel::O1) {
+    if (!optimizes(level_)) {
         return;
     }
     // R0-R2 carry expression results and arguments, R4/R5 aggregates and returns,
