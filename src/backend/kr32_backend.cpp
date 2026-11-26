@@ -1085,6 +1085,7 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
             text = coalesce_store_addresses(text);
             text = combine_move_arithmetic(text);
             text = coalesce_load_moves(text);
+            text = coalesce_argument_producers(text);
             text = coalesce_store_sources(text);
             text = propagate_copies(text);
             text = remove_redundant_jumps(text);

@@ -300,6 +300,232 @@ std::string remove_dead_moves(std::string_view assembly) {
     return result;
 }
 
+std::string coalesce_argument_producers(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto parse_register = [](std::string_view text, std::string& reg,
+                                   unsigned& number) {
+        text = trim(text);
+        if (text.size() < 2 || text.front() != 'R') {
+            return false;
+        }
+        unsigned value = 0;
+        for (std::size_t index = 1; index < text.size(); ++index) {
+            if (text[index] < '0' || text[index] > '9') {
+                return false;
+            }
+            value = value * 10 + static_cast<unsigned>(text[index] - '0');
+        }
+        reg = std::string(text);
+        number = value;
+        return true;
+    };
+    const auto mentions = [](std::string_view text, std::string_view reg) {
+        std::size_t count = 0;
+        for (auto at = text.find(reg); at != std::string_view::npos;
+             at = text.find(reg, at + reg.size())) {
+            const bool before_ok =
+                at == 0 || !(text[at - 1] >= '0' && text[at - 1] <= '9');
+            const auto after = at + reg.size();
+            const bool after_ok =
+                after >= text.size() || !(text[after] >= '0' && text[after] <= '9');
+            if (before_ok && after_ok) {
+                ++count;
+            }
+        }
+        return count;
+    };
+    const auto next_instruction = [&](std::size_t start) {
+        std::size_t at = start;
+        while (at < lines.size()) {
+            const auto candidate = trim(lines[at]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++at;
+                continue;
+            }
+            break;
+        }
+        return at;
+    };
+
+    std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto move = trim(lines[index]);
+        if (move.rfind("MOV ", 0) != 0) {
+            continue;
+        }
+        const auto comma = move.find(',');
+        if (comma == std::string_view::npos) {
+            continue;
+        }
+        std::string destination;
+        std::string source;
+        unsigned destination_number = 0;
+        unsigned source_number = 0;
+        if (!parse_register(move.substr(4, comma - 4), destination,
+                            destination_number) ||
+            !parse_register(move.substr(comma + 1), source, source_number)) {
+            continue;
+        }
+        if (destination_number > 3 || source_number < 12 ||
+            source_number > 15 || source == destination) {
+            continue;
+        }
+        std::size_t producer_index = index;
+        bool found_producer = false;
+        std::string_view mnemonic;
+        std::string_view producer;
+        std::size_t producer_comma = std::string_view::npos;
+        while (producer_index > 0) {
+            --producer_index;
+            const auto candidate = trim(lines[producer_index]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                continue;
+            }
+            if (candidate.back() == ':') {
+                break;
+            }
+            const auto space = candidate.find_first_of(" \t");
+            if (space == std::string_view::npos) {
+                continue;
+            }
+            const auto candidate_mnemonic = candidate.substr(0, space);
+            if (candidate_mnemonic == "CALL" || candidate_mnemonic == "RET" ||
+                candidate_mnemonic == "HALT" || candidate_mnemonic == "JMP" ||
+                candidate_mnemonic == "BRA" ||
+                (candidate_mnemonic.size() > 1 &&
+                 candidate_mnemonic[0] == 'B')) {
+                break;
+            }
+            const auto candidate_comma = candidate.find(',');
+            if (candidate_comma == std::string_view::npos) {
+                if (mentions(candidate, source) != 0) {
+                    break;
+                }
+                continue;
+            }
+            std::string first;
+            unsigned first_number = 0;
+            if (!parse_register(
+                    candidate.substr(space, candidate_comma - space), first,
+                    first_number)) {
+                if (mentions(candidate, source) != 0) {
+                    break;
+                }
+                continue;
+            }
+            if (mentions(candidate, destination) != 0) {
+                break;
+            }
+            if (first == source) {
+                const bool pure_destination =
+                    candidate_mnemonic == "MOV" ||
+                    candidate_mnemonic == "LEA" ||
+                    candidate_mnemonic == "LOAD" ||
+                    candidate_mnemonic == "LOAD8U" ||
+                    candidate_mnemonic == "LOAD8S" ||
+                    candidate_mnemonic == "LOAD16U" ||
+                    candidate_mnemonic == "LOAD16S";
+                if (pure_destination && mentions(candidate, source) == 1) {
+                    found_producer = true;
+                    mnemonic = candidate_mnemonic;
+                    producer = candidate;
+                    producer_comma = candidate_comma;
+                }
+                break;
+            }
+            if (mentions(candidate, source) != 0) {
+                break;
+            }
+        }
+        if (!found_producer) {
+            continue;
+        }
+        std::string produced;
+        unsigned produced_number = 0;
+        if (!parse_register(producer.substr(
+                                producer.find_first_of(" \t"),
+                                producer_comma - producer.find_first_of(" \t")),
+                            produced, produced_number) ||
+            produced != source) {
+            continue;
+        }
+        bool source_live = false;
+        for (auto after = next_instruction(index + 1); after < lines.size();
+             after = next_instruction(after + 1)) {
+            const auto candidate = trim(lines[after]);
+            if (candidate.back() == ':') {
+                source_live = true;
+                break;
+            }
+            const auto candidate_space = candidate.find_first_of(" \t");
+            const auto candidate_mnemonic =
+                candidate_space == std::string_view::npos
+                    ? candidate
+                    : candidate.substr(0, candidate_space);
+            if (candidate_mnemonic == "CALL" || candidate_mnemonic == "RET" ||
+                candidate_mnemonic == "HALT") {
+                break;
+            }
+            if (candidate_mnemonic == "JMP" || candidate_mnemonic == "BRA" ||
+                (candidate_mnemonic.size() > 1 &&
+                 candidate_mnemonic[0] == 'B')) {
+                source_live = true;
+                break;
+            }
+            if (mentions(candidate, source) == 0) {
+                continue;
+            }
+            const auto candidate_comma = candidate.find(',');
+            const auto first = trim(candidate.substr(
+                candidate_mnemonic.size(),
+                candidate_comma == std::string_view::npos
+                    ? std::string_view::npos
+                    : candidate_comma - candidate_mnemonic.size()));
+            source_live = first != source || mentions(candidate, source) != 1 ||
+                          (candidate_mnemonic != "MOV" &&
+                           candidate_mnemonic != "LOAD" &&
+                           candidate_mnemonic != "LOAD8U" &&
+                           candidate_mnemonic != "LOAD8S" &&
+                           candidate_mnemonic != "LOAD16U" &&
+                           candidate_mnemonic != "LOAD16S" &&
+                           candidate_mnemonic != "LEA");
+            break;
+        }
+        if (source_live) {
+            continue;
+        }
+        const auto rest = std::string(trim(producer.substr(
+            producer_comma + 1)));
+        replacements[producer_index] =
+            "        " + std::string(mnemonic) + " " + destination + ", " + rest;
+        dead[index] = true;
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
 std::string coalesce_load_moves(std::string_view assembly) {
     std::istringstream input{std::string(assembly)};
     std::string line;

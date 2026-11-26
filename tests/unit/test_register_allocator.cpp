@@ -160,6 +160,21 @@ TEST_CASE("store-source coalescing removes a dead move into R0") {
     CHECK(output.find("MOV R0, R14") != std::string::npos);
 }
 
+TEST_CASE("argument producer coalescing rewrites both call arguments") {
+    const auto input = std::string("        MOV R13, R8\n"
+                                   ".Ldbg.f.1:\n"
+                                   "        LEA R14, [.str]\n"
+                                   ".Ldbg.f.2:\n"
+                                   "        MOV R0, R13\n"
+                                   "        MOV R1, R14\n"
+                                   "        CALL Console_line\n");
+    const auto output = krc::backend::coalesce_argument_producers(input);
+    CHECK(output.find("MOV R0, R8") != std::string::npos);
+    CHECK(output.find("LEA R1, [.str]") != std::string::npos);
+    CHECK(output.find("MOV R0, R13") == std::string::npos);
+    CHECK(output.find("MOV R1, R14") == std::string::npos);
+}
+
 TEST_CASE("move-arithmetic combining folds the two-address form") {
     const auto input = std::string("        MOV R0, R8\n"
                                    ".Ldbg.f.1:\n"

@@ -42,6 +42,11 @@ enum class OptimizationLevel {
 // Removes `MOV D,S` when the next instruction overwrites D without reading it.
 [[nodiscard]] std::string remove_dead_moves(std::string_view assembly);
 
+// Rewrites `PRODUCER Rscratch,...; MOV Rarg,Rscratch` into the producer writing
+// Rarg directly, dropping the move. Only single-destination producers are
+// rewritten, and Rscratch must not be read again on this path.
+[[nodiscard]] std::string coalesce_argument_producers(std::string_view assembly);
+
 // Rewrites `LOAD D,[addr]; MOV E,D` or `LEA D,[addr]; MOV E,D` to the same
 // operation with E as its destination, when D is dead after the move.
 [[nodiscard]] std::string coalesce_load_moves(std::string_view assembly);
