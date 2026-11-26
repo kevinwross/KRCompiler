@@ -2395,8 +2395,8 @@ std::string fold_frame_addresses(std::string_view assembly) {
             continue;
         }
         char* stop = nullptr;
-        const long offset = std::strtol(
-            std::string(arithmetic_text.substr(9)).c_str(), &stop, 0);
+        const std::string immediate(arithmetic_text.substr(9));
+        const long offset = std::strtol(immediate.c_str(), &stop, 0);
         if (stop == nullptr || *stop != '\0') {
             continue;
         }

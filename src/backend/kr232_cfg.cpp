@@ -246,7 +246,8 @@ bool parse_frame_slot(std::string_view address, int& slot) {
     }
     body = body.substr(0, body.size() - 1);
     char* stop = nullptr;
-    const long value = std::strtol(std::string(body).c_str(), &stop, 0);
+    const std::string body_value(body);
+    const long value = std::strtol(body_value.c_str(), &stop, 0);
     if (stop == nullptr || *stop != '\0' || value >= 0) {
         return false;
     }
@@ -390,7 +391,8 @@ bool parse_immediate_operand(std::string_view text, int& value) {
         return false;
     }
     char* stop = nullptr;
-    const long parsed = std::strtol(std::string(text.substr(1)).c_str(), &stop, 0);
+    const std::string immediate(text.substr(1));
+    const long parsed = std::strtol(immediate.c_str(), &stop, 0);
     if (stop == nullptr || *stop != '\0') {
         return false;
     }

@@ -663,7 +663,8 @@ CompileResult compile(const Source& source, const Options& options) {
         if (id == target::TargetId::Kr32 || id == target::TargetId::Kr16) {
             const auto edges = ir::split_critical_edges(*module);
             change.edges_split += edges.edges_split;
-            const auto across = ir::promote_cross_block_allocas(*module);
+            const auto across =
+                ir::promote_cross_block_allocas(*module);
             change.instructions_removed += across.instructions_removed;
         }
         // Promotion runs before CSE deliberately: E2 shares only expressions

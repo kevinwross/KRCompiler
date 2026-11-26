@@ -673,7 +673,8 @@ PassChange alloca_promotion(Module& module) {
                 }
                 const Instruction* target = nullptr;
                 for (const auto& instruction : block->instructions) {
-                    if (instruction && is_promotable(*instruction, *block, *function)) {
+                    if (instruction &&
+                        is_promotable(*instruction, *block, *function)) {
                         target = instruction.get();
                         break;
                     }

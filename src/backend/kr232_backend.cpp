@@ -876,8 +876,8 @@ std::string reuse_frame_addresses(std::string_view assembly) {
                 continue;
             }
             char* stop = nullptr;
-            const long value = std::strtol(
-                std::string(immediate.substr(1)).c_str(), &stop, 0);
+            const std::string immediate_value(immediate.substr(1));
+            const long value = std::strtol(immediate_value.c_str(), &stop, 0);
             if (stop == nullptr || *stop != '\0') {
                 valid = false;
                 continue;
@@ -1046,8 +1046,8 @@ std::string fold_frame_addresses(std::string_view assembly) {
             continue;
         }
         char* stop = nullptr;
-        const long value =
-            std::strtol(std::string(immediate_text.substr(1)).c_str(), &stop, 0);
+        const std::string immediate_value(immediate_text.substr(1));
+        const long value = std::strtol(immediate_value.c_str(), &stop, 0);
         if (stop == nullptr || *stop != '\0') {
             continue;
         }
@@ -1104,8 +1104,8 @@ std::string fold_frame_addresses(std::string_view assembly) {
                 continue;
             }
             char* rest_stop = nullptr;
-            displacement =
-                std::strtol(std::string(rest).c_str(), &rest_stop, 0);
+            const std::string rest_value(rest);
+            displacement = std::strtol(rest_value.c_str(), &rest_stop, 0);
             if (rest_stop == nullptr || *rest_stop != '\0') {
                 continue;
             }
