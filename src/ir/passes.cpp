@@ -50,6 +50,21 @@ ConstantInt* fold_instruction(Module& module, const Instruction& instruction,
     if (!instruction.type || instruction.type->kind != TypeKind::Integer) {
         return nullptr;
     }
+    // A boolean argument arrives as `trunc i32 <literal> to i1`. Folding that
+    // truncation lets the call pass the constant directly instead of masking a
+    // materialized 0/1 in the backend.
+    if (instruction.opcode == Opcode::Trunc && instruction.type->bits == 1 &&
+        instruction.operands.size() == 1 && instruction.operands[0] &&
+        instruction.operands[0]->type &&
+        instruction.operands[0]->type->kind == TypeKind::Integer) {
+        const auto value = constant_operand(instruction.operands[0], folded);
+        if (!value) {
+            return nullptr;
+        }
+        return module.constant_int(instruction.type,
+                                   static_cast<std::int64_t>(
+                                       static_cast<std::uint64_t>(*value) & 1u));
+    }
     const unsigned bits = static_cast<unsigned>(instruction.type->bits);
     if (bits != 32 && bits != 64) {
         return nullptr;

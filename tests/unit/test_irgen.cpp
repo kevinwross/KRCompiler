@@ -788,6 +788,26 @@ TEST_CASE("Dead code elimination keeps a volatile access") {
     CHECK(printed.str().find("volatile") != std::string::npos);
 }
 
+TEST_CASE("Constant folding folds truncated true and false constants") {
+    const auto generated = generate(R"SRC(
+_Bool take(_Bool);
+_Bool yes(void) { return take(1); }
+_Bool no(void) { return take(0); }
+ )SRC");
+    CHECK_FALSE(generated.had_errors);
+    REQUIRE(generated.module);
+    CHECK(generated.verifier_error.empty());
+
+    const auto change = krc::ir::constant_folding(*generated.module);
+    CHECK(change.instructions_folded >= 2);
+
+    std::ostringstream out;
+    krc::ir::print_module(*generated.module, out);
+    const auto text = out.str();
+    CHECK(text.find("trunc i32 1 to i1") == std::string::npos);
+    CHECK(text.find("trunc i32 0 to i1") == std::string::npos);
+}
+
 TEST_CASE("Constant folding replaces a folded operation with its value") {
     const auto generated = generate(R"SRC(
 int folded(int *values) { return (2 + 3) * 4 + values[-1]; }
