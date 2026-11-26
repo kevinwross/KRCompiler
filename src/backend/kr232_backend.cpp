@@ -1822,6 +1822,65 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             }
         };
 
+        std::unordered_map<const ir::Value*, std::size_t> address_uses;
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                for (const auto* operand : instruction->operands) {
+                    if (operand) {
+                        ++address_uses[operand];
+                    }
+                }
+            }
+        }
+        std::unordered_set<const ir::Instruction*> folded_geps;
+        for (const auto& block : function->blocks) {
+            for (std::size_t index = 1; index < block->instructions.size(); ++index) {
+                const auto& instruction = block->instructions[index];
+                if (instruction->opcode != ir::Opcode::Store) {
+                    continue;
+                }
+                const auto* type = instruction->operands[0]->type;
+                if (!type || type->kind == ir::TypeKind::Float ||
+                    type->kind == ir::TypeKind::Struct ||
+                    type->kind == ir::TypeKind::Union ||
+                    type->kind == ir::TypeKind::Array) {
+                    continue;
+                }
+                const auto* gep = dynamic_cast<const ir::Instruction*>(
+                    instruction->operands[1]);
+                if (!gep || gep->opcode != ir::Opcode::GetElementPtr ||
+                    gep->operands.size() != 2 || !gep->source_type ||
+                    address_uses[gep] != 1 ||
+                    type_bytes(gep->source_type) != 1) {
+                    continue;
+                }
+                std::size_t previous = index;
+                bool adjacent = false;
+                while (previous > 0) {
+                    --previous;
+                    if (block->instructions[previous].get() == gep) {
+                        adjacent = true;
+                        break;
+                    }
+                    const auto opcode = block->instructions[previous]->opcode;
+                    if (opcode != ir::Opcode::Trunc &&
+                        opcode != ir::Opcode::ZExt &&
+                        opcode != ir::Opcode::SExt &&
+                        opcode != ir::Opcode::BitCast) {
+                        break;
+                    }
+                }
+                if (!adjacent) {
+                    continue;
+                }
+                const auto* offset =
+                    dynamic_cast<const ir::ConstantInt*>(gep->operands[1]);
+                if (!offset) {
+                    continue;
+                }
+                folded_geps.insert(gep);
+            }
+        }
         for (const auto& block : function->blocks) {
             out << label_tag << "bb" << block_index[block.get()] << ":\n";
             for (const auto& instruction : block->instructions) {
@@ -1847,6 +1906,8 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         break;
                     }
                     case ir::Opcode::GetElementPtr: {
+                        const bool folded = folded_geps.count(instruction.get()) != 0;
+                        const unsigned destination = folded ? kAddressReg : kValueReg;
                         if (instruction->operands.empty()) {
                             error = "kr232 backend: getelementptr without a base";
                             return std::nullopt;
@@ -1861,11 +1922,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             base_instruction->opcode == ir::Opcode::Alloca) {
                             // The element offset below is added to the object's lowest
                             // byte, which is its last slot, not its first.
-                            out << "  mov r" << kValueReg << ", r13\n";
-                            out << "  sub r" << kValueReg << ", #"
+                            out << "  mov r" << destination << ", r13\n";
+                            out << "  sub r" << destination << ", #"
                                 << alloca_offset(*base_instruction) << "\n";
                         } else {
-                            operand(0, kValueReg);
+                            operand(0, destination);
                         }
                         // A record member index selects a field: its byte offset is
                         // the sum of the preceding fields' sizes, not the index
@@ -1881,9 +1942,9 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             const std::uint32_t offset_bytes =
                                 field_offset(base_type, static_cast<std::size_t>(member->value));
                             if (offset_bytes != 0) {
-                                out << "  add r" << kValueReg << ", #" << offset_bytes << "\n";
+                                out << "  add r" << destination << ", #" << offset_bytes << "\n";
                             }
-                            store_result(instruction.get(), kValueReg);
+                            store_result(instruction.get(), destination);
                             break;
                         }
                         // `gep [N x T], base, 0, i` is the shape the front end emits
@@ -1908,7 +1969,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                     index->value * static_cast<std::int64_t>(stride);
 
                                 if (constant != 0) {
-                                    out << "  add r" << kValueReg << ", #" << constant << "\n";
+                                    out << "  add r" << destination << ", #" << constant << "\n";
                                 }
                                 continue;
                             }
@@ -1931,9 +1992,11 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                 }
                                 out << "  shl r" << kSecondReg << ", #" << shift << "\n";
                             }
-                            out << "  add r" << kValueReg << ", r" << kSecondReg << "\n";
+                            out << "  add r" << destination << ", r" << kSecondReg << "\n";
                         }
-                        store_result(instruction.get(), kValueReg);
+                        if (!folded) {
+                            store_result(instruction.get(), destination);
+                        }
                         break;
                     }
                     case ir::Opcode::Load: {
@@ -2026,6 +2089,18 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                             break;
                         }
                         const auto bytes = type_bytes(instruction->operands[0]->type);
+                        if (const auto* address =
+                                dynamic_cast<const ir::Instruction*>(
+                                    instruction->operands[1]);
+                            address != nullptr && folded_geps.count(address) != 0) {
+                            materialize(instruction->operands[0], kValueReg);
+                            const auto mnemonic = bytes == 1
+                                                      ? "stb"
+                                                      : (bytes == 2 ? "sth" : "st");
+                            out << "  " << mnemonic << " [r" << kAddressReg
+                                << "], r" << kValueReg << "\n";
+                            break;
+                        }
                         // The value first, then the address into R8: a global's
                         // address is an `ld`, and loading it first would overwrite
                         // the value.
