@@ -499,6 +499,22 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-25T17:30:30-08:00 — host gate (Windows + WSL)
+Revision: c415264
+
+```
+windows-msvc-debug    PASS 1009/1009
+linux-gcc-debug       PASS 757/757
+linux-gcc-release     PASS 757/757
+linux-clang-debug     PASS 757/757
+linux-sanitize        PASS 757/757
+not verified: windows-msvc-release, native Linux x64, Linux ARM64
+```
+
+The Linux row caught two dangling `strtol` parse pointers in the KR232 and KR216
+text passes; both were fixed before this gate, and the sanitizer then passed. The
+Windows row ran on the same revision.
+
 2026-11-21T06:38:00-08:00 — host gate (Windows + WSL)
 Revision: 2ee0eb3
 
