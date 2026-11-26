@@ -308,37 +308,6 @@ Kr216Backend::FrameLayout Kr216Backend::layout_function(const ir::Function& func
                                                         std::string& error) const {
     FrameLayout layout;
     std::uint32_t offset = 0;
-    for (const auto& block : function.blocks) {
-        for (const auto& instruction : block->instructions) {
-            if (instruction->opcode != ir::Opcode::Alloca) {
-                continue;
-            }
-            const auto size = std::max<std::uint32_t>(
-                kSlotSize, type_size(instruction->allocated_type));
-            offset = round_up(offset, 2);
-            layout.allocas[instruction.get()] = offset;
-            layout.slots[instruction.get()] = offset;
-            offset += size;
-        }
-    }
-    const auto plan = plan_two_byte_value_slots(function, offset);
-    for (const auto& [instruction, slot] : plan.slots) {
-        layout.slots[instruction] = slot;
-    }
-    offset = plan.next_offset;
-    for (const auto& block : function.blocks) {
-        for (const auto& instruction : block->instructions) {
-            if (instruction->opcode == ir::Opcode::Alloca ||
-                !instruction->type || ir::is_void(instruction->type) ||
-                type_size(instruction->type) == kSlotSize) {
-                continue;
-            }
-            offset = round_up(offset, 2);
-            layout.slots[instruction.get()] = offset;
-            offset += std::max<std::uint32_t>(kSlotSize,
-                                              type_size(instruction->type));
-        }
-    }
     if (returns_aggregate(function)) {
         offset = round_up(offset, 2);
         layout.return_pointer = offset;
@@ -364,6 +333,40 @@ Kr216Backend::FrameLayout Kr216Backend::layout_function(const ir::Function& func
         offset = round_up(offset, 2);
         layout.slots[parameter.get()] = offset;
         offset += std::max<std::uint32_t>(kSlotSize, type_size(parameter->type));
+    }
+    const auto plan = plan_two_byte_value_slots(function, offset);
+    for (const auto& [instruction, slot] : plan.slots) {
+        layout.slots[instruction] = slot;
+    }
+    offset = plan.next_offset;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode == ir::Opcode::Alloca ||
+                !instruction->type || ir::is_void(instruction->type) ||
+                type_size(instruction->type) == kSlotSize) {
+                continue;
+            }
+            offset = round_up(offset, 2);
+            layout.slots[instruction.get()] = offset;
+            offset += std::max<std::uint32_t>(kSlotSize,
+                                              type_size(instruction->type));
+        }
+    }
+    // Alloca storage is last: arrays and records are colder than parameters
+    // and SSA values, so keeping the scalar slots low avoids the R7 address
+    // sequence for every scalar access.
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Alloca) {
+                continue;
+            }
+            const auto size = std::max<std::uint32_t>(
+                kSlotSize, type_size(instruction->allocated_type));
+            offset = round_up(offset, 2);
+            layout.allocas[instruction.get()] = offset;
+            layout.slots[instruction.get()] = offset;
+            offset += size;
+        }
     }
     layout.frame_size = round_up(offset, 2);
     if (layout.frame_size > 0xFFFE) {
