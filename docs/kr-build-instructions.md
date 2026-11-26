@@ -390,9 +390,10 @@ pwsh -File scripts\install-tools.ps1 [-Dest <dir>] [-Config Debug|Release] [-All
 ```
 
 Copies every family binary (`krc`, `krld`, four VM emulators, two disassemblers,
-the kr216 bench, two krdbg programs) into `$HOME/.local/bin` by default, reports
-what it could not find, and prints the `PATH` line if the destination is not on
-it. It exits non-zero on a missing binary unless `-AllowMissing`.
+the kr216 bench, two krdbg programs) and the `SDL2.dll` that `kr32.exe` loads into
+`$HOME/.local/bin` by default, reports what it could not find, and prints the
+`PATH` line if the destination is not on it. It exits non-zero on a missing
+binary, or on a `kr32.exe` copied without its DLL, unless `-AllowMissing`.
 
 ### 7.5 A release archive
 
@@ -426,7 +427,7 @@ ctest --preset <preset> -N         # list, and count rows
 
 | Repository | Preset in the family gate | Rows asserted |
 |---|---|---|
-| krcompiler | `windows-msvc-debug` / `-release` | 978 each, plus `krc_tests` |
+| krcompiler | `windows-msvc-debug` / `-release` | 1012 each, plus `krc_tests` |
 | kr32 | `windows-msvc-debug` | 42 |
 | kr16 | `windows-ninja-debug` | 61 |
 | kr216 | `windows-msvc-debug` + `-DKR216_BUILD_GUEST_TESTS=ON` | 56 Debug, 11 Release (guest rows are not enabled in the release wave) |
