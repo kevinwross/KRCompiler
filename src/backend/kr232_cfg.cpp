@@ -755,7 +755,8 @@ std::string reuse_frame_addresses_across_blocks(std::string_view assembly) {
 
     auto flow = machine::build_control_flow(lines, analyze);
     const auto transfer = [&](const machine::TextBlock& block,
-                              FrameAddressState state, std::vector<bool>* dead) {
+                              FrameAddressState state, std::vector<bool>* dead,
+                              std::vector<std::string>* replacements) {
         for (std::size_t position = 0; position < block.instructions.size();
              ++position) {
             const auto line_index = block.instructions[position];
@@ -782,6 +783,19 @@ std::string reuse_frame_addresses_across_blocks(std::string_view assembly) {
                                 (*dead)[line_index] = true;
                                 (*dead)[next_index] = true;
                             }
+                        } else if (state.valid &&
+                                   offset - state.offset >= -127 &&
+                                   offset - state.offset <= 127) {
+                            const int delta = offset - state.offset;
+                            if (dead != nullptr && replacements != nullptr) {
+                                (*dead)[line_index] = true;
+                                (*replacements)[next_index] =
+                                    delta > 0
+                                        ? "  add r8, #" + std::to_string(delta)
+                                        : "  sub r8, #" +
+                                              std::to_string(-delta);
+                            }
+                            state.offset = offset;
                         } else {
                             state.valid = true;
                             state.offset = offset;
@@ -846,7 +860,8 @@ std::string reuse_frame_addresses_across_blocks(std::string_view assembly) {
                 }
                 entry = joined.value_or(FrameAddressState{});
             }
-            const auto exit = transfer(flow.blocks[index], entry, nullptr);
+            const auto exit =
+                transfer(flow.blocks[index], entry, nullptr, nullptr);
             if (!entries[index] || *entries[index] != entry || !exits[index] ||
                 *exits[index] != exit) {
                 entries[index] = entry;
@@ -857,15 +872,21 @@ std::string reuse_frame_addresses_across_blocks(std::string_view assembly) {
     }
 
     std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
     for (std::size_t index = 0; index < flow.blocks.size(); ++index) {
         static_cast<void>(transfer(flow.blocks[index],
                                    entries[index].value_or(FrameAddressState{}),
-                                   &dead));
+                                   &dead, &replacements));
     }
 
     std::string result;
     for (std::size_t index = 0; index < lines.size(); ++index) {
         if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
             continue;
         }
         result += lines[index];
