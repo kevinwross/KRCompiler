@@ -1517,16 +1517,6 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             }
         }
         std::uint32_t next_slot = holds_eight_bytes ? 1u : 0u;
-        for (const auto& block : function->blocks) {
-            for (const auto& instruction : block->instructions) {
-                if (instruction->opcode == ir::Opcode::Alloca) {
-                    slot_of.emplace(instruction.get(), next_slot);
-                    next_slot += std::max<std::uint32_t>(
-                        1u,
-                        align_frame(type_bytes(instruction->allocated_type)) / 4u);
-                }
-            }
-        }
         // A function that returns a record receives its destination in R6.
         const bool returns_record = function->type != nullptr &&
                                     function->type->return_type != nullptr &&
@@ -1576,6 +1566,19 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                      instruction->type->kind == ir::TypeKind::Array)) {
                     aggregate_destination.emplace(instruction.get(), next_slot);
                     next_slot += align_frame(type_bytes(instruction->type)) / 4u;
+                }
+            }
+        }
+        // Alloca storage sits above the scalar slots. Arrays and records are
+        // less frequently touched than parameters and SSA values, and keeping
+        // the scalar slots low avoids an address pair for every scalar access.
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode == ir::Opcode::Alloca) {
+                    slot_of.emplace(instruction.get(), next_slot);
+                    next_slot += std::max<std::uint32_t>(
+                        1u,
+                        align_frame(type_bytes(instruction->allocated_type)) / 4u);
                 }
             }
         }
