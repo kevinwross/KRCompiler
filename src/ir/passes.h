@@ -17,10 +17,12 @@ struct PassChange {
     std::size_t instructions_folded = 0;
     // Control-flow edges replaced by a block of their own.
     std::size_t edges_split = 0;
+    // Call sites replaced by a cloned single-block function body.
+    std::size_t functions_inlined = 0;
 
     [[nodiscard]] bool changed() const {
         return instructions_removed != 0 || instructions_folded != 0 ||
-               edges_split != 0;
+               edges_split != 0 || functions_inlined != 0;
     }
 };
 
@@ -34,6 +36,15 @@ struct PassChange {
 // folded only when its count is inside the type's width, because the backend
 // takes the count modulo the word size instead.
 [[nodiscard]] PassChange constant_folding(Module& module);
+
+// Inlines a leaf function with one basic block and one call site in the module.
+// The callee must take and return scalar values and contain no call, alloca,
+// phi, invoke, landing pad, or variadic convention. The body is cloned at the
+// call site, parameters are replaced by arguments, and the call result is
+// replaced by the cloned return value. This is deliberately narrow: it removes
+// the call-frame and argument-move cost without duplicating a body at several
+// call sites.
+[[nodiscard]] PassChange inline_small_functions(Module& module);
 
 // E2: local common-subexpression elimination, which is copy propagation over the
 // values an expression produces. Two instructions in the **same block** that

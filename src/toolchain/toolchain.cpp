@@ -647,7 +647,10 @@ CompileResult compile(const Source& source, const Options& options) {
         diagnostics.report(frontend::Severity::Error, "IR verifier: " + verify_error);
     }
     if (options.optimize > 0 && !diagnostics.has_errors()) {
-        auto change = ir::constant_folding(*module);
+        ir::PassChange change;
+        const auto folded = ir::constant_folding(*module);
+        change.instructions_removed += folded.instructions_removed;
+        change.instructions_folded += folded.instructions_folded;
         const auto forwarded = ir::forward_alloca_loads(*module);
         change.instructions_removed += forwarded.instructions_removed;
         const auto dead_allocas = ir::eliminate_dead_alloca_stores(*module);
@@ -668,6 +671,10 @@ CompileResult compile(const Source& source, const Options& options) {
         // trips are gone every variable read is a distinct load.
         const auto promoted = ir::alloca_promotion(*module);
         change.instructions_removed += promoted.instructions_removed;
+        if (options.optimize >= 2) {
+            const auto inlined = ir::inline_small_functions(*module);
+            change.functions_inlined += inlined.functions_inlined;
+        }
         const auto shared = ir::copy_propagation(*module);
         change.instructions_removed += shared.instructions_removed;
         change.instructions_folded += shared.instructions_folded;

@@ -195,6 +195,7 @@ add_library(krc_impl OBJECT
     src/ir/ir.cpp
     src/ir/mem2reg.cpp
     src/ir/passes.cpp
+    src/ir/inline.cpp
     src/irgen/c_irgen.cpp
     src/irgen/c_irgen_expressions.cpp
     src/irgen/c_irgen_setup.cpp
