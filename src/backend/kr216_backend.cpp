@@ -1790,6 +1790,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
 }
 
 std::string fold_frame_addresses(std::string_view assembly);
+std::string reuse_frame_addresses(std::string_view assembly);
 std::string fold_stack_self_address(std::string_view assembly);
 std::string fold_bool_stores(std::string_view assembly);
 std::string eliminate_kr216_dead_stores(std::string_view assembly);
@@ -1937,6 +1938,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         for (int pass = 0; pass < passes; ++pass) {
             const auto before = out;
             out = fold_frame_addresses(out);
+            out = reuse_frame_addresses(out);
             out = fold_stack_self_address(out);
             out = coalesce_store_values(out);
             out = fold_bool_stores(out);
@@ -2334,6 +2336,106 @@ std::string eliminate_kr216_dead_stores(std::string_view assembly) {
                 break;  // a pointer load may observe the frame slot
             }
         }
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
+std::string reuse_frame_addresses(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto trim = [](std::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    };
+    const auto next_instruction = [&](std::size_t start) {
+        std::size_t at = start;
+        while (at < lines.size()) {
+            const auto candidate = trim(lines[at]);
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                ++at;
+                continue;
+            }
+            break;
+        }
+        return at;
+    };
+    std::vector<bool> dead(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (trim(lines[index]) != "MOV R7, SP") {
+            continue;
+        }
+        const auto load = next_instruction(index + 1);
+        if (load >= lines.size() ||
+            trim(lines[load]).rfind("LD R6, #", 0) != 0) {
+            continue;
+        }
+        const auto add = next_instruction(load + 1);
+        if (add >= lines.size() || trim(lines[add]) != "ADD R7, R6") {
+            continue;
+        }
+        const auto access = next_instruction(add + 1);
+        if (access >= lines.size()) {
+            continue;
+        }
+        const auto access_text = trim(lines[access]);
+        const auto space = access_text.find_first_of(" \t");
+        if (space == std::string_view::npos) {
+            continue;
+        }
+        const auto mnemonic = access_text.substr(0, space);
+        const bool is_load = mnemonic == "LD" || mnemonic == "LDB" ||
+                             mnemonic == "LDW" || mnemonic == "LDBU" ||
+                             mnemonic == "LDBS";
+        const bool is_store = mnemonic == "ST" || mnemonic == "STB" ||
+                              mnemonic == "STW";
+        if ((!is_load && !is_store) ||
+            access_text.find("[R7]") == std::string_view::npos) {
+            continue;
+        }
+        if (is_load) {
+            const auto comma = access_text.find(',');
+            if (comma != std::string_view::npos &&
+                trim(access_text.substr(space, comma - space)) == "R7") {
+                continue;
+            }
+        }
+        const auto repeat = next_instruction(access + 1);
+        if (repeat >= lines.size() ||
+            trim(lines[repeat]) != "MOV R7, SP") {
+            continue;
+        }
+        const auto repeat_load = next_instruction(repeat + 1);
+        if (repeat_load >= lines.size() ||
+            trim(lines[repeat_load]) != trim(lines[load])) {
+            continue;
+        }
+        const auto repeat_add = next_instruction(repeat_load + 1);
+        if (repeat_add >= lines.size() ||
+            trim(lines[repeat_add]) != "ADD R7, R6") {
+            continue;
+        }
+        dead[repeat] = true;
+        dead[repeat_load] = true;
+        dead[repeat_add] = true;
     }
     std::string result;
     for (std::size_t index = 0; index < lines.size(); ++index) {
