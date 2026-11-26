@@ -2423,12 +2423,12 @@ std::string reuse_frame_addresses(std::string_view assembly) {
                             dead[index] = true;
                             dead[load] = true;
                             dead[add] = true;
-                        } else if (delta > 0 && delta <= 255) {
+                        } else if (delta > 0 && delta <= 127) {
                             dead[index] = true;
                             dead[load] = true;
                             replacements[add] = "    ADD R7, #" +
                                                 std::to_string(delta);
-                        } else if (delta < 0 && -delta <= 255) {
+                        } else if (delta < 0 && -delta <= 127) {
                             dead[index] = true;
                             dead[load] = true;
                             replacements[add] = "    SUB R7, #" +
