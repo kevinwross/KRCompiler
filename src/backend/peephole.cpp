@@ -1,9 +1,13 @@
 #include "backend/peephole.h"
 
+#include <algorithm>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "backend/machine_cfg.h"
 
 namespace krc::backend {
 
@@ -697,6 +701,201 @@ std::string coalesce_load_moves(std::string_view assembly) {
         if (!replacements[index].empty()) {
             result += replacements[index];
             result += '\n';
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
+std::string remove_dead_moves_across_blocks(std::string_view assembly) {
+    std::istringstream input{std::string(assembly)};
+    std::string line;
+    std::vector<std::string> lines;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    const auto register_number = [](std::string_view text) {
+        text = trim(text);
+        if (text.size() < 2 || text.front() != 'R') {
+            return -1;
+        }
+        int value = 0;
+        for (std::size_t index = 1; index < text.size(); ++index) {
+            if (text[index] < '0' || text[index] > '9') {
+                return -1;
+            }
+            value = value * 10 + (text[index] - '0');
+        }
+        return value < 16 ? value : -1;
+    };
+    const auto registers_in = [&](std::string_view text) {
+        std::vector<int> regs;
+        for (std::size_t at = 0; at + 1 < text.size(); ++at) {
+            if (text[at] != 'R' || (at > 0 && text[at - 1] >= 'A' &&
+                                                text[at - 1] <= 'Z')) {
+                continue;
+            }
+            std::size_t end = at + 1;
+            while (end < text.size() && text[end] >= '0' && text[end] <= '9') {
+                ++end;
+            }
+            if (end == at + 1) {
+                continue;
+            }
+            const auto number = register_number(text.substr(at, end - at));
+            if (number >= 0) {
+                regs.push_back(number);
+            }
+            at = end - 1;
+        }
+        return regs;
+    };
+    const auto analyze = [&](std::string_view raw) {
+        machine::InstructionFlow flow;
+        const auto text = trim(raw);
+        const auto space = text.find_first_of(" \t");
+        const auto mnemonic =
+            space == std::string_view::npos ? text : text.substr(0, space);
+        const auto comma = text.find(',');
+        const auto first = space == std::string_view::npos
+                               ? std::string_view{}
+                               : trim(text.substr(
+                                     mnemonic.size(),
+                                     comma == std::string_view::npos
+                                         ? std::string_view::npos
+                                         : comma - mnemonic.size()));
+        const auto rest = comma == std::string_view::npos
+                              ? std::string_view{}
+                              : text.substr(comma + 1);
+        if (mnemonic == "MOV") {
+            const int destination = register_number(first);
+            if (destination >= 0) {
+                flow.defs.push_back(destination);
+            }
+            for (const auto reg : registers_in(rest)) {
+                flow.uses.push_back(reg);
+            }
+            return flow;
+        }
+        if (mnemonic.rfind("LOAD", 0) == 0 || mnemonic == "LEA") {
+            const int destination = register_number(first);
+            if (destination >= 0) {
+                flow.defs.push_back(destination);
+            }
+            for (const auto reg : registers_in(rest)) {
+                flow.uses.push_back(reg);
+            }
+            return flow;
+        }
+        if (mnemonic.rfind("STORE", 0) == 0) {
+            for (const auto reg : registers_in(text)) {
+                flow.uses.push_back(reg);
+            }
+            return flow;
+        }
+        if (mnemonic == "CALL") {
+            // R0-R3 carry scalar arguments; R4 carries the hidden
+            // aggregate-return destination, and an indirect call reads its
+            // target from R5 (docs/abi.md, KR32).
+            for (int reg = 0; reg <= 5; ++reg) {
+                flow.uses.push_back(reg);
+            }
+            for (int reg = 0; reg <= 6; ++reg) {
+                flow.defs.push_back(reg);
+            }
+            for (int reg = 12; reg <= 15; ++reg) {
+                flow.defs.push_back(reg);
+            }
+            return flow;
+        }
+        if (mnemonic == "RET") {
+            flow.uses = {0, 1};
+            flow.falls_through = false;
+            return flow;
+        }
+        if (mnemonic == "HALT") {
+            flow.uses = {0};
+            flow.falls_through = false;
+            return flow;
+        }
+        if (mnemonic == "JMP" || mnemonic == "BRA" ||
+            (mnemonic.size() > 1 && mnemonic.front() == 'J')) {
+            if (space != std::string_view::npos) {
+                flow.targets.emplace_back(trim(text.substr(space)));
+            }
+            flow.falls_through = mnemonic != "JMP" && mnemonic != "BRA";
+            return flow;
+        }
+        if (mnemonic == "CMP" || mnemonic.rfind("PUSH", 0) == 0) {
+            for (const auto reg : registers_in(text)) {
+                flow.uses.push_back(reg);
+            }
+            return flow;
+        }
+        if (mnemonic.rfind("POP", 0) == 0) {
+            const int destination = register_number(first);
+            if (destination >= 0) {
+                flow.defs.push_back(destination);
+            }
+            return flow;
+        }
+        const bool arithmetic =
+            mnemonic == "ADD" || mnemonic == "SUB" || mnemonic == "MUL" ||
+            mnemonic == "DIVS" || mnemonic == "DIVU" || mnemonic == "MODS" ||
+            mnemonic == "MODU" || mnemonic == "AND" || mnemonic == "OR" ||
+            mnemonic == "XOR" || mnemonic == "SHL" || mnemonic == "SHR" ||
+            mnemonic == "SAR" || mnemonic == "NEG" || mnemonic == "NOT";
+        if (arithmetic) {
+            const int destination = register_number(first);
+            if (destination >= 0) {
+                flow.defs.push_back(destination);
+            }
+            for (const auto reg : registers_in(text)) {
+                flow.uses.push_back(reg);
+            }
+            return flow;
+        }
+        // Unknown instruction: every register may be read.
+        for (int reg = 0; reg <= 15; ++reg) {
+            flow.uses.push_back(reg);
+        }
+        return flow;
+    };
+    auto flow = machine::build_control_flow(lines, analyze);
+    machine::compute_liveness(flow);
+    std::vector<bool> dead(lines.size(), false);
+    for (const auto& block : flow.blocks) {
+        std::set<int> live(block.live_out.begin(), block.live_out.end());
+        for (auto position = block.instructions.size(); position-- > 0;) {
+            const auto index = block.instructions[position];
+            const auto text = trim(lines[index]);
+            const auto effects = analyze(text);
+            if (text.rfind("MOV ", 0) == 0) {
+                const auto comma = text.find(',');
+                const int destination =
+                    comma == std::string_view::npos
+                        ? -1
+                        : register_number(
+                              text.substr(4, comma - 4));
+                if (destination >= 0 && destination != 7 &&
+                    live.find(destination) == live.end()) {
+                    dead[index] = true;
+                    continue;
+                }
+            }
+            for (const auto def : effects.defs) {
+                live.erase(def);
+            }
+            for (const auto use : effects.uses) {
+                live.insert(use);
+            }
+        }
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
             continue;
         }
         result += lines[index];

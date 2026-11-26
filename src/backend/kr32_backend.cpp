@@ -1089,6 +1089,7 @@ std::optional<std::string> Kr32Backend::emit(std::string& error) const {
             text = coalesce_store_sources(text);
             text = propagate_copies(text);
             text = remove_redundant_jumps(text);
+            text = remove_dead_moves_across_blocks(text);
             if (pass > 0 && text.size() >= before.size()) {
                 text = before;
             }

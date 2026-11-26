@@ -53,6 +53,9 @@ enum class OptimizationLevel {
 
 // Rewrites `MOV D,S; STORE V,[D+off]` to `STORE V,[S+off]`, dropping the move
 // when D is written again before it is read.
+[[nodiscard]] std::string remove_dead_moves_across_blocks(
+    std::string_view assembly);
+
 [[nodiscard]] std::string coalesce_store_addresses(std::string_view assembly);
 
 // Folds `MOV D, S; OP D, D, X` into `OP D, S, X`, for the two-address integer

@@ -184,6 +184,25 @@ TEST_CASE("store-source coalescing handles subword stores") {
     CHECK(output.find("MOV R0, R15") == std::string::npos);
 }
 
+TEST_CASE("global dead-move removal keeps call argument setup") {
+    const auto input = std::string("        MOV R4, R1\n"
+                                   "        MOV R5, R2\n"
+                                   "        CALL target\n"
+                                   "        MOV R0, #0\n"
+                                   "        RET\n");
+    const auto output = krc::backend::remove_dead_moves_across_blocks(input);
+    CHECK(output.find("MOV R4, R1") != std::string::npos);
+    CHECK(output.find("MOV R5, R2") != std::string::npos);
+}
+
+TEST_CASE("global dead-move removal drops a dead block-local move") {
+    const auto input = std::string("        MOV R2, R3\n"
+                                   "        MOV R0, #0\n"
+                                   "        RET\n");
+    const auto output = krc::backend::remove_dead_moves_across_blocks(input);
+    CHECK(output.find("MOV R2, R3") == std::string::npos);
+}
+
 TEST_CASE("move-arithmetic combining folds the two-address form") {
     const auto input = std::string("        MOV R0, R8\n"
                                    ".Ldbg.f.1:\n"
