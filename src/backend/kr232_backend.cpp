@@ -114,6 +114,56 @@ constexpr unsigned kValueReg = 6;
 constexpr unsigned kSecondReg = 7;
 constexpr unsigned kAddressReg = 8;
 
+bool takes_two_slots(const ir::Type* type) {
+    return type != nullptr && type->kind == ir::TypeKind::Float &&
+           (type->bits + 7u) / 8u >= 8u;
+}
+
+// Values in descending order of how often the function reads them. The emitter
+// assigns the first value slot to the most-read value, which puts the hottest
+// temporaries in the signed-byte FP range and lets them use direct addressing
+// instead of materialising an address through R8.
+std::vector<const ir::Instruction*> values_by_frequency(const ir::Function& function) {
+    std::unordered_map<const ir::Value*, std::size_t> uses;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            for (const auto* operand : instruction->operands) {
+                if (operand != nullptr) {
+                    ++uses[operand];
+                }
+            }
+            for (const auto& incoming : instruction->incoming) {
+                if (incoming.first != nullptr) {
+                    ++uses[incoming.first];
+                }
+            }
+        }
+    }
+
+    std::vector<const ir::Instruction*> values;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode == ir::Opcode::Alloca ||
+                instruction->type == nullptr ||
+                instruction->type->kind == ir::TypeKind::Void) {
+                continue;
+            }
+            values.push_back(instruction.get());
+        }
+    }
+    std::stable_sort(values.begin(), values.end(),
+                     [&](const ir::Instruction* left, const ir::Instruction* right) {
+                         const auto left_uses = uses.find(left);
+                         const auto right_uses = uses.find(right);
+                         const std::size_t left_count =
+                             left_uses == uses.end() ? 0 : left_uses->second;
+                         const std::size_t right_count =
+                             right_uses == uses.end() ? 0 : right_uses->second;
+                         return left_count > right_count;
+                     });
+    return values;
+}
+
 }  // namespace
 
 Kr232Backend::Kr232Backend(const ir::Module& module, const target::TargetProfile& profile,
@@ -156,19 +206,13 @@ std::uint32_t Kr232Backend::frame_bytes(const ir::Function& function) const {
             }
         }
     }
-    for (const auto& block : function.blocks) {
-        for (const auto& instruction : block->instructions) {
-            if (instruction->opcode != ir::Opcode::Alloca && instruction->type != nullptr &&
-                instruction->type->kind != ir::TypeKind::Void) {
-                const bool eight = instruction->type->kind == ir::TypeKind::Float &&
-                                   (instruction->type->bits + 7u) / 8u >= 8u;
-                const std::uint32_t slots = eight ? 2u : 1u;
-                if (slots == 2u && (next_slot % 2u) != 0u) {
-                    ++next_slot;
-                }
-                next_slot += slots;
-            }
+    for (const auto* instruction : values_by_frequency(function)) {
+        const bool eight = takes_two_slots(instruction->type);
+        const std::uint32_t slots = eight ? 2u : 1u;
+        if (slots == 2u && (next_slot % 2u) != 0u) {
+            ++next_slot;
         }
+        next_slot += slots;
     }
     return 4u + 4u * next_slot;
 }
@@ -1354,18 +1398,13 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 }
             }
         }
-        for (const auto& block : function->blocks) {
-            for (const auto& instruction : block->instructions) {
-                if (instruction->opcode != ir::Opcode::Alloca && instruction->type != nullptr &&
-                    instruction->type->kind != ir::TypeKind::Void) {
-                    const std::uint32_t slots = slots_for(instruction->type);
-                    if (slots == 2u && (next_slot % 2u) != 0u) {
-                        ++next_slot;
-                    }
-                    slot_of.emplace(instruction.get(), next_slot);
-                    next_slot += slots;
-                }
+        for (const auto* instruction : values_by_frequency(*function)) {
+            const std::uint32_t slots = slots_for(instruction->type);
+            if (slots == 2u && (next_slot % 2u) != 0u) {
+                ++next_slot;
             }
+            slot_of.emplace(instruction, next_slot);
+            next_slot += slots;
         }
         // A call that returns a record needs somewhere to put it: the callee copies
         // into a destination the caller names. Those destinations get their own
