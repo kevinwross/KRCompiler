@@ -302,7 +302,7 @@ Plan plan_promotion(const Graph& graph, const Instruction& alloca) {
 
 }  // namespace
 
-PassChange promote_cross_block_allocas(Module& module) {
+PassChange promote_cross_block_allocas(Module& module, bool promote_recorded) {
     PassChange change;
     for (const auto& function : module.functions()) {
         if (!function || function->declaration) {
@@ -317,7 +317,7 @@ PassChange promote_cross_block_allocas(Module& module) {
             for (const auto& instruction : block->instructions) {
                 if (instruction && instruction->opcode == Opcode::Alloca &&
                     !instruction->is_volatile && instruction->allocated_type &&
-                    !is_recorded_variable(*instruction) &&
+                    (promote_recorded || !is_recorded_variable(*instruction)) &&
                     address_is_private(*instruction, *function)) {
                     candidates.push_back(instruction.get());
                 }

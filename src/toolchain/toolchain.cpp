@@ -664,7 +664,7 @@ CompileResult compile(const Source& source, const Options& options) {
             const auto edges = ir::split_critical_edges(*module);
             change.edges_split += edges.edges_split;
             const auto across =
-                ir::promote_cross_block_allocas(*module);
+                ir::promote_cross_block_allocas(*module, options.optimize >= 2);
             change.instructions_removed += across.instructions_removed;
         }
         // Promotion runs before CSE deliberately: E2 shares only expressions

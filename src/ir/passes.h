@@ -116,7 +116,8 @@ struct PassChange {
 // inserting a phi at every join the slot is live into. Refuses a recorded
 // <variable>.addr, an escaping address, a volatile access, and a load that no
 // store reaches on some path -- all decided before anything is rewritten.
-[[nodiscard]] PassChange promote_cross_block_allocas(Module& module);
+[[nodiscard]] PassChange promote_cross_block_allocas(
+    Module& module, bool promote_recorded = false);
 
 // Splits every edge whose source has more than one successor and whose destination
 // has more than one predecessor, so a phi has a block of its own to write on.
