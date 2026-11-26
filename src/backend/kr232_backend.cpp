@@ -1541,12 +1541,31 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                                      function->type->return_type->kind == ir::TypeKind::Union ||
                                      function->type->return_type->kind == ir::TypeKind::Array);
         std::uint32_t return_pointer_slot = 0;
-        if (returns_record) {
+        bool return_pointer_low = false;
+        bool first_parameter_low = false;
+        if (holds_eight_bytes && returns_record) {
+            // Slot 0 is safe for a four-byte value even beside a double: it
+            // covers FP-4..FP-1, below the saved frame pointer.
+            return_pointer_slot = 0;
+            return_pointer_low = true;
+            next_slot = 1;
+        } else if (holds_eight_bytes && !function->parameters.empty() &&
+                   slots_for(function->parameters.front()->type) == 1u) {
+            slot_of.emplace(function->parameters.front().get(), 0);
+            first_parameter_low = true;
+            next_slot = 1;
+        }
+        if (returns_record && !return_pointer_low) {
             return_pointer_slot = next_slot++;
         }
         // Parameters live below ordinary values so a large function does not
         // need an address pair for every argument access.
-        for (const auto& parameter : function->parameters) {
+        for (std::size_t parameter_index = 0;
+             parameter_index < function->parameters.size(); ++parameter_index) {
+            const auto& parameter = function->parameters[parameter_index];
+            if (first_parameter_low && parameter_index == 0) {
+                continue;
+            }
             const std::uint32_t slots = slots_for(parameter->type);
             if (slots == 2u && (next_slot % 2u) != 0u) {
                 ++next_slot;
