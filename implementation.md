@@ -499,6 +499,17 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-26T04:40:00-08:00 — release check (Windows + WSL)
+Revision: b6a50aa
+
+```
+windows-msvc-release PASS 1011/1011
+linux-gcc-release    PASS 758/758
+not verified: native Linux x64, Linux ARM64
+```
+
+Both release builds are warning-free and include the KR32 CFG-liveness pass.
+
 2026-11-26T04:30:00-08:00 — sanitizer check (WSL)
 Revision: 6358c52
 
