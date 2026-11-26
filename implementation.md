@@ -499,6 +499,47 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-26T11:49:47-08:00 — family gate, clean trees (Windows + WSL)
+Revision: 8591396 (kr32 cf88372, kr16 6762cbf, kr232 27c0081, kr216 a65f984, krdbg 48872a4)
+
+```
+krcompiler        debug   PASS 978/978
+krcompiler        release PASS 978/978
+kr32              debug   FAIL 43 rows registered (42 expected); 2 tests failed
+kr32              release FAIL 2 tests failed
+kr16              debug   FAIL 62 rows registered (61 expected)
+kr16              release FAIL 62 rows registered (61 expected)
+kr216             debug   FAIL 58 rows registered (56 expected); 58/58 tests passed
+kr216             release PASS 11/11
+kr232             debug   FAIL kernel tree 15 rows registered (14 expected)
+kr232             release PASS (preset row)
+krdbg             debug   PASS 3/3
+krdbg             release PASS 3/3
+krcompiler        linux   FAIL doctest.h absent from a fresh mirror
+kr32              linux   FAIL no installed compiler package
+kr16              linux   FAIL no installed compiler package
+kr232             linux   FAIL no installed compiler package
+krdbg             linux   FAIL no installed compiler package
+kr216             linux   PASS 11/11
+not verified: native Linux x64, Linux ARM64
+```
+
+Clean run: every repository's `build/` and `<family>/build` were deleted first, so
+nothing incremental could hide a failure. Eleven of twenty rows failed, in four
+independent ways, none of them introduced by the clean. The Linux wave has been
+green only because `~/mirrors/krcompiler` predated the mirror tool's
+`third_party/` exclusion: a fresh mirror never receives `third_party/doctest`, so
+the compiler's `tests/unit/main.cpp` cannot include `doctest.h`, its install
+fails, and the four consumer rows then fail for want of a compiler package. Three
+asserted row counts are stale against suites that grew — kr32 43/42, kr16 62/61,
+kr216 58/56 and the kr232 kernel tree 15/14 — and the gates fail on them by
+design. kr32's provenance row covers all of `third_party/`, which holds a fetched
+SDL2 tree the manifest cannot list, and its committed `kernel.kr32` no longer
+matches a rebuild (identical rebuilt hash on two runs, so drift rather than
+nondeterminism). The compiler and krdbg rows are green in both configurations,
+including the staged-sysroot check. No row was retried. The timestamp is the
+first Windows build log's creation time.
+
 2026-11-26T08:50:00-08:00 — boundary matrix (Windows + WSL)
 Revision: 195973a
 
@@ -7817,3 +7858,5 @@ not verified: native Linux x64, Linux ARM64
 - **2026-11-26T08:50:00-08:00** — **Constant boolean truncation folds in IR.** `trunc i32 <literal> to i1` now becomes an `i1` constant, so `enterQuadrant(true)` and `enterQuadrant(false)` pass `MOV R1, #1` / `MOV R1, #0` directly instead of materializing `R0` and masking it with `AND ... #1`. KR32 startrekng O2 `.text` falls from 1,069,064 to 1,068,684 bytes; image 2,708,151 to 2,702,311. Full Windows debug/release and Linux GCC/Clang/sanitizer matrix: PASS.
 
 - **2026-11-26T09:35:00-08:00** — **KR32 reuses an already-live constant register across stores.** `reuse_constant_registers` removes a repeated `MOV Rd,#imm` while Rd still holds that value; it carries facts only across stores and debug labels, resetting on every other instruction. `Console_ctor_0_value` now has one `MOV R0,#0` followed by `STORE R0,[R12]`, `STORE R0,[R12+4]`, `STORE R0,[R12+8]`, with no address-setup moves. KR32 O2 `.text` falls from 1,068,684 to 1,068,604 bytes; image 2,702,311 to 2,702,231. Full `windows-msvc-debug` suite: 1011/1011; unit tests 309/309.
+
+- **2026-11-26T13:10:02-08:00** — **`install-tools.ps1` copies the `SDL2.dll` that `kr32.exe` links.** The PATH directory it builds held `kr32.exe` alone, and a kr32 without `SDL2.dll` beside it exits `0xC0000135` (STATUS_DLL_NOT_FOUND) before printing anything, so the script now copies the DLL from the same build tree and reports its absence as a missing runtime — `-AllowMissing` still downgrades that to a warning. Verified: a Debug copy produces the eleven binaries plus `SDL2.dll` (1,586,176 bytes) and the copied `kr32.exe --help` prints usage; renaming the DLL out of `kr32/build/windows-msvc/Debug` makes the same run report `MISSING SDL2.dll` and exit 1, or exit 0 with `-AllowMissing`. `package.ps1` is unchanged because the compiler archive ships no VM binary; kr32's own `install(TARGETS kr32)` still omits the DLL, which is that repository's rule. No build was required for a script change, and the docs change is [docs/kr-build-instructions.md](docs/kr-build-instructions.md) §7.4.
