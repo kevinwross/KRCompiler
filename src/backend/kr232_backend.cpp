@@ -2440,6 +2440,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             text = coalesce_argument_moves(text);
             text = coalesce_address_moves(text);
             text = forward_frame_loads_across_blocks(text);
+            text = eliminate_local_dead_frame_stores(text);
             text = eliminate_dead_frame_stores(text);
             text = eliminate_dead_register_definitions(text);
             if (pass > 0 && text.size() >= before.size()) {

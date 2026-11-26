@@ -5,6 +5,7 @@
 #include "backend/kr232_cfg.h"
 
 using krc::backend::eliminate_dead_frame_stores;
+using krc::backend::eliminate_local_dead_frame_stores;
 using krc::backend::eliminate_dead_register_definitions;
 using krc::backend::fold_frame_addresses_to_lea;
 using krc::backend::forward_frame_loads_across_blocks;
@@ -65,6 +66,20 @@ TEST_CASE("KR232 keeps an argument move across a call") {
         "  ret\n";
     const auto output = eliminate_dead_register_definitions(input);
     CHECK(output.find("mov r2, #1") != std::string::npos);
+}
+
+TEST_CASE("KR232 dead-store scan sees past a pointer store") {
+    const std::string input =
+        ".Lf:\n"
+        "  st [r13-4], r6\n"
+        "  st [r8], r7\n"
+        "  st [r13-4], r2\n"
+        "  ld r6, [r13-4]\n"
+        "  ret\n";
+    const auto output = eliminate_local_dead_frame_stores(input);
+    CHECK(output.find("st [r13-4], r6") == std::string::npos);
+    CHECK(output.find("st [r8], r7") != std::string::npos);
+    CHECK(output.find("st [r13-4], r2") != std::string::npos);
 }
 
 TEST_CASE("KR232 removes a store overwritten before any read") {

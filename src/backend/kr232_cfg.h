@@ -24,6 +24,13 @@ namespace krc::backend {
 // positive offsets are incoming argument areas and are left alone.
 [[nodiscard]] std::string eliminate_dead_frame_stores(std::string_view assembly);
 
+// A straight-line companion to `eliminate_dead_frame_stores`. It scans past a
+// store through a pointer, which writes memory but cannot read the pending slot,
+// so an overwrite after it still makes the earlier frame store dead. A pointer
+// load or a call still stops the scan because either may observe the slot.
+[[nodiscard]] std::string eliminate_local_dead_frame_stores(
+    std::string_view assembly);
+
 // Removes a frame load when the same slot already lives in the destination
 // register on every path into the block. A call, a pointer store or an unknown
 // instruction clears the availability map; a frame store records the value

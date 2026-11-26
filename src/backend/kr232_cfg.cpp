@@ -413,6 +413,97 @@ bool register_destination(std::string_view line, int& destination) {    const au
     return parse_register_operand(operands[0], destination);
 }
 
+std::string eliminate_local_dead_frame_stores(std::string_view assembly) {
+    std::vector<std::string> lines;
+    {
+        std::string text(assembly);
+        std::size_t start = 0;
+        while (start <= text.size()) {
+            const auto end = text.find('\n', start);
+            lines.push_back(text.substr(start, end == std::string::npos
+                                                   ? std::string::npos
+                                                   : end - start));
+            if (end == std::string::npos) {
+                break;
+            }
+            start = end + 1;
+        }
+    }
+    std::vector<bool> dead(lines.size(), false);
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        const auto line = trim(without_comment(lines[index]));
+        const auto mnemonic = mnemonic_of(line);
+        if (mnemonic != "st" && mnemonic != "stb" && mnemonic != "stw") {
+            continue;
+        }
+        const auto operands = operands_of(line);
+        int slot = 0;
+        if (operands.empty() || !parse_frame_slot(operands[0], slot)) {
+            continue;
+        }
+        for (std::size_t next = index + 1; next < lines.size(); ++next) {
+            const auto candidate = trim(without_comment(lines[next]));
+            if (candidate.empty() || candidate.front() == ';' ||
+                (candidate.back() == ':' &&
+                 candidate.rfind(".Ldbg.", 0) == 0)) {
+                continue;
+            }
+            if (candidate.back() == ':') {
+                break;
+            }
+            const auto next_mnemonic = mnemonic_of(candidate);
+            if (next_mnemonic == "call" || next_mnemonic == "ret" ||
+                next_mnemonic == "halt" || next_mnemonic == "enter" ||
+                next_mnemonic == "leave" || next_mnemonic == "jmp" ||
+                next_mnemonic == "bra" ||
+                (next_mnemonic.size() > 1 && next_mnemonic.front() == 'b')) {
+                break;
+            }
+            const auto next_operands = operands_of(candidate);
+            if (next_mnemonic == "st" || next_mnemonic == "stb" ||
+                next_mnemonic == "stw") {
+                int next_slot = 0;
+                if (!next_operands.empty() &&
+                    parse_frame_slot(next_operands[0], next_slot)) {
+                    if (next_slot == slot) {
+                        dead[index] = true;
+                        break;
+                    }
+                    continue;
+                }
+                // A store through a pointer cannot observe the pending slot.
+                continue;
+            }
+            if (is_load(next_mnemonic)) {
+                int next_slot = 0;
+                if (next_operands.size() > 1 &&
+                    parse_frame_slot(next_operands[1], next_slot)) {
+                    if (next_slot == slot) {
+                        break;
+                    }
+                    continue;
+                }
+                const auto address =
+                    next_operands.size() > 1 ? trim(next_operands[1])
+                                             : std::string_view{};
+                if (!address.empty() && address.front() == '#') {
+                    continue;
+                }
+                break;
+            }
+        }
+    }
+    std::string result;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (dead[index]) {
+            continue;
+        }
+        result += lines[index];
+        result += '\n';
+    }
+    return result;
+}
+
 std::string eliminate_dead_frame_stores(std::string_view assembly) {
     std::vector<std::string> lines;
     {
