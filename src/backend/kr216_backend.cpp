@@ -657,6 +657,59 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         }
     }
 
+    std::unordered_map<const ir::Value*, std::size_t> address_uses;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            for (const auto* operand : instruction->operands) {
+                if (operand) {
+                    ++address_uses[operand];
+                }
+            }
+        }
+    }
+    std::unordered_map<const ir::Instruction*,
+                       std::pair<const ir::Value*, std::int64_t>>
+        folded_geps;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Store) {
+                continue;
+            }
+            const auto* type = instruction->operands[0]->type;
+            if (!type || ir::is_float(type) || is_aggregate(type) ||
+                type_size(type) > 4) {
+                continue;
+            }
+            const auto* gep = dynamic_cast<const ir::Instruction*>(
+                instruction->operands[1]);
+            if (!gep || gep->opcode != ir::Opcode::GetElementPtr ||
+                gep->operands.size() != 2 || !gep->source_type ||
+                address_uses[gep] != 1) {
+                continue;
+            }
+            const auto* index =
+                dynamic_cast<const ir::ConstantInt*>(gep->operands[1]);
+            if (!index || type_size(gep->source_type) != 1) {
+                continue;
+            }
+            const auto offset = static_cast<std::int64_t>(index->value);
+            if (offset < -32768 || offset > 32767) {
+                continue;
+            }
+            folded_geps.emplace(gep,
+                                std::make_pair(gep->operands[0], offset));
+        }
+    }
+    const auto memory_operand = [](std::string_view reg, std::int64_t offset) {
+        std::string address = "[";
+        address += reg;
+        if (offset != 0) {
+            address += offset > 0 ? "+" : "";
+            address += std::to_string(offset);
+        }
+        address += "]";
+        return address;
+    };
     std::size_t synthetic_label = 0;
     std::size_t debug_label_counter = 0;
     for (const auto& block : function.blocks) {
@@ -710,7 +763,24 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
             case ir::Opcode::Store: {
                 const auto size = type_size(
                     instruction->operands[0] ? instruction->operands[0]->type : nullptr);
-                load_word(instruction->operands[1], "R3");
+                int address_offset = 0;
+                if (const auto* address =
+                        dynamic_cast<const ir::Instruction*>(
+                            instruction->operands[1])) {
+                    const auto folded = folded_geps.find(address);
+                    if (folded != folded_geps.end()) {
+                        load_word(folded->second.first, "R3");
+                        address_offset =
+                            static_cast<int>(folded->second.second);
+                    } else {
+                        load_word(instruction->operands[1], "R3");
+                    }
+                } else {
+                    load_word(instruction->operands[1], "R3");
+                }
+                const auto r3_address = [&](std::uint32_t extra) {
+                    return memory_operand("R3", address_offset + extra);
+                };
                 if (const auto* floating =
                         dynamic_cast<const ir::ConstantFloat*>(instruction->operands[0])) {
                     std::uint64_t bits = 0;
@@ -725,7 +795,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                std::to_string(static_cast<std::uint16_t>(
                                    (bits >> (offset * 8)) & 0xFFFF)) +
                                "\n";
-                        out += "    ST [R3+" + std::to_string(offset) + "], R2\n";
+                        out += "    ST " + r3_address(offset) + ", R2\n";
                     }
                     break;
                 }
@@ -738,7 +808,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                                std::to_string(static_cast<std::uint16_t>(
                                    (bits >> (offset * 8)) & 0xFFFF)) +
                                "\n";
-                        out += "    ST [R3+" + std::to_string(offset) + "], R2\n";
+                        out += "    ST " + r3_address(offset) + ", R2\n";
                     }
                     break;
                 }
@@ -747,19 +817,19 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     const auto source = slot(instruction->operands[0]);
                     for (std::uint32_t offset = 0; offset < size; offset += kSlotSize) {
                         out += "    LD R6, [SP+" + std::to_string(source + offset) + "]\n";
-                        out += "    ST [R3+" + std::to_string(offset) + "], R6\n";
+                        out += "    ST " + r3_address(offset) + ", R6\n";
                     }
                     break;
                 }
                 if (size == 1) {
                     load_word(instruction->operands[0], "R2");
-                    out += "    STB [R3], R2\n";
+                    out += "    STB " + r3_address(0) + ", R2\n";
                     break;
                 }
                 const auto* source = instruction->operands[0];
                 if (size <= 2) {
                     load_word(source, "R2");
-                    out += size == 1 ? "    STB [R3], R2\n" : "    ST [R3], R2\n";
+                    out += size == 1 ? "    STB " + r3_address(0) + ", R2\n" : "    ST " + r3_address(0) + ", R2\n";
                     break;
                 }
                 const bool has_slot =
@@ -769,14 +839,14 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     load_address(source, "R6");
                     for (std::uint32_t offset = 0; offset < size; offset += 2) {
                         out += "    LD R2, [R6+" + std::to_string(offset) + "]\n";
-                        out += "    ST [R3+" + std::to_string(offset) + "], R2\n";
+                        out += "    ST " + r3_address(offset) + ", R2\n";
                     }
                 } else {
                     load_word(source, "R2");
-                    out += "    ST [R3], R2\n";
+                    out += "    ST " + r3_address(0) + ", R2\n";
                     if (size > 2) {
                         load_word(source, "R2", true);
-                        out += "    ST [R3+2], R2\n";
+                        out += "    ST " + r3_address(2) + ", R2\n";
                     }
                 }
                 break;
@@ -1423,6 +1493,9 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 break;
             }
             case ir::Opcode::GetElementPtr: {
+                if (folded_geps.count(instruction.get()) != 0) {
+                    break;
+                }
                 const bool dynamic_index =
                     instruction->operands.size() > 1 &&
                     dynamic_cast<const ir::ConstantInt*>(instruction->operands[1]) == nullptr;
