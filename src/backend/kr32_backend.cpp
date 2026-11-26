@@ -2311,11 +2311,24 @@ void Kr32Backend::emit_instruction(std::string& out, const ir::Function& functio
                               machine::Operand::physical(0),
                               machine::Operand::frame_offset(*object));
         } else {
-            load_value(out, function, layout, instruction.operands[0], "R0");
-            load_value(out, function, layout, instruction.operands[1], "R1");
-            emit_store_opcode(out, store_opcode(instruction.operands[0]->type),
-                              machine::Operand::physical(0),
-                              machine::Operand::bare_address("R1"));
+            const auto* address =
+                dynamic_cast<const ir::Instruction*>(instruction.operands[1]);
+            const auto address_register =
+                address == nullptr ? std::string("R1") : result_register(*address);
+            if (address != nullptr && address_register != "R0") {
+                // The address already lives in a register the value load does
+                // not touch, so store through it instead of copying to R1.
+                load_value(out, function, layout, instruction.operands[0], "R0");
+                emit_store_opcode(out, store_opcode(instruction.operands[0]->type),
+                                  machine::Operand::physical(0),
+                                  machine::Operand::bare_address(address_register));
+            } else {
+                load_value(out, function, layout, instruction.operands[0], "R0");
+                load_value(out, function, layout, instruction.operands[1], "R1");
+                emit_store_opcode(out, store_opcode(instruction.operands[0]->type),
+                                  machine::Operand::physical(0),
+                                  machine::Operand::bare_address("R1"));
+            }
         }
         break;
     case ir::Opcode::GetElementPtr: {

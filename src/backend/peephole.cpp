@@ -1088,6 +1088,15 @@ std::string fold_address_arithmetic(std::string_view assembly) {
                 continue;
             }
             if (is_label(candidate)) {
+                const auto name = label_name(candidate);
+                const bool function_end =
+                    (name.size() > 4 &&
+                     name.compare(name.size() - 4, 4, ".ret") == 0) ||
+                    (name.size() > 4 &&
+                     name.compare(name.size() - 4, 4, ".end") == 0);
+                if (function_end) {
+                    dead = destination != "R0" && destination != "R1";
+                }
                 break;
             }
             const auto next_space = candidate.find_first_of(" \t");
