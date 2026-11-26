@@ -499,6 +499,19 @@ Tracked open questions are in `plan.md` §17.2. The decision points that affect 
 
 ## Gate verification
 
+2026-11-26T08:15:00-08:00 — incremental host gate (Windows + WSL sanitizer)
+Revision: e366991
+
+```
+windows-msvc-debug    PASS 1011/1011
+windows-msvc-release  PASS 1011/1011
+linux-sanitize        PASS 758/758
+not verified: linux-gcc-debug, linux-clang-debug, linux-gcc-release, native Linux x64, Linux ARM64
+```
+
+This covers constant-GEP store folding on KR32, KR216, KR16 and KR232. The
+release and sanitizer builds were incremental, not clean gate builds.
+
 2026-11-26T05:52:00-08:00 — sanitizer check (WSL)
 Revision: e8b9400
 
