@@ -824,6 +824,7 @@ std::string reuse_frame_addresses(std::string_view assembly) {
         return first == "r8";
     };
     std::vector<bool> dead(lines.size(), false);
+    std::vector<std::string> replacements(lines.size());
     std::size_t expected_arithmetic = lines.size();
     bool valid = false;
     long current_offset = 0;
@@ -887,6 +888,16 @@ std::string reuse_frame_addresses(std::string_view assembly) {
             if (valid && offset == current_offset) {
                 dead[index] = true;
                 dead[arithmetic] = true;
+            } else if (valid && offset - current_offset >= -127 &&
+                       offset - current_offset <= 127) {
+                const long delta = offset - current_offset;
+                dead[index] = true;
+                replacements[arithmetic] =
+                    delta > 0 ? "  add r8, #" + std::to_string(delta)
+                              : "  sub r8, #" + std::to_string(-delta);
+                current_offset = offset;
+                valid = true;
+                expected_arithmetic = arithmetic;
             } else {
                 current_offset = offset;
                 valid = true;
@@ -901,6 +912,11 @@ std::string reuse_frame_addresses(std::string_view assembly) {
     std::string result;
     for (std::size_t index = 0; index < lines.size(); ++index) {
         if (dead[index]) {
+            continue;
+        }
+        if (!replacements[index].empty()) {
+            result += replacements[index];
+            result += '\n';
             continue;
         }
         result += lines[index];
