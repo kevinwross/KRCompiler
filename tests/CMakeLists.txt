@@ -8377,7 +8377,7 @@ endif()
     # than a smoke test. Every run uses the same guest argument names, so the
     # argument comments in the four outputs also match.
     set(test_compiler_suffixes)
-    foreach(test_compiler_combo IN ITEMS o0-o0 o1-o0 o0-o1 o1-o1)
+    foreach(test_compiler_combo IN ITEMS o0-o0 o1-o0 o0-o1 o1-o1 o2-o0 o2-o1)
         string(REPLACE "-" ";" test_compiler_parts "${test_compiler_combo}")
         list(GET test_compiler_parts 0 test_compiler_program)
         list(GET test_compiler_parts 1 test_compiler_runtime)
@@ -8438,7 +8438,8 @@ endif()
         # The program-only and runtime-only rows are compared against the baseline
         # that uses neither -O1, so each half's contribution is pinned separately.
         foreach(test_compiler_suffix IN LISTS test_compiler_suffixes)
-            if(NOT test_compiler_suffix STREQUAL "prog_o0_rt_o0")
+            if(NOT test_compiler_suffix STREQUAL "prog_o0_rt_o0" AND
+               NOT test_compiler_suffix MATCHES "^prog_o2_")
                 add_test(NAME krc_test_compiler_${test_compiler_suffix}_matches_baseline
                     COMMAND ${CMAKE_COMMAND} -E compare_files
                             ${test_compiler_root_prog_o0_rt_o0}/compiled.s
