@@ -12,6 +12,10 @@ endif()
 set(sources console geometry galaxy ship scanner weapons computer game)
 set(objects)
 set(far_args)
+set(level_args)
+if(DEFINED LEVEL AND NOT LEVEL STREQUAL "")
+    list(APPEND level_args ${LEVEL})
+endif()
 if(VM_TARGET STREQUAL "kr232")
     list(APPEND far_args --far-calls)
 endif()
@@ -21,7 +25,7 @@ foreach(name IN LISTS sources)
     set(object "${WORK}/${name}.o")
     file(REMOVE "${object}")
     execute_process(
-        COMMAND "${KRC}" -c ${far_args} --target=${VM_TARGET}
+        COMMAND "${KRC}" -c ${far_args} ${level_args} --target=${VM_TARGET}
                 "${SOURCE_DIR}/${name}.cpp" -o "${object}"
         RESULT_VARIABLE result)
     if(NOT result EQUAL 0)
@@ -33,7 +37,7 @@ endforeach()
 set(main_object "${WORK}/main.o")
 file(REMOVE "${main_object}")
 execute_process(
-    COMMAND "${KRC}" -c ${far_args} --target=${VM_TARGET}
+    COMMAND "${KRC}" -c ${far_args} ${level_args} --target=${VM_TARGET}
             "${SOURCE_DIR}/${RUN_MAIN}" -o "${main_object}"
     RESULT_VARIABLE result)
 if(NOT result EQUAL 0)

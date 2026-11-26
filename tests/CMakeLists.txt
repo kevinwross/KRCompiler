@@ -8616,3 +8616,33 @@ endif()
                     "-DEXPECT=Mission ended"
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunStartrekng.cmake)
     endif()
+
+    add_test(NAME krc_run_startrekng_kr32_o2_script
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DVM_TARGET=kr32
+                -DLEVEL=-O2
+                -DRUN_MAIN=main_script.cpp
+                -DSOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/startrekng
+                -DWORK=${KRC_TEST_OUTPUT_DIR}/startrekng_kr32_o2
+                -DKRC_STAGE_RUNTIME=${KRC_STAGE_RUNTIME}
+                -DVM=${KRC_KR32_VM}
+                -DMAX_STEPS=50000000
+                "-DEXPECT=Mission ended"
+                -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunStartrekng.cmake)
+    if(KRC_KR232_VM)
+        add_test(NAME krc_run_startrekng_kr232_o2_script
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM_TARGET=kr232
+                    -DLEVEL=-O2
+                    -DRUN_MAIN=main_script.cpp
+                    -DSOURCE_DIR=${CMAKE_SOURCE_DIR}/examples/startrekng
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/startrekng_kr232_o2
+                    -DVM=${KRC_KR232_VM}
+                    -DMAX_STEPS=200000000
+                    "-DEXPECT=Mission ended"
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunStartrekng.cmake)
+    endif()
