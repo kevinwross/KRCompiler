@@ -193,7 +193,7 @@ Notes that cost time when missed:
 - Parallelism follows the **processor count**, in the gates rather than the
   presets: no preset carries a `jobs` value except `krcompiler`'s test presets,
   which pin 1 (§8). The gates pass the count to both the build and `ctest`.
-  Two exceptions: the x86_64 Linux rows stay at **two jobs** because GCC 15 in
+  Two exceptions: the x86_64 Linux rows stay at **eight jobs** (raised from two on 2026-11-26 while watching for the ICE to return) because GCC 15 in
   this WSL image intermittently segfaults while garbage-collecting, and
   `kr32`'s sanitizer row caps at four because of its 600 s per-test watchdog.
 
@@ -530,7 +530,7 @@ are built and tested by their preset.
 - Run the Linux presets one at a time on the dev machine. GCC 15 in this image
   intermittently segfaults while garbage-collecting, surfacing as
   `internal compiler error: Segmentation fault` inside standard headers — build
-  with `ulimit -s unlimited` and at most `-j2`, and rebuild once before calling a
+  with `ulimit -s unlimited` and at most `-j8`, and rebuild once before calling a
   build failed.
 - With four presets running at once, `ctest` can read the staged `libkrcrt.kro`
   while another job rebuilds it, producing `krld: KRO CRC mismatch` in one link
@@ -630,7 +630,7 @@ green.
 7. **A Linux suite with no VM copies in `vm/` is green with fewer rows.** Count
    rows (`ctest -N`) rather than trusting "100% tests passed".
 8. **Two test suites at once** produce a one-row flake. Serialise rows.
-9. **GCC 15 ICEs** in this WSL image; `ulimit -s unlimited`, `-j2`, rebuild once.
+9. **GCC 15 ICEs** in this WSL image; `ulimit -s unlimited`, `-j8`, rebuild once.
 10. **Do not edit a committed listing, fixture or image to make a row pass** —
     the drift rows exist to catch exactly that.
 

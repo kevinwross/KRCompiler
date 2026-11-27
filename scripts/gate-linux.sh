@@ -55,10 +55,10 @@ CORES="$(nproc 2>/dev/null || echo 4)"
 # The family gate runs every repository at once and hands each one a share of the
 # machine; alone, this takes 80%.
 # GCC 15 in this WSL image intermittently segfaults while garbage-collecting, so
-# the x86_64 rows stay at two jobs. The ARM64 host has no such limit.
+# the x86_64 rows stay at eight jobs. The ARM64 host has no such limit.
 if [ "$(uname -m 2>/dev/null || echo unknown)" = "x86_64" ]; then
-    JOBS="${FAMILY_JOBS:-2}"
-    [ "$JOBS" -gt 2 ] && JOBS=2
+    JOBS="${FAMILY_JOBS:-8}"
+    [ "$JOBS" -gt 8 ] && JOBS=8
 else
     JOBS="${FAMILY_JOBS:-$CORES}"
 fi
