@@ -479,6 +479,14 @@ PassChange forward_alloca_loads(Module& module) {
                             value->type->kind == TypeKind::Pointer;
                         if (!computed_unsafe) {
                             current[alloca] = value;
+                        } else {
+                            // A computed pointer is not forwarded, so what the slot
+                            // holds is no longer known: forget the earlier value
+                            // rather than keep forwarding it. Leaving it in place
+                            // made `root = insert(root, ...)` read the initializer
+                            // on every later iteration, which is how the binarytree
+                            // example came back with a height of zero at -O1.
+                            current.erase(alloca);
                         }
                     }
                     continue;
