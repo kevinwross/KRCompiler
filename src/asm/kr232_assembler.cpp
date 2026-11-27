@@ -103,7 +103,9 @@ bool assemble_once(std::string_view source, std::string_view file_name,
     std::map<std::string, bool> globals;
     std::map<std::string, bool> weaks;
     std::vector<Fixup> fixups;
+    std::vector<std::string> type_records;
     std::vector<std::string> variable_records;
+    std::map<std::string, std::pair<std::string, std::uint32_t>> global_records;
     std::uint32_t data_offset = 0;
     bool in_data = false;
 
@@ -145,7 +147,21 @@ bool assemble_once(std::string_view source, std::string_view file_name,
             variable_records.push_back("V " + trim(line.substr(10)));
             continue;
         }
-        if (line.rfind(".word", 0) == 0 || line.rfind(".byte", 0) == 0) {
+        if (line.rfind(".debug_type ", 0) == 0) {
+            type_records.push_back(trim(line.substr(12)));
+            continue;
+        }
+        if (line.rfind(".debug_global ", 0) == 0) {
+            std::istringstream stream{trim(line.substr(14))};
+            std::string name;
+            std::string type;
+            std::uint32_t size = 0;
+            stream >> name >> type >> size;
+            if (!name.empty()) {
+                global_records[name] = {type, size};
+            }
+            continue;
+        }        if (line.rfind(".word", 0) == 0 || line.rfind(".byte", 0) == 0) {
             const bool word = line.rfind(".word", 0) == 0;
             const std::string rest = trim(line.substr(word ? 5 : 5));
             std::size_t start = 0;
@@ -492,6 +508,9 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         bridge.push_back(0);
     };
     emit("S 1 " + std::string(file_name));
+    for (const std::string& record : type_records) {
+        emit(record);
+    }
     const std::uint32_t text_size = static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
     // Line labels must be unique per source file. The linker merges every object's
     // bridge into one section and resolves a label by name, so two objects that
@@ -518,12 +537,43 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         out.program.symbols.push_back(Symbol{label, 0, line.offset, false});
         emit("L " + label + " 1 " + std::to_string(line.line) + " 0");
     }
+    // Functions are the text labels; data labels become sized globals. Every
+    // global used to be an F record, which made `points[2]` look like a function
+    // spanning the whole text and left the globals list empty.
+    std::vector<std::pair<std::uint32_t, std::string>> text_labels;
     for (const auto& [name, offset] : labels) {
+        // Only named functions bound a span: a `.Lbb` block label inside one
+        // would end it early, and every line after the block would lose its
+        // function.
+        if (label_section[name] == 0 && !name.empty() && name.front() != '.') {
+            text_labels.emplace_back(offset, name);
+        }
+    }
+    std::sort(text_labels.begin(), text_labels.end());
+    for (std::size_t index = 0; index < text_labels.size(); ++index) {
+        const std::string& name = text_labels[index].second;
         if (globals.count(name) == 0) {
             continue;
         }
-        emit("F " + name + " " + name + " " + end_label + " 0 0");
-        (void)offset;
+        const std::string end = index + 1 < text_labels.size()
+                                    ? text_labels[index + 1].second
+                                    : end_label;
+        emit("F " + name + " " + name + " " + end + " 0 0");
+    }
+    for (const auto& [name, offset] : labels) {
+        if (globals.count(name) == 0 || label_section[name] == 0) {
+            continue;
+        }
+        const auto found = global_records.find(name);
+        const std::string type =
+            found != global_records.end() ? found->second.first : "0";
+        const std::uint32_t size =
+            found != global_records.end()
+                ? found->second.second
+                : static_cast<std::uint32_t>(
+                      symbol_sizes[{label_section[name], offset}]);
+        emit("G " + name + " " + name + " " + type + " " +
+             std::to_string(size));
     }
     for (const std::string& record : variable_records) {
         emit(record);

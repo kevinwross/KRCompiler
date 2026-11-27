@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <unordered_set>
 
 #include "backend/peephole.h"
 #include "ir/ir.h"
@@ -28,9 +29,14 @@ public:
     [[nodiscard]] std::uint32_t frame_bytes(const ir::Function& function) const;
 
 private:
+    // Appends the KDBG type directives for a type and everything it references.
+    void add_debug_type(ir::TypePtr type) const;
+
     const ir::Module& module_;
     OptimizationLevel level_;
     mutable std::string debug_info_;
+    mutable std::string debug_directives_;
+    mutable std::unordered_set<std::string> debug_types_;
 };
 
 }  // namespace krc::backend

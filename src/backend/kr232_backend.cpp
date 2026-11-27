@@ -92,6 +92,14 @@ std::uint32_t type_bytes(const ir::Type* type) {
     return 0;
 }
 
+// The spelling `.debug_info` uses for a type: no IR sigils and no spaces, so a
+// record field can hold it. The same transformation the other backends apply.
+std::string debug_type_name(const ir::TypePtr& type) {
+    auto name = ir::type_to_string(type);
+    name.erase(std::remove(name.begin(), name.end(), '%'), name.end());
+    std::replace(name.begin(), name.end(), ' ', '_');
+    return name;
+}
 // The byte offset of a record's field, which is what a member index means.
 std::uint32_t field_offset(const ir::Type* record, std::size_t index) {
     std::uint32_t bytes = 0;
@@ -1373,10 +1381,85 @@ std::string coalesce_address_moves(std::string_view assembly) {
 
 }  // namespace
 
+void Kr232Backend::add_debug_type(ir::TypePtr type) const {
+    if (!type || ir::is_void(type)) {
+        return;
+    }
+    const auto name = debug_type_name(type);
+    if (!debug_types_.insert(name).second) {
+        return;
+    }
+    const auto size = type_bytes(type);
+    debug_directives_ += ".debug_type T " + name + " " + std::to_string(size) + "\n";
+    if (type->kind == ir::TypeKind::Struct || type->kind == ir::TypeKind::Union) {
+        const bool is_union = type->kind == ir::TypeKind::Union;
+        if (type->base_type) {
+            add_debug_type(type->base_type);
+        }
+        debug_directives_ += ".debug_type C " + name + " " + std::to_string(size) +
+                             " " + (type->base.empty() ? "-" : type->base) + "\n";
+        for (std::size_t index = 0; index < type->fields.size(); ++index) {
+            const auto& field = type->fields[index];
+            const auto field_size = type_bytes(field);
+            const auto field_name = index < type->field_names.size()
+                                        ? type->field_names[index]
+                                        : std::to_string(index);
+            const auto offset = is_union ? 0 : field_offset(type, index);
+            debug_directives_ += ".debug_type M " + name + " " + field_name + " " +
+                                 std::to_string(offset) + " " +
+                                 debug_type_name(field) + " " +
+                                 std::to_string(field_size) + "\n";
+            add_debug_type(field);
+        }
+    } else if (type->kind == ir::TypeKind::Array) {
+        add_debug_type(type->element);
+        debug_directives_ += ".debug_type A " + name + " " +
+                             debug_type_name(type->element) + " " +
+                             std::to_string(type->count) + "\n";
+    } else if (type->kind == ir::TypeKind::Pointer) {
+        add_debug_type(type->element);
+        debug_directives_ += ".debug_type R " + name + " " +
+                             debug_type_name(type->element) + "\n";
+    }
+}
+
 std::optional<std::string> Kr232Backend::emit(std::string& error) const {
     debug_info_.clear();
+    debug_types_.clear();
+    debug_directives_.clear();
+    // The type records go before the code: the assembler appends them to the
+    // `.debug_info` bridge, and the linker turns that into KDBG types.
+    for (const auto& function : module_.functions()) {
+        if (function->declaration) {
+            continue;
+        }
+        if (function->type) {
+            add_debug_type(function->type->return_type);
+        }
+        for (const auto& parameter : function->parameters) {
+            add_debug_type(parameter->type);
+        }
+        for (const auto& block : function->blocks) {
+            for (const auto& instruction : block->instructions) {
+                if (instruction->opcode == ir::Opcode::Alloca) {
+                    add_debug_type(instruction->allocated_type);
+                }
+            }
+        }
+    }
+    for (const auto& global : module_.globals()) {
+        if (global->external) {
+            continue;
+        }
+        if (global->element_type) {
+            add_debug_type(global->element_type);
+        } else if (global->type) {
+            add_debug_type(global->type);
+        }
+    }
     std::ostringstream out;
     out << "; kr232 backend, optimization level " << static_cast<int>(level_) << "\n";
+    out << debug_directives_;
     // The floating-point constants this module uses, each one an eight-byte entry
     // in `.data`; a constant is loaded with `fld` from its address.
     std::vector<double> fp_constants;
@@ -1414,12 +1497,19 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             if (global->external) {
                 continue;
             }
+            const ir::TypePtr global_type =
+                global->element_type ? global->element_type : global->type;
             if (!global->name.empty() && global->name.front() != '.') {
                 if (global->weak) {
                     out << ".weak " << global->name << "\n";
                 } else if (!global->internal) {
                     out << ".globl " << global->name << "\n";
                 }
+                // The assembler turns this into a KDBG G record with a real
+                // size and type, so globals stop looking like functions.
+                out << ".debug_global " << global->name << " "
+                    << debug_type_name(global_type) << " "
+                    << type_bytes(global_type) << "\n";
             }
             out << global->name << ":\n";
             // A table of addresses is what a vtable is: one relocated word per
@@ -1466,7 +1556,7 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 // word was emitted for every such object, so the linker packed the
                 // next global four bytes in: `block[6]` and two counters overlapped,
                 // and a write to block[2] silently changed a counter.
-                const ir::Type* allocated = global->element_type != nullptr ? global->element_type : global->type;
+                const ir::Type* allocated = global_type;
                 std::uint32_t remaining = type_bytes(allocated);
                 if (remaining == 0) {
                     remaining = 4;
@@ -1692,7 +1782,8 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 }
                 out << ".debug_var " << name << " " << variable << " "
                     << static_cast<long>(0) - static_cast<long>(alloca_offset(*instruction))
-                    << " 0 " << type_bytes(instruction->allocated_type) << "\n";
+                    << " " << debug_type_name(instruction->allocated_type) << " "
+                    << type_bytes(instruction->allocated_type) << "\n";
             }
         }
         if (returns_record) {
