@@ -9,13 +9,10 @@ must record, and the definition of done — lives in each repository's `AGENTS.m
 and `AGENTS.local.md`, which win wherever this document and they disagree.
 
 **Basis.** Every command below is taken from the scripts and presets named beside
-it, not from memory: `scripts/doctor.*`, `scripts/gate-*`, `scripts/kr-mirror.sh`,
-`scripts/bootstrap.*`, `scripts/package.ps1`, `scripts/verify-release.ps1`,
-`kr232/scripts/check-family.ps1` and its workers, and each tree's
-`CMakePresets.json`. The commands were not executed while writing this document
-(a documentation-only change, and this session's sandbox blocks capturing native
-tool output); they are read from the sources. Where the plan and the trees differ,
-this document follows the trees and says so.
+it, not from memory, and the sequence was exercised end to end: a clean family gate
+(19 of 20 rows, the one exception being `kr216`'s density row) and a clean ARM64
+build on the Raspberry Pi both ran from these instructions. Where the plan and the
+trees differ, this document follows the trees and says so.
 
 ## 1. Directory layout this assumes
 
@@ -62,7 +59,7 @@ the family gate and the executed rows will not work.
 | Clang sanitizer runtimes | `linux-sanitize` | `libclang-rt-21-dev` (a separate package from `clang`) | a sanitize build links |
 | `rsync` | the WSL mirror | any | `rsync --version` |
 | `git` | build provenance (`krc --version` revision; reports `unknown` without a checkout) and `check-arm64.ps1` pulls | any | `git --version` |
-| `node` | `kr232` spec lint (`tools/check-isa.mjs`); the kr232 gate runs it first | any | `node --version` |
+| `node` | `kr232` spec lint (`tools/check-isa.mjs`) — optional; the gate names the skip when it is absent | any | `node --version` |
 | SDL2 development files | `krdbg` and the `kr32` UI on **Linux** (`libsdl2-dev`, `pkg-config`) | system package | `pkg-config --modversion sdl2` |
 | WSL 2 + Ubuntu | the Linux x64 host | Ubuntu 26.04 on the dev machine | `wsl -l -v` |
 | SSH + an ARM64 host alias | the ARM64 gate | `bitwhiz` is the configured alias | `ssh bitwhiz uname -m` |
@@ -184,7 +181,7 @@ Notes that cost time when missed:
   suffix on the directory). Its `AGENTS.local.md` still says `--preset
   windows-msvc`; no such configure preset exists.
 - **kr16** has both a Visual Studio pair and a Ninja pair; its gate defaults to
-  `windows-ninja-debug` and asserts 61 rows there.
+  `windows-ninja-debug` and asserts 62 rows there.
 - **kr232's** `windows-msvc-debug` uses the **Ninja** generator, not Visual
   Studio. `krdbg`'s Windows presets are Ninja too.
 - **krdbg** is the outlier: `windows-msvc` and `linux-wsl`, not
@@ -193,9 +190,10 @@ Notes that cost time when missed:
 - Parallelism follows the **processor count**, in the gates rather than the
   presets: no preset carries a `jobs` value except `krcompiler`'s test presets,
   which pin 1 (§8). The gates pass the count to both the build and `ctest`.
-  Two exceptions: the x86_64 Linux rows stay at **eight jobs** (raised from two on 2026-11-26 while watching for the ICE to return) because GCC 15 in
-  this WSL image intermittently segfaults while garbage-collecting, and
-  `kr32`'s sanitizer row caps at four because of its 600 s per-test watchdog.
+  Two exceptions: the x86_64 Linux rows stay at **eight jobs** because GCC 15 in
+  this WSL image intermittently segfaults while garbage-collecting (raised from
+  two on 2026-11-26, watching for the ICE to return), and `kr32`'s sanitizer row
+  caps at four because of its 600 s per-test watchdog.
 
 ## 6. Building
 
@@ -229,6 +227,26 @@ exit code.
 
 Run it from a Developer shell: it calls bare `cmake`/`ctest`, unlike the
 per-repository gates.
+
+**Every test image is build output.** A clean tree needs no checked-in binaries:
+
+| Repository | Generated at build time | Target |
+|---|---|---|
+| kr16 | the two golden containers | `<build>/golden`, from `tests/golden/generate.cpp` |
+| kr32 | the KR32OS images | `<build>/os-images`, from `kr32os/build.ps1` |
+| kr232 | the fixture images and the kernel | `<build>/fixtures` and `<build>/kernel.kr232`, from `cmake/BuildKr232Fixtures.cmake` |
+| krcompiler | its two kr232 containers | `<build>/<preset>/kr232-images`, from `kr232-fixture.s` and `kr232-draw.s` |
+
+The kr232 and compiler images need `krc` and `krld`, so a configure without the
+toolchain registers only the rows it can build: kr232's plain suite has 2 rows, its
+kernel tree 13.
+
+**What a passing gate looks like.** 20 rows is a full pass. One row is expected
+red today: `kr216`'s Debug preset, whose `density_benchmark` measures bytes per
+instruction against the plan's 2.5 target. It reads 2.57 at the default `-O1`
+(2.53 with the branch-relaxation overhead removed; 2.47 at `-O0`). It is a codegen
+gap, not a build failure, so a clean run currently ends `19 of 20`; every other
+row must be green.
 
 ### 6.2 The compiler alone
 
@@ -283,9 +301,13 @@ cmake --preset windows-ninja-debug -DKR16_KRC_PREFIX=C:\krc-debug
 cmake --build --preset windows-ninja-debug
 ctest --preset windows-ninja-debug
 
-# kr232 (finds krc/krld through cmake/KrGuest.cmake; pass them explicitly to be sure)
+# kr232 (finds krc/krld through cmake/KrGuest.cmake; pass them explicitly to be
+# sure. Without them the kernel and fixture rows are not registered, because both
+# are built from source by the toolchain.)
 cd <family>\kr232
-cmake --preset windows-msvc-debug -DKRG_KRC=C:\krc-debug\bin\krc.exe -DKRG_KRLD=C:\krc-debug\bin\krld.exe
+cmake --preset windows-msvc-debug -DKR232_BUILD_KERNEL=ON `
+    -DKR232_KRC=C:\krc-debug\bin\krc.exe -DKR232_KRLD=C:\krc-debug\bin\krld.exe `
+    -DCMAKE_PREFIX_PATH=C:\krc-debug
 cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug
 
@@ -310,8 +332,8 @@ assert row counts, and run extra checks the bare preset does not:
 |---|---|---|
 | krcompiler | `scripts/gate-windows.ps1` | doctor, all presets, `krc_tests`, staged sysroot |
 | kr32 | `scripts/run-gate.ps1` | `-Preset`, `-Krc`, `-Krld`, `-SkipTests` |
-| kr16 | `scripts/gate-windows.ps1` | default preset `windows-ninja-debug`, asserts 61 rows |
-| kr232 | `scripts/gate-windows.ps1` | `-Krc`, `-Krld`, `-Arm64`; runs the spec lint first |
+| kr16 | `scripts/gate-windows.ps1` | default preset `windows-ninja-debug`, asserts 62 rows |
+| kr232 | `scripts/gate-windows.ps1` | `-Krc`, `-Krld`, `-Arm64`; runs the spec lint first (a named skip without `node`), then a plain tree (2 rows) and a kernel tree (13 rows, asserted) |
 | krdbg | `scripts/gate-windows.ps1` | resolves MSVC itself via `vcvarsall` |
 
 ### 6.4 Give the compiler VM binaries for its executed rows
@@ -349,11 +371,25 @@ Everything a build produces stays inside that repository's `build/`. In
 ```text
 build/<preset>/host/bin/<Config>/   krc, krld, krc_tests
 build/<preset>/stage/               staged target files: sysroot, linked test images
+build/<preset>/kr232-images/        the two kr232 containers the dump and run rows read
 ```
 
 In a VM tree or `krdbg`, the executables sit in the preset's own binary directory
 (for example `build/windows-msvc/Debug/kr32.exe`, `build/windows-ninja/kr16.exe`,
-`build/windows-msvc/krdbg_demo.exe`).
+`build/windows-msvc/krdbg_demo.exe`). Test images the tree builds for itself live
+in the same `build/` directory and are never committed:
+
+```text
+kr16:   build/golden/                 exec_min.kr16, rel_min.o
+kr32:   build/os-images/              bios.kr32, kernel.kr32 and the initrd
+kr232:  build/fixtures/               the user and gate programs, halt.bin, kernel-draw.bin
+        build/kernel.kr232            the kernel the user programs run under
+```
+
+Each has a source beside it: `tests/golden/generate.cpp`, `kr32os/build.ps1`,
+`cmake/BuildKr232Fixtures.cmake` (with `tests/fixtures/halt.s` and
+`kernel-draw.s`), and `tests/fixtures/kr232-fixture.s`. Delete the build directory
+and the build recreates all of them.
 
 ### 7.2 An installed compiler prefix
 
@@ -431,14 +467,19 @@ ctest --preset <preset> -N         # list, and count rows
 | Repository | Preset in the family gate | Rows asserted |
 |---|---|---|
 | krcompiler | `windows-msvc-debug` / `-release` | 1012 each, plus `krc_tests` |
-| kr32 | `windows-msvc-debug` | 42 |
-| kr16 | `windows-ninja-debug` | 61 |
-| kr216 | `windows-msvc-debug` + `-DKR216_BUILD_GUEST_TESTS=ON` | 56 Debug, 11 Release (guest rows are not enabled in the release wave) |
-| kr232 | `windows-msvc-debug` | 14 kernel rows in `build/gate-kernel`, asserted by the gate |
+| kr32 | `windows-msvc-debug` | 43 |
+| kr16 | `windows-ninja-debug` | 62 |
+| kr216 | `windows-msvc-debug` + `-DKR216_BUILD_GUEST_TESTS=ON` | 58 Debug, 11 Release (guest rows are not enabled in the release wave) |
+| kr232 | `windows-msvc-debug` with the toolchain | 13 in `build/gate-kernel`, asserted by the gate; the compiler-less plain tree has 2 |
 | krdbg | `windows-msvc` | 3 |
 
 If a count moves, the gate fails on purpose. Confirm the new suite is correct
 before changing the number.
+
+One row is expected red and is not a row count: `kr216`'s Debug preset runs
+`density_benchmark`, which measures 2.57 bytes per instruction against the plan's
+2.5 target. It is a codegen gap recorded in that repository's plan, not a build
+failure; every other row must be green.
 
 - Run **`krcompiler`'s** suite serially. Its test presets pin `"jobs": 1`, and
   with `"jobs": 4` the executed-image tests failed nondeterministically: four
@@ -462,14 +503,33 @@ cd ~/mirrors/krcompiler && bash scripts/gate-linux.sh
 ```
 
 The mirror tool excludes `build/`, `.git/` and `*.tmp`, plus anything listed in
-the repository's `.kr-mirror-exclude`. Excluding `.git` is safe for the build:
-`krcompiler` asks `git rev-parse` for the revision and falls back to `unknown`
-when there is no checkout — so a mirror build's `krc --version` names no commit,
-which is worth knowing when comparing two green results. With no `--source`, the
-tool expects exactly one `/mnt/c/Users/*/repos/<repo>` and refuses to guess
-between several. It takes a per-mirror `flock`, so two agents either wait
-(`--wait <seconds>`) or stop with a sentence naming the holder's pid — never a
-half-written tree.
+the repository's `.kr-mirror-exclude`. There is no default exclusion for
+`third_party/`: the vendored trees there (doctest, stb, kdbg's reader) are build
+inputs, and an excluded path is also never deleted, so a default exclusion left
+each mirror with whatever copy it had and a fresh mirror without it. Excluding
+`.git` is safe for the build: `krcompiler` asks `git rev-parse` for the revision
+and falls back to `unknown` when there is no checkout — so a mirror build's
+`krc --version` names no commit, which is worth knowing when comparing two green
+results. With no `--source`, the tool expects exactly one
+`/mnt/c/Users/*/repos/<repo>` and refuses to guess between several. It takes a
+per-mirror `flock`, so two agents either wait (`--wait <seconds>`) or stop with a
+sentence naming the holder's pid — never a half-written tree.
+
+Because `build/` is excluded, a refresh **keeps the mirror's build trees**: that is
+where stale caches, half-configured directories and objects from an old layout
+survive. When the tree has moved underneath them — presets renamed, fixtures
+turned from checked-in files into build output, a compiler change that alters every
+consumer's object — reset the mirrors instead of refreshing them:
+
+```sh
+rm -rf ~/mirrors/*
+for repo in krcompiler kr32 kr16 kr232 kr216 krdbg; do
+    sh /mnt/c/Users/kevin/repos/KRCompiler/scripts/kr-mirror.sh "$repo"
+done
+```
+
+A fresh mirror is about 80 MB; the six with their build trees were 4.4 GB. Check
+that `~/mirrors/krcompiler/third_party/doctest/doctest.h` arrived before building.
 
 A gate started from a `/mnt/c` path does this itself: it prints the mirror it
 used and `exec`s itself there. `--in-place` opts out for the rare intentional
@@ -493,10 +553,16 @@ skipped with a printed line when `clang++` is absent; every skip is named.
 
 The family gate's Linux wave runs all six trees from `~/mirrors`, installing the
 compiler into `~/krc-debug` and `~/.local` before the consumer rows
-(`kr232/scripts/family-linux.ps1`). One machine-specific detail: that script
-hardcodes `/mnt/c/Users/kevin/repos/krcompiler/scripts/kr-mirror.sh`; on a
-different Windows user, edit that line or set the path the gates read
-(`KRC_MIRROR_TOOL`).
+(`kr232/scripts/family-linux.ps1`). The consumer gates then find `krc` and `krld`
+on `PATH` (or in `KR232_KRC`/`KR232_KRLD`). Two of them need the toolchain
+explicitly: kr232's gate builds the kernel and every fixture from source, and
+krdbg's two-adapter step builds the sibling `kr232` as a subproject, whose
+fixtures are guest code. Both stop with a sentence naming the missing tool rather
+than failing on a file. kr232's spec lint needs `node`, which this image does not
+install; the gate prints a named skip instead of failing on the interpreter.
+One machine-specific detail: that script hardcodes
+`/mnt/c/Users/kevin/repos/krcompiler/scripts/kr-mirror.sh`; on a different Windows
+user, edit that line or set the path the gates read (`KRC_MIRROR_TOOL`).
 
 ### 9.3 The consumers on Linux
 
@@ -512,8 +578,14 @@ cmake --build --preset linux-gcc-debug && ctest --preset linux-gcc-debug
 cmake --preset linux-gcc-debug -DKR16_KRC_PREFIX=$HOME/krc-debug
 cmake --build --preset linux-gcc-debug && ctest --preset linux-gcc-debug
 
-# kr232, kr216
-cmake --preset linux-gcc-debug -DKRG_KRC=$HOME/krc-debug/bin/krc -DKRG_KRLD=$HOME/krc-debug/bin/krld
+# kr232 (like Windows: the kernel and the fixtures are built from source)
+cmake --preset linux-gcc-debug -DKR232_BUILD_KERNEL=ON \
+    -DKR232_KRC=$HOME/krc-debug/bin/krc -DKR232_KRLD=$HOME/krc-debug/bin/krld
+cmake --build --preset linux-gcc-debug && ctest --preset linux-gcc-debug
+
+# kr216 (guest rows are opt-in)
+cmake --preset linux-gcc-debug -DKR216_BUILD_GUEST_TESTS=ON \
+    -DKRG_KRC=$HOME/krc-debug/bin/krc -DKRG_KRLD=$HOME/krc-debug/bin/krld
 cmake --build --preset linux-gcc-debug && ctest --preset linux-gcc-debug
 
 # krdbg (its presets are linux-wsl, not linux-gcc-debug; SDL2 required)
@@ -523,7 +595,9 @@ cmake --build --preset linux-wsl && ctest --preset linux-wsl
 
 Gates exist for kr32 (`scripts/run-gate.sh`), kr232 (`scripts/gate-linux.sh`),
 and krdbg (`scripts/gate-linux.sh`); kr16 and kr216 have no Linux gate script and
-are built and tested by their preset.
+are built and tested by their preset. The kr232 and krdbg gates export the family
+job share and build the guest fixtures, so they need `krc` and `krld` on `PATH`
+(the family Linux wave installs them into `~/.local/bin` first).
 
 ### 9.4 WSL cost and stability
 
@@ -549,12 +623,22 @@ pwsh -File <family>\kr232\scripts\check-arm64.ps1 [-Target bitwhiz] [-Root ~/rep
 ```
 
 It copies a script to the host, fast-forward-pulls `kr232`, `krcompiler`, `krdbg`,
-`kr216`, and `kr32`, builds the compiler with `linux-clang-debug`, installs it to
-`~/krc-debug`, builds `kr232` with the kernel rows, builds `kr32`, points the
-compiler's executed rows at those binaries, then runs kr232's rows, the
-compiler's whole suite, `krc_tests`, krdbg's ARM64 gate, and the krdbg fixture
-drift row. It ends with `ARM64 CHECKS: PASS` or throws. It requires all five
-checkouts to exist under `-Root` and the SSH alias to be configured.
+`kr216`, and `kr32`, configures and builds the compiler with
+`linux-clang-debug`, installs it to `~/krc-debug` and puts that prefix on `PATH`,
+builds `kr232` with the kernel rows, builds `kr32`, points the compiler's executed
+rows at those binaries, then runs kr232's rows (13, asserted), the compiler's whole
+suite (1012), `krc_tests`, krdbg's ARM64 gate, and the krdbg fixture drift row. It
+ends with `ARM64 CHECKS: PASS` or throws. It requires all five checkouts to exist
+under `-Root` and the SSH alias to be configured.
+
+For a **clean** ARM64 run, delete the build trees on the host first — the script
+configures with `--fresh` for the consumers but reuses the compiler's directory, so
+only deleting makes it a from-scratch build:
+
+```powershell
+ssh bitwhiz 'for r in krcompiler kr232 kr32 krdbg kr216 kr16; do rm -rf ~/repos/$r/build; done'
+pwsh -File <family>\kr232\scripts\check-arm64.ps1
+```
 
 ### 10.2 On the ARM64 host
 
@@ -592,8 +676,10 @@ Whole family:
 
 1. Delete every repository's `build/` directory.
 2. Delete `<family>/build/family-prefix*`.
-3. In WSL, delete `~/mirrors/*` (or let the mirror refresh overwrite them) and the
-   `~/krc-debug` prefix.
+3. In WSL, delete `~/mirrors/*` and the `~/krc-debug` and `~/.local` compiler
+   prefixes, then recreate the mirrors (§9.1). A *refresh* will not do it: the
+   mirror tool excludes `build/` from deletion, so the mirror's stale build trees
+   survive. `rm -rf ~/mirrors/*` is the only thing that removes them.
 4. Re-run `check-family.ps1`.
 
 Two things to preserve first:
@@ -607,9 +693,13 @@ Two things to preserve first:
   `cannot open object output ...\stage\tests\...kro` — and 740 rows fail at once.
   Delete the whole build directory, then configure.
 
+Nothing else needs preserving: every test image (kr16's goldens, kr32's OS images,
+kr232's fixtures and kernel, the compiler's two kr232 containers) is generated by
+the build from a source beside it, so a deleted `build/` recreates it.
+
 A clean-build pass is expected to end with every family row passing; the gate
 builds what it tests and asserts counts so that a smaller suite cannot read as
-green.
+green. Today the single known exception is `kr216`'s `density_benchmark` (§8).
 
 ## 12. Known traps, in the order they bite
 
@@ -622,16 +712,24 @@ green.
    Pass `-DKRG_TOOLCHAIN=krc` to exercise the real compiler.
 5. **`kr216`'s guest rows are off by default**; without
    `-DKR216_BUILD_GUEST_TESTS=ON` its suite is 11 rows, not 56.
-6. **`kr232`'s gate needs `node`** for the spec lint and `krc`/`krld` for its
-   kernel rows; without `-Krc`/`-Krld` it says those rows were skipped instead of
-   pretending they ran. Its kernel rows configure a fresh Ninja tree and need a
-   Developer environment (`cl.exe` or `INCLUDE` set); the gate stops with that
-   sentence rather than a bare `code=2`.
+6. **`kr232`'s gate needs `krc`/`krld`** for the kernel and the fixtures, and
+   `node` for the spec lint. Without the tools it stops with a sentence naming
+   them; without `node` it prints a named skip and continues. A configure without
+   the toolchain registers only the plain suite (2 rows) — the 13 kernel rows
+   exist only where the images can be built.
 7. **A Linux suite with no VM copies in `vm/` is green with fewer rows.** Count
    rows (`ctest -N`) rather than trusting "100% tests passed".
 8. **Two test suites at once** produce a one-row flake. Serialise rows.
 9. **GCC 15 ICEs** in this WSL image; `ulimit -s unlimited`, `-j8`, rebuild once.
-10. **Do not edit a committed listing, fixture or image to make a row pass** —
+10. **The mirrors keep stale build trees.** `build/` is excluded from the mirror's
+    deletion, so a refresh preserves whatever half-configured directory the last
+    run left. Delete `~/mirrors/*` when the tree has moved underneath it (§9.1).
+11. **A fixture recorded with an absolute source path is reproducible only on that
+    machine.** Images embed the source path in their debug data; build them from a
+    relative path against a named root (kr232's `BuildKr232Fixtures.cmake` and
+    krdbg's fixture check both do), or the ARM64 host will fail a tree the x64 host
+    calls clean.
+12. **Do not edit a committed listing, fixture or image to make a row pass** —
     the drift rows exist to catch exactly that.
 
 ## 13. What this document does not cover
