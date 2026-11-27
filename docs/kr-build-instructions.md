@@ -190,9 +190,12 @@ Notes that cost time when missed:
 - **krdbg** is the outlier: `windows-msvc` and `linux-wsl`, not
   `windows-msvc-debug`/`linux-gcc-debug`.
 - All Linux presets use Ninja, so `ninja` must exist in the Linux environment.
-- Test parallelism is **not** uniform: `krcompiler` and `kr232` pin
-  `"jobs": 1`, `kr32` and `kr16` default to 4, and `kr216`/`krdbg` leave it
-  unset. Leave `krcompiler` at 1 (§8).
+- Parallelism follows the **processor count**, in the gates rather than the
+  presets: no preset carries a `jobs` value except `krcompiler`'s test presets,
+  which pin 1 (§8). The gates pass the count to both the build and `ctest`.
+  Two exceptions: the x86_64 Linux rows stay at **two jobs** because GCC 15 in
+  this WSL image intermittently segfaults while garbage-collecting, and
+  `kr32`'s sanitizer row caps at four because of its 600 s per-test watchdog.
 
 ## 6. Building
 

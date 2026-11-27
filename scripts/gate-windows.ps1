@@ -43,7 +43,7 @@ if (-not (Test-Path $cmake)) { $cmake = 'cmake'; $ctest = 'ctest' }
 # is in scripts/gate-linux.sh.
 $cores = if ($env:NUMBER_OF_PROCESSORS) { [int]$env:NUMBER_OF_PROCESSORS } else { [Environment]::ProcessorCount }
 # The family gate can hand down a share of the machine; alone, this takes 80%.
-$jobs = if ($env:FAMILY_JOBS) { [Math]::Max(1, [int]$env:FAMILY_JOBS) } else { [Math]::Max(1, [Math]::Floor($cores * 0.8)) }
+$jobs = if ($env:FAMILY_JOBS) { [Math]::Max(1, [int]$env:FAMILY_JOBS) } else { [Math]::Max(1, $cores) }
 
 $presets = if ($Preset) { @($Preset) } else { @('windows-msvc-debug', 'windows-msvc-release') }
 $failed = 0
@@ -74,7 +74,7 @@ foreach ($name in $presets) {
     if (-not $SkipTests) {
         # -j: the suite is 976 rows of short tests, and running them one at a time
         # was the longest single step in the family matrix.
-        Step "$name ctest" { & $ctest --preset $name --parallel $jobs --output-on-failure --no-tests=error }
+        Step "$name ctest" { & $ctest --preset $name --output-on-failure --no-tests=error }
         if (-not $script:ok) { continue }
         # krc_tests is a binary, not a ctest row.
         $config = if ($name -match 'release') { 'Release' } else { 'Debug' }
