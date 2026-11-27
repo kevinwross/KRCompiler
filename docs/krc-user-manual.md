@@ -37,9 +37,9 @@ Contents:
 A program is built in two steps, exactly as with a conventional toolchain:
 
 ```
-source.c ──krc -c──> source.kro ──krld──> program.kr32
-   │                                          ▲
-   └──────────── krc -S ──> source.c.s ───────┘
+source.c ──krc -c──> source.<target>.kro ──krld──> program.kr32
+   │                                                 ▲
+   └──────────── krc -S ──> source.<target>.s ───────┘
       (assembly; krld assembles it during the link)
 ```
 
@@ -254,9 +254,9 @@ compiler what it accepts:
 ```
 
 ```
-kr32   register  pointer=32  data=ilp32  backend=yes
-kr16   register  pointer=16  data=ip16   backend=yes
-kr64   register  pointer=64  data=lp64   backend=no
+kr32  register  pointer=32  data=ilp32  backend=yes
+kr16  register  pointer=16  data=ip16  backend=yes
+kr64  register  pointer=64  data=lp64  backend=no
 kr216  register  pointer=16  data=ip16-long32  backend=yes
 kr232  register  pointer=32  data=ilp32  backend=yes
 ```
@@ -265,7 +265,7 @@ kr232  register  pointer=32  data=ilp32  backend=yes
 |---|---|---|---|---|---|---|
 | `kr32` | ILP32 | 32 / 32 / 32 | yes | 32 / 64 | 4 GiB | C and C++ |
 | `kr16` | IP16 | 16 / 16 / 16 | no | no | 64 KiB | C and C++ within the profile |
-| `kr232` | ILP32, no 64-bit type | 32 / 32 / 32 | no | 32 / 64 | 4 GiB | C and C++ |
+| `kr232` | ILP32, no 64-bit type | 32 / 32 / 32 | no | 64 / 64 | 4 GiB | C and C++ |
 | `kr216` | Ip16Long32 | 16 / 32 / 16 | yes | 32 / 64 | 64 KiB | C and C++ |
 | `kr64` | LP64 (profile placeholder) | 32 / 64 / 64 | yes | 32 / 64 | — | none |
 
@@ -672,6 +672,8 @@ krc image [options] objects... -o image
 | `--dump-stats` | Print per-function IR instruction and block counts |
 | `-O0` | No optimiser passes; every value lives in a frame slot |
 | `-O1`, `-O` | Run the optimiser passes documented in [optimize.md](optimize.md); the default |
+| `-O2` | Run the text pipeline to a second fixed point |
+| `-Os` | The aggressive size-oriented path; the second pass is kept only when smaller |
 | `-S` | Emit target assembly |
 | `-c` | Emit a relocatable object, or a complete image on KR16 |
 | `--emit-object` | With `-c`: write a `.kro` instead of a KR16 image |
@@ -679,7 +681,7 @@ krc image [options] objects... -o image
 | `-o FILE` | Output path |
 | `-I DIR`, `-IDIR` | Add an include directory, before the sysroot |
 | `--sysroot DIR`, `--sysroot=DIR` | Replace the target sysroot |
-| `-l [FILE]`, `--listing=FILE` | Write a listing; the default name derives from the output name or the source |
+| `-l [FILE]`, `--listing=FILE` | Write a listing; the default name derives from the output name or the source. A bare `-l` consumes the next argument only when it ends in `.lst`; use `--listing=FILE` for any other name |
 | `--dump-symbols FILE` | Decode KDBG from a `.kr32`, `.kr16`, `.kr216`, or `.kr232` image |
 | `--json` | JSON output for `--dump-symbols` |
 
@@ -689,7 +691,12 @@ invocation. With `-o`, all inputs write the same path; pass one input per
 invocation when `-o` is used.
 
 `krc` exits `0` on success, `1` when a diagnostic was reported, and `2` for a
-usage error (unknown option, missing option value, unknown target).
+usage error (unknown option, missing option value, unknown target). The `image`
+subcommand reports every error, usage included, as `1`.
+
+A bare `krc --target=kr216 file.c` with no stage flag writes `file.kr216.s`; with
+`-o FILE` it writes an object instead. The other targets reject a bare invocation
+with `no output requested` rather than choosing an output for you.
 
 ### `krc image`
 
@@ -709,7 +716,7 @@ krc image [options] objects... -o image
 | `-l [FILE]`, `--listing=FILE` | Write a linked listing |
 | `-o FILE` | Output image |
 
-Inputs may be KRO objects, `.s` assembly, or KRO archives. With `-o` and no
+Inputs may be KRO objects or `.s` assembly. With `-o` and no
 suffix, `krc image` appends `.kr32`, `.kr16`, `.kr216`, or `.kr232` (or `.flat`
 under `--flat`). A suffix naming another target is refused:
 

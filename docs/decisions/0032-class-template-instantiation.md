@@ -74,7 +74,7 @@ types, which is the only moment an instance's bindings are active.
   decision, and none is approximated: the parser consumes `Box<int, 4>` but the
   instantiation rejects the argument that has no type.
 - The instance's destructor participates in the ordinary cleanup machinery of
-  [ADR 0027](0027-destructor-cleanup.md), so a scope may hold several instances
+  [ADR 0027](0027-exception-cleanup.md), so a scope may hold several instances
   and their destructors run in reverse construction order.
 
 ## Alternatives considered

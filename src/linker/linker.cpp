@@ -681,6 +681,33 @@ bool link_objects(std::span<const KroObject> objects, const LinkOptions& options
             auto& section = image.sections[output_section];
             const auto offset = static_cast<std::size_t>(
                 offsets[object_index][relocation.section] + relocation.offset);
+            // A relocation type fixes its width. Rejecting a mismatch here keeps a
+            // malformed object from patching the wrong number of bytes
+            // (documentation audit A16b).
+            std::uint8_t expected_width = 0;
+            switch (relocation.type) {
+                case KroRelocationType::Abs8:
+                case KroRelocationType::PcRel8:
+                    expected_width = 1;
+                    break;
+                case KroRelocationType::Abs16:
+                case KroRelocationType::PcRel16:
+                    expected_width = 2;
+                    break;
+                case KroRelocationType::Abs32:
+                case KroRelocationType::PcRel32:
+                case KroRelocationType::Kr32Abs32:
+                    expected_width = 4;
+                    break;
+                case KroRelocationType::Abs64:
+                case KroRelocationType::PcRel64:
+                    expected_width = 8;
+                    break;
+            }
+            if (expected_width == 0 || relocation.width != expected_width) {
+                error = "relocation width does not match its type";
+                return false;
+            }
             std::uint64_t value = target + relocation.addend;
             if (relocation.type == KroRelocationType::PcRel32 ||
                 relocation.type == KroRelocationType::PcRel64 ||
@@ -736,6 +763,10 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
     debug::KdbgImage kdbg;
     kdbg.target_id = image.target_id;
     kdbg.abi_version = 1;
+    // KDBG selects its 64-bit records from this byte width; a 16-bit target that
+    // recorded 4 would have every address read as four bytes (audit A17c).
+    kdbg.pointer_width =
+        (image.target_id == 2 || image.target_id == 4) ? std::uint8_t{2} : std::uint8_t{4};
     // The payload's addresses are absolute in the image's load space, and a
     // `.kr16` is mapped at its section addresses rather than relocated. Recording
     // the base lets a reader reject a payload built for a different image

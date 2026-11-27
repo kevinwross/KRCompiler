@@ -1,5 +1,9 @@
 # Optimizer handoff
 
+**Status:** point-in-time handoff, kept for its record. It is not current guidance; the
+optimisation contract is `plan.md` §8.8 and D-049, and the tracker is
+[implementation.md](implementation.md).
+
 Everything a fresh session needs to continue the optimisation work without rediscovering it.
 Written at the end of a session that ran out of context before it could implement a pass.
 

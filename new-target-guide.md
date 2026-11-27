@@ -1,9 +1,11 @@
 # Building a new target backend
 
-**Status:** guide, 2026-11-21, at revision `73611af`. Written for a session that has read
-`AGENTS.md` and `AGENTS.local.md` and nothing else.
-**Reads with:** [ADR 0002](decisions/0002-target-descriptor-schema-freeze.md) (descriptor schema
-freeze), [ADR 0046](decisions/0046-object-layout-and-aggregate-rules.md) (object layout and
+**Status:** point-in-time guide, 2026-11-21, at revision `73611af`. Superseded by
+[docs/new-target-guide.md](docs/new-target-guide.md), which covers kr216 and kr232 as well;
+this copy is kept for its record and is not current guidance. Written for a session that has
+read `AGENTS.md` and `AGENTS.local.md` and nothing else.
+**Reads with:** [ADR 0002](docs/decisions/0002-target-descriptor-schema-freeze.md) (descriptor schema
+freeze), [ADR 0046](docs/decisions/0046-object-layout-and-aggregate-rules.md) (object layout and
 aggregate rules), `docs/abi.md` and `docs/abi-kr16.md` (the two existing ABIs), `docs/symbols.md`
 (KDBG), `docs/object.md` (KRO), `plan.md` §4 (data models) and §16 (milestones).
 

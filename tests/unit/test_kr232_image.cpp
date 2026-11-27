@@ -55,7 +55,7 @@ TEST_CASE("a kr232 image carries the ADR 0058 header") {
     CHECK(read32(bytes, 12) == 64);
     CHECK(read32(bytes, 16) == 0x0200);
     CHECK(read16(bytes, 20) == 1);  // ABI version
-    CHECK(read16(bytes, 22) == 2);  // two sections
+    CHECK(read16(bytes, 22) == 3);  // text, kdbg, and the synthesized reset
     CHECK(read16(bytes, 24) == 5);  // target id
     CHECK(read32(bytes, 28) == 0);  // kernel base
     CHECK(read32(bytes, 44) == bytes.size());
@@ -89,6 +89,15 @@ TEST_CASE("the section records and CRC match the payload") {
     CHECK(strings + 10 <= bytes.size());
     CHECK(read32(bytes, 40) == bytes.size() - strings);
 
+    // Third record: the synthesized 4-byte .reset at 0x0100, holding the entry.
+    const std::uint32_t third = table + 64;
+    CHECK(read16(bytes, third + 6) == 1);  // alloc
+    CHECK(read32(bytes, third + 8) == 0x0100);
+    CHECK(read32(bytes, third + 16) == 4);
+    const std::uint32_t reset_name = strings + read32(bytes, third);
+    CHECK(std::string(reinterpret_cast<const char*>(bytes.data() + reset_name)) == ".reset");
+    CHECK(read32(bytes, read32(bytes, third + 12)) == 0x0200);  // the entry
+
     // The CRC is over the whole file with its own field zeroed.
     std::vector<std::uint8_t> copy = bytes;
     copy[48] = copy[49] = copy[50] = copy[51] = 0;
@@ -105,9 +114,9 @@ TEST_CASE("the writer refuses an entry outside text and overlapping sections") {
     CHECK(!error.empty());
 
     Kr232Image overlap;
-    overlap.entry = 0x100;
-    overlap.sections.push_back(Kr232Section{".a", 1, 5, 0x100, 4, {0x71, 0x71}});
-    overlap.sections.push_back(Kr232Section{".b", 1, 5, 0x101, 4, {0x71}});
+    overlap.entry = 0x104;
+    overlap.sections.push_back(Kr232Section{".a", 1, 5, 0x104, 4, {0x71, 0x71}});
+    overlap.sections.push_back(Kr232Section{".b", 1, 5, 0x105, 4, {0x71}});
     CHECK(!write_kr232_image(overlap, bytes, error));
 
     Kr232Image user_out_of_range = kernel_image();
@@ -135,7 +144,7 @@ TEST_CASE("a linked image maps onto the kr232 container") {
     REQUIRE(krc::linker::write_kr232_container(linked, bytes, error));
     CHECK(read16(bytes, 24) == 5);        // target id
     CHECK(read32(bytes, 16) == 0x0200);   // entry
-    CHECK(read16(bytes, 22) == 1);        // one section
+    CHECK(read16(bytes, 22) == 2);        // text and the synthesized reset
 }
 TEST_CASE("the linker writes a kr232 container for a kr232 object") {
     krc::asm_kr232::Program program;

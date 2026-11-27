@@ -977,7 +977,11 @@ void Kr16Backend::emit_function(std::string& out,
                     }
                     return nullptr;
                 }();
-                const bool variadic_call = callee_type && callee_type->variadic;
+                // An unprototyped callee has no parameter list to place arguments
+                // from, so it takes the same all-stack path as a variadic one
+                // (docs/abi-kr16.md, audit A9).
+                const bool variadic_call =
+                    callee_type && (callee_type->variadic || callee_type->unprototyped);
                 const bool aggregate_return =
                     instruction->type &&
                     (instruction->type->kind == ir::TypeKind::Struct ||

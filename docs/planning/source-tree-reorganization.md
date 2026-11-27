@@ -16,11 +16,11 @@ debug paths logical and `/`-separated with a root table rather than physical hos
 
 ### 1.1 Host and target source are mixed by directory
 
-- Host compiler code lives under [src](../src): `frontend`, `ir`, `irgen`, `backend`, `asm`,
+- Host compiler code lives under [src](../../src): `frontend`, `ir`, `irgen`, `backend`, `asm`,
   `linker`, `debug`, `target`, and `tools`.
-- Target-compiled source also lives under `src/runtime`:
-  [src/runtime/kr32/libc.c](../src/runtime/kr32/libc.c) and
-  [src/runtime/kr32/crt0.s](../src/runtime/kr32/crt0.s).
+- Target-compiled source lives under `targets/` (the plan's own migration moved it out of `src/runtime`):
+  [targets/kr32/runtime/libc.c](../../targets/kr32/runtime/libc.c) and
+  [targets/kr32/runtime/crt0.s](../../targets/kr32/runtime/crt0.s).
 - Names alone are not a reliable boundary. `src/backend/kr32_backend.cpp` and
   `src/asm/kr32_assembler.cpp` are host C++ that generate KR32 output; they are not target
   source. `src/runtime/kr32/libc.c` is target C compiled by `krc`.
@@ -30,11 +30,11 @@ debug paths logical and `/`-separated with a root table rather than physical hos
 - Common target headers are under `sysroot/include/`; per-target headers are under
   `sysroot/<target>/include/bits/`.
 - `sysroot/<target>/lib/` is reserved for prebuilt runtime libraries but does not exist yet.
-  The approved layout is in [plan.md](../plan.md) §5.3, lines 298–307.
+  The approved layout is in [plan.md](../../plan.md) §5.3, lines 298–307.
 - The checked-in `bits/` files are a fallback. CMake generates authoritative copies into
   `build/<preset>/generated-sysroot`, and `krc` searches generated first
-  ([CMakeLists.txt](../CMakeLists.txt) lines 69–88,
-  [sysroot/README.md](../sysroot/README.md) line 3).
+  ([CMakeLists.txt](../../CMakeLists.txt) lines 69–88,
+  [sysroot/README.md](../../sysroot/README.md) line 3).
 
 So “sysroot contains all kr32/kr16/kr64 files” is not accurate today: it contains headers
 only, plus generated fallbacks. It contains no runtime source and no libraries.
@@ -59,22 +59,22 @@ source 0 C:\Users\kevin\source\repos\KRCompiler\tests\fixtures\c\hello.c
 ```
 
 That violates the intended contract that objects carry no absolute host paths
-([docs/object.md](../docs/object.md) line 118) and the determinism/path-remapping decision
-D-035 ([plan.md](../plan.md) line 1550). A Linux build would record
+([docs/object.md](../../docs/object.md) line 118) and the determinism/path-remapping decision
+D-035 ([plan.md](../../plan.md) line 1550). A Linux build would record
 `/home/.../tests/fixtures/c/hello.c`. Sysroot paths have the same problem and can appear with
 either `/` or `\`.
 
 The path comes from `SourceManager::load_file` storing `path.string()`
-([src/frontend/source_manager.cpp](../src/frontend/source_manager.cpp) line 98), then into
+([src/frontend/source_manager.cpp](../../src/frontend/source_manager.cpp) line 98), then into
 instruction debug records and KDBG sources
-([src/debug/kdbg.cpp](../src/debug/kdbg.cpp) lines 241–245).
+([src/debug/kdbg.cpp](../../src/debug/kdbg.cpp) lines 241–245).
 
 ### 1.5 Runtime is not tracked per target
 
 `src/runtime` has one target implementation, KR32. There is no KR16 or KR64 runtime source,
 no per-target manifest, and no build target that produces a reusable runtime library. Target
 tests recompile `libc.c` for each linked fixture via
-[cmake/LinkRuntime.cmake](../cmake/LinkRuntime.cmake).
+[cmake/LinkRuntime.cmake](../../cmake/LinkRuntime.cmake).
 
 ---
 
@@ -358,7 +358,7 @@ choice is a profile property.
 **Status: approved 2026-11-11; implemented.**
 
 - Create `targets/` and move `src/runtime/kr32` there.
-- Update [cmake/LinkRuntime.cmake](../cmake/LinkRuntime.cmake), tests, README, and
+- Update [cmake/LinkRuntime.cmake](../../cmake/LinkRuntime.cmake), tests, README, and
   `implementation.md` paths.
 - No behavior change; all existing tests remain green except intentional path updates.
 

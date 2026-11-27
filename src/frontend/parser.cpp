@@ -918,6 +918,7 @@ std::unique_ptr<AstNode> Parser::parse_declarator(bool allow_abstract) {
             if (!check(")")) {
                 has_prototype = true;
                 if (check("void") && peek(1).text == ")") {
+                    has_prototype = true;
                     ++position_;
                 } else {
                     for (;;) {

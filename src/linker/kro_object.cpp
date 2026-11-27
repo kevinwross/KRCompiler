@@ -387,6 +387,26 @@ bool read_object(std::span<const std::uint8_t> bytes, KroObject& object, std::st
     object.pointer_width = bytes[20];
     object.endianness = bytes[21];
     object.flags = read_u16(bytes, 10);
+    // Validate the identity fields the reader exposes. The writer checks them on
+    // the way out; a reader that trusted a foreign or truncated object would let
+    // the linker patch bytes against the wrong target (documentation audit A16c).
+    if (object.kind != KroKind::Object && object.kind != KroKind::Executable) {
+        error = "KRO kind is unsupported";
+        return false;
+    }
+    if (object.target_id == 0 || object.target_id > 5) {
+        error = "KRO target id is unsupported";
+        return false;
+    }
+    if (object.abi_version != 1u) {
+        error = "KRO ABI version is unsupported";
+        return false;
+    }
+    if (object.pointer_width != 16 && object.pointer_width != 32 &&
+        object.pointer_width != 64) {
+        error = "KRO pointer width is unsupported";
+        return false;
+    }
     object.entry = read_u64(bytes, 68);
     object.image_base = read_u64(bytes, 76);
     std::copy(bytes.begin() + 92, bytes.begin() + 108, object.build_id.begin());

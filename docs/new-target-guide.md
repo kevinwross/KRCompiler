@@ -34,7 +34,8 @@ true is the last step of this document, not the first.
 `src/backend/<target>_descriptor.{h,cpp}` declares the register file: which registers
 are arguments, which are constant, which carry the frame pointer, stack pointer,
 return address, flags and exception frame, the call alignment, and the scratch sets.
-The existing three are the model; copy the shape and change the numbers.
+KR32 and KR232 have a descriptor file; KR16 and KR216 encode the same facts in their
+backends. Copy the shape from KR32 or KR232 and change the numbers.
 
 A descriptor is not a style choice. `docs/targets/schema.md` freezes the fields, and
 ADR 0002 freezes the schema itself, so a field that does not fit needs an ADR before
@@ -42,13 +43,16 @@ code that depends on it.
 
 ## 3. The assembler, encoder and object writer
 
-`src/asm/<target>_*`:
+`src/asm/<target>_*` is not one shape across the four targets. kr232 has a parser,
+an assembler, an encoder and an object; kr32 and kr16 have an assembler that parses
+internally, an encoder and an object; kr216 has an encoder and an object and no
+separate assembler. The pieces are:
 
-- `_parser`: text to statements.
+- `_parser` (optional): text to statements.
 - `_encoder`: statements to bytes. Every refusal names the operands it rejected.
-- `_assembler`: sections, labels, fixups, and one `toolchain::ListingRow` per
-  statement so `-l` works (see `docs/listing.md`; the row carries section, address,
-  bytes, source text and line).
+- `_assembler`: sections, labels, fixups, and one `krc::listing::ListingRow` per
+  statement so `-l` works (see [include/krc/listing.h](../include/krc/listing.h); the
+  row carries section, address, bytes, source text and line).
 - `_object`: the backend's object, written through the KRO writer.
 
 The assembler is also what `-S` output is fed back into, so the text it accepts and
@@ -69,9 +73,11 @@ front-end features the target accepts. A target without exception support must r
 ## 5. The runtime, sysroot and image layout
 
 `targets/<target>/runtime/` holds the startup file and the C runtime objects the
-linker places: `crt0.s`, syscall glue, and the headers under
-`targets/<target>/include`. `krc image` links them with `--target`, so nothing in the
-build script needs to know their names.
+linker places: `crt0.s`, syscall glue, and the C library. Headers live in
+`sysroot/<target>/include`, with `bits/` generated from the profile. Every link
+recipe names the runtime objects it wants: `krc image` links the objects it is given
+and nothing else, so the startup, file I/O, EH and `libkrcrt` objects are passed on
+the command line.
 
 The sysroot is installed under `share/krc/sysroot/<target>` and exported by the
 package (`KRC_SYSROOT`). A consumer links with `$<TARGET_FILE:krc> image`, never by

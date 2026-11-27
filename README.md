@@ -1,8 +1,28 @@
 # KRCompiler
 
-KRCompiler is a retargetable C/C++ compiler for the KR-family virtual machines. It ships as `krc` (compiler driver) and `krld` (linker), with a typed SSA IR, per-target backends, an object format, a symbol/debug format, and a common runtime.
+KRCompiler is a retargetable C/C++ compiler for the KR-family virtual machines. It ships `krc` — the driver, assembler, and image writer — and `krld`, the linker. The tree holds a C11 and C++17 front end, a typed-SSA IR with a verifier and optimiser, per-target backends, the KRO object format, the KDBG symbol and debug format, and a per-target runtime and C library.
 
-The plan is approved. **M1 is complete locally** and **M2 is in progress**: the frozen typed-SSA IR, C IRGen, KR32 assembly emitter, encoder, assembler, graph-colouring allocator, and peepholes are implemented; `hello.c` and `mainentry.c` emit assembly, and `hello` assembles, links with a stub runtime, and runs on KR32. G2a has local evidence. **M3 is in progress**: KRO v1 is frozen, `krc -c` writes objects, `krld` links them into a KR32 `.kr32` executable, and `targets/kr32/runtime/crt0.s` starts programs. G2a and G2b pass locally. G3 passes: the extracted `binarytree.c`, `libc-test.c`, and `varargs.c` compile, link, and run on KR32 with expected output. G4 passes through the ADR 0008 `.debug_info` bridge: the KR32 GUI/DAP debugger sets a source breakpoint, stops in `binarytree.c`, and shows frames, locals/globals, aggregate expansion, and memory. M4 is complete locally. M5 has reached G5 locally: classes, methods, constructors, block/function-scope destructors, `new`/`delete` including arrays, default copy, single inheritance, static devirtualization, and vptr-based dynamic dispatch through pointers, references, base-method self calls, and virtual array destructors work. M7 has started with KR16 syntax, IR generation, and the KR16 instruction encoder, assembler, and scalar code generator and `.kr16` images running `hello.c` and `sum.c` on the IP16 data model; M6 has started: `nullptr`, `auto`/`decltype`, range-for, `constexpr`, and scoped `enum class` work. M4 now handles positional, designated, and nested designated aggregate initializers. M7 has started with KR16 syntax, IR generation, and the KR16 instruction encoder, assembler, and scalar code generator and `.kr16` images running `hello.c` and `sum.c` on the IP16 data model; M6 has started: `nullptr`, `true`/`false`, `auto` locals and return types, `decltype`, range-for over arrays and braced lists, `constexpr` variables/functions with branches, loops (for/while/do), recursion, and constant array bounds, C++ `static_assert`, named casts, `if constexpr` with branch discard, inline variables and weak inline functions/methods, scoped `enum class` with underlying types, applied `alignas`, flat namespaces, chained qualified namespace lookup, `using` aliases, default function/method arguments, constructor overloads, constructor member-initializer lists and delegating constructors, reference-returning and chained assignment via `return *this`, braced class/aggregate initialization, copy and move constructors/assignment via rvalue casts and `std::move`, `explicit`, `noexcept`/`final`, reference variables/parameters and reference members, member/free operators including inherited reference-returning subscript and call, unary, distinct prefix/postfix increment-decrement, and compound assignment, implicit array-member indexing, no-capture lambdas with deduced return types and by-value, by-reference, init, and default [=]/[&] capturing lambdas, structured bindings over structs and arrays, array `new[]`/`delete[]` lifetimes, placement new, and int-bound function-template syntax work. `hello.cpp` and `balanced-tree.cpp` run; real template deduction, capture lambdas, and move semantics remain. See [plan.md](plan.md) and [implementation.md](implementation.md). See [plan.md](plan.md) and [implementation.md](implementation.md).
+## Status
+
+The plan is approved (2026-11-09). [implementation.md](implementation.md) is the live tracker: milestone status, test counts, gate evidence, and the running log live there and are not repeated here.
+
+- **Complete locally:** M0 foundation, M1 C front end and sysroot, and M4 C core and debug format. M8 v1.0 hardening has all of its evidence and waits only on the `v1.0` tag.
+- **In progress:** M2 and M3 backend and linker hardening, M5 C++ core, M6 C++11/14/17, M7 KR16 runtime, and M9/M10 v1.1 runtime and language completion.
+- **Remote CI is not configured.** The GitHub Actions workflow was removed on 2026-11-23 (`e3bed04`); every gate on record is a local run on the hosts named in [AGENTS.local.md](AGENTS.local.md).
+
+## Targets
+
+`krc --target=NAME` selects one of five profiles. Each document owns its target's data model and ABI rules.
+
+| Target | Data model | Document |
+|---|---|---|
+| `kr32` | ILP32, 32-bit pointers | [docs/abi.md](docs/abi.md) |
+| `kr16` | IP16, 16-bit pointers and `long`, no floating point or 64-bit integer | [docs/abi-kr16.md](docs/abi-kr16.md) |
+| `kr216` | IP16 with a 32-bit `long` | [docs/abi-kr216.md](docs/abi-kr216.md) |
+| `kr232` | ILP32 with no 64-bit integer | [docs/abi-kr232.md](docs/abi-kr232.md) |
+| `kr64` | LP64 | [docs/targets/kr64.md](docs/targets/kr64.md) — profile only; `krc` has no kr64 code generator |
+
+`krc --list-targets` prints the same set with each profile's capabilities; the descriptor fields are defined by [docs/targets/schema.md](docs/targets/schema.md).
 
 ## Build
 
@@ -22,30 +42,29 @@ cmake --build --preset linux-gcc-debug
 ctest --preset linux-gcc-debug
 ```
 
-Other presets: `linux-gcc-release`, `linux-clang-debug`, and `linux-sanitize`.
+Other presets: `windows-msvc-release`, `linux-gcc-release`, `linux-clang-debug`, and `linux-sanitize`. The Linux presets use Ninja and run inside WSL when the host is Windows. [docs/kr-build-instructions.md](docs/kr-build-instructions.md) is the family build and gate guide: presets, gate flags, install prefixes, the generated test images, and the clean-build procedure.
 
 ## Build outputs
 
-Host binaries are written to `build/<preset>/host/bin/<config>/`. Target-facing files are
-staged under `build/<preset>/stage/`: `stage/sysroot/` mirrors the installed sysroot,
-`stage/sysroot/kr32/lib/` holds the staged runtime, and `stage/tests/` holds linked test
-images. Target source lives under `targets/`; the host compiler never builds it directly.
+Host binaries are written to `build/<preset>/host/bin/<config>/`. Target-facing files are staged under
+`build/<preset>/stage/`: `stage/sysroot/` mirrors the installed sysroot,
+`stage/sysroot/<target>/lib/` holds each staged runtime, and `stage/tests/` holds linked test
+images. `build/<preset>/kr232-images/` holds the KR232 images that the KR232 test rows read.
+Target source lives under `targets/`; the host compiler never builds it directly.
 See [docs/tree.md](docs/tree.md).
 
-## Current M2 surface
+## What the tools do today
 
-- Typed SSA IR types, constants, globals, functions, blocks, and instructions.
-- `IRBuilder`, dominance/type verifier, and deterministic textual IR dump.
-- C IRGen for scalar types, pointers, arrays, calls, variadic calls, globals/string literals, returns, and `if`/`while`/`do`/`for` control flow.
-- KR32 assembly emitter with stack slots, call/varargs staging, prologue/epilogue, and `.text`/`.data` output.
-- In-tree KR32 base encoder, C ABI register descriptor, assembly parser/encoder with labels and relocations, graph-colouring allocator, and peephole pass.
-- KRO v1 object writer/reader, `krc -c` object emission, `krld` section/symbol/relocation linking, the KR32 `.kr32` executable writer, the KR32 crt0 runtime, a C `puts`, and linker-defined heap/stack symbols.
-- Recursive named structs, `.`/`->` member access, struct layout/GEP lowering, bit-fields, positional aggregate initializers, function pointers, integer/floating-point varargs, integer/string/float `printf`, a C string/memory library, and a free-list allocator.
-- C front end from M1: lexer, preprocessor, parser, Sema, generated sysroot bits, and `krc -fsyntax-only`.
-- `krc -E`, `krc --dump-ast`, `krc --dump-ir`, and `krc -S`.
-- KR32/KR16/KR64 target profiles and frozen target descriptor schema.
-- `krc`, `krld`, `krc_extract_fixtures`, and `krc_gen_sysroot_bits`.
-- CMake presets, CI, and the CLI determinism harness.
+- **C front end:** preprocessor, lexer, C11 parser, and Sema; `-E`, `-fsyntax-only`, and `--dump-ast`.
+- **C++ front end:** classes with single inheritance, virtual dispatch, RTTI, exceptions where the target supports them, function and class templates including partial specialisation, variadic packs and fold expressions, `constexpr` including `if constexpr`, lambdas with captures, structured bindings, `enum class`, range-for, and `auto`/`decltype`.
+- **IR:** typed SSA with a verifier, a deterministic textual dump, and per-function statistics (`--dump-ir`, `--dump-stats`), plus mem2reg, inlining, and the optimisation pipeline.
+- **Optimisation:** `-O0`, `-O1`/`-O` (the default), `-O2`, and `-Os`.
+- **Backends:** KR32, KR16, KR216, and KR232 emit assembly (`-S`), KRO objects, and runnable images.
+- **Linking:** `krld` links KRO objects and archives into `.kr32`, `.kr16`, `.kr216`, and `.kr232` images with a deterministic map, section sizes, layout scripts, weak symbols, and section garbage collection. `krc image` exposes the same link from the driver.
+- **Debug information:** KDBG v1 plus the v1.1 scope records; `krc --dump-symbols` prints text or JSON.
+- **Runtime:** per-target `crt0`, the C string and memory library, `printf`, `malloc`, and host and file services where the target provides them.
+- **Determinism:** the same inputs built twice must be byte-identical; the suite compares objects, images, and CLI output.
+- **Tooling:** `krc_extract_fixtures`, `krc_gen_sysroot_bits`, and the install and packaging scripts.
 
 ```sh
 krc -fsyntax-only path/to/file.c
@@ -58,22 +77,15 @@ krc -c path/to/file.c -o path/to/file.kro
 krld path/to/file.kro ... -o path/to/image.kr32
 ```
 
-`krc --version`, `krc --help`, `krc --list-targets`, and `krld --version` work. Code generation is not implemented yet; compiling without `-fsyntax-only` parses and checks the input, then exits with a not-yet-implemented message.
+`krc --help` and `krc image --help` list the options; [docs/krc-user-manual.md](docs/krc-user-manual.md) explains them.
 
 ## Documentation
 
-- [docs/README.md](docs/README.md)
-- [docs/tree.md](docs/tree.md)
-- [docs/abi.md](docs/abi.md)
-- [docs/abi-kr16.md](docs/abi-kr16.md)
-- [docs/abi-kr216.md](docs/abi-kr216.md)
-- [docs/host-services.md](docs/host-services.md)
-- [docs/object.md](docs/object.md)
-- [docs/symbols.md](docs/symbols.md)
-- [docs/ir.md](docs/ir.md)
-- [docs/attributes.md](docs/attributes.md)
-- [docs/targets/kr32.md](docs/targets/kr32.md), [kr16.md](docs/targets/kr16.md), [kr64.md](docs/targets/kr64.md)
+[docs/README.md](docs/README.md) is the index. Start with:
 
-**Branches.** `master` is the shipped line: stage A of the toolchain adoption and
-KDBG v1.1 are merged into it. `adopt-krc` and `kdbg-v1-1` remain as history (and
-as the revisions consumers pin) but are not where new work lands.
+- [docs/krc-user-manual.md](docs/krc-user-manual.md) — building and linking C and C++ programs.
+- [docs/kr-build-instructions.md](docs/kr-build-instructions.md) — configuring, building, and gating the family.
+- [docs/tree.md](docs/tree.md) — the host/target boundary and the build output contract.
+- [docs/release-notes.md](docs/release-notes.md) — what v1.0 contains and what it does not.
+
+**Branches.** `master` is the shipped line. `adopt-krc`, `kdbg-v1-1`, and `libc` remain as history and as the revisions consumers pin; new work lands on `master`.

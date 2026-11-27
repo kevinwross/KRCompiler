@@ -5,12 +5,21 @@ snapshots expose, and retired instructions, which the VM reports when it halts.
 `cmake/BenchmarkImage.cmake` records the second without adding a profiler to a
 target.
 
-Build one image per level, then run each image:
+Build one object per level, link each against the staged runtime, then run each
+image:
 
 ```sh
-krc -O0 -o bench-o0.kr32 source.c
-krc -O1 -o bench-o1.kr32 source.c
-krc -O2 -o bench-o2.kr32 source.c
+stage=build/windows-msvc-debug/stage/sysroot/kr32/lib
+rt=targets/kr32/runtime
+
+krc -c -O0 source.c -o bench-o0.kro
+krc -c -O1 source.c -o bench-o1.kro
+krc -c -O2 source.c -o bench-o2.kro
+
+for level in o0 o1 o2; do
+    krld "$rt/crt0.s" "bench-$level.kro" "$stage/libkrcrt.kro" \
+         "$rt/fileio.s" "$rt/eh.s" -o "bench-$level.kr32"
+done
 
 cmake -DVM=path/to/kr32-vm -DIMAGE=bench-o0.kr32 \
       -DNAME=source-o0 -DOUTPUT=bench.tsv \

@@ -1,5 +1,8 @@
 # Handoff — 2026-11-19
 
+**Status:** point-in-time handoff, kept for its record. It is not current guidance; start from
+[README.md](README.md) and [implementation.md](implementation.md).
+
 Written 2026-11-19 at revision `085a8f5` by the session that completed the optimisation
 programme. Every number in it was true at that revision. **Re-run §9 before trusting it.**
 

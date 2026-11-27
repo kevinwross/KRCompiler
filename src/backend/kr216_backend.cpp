@@ -1598,7 +1598,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                     }
                     return nullptr;
                 }();
-                const bool variadic_call = callee_type && callee_type->variadic;
+                // An unprototyped callee takes the all-stack path too: its type has no
+        // parameter list to place arguments from (docs/abi-kr216.md, audit A9).
+        const bool variadic_call =
+            callee_type && (callee_type->variadic || callee_type->unprototyped);
                 const auto arguments = classify_arguments(values, variadic_call);
                 for (const auto& argument : arguments) {
                     if (argument.on_stack) continue;

@@ -1,20 +1,30 @@
 # Test fixtures
 
-`extracted/` contains C and C++ source extracted from the sibling KR32/KR16 doctest suites. The files are committed so the compiler has a stable corpus independent of the sibling repositories.
+Fixtures are grouped by how the suite consumes them:
 
-Generate or refresh them with:
+- `c/` — the C and C++ fixtures, one behaviour per file. Each is registered in
+  [tests/CMakeLists.txt](../CMakeLists.txt) as a syntax check, a compile, a link,
+  or a link-and-run row, depending on the target and what it exercises.
+- `extracted/` — the seed extracted from the sibling doctest suites, with
+  `manifest.tsv` recording the source path, source line, output file, and byte
+  count for each file. The tiered corpus in `tests/corpus/extracted/` is the
+  wider extraction; see [tests/corpus/README.md](../corpus/README.md).
+- `games/` — the scripted input for the three game examples.
+- `kr232-fixture.s`, `kr232-draw.s`, `kr232_offset_form.s`, `status-high.s` —
+  assembly fixtures for the KR232 image rows.
+- `kr232-vectors.txt` — the KR232 encoder vector table.
+
+Generate or refresh the seed with:
 
 ```sh
-# From the repository root, after M0 builds.
 krc_extract_fixtures --out tests/fixtures/extracted \
   ../kr32/tests/unit/test_cc_1.cpp \
   ../kr32/tests/cxx/test_cxx_codegen_1.cpp
 ```
-
-The current M0 set is a deliberately small seed (five fixtures per source file). The full extraction is a later M1 task. `manifest.tsv` records the source path, source line, output file, and byte count for each fixture.
 
 Rules:
 
 - Do not edit extracted files by hand; change the extractor or the upstream doctest source.
 - Keep the extractor's output deterministic.
 - A fixture is `.c` when it comes from a C test file and `.cpp` when it comes from a C++ test file.
+- A fixture that needs a target image is build output, not a committed binary.

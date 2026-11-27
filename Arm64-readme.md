@@ -1,5 +1,9 @@
 # Verifying the ARM64 host
 
+**Status:** point-in-time checklist. The ARM64 host now follows the tester loop in
+[docs/arm64-tester.md](docs/arm64-tester.md) rather than running a gatekeeper loop, so this
+document is kept for its record of the first verification, not as current guidance.
+
 This is the checklist for the Raspberry Pi 5 (Debian 13, GCC 14.2) host. It exists because the
 ARM64 row of the platform table in `AGENTS.local.md` records a gate, and the tree moves between
 gates. A stale gate row is believed, so refresh it rather than trusting it: re-run the presets

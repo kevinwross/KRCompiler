@@ -3,8 +3,9 @@
 **Status:** Draft. The scalar argument/return/frame rules are frozen by
 [ADR 0016](decisions/0016-kr16-scalar-abi.md), stack arguments by
 [ADR 0028](decisions/0028-kr16-stack-arguments.md), and variadic calls by
-[ADR 0029](decisions/0029-kr16-variadic-calls.md); aggregates and floating point
-remain open. The object and link path is
+[ADR 0029](decisions/0029-kr16-variadic-calls.md); aggregate parameters and
+returns by [ADR 0048](decisions/0048-kr16-aggregate-return-destination.md), and
+floating point remains open. The object and link path is
 defined by [ADR 0019](decisions/0019-kr16-object-linker.md).
 
 ## Data model
@@ -168,4 +169,4 @@ functions defined in the same image or resolved by the linker.
 
 The backend rejects unsupported features with a target-specific diagnostic
 rather than emitting a wrong calling sequence. Known rejected cases include
-aggregate parameters or returns and floating-point values.
+floating-point values.

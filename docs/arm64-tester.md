@@ -50,7 +50,7 @@ write `history rewritten` in the entry.
 
 ## 4. Build and test
 
-Use the repository's own Linux preset — the same one its CI uses:
+Use the repository's own Linux preset:
 
 ```sh
 git switch <branch>
@@ -63,10 +63,12 @@ ctest --preset linux-gcc-debug --output-on-failure
 - Re-run `cmake --preset linux-gcc-debug` only when `CMakeLists.txt`,
   `CMakePresets.json` or `cmake/` changed; otherwise build the existing tree.
 - **Executed tests need sibling VM binaries.** The suite runs real programs
-  through a KR32 and a KR16 VM when `KRC_KR32_VM` and `KRC_KR16_VM` were set at
-  configure time. If they were not, those tests are skipped — log
-  `Skipped: executed VM tests (no KRC_KR32_VM/KRC_KR16_VM)` and never report
-  them as passed.
+  through a KR32, a KR16, and a KR232 VM when `KRC_KR32_VM`, `KRC_KR16_VM`, and
+  `KRC_KR232_VM` were set at configure time; a configured `KRC_KR232_VM` also
+  needs `KRC_KR232_DIS`, or the configure stops. If they were not set, those
+  tests are skipped — log
+  `Skipped: executed VM tests (no KRC_KR32_VM/KRC_KR16_VM/KRC_KR232_VM)` and
+  never report them as passed.
 - This is the slowest job in the programme: the compiler builds itself and then
   runs a large suite. Record the durations.
 

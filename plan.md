@@ -798,7 +798,7 @@ The KR16 profile is non-conforming by design. It exists to keep the 16-bit targe
 | `intmax_t` | 8 | 2 | |
 | `wchar_t` | 2 | 2 | |
 
-The model is a new profile value (`Ip16Long32`), not `Ip16`: KR16's `long` is 16 bits and it has no `long long`. [ADR 0053](decisions/0053-kr216-target-profile.md) adds the value, and `docs/abi-kr216.md` is the target's appendix.
+The model is a new profile value (`Ip16Long32`), not `Ip16`: KR16's `long` is 16 bits and it has no `long long`. [ADR 0053](docs/decisions/0053-kr216-target-profile.md) adds the value, and `docs/abi-kr216.md` is the target's appendix.
 
 **KR64 (placeholder, LP64)**
 
@@ -839,7 +839,7 @@ The model is a new profile value (`Ip16Long32`), not `Ip16`: KR16's `long` is 16
 - `ENTER #frame, #mask` and `LEAVE #mask` create and destroy the frame; FP is maintained in every function.
 - Aggregates are memory class: an argument is a hidden pointer to a caller-owned copy, and a return uses the R6 destination.
 - A variadic call passes every argument on the stack, floating point included.
-- The exact rules are in `docs/abi-kr216.md` ([ADR 0053](decisions/0053-kr216-target-profile.md)) and tested with the same calling-convention suite as KR16.
+- The exact rules are in `docs/abi-kr216.md` ([ADR 0053](docs/decisions/0053-kr216-target-profile.md)) and tested with the same calling-convention suite as KR16.
 
 **KR64** (placeholder): LP64, first six integer args in R0–R5, first eight FP args in F0–F7; to be confirmed.
 
@@ -1595,11 +1595,12 @@ Survey decision IDs use the `S-G` prefix to avoid collision with acceptance gate
 
 | D-049 | Optimisation contract | `-O0` is straightforward lowering and gains no pass; **selection quality is not an optimisation level** — S1–S5-shaped improvements apply at every level, because emitting a literal operand or a direct conditional branch is lower quality lowering, not optimisation. `-O1` is §8.8's list and additionally permits global CSE and two text-level peepholes. Named locals **are** promoted at `-O1`, and the debug-info cost is documented rather than avoided. No optimiser pass lands before `--dump-stats` exists to measure it. | The review of `docs/optimize.md` found the proposal exceeded §8.8 by five selection passes, global CSE and two text passes, and that its Q3 recommendation (do not promote named locals) contradicted its own E6 pass. This row settles all three, and makes measurement the precondition rather than a later step. | — |
 
-| D-050 | KR216 target | KR216 is a fourth VM target, extending D-002's list: `DataModel::Ip16Long32` (`int` 16, `long` 32, `long long` 64, pointer 16, `char` signed, alignment 2), `TargetId::Kr216` with KRO and KDBG target ID 4, descriptor schema v2 with `this_register` and `sret_register`, `has_fpu` and `has_cpp` on with `has_eh`/`has_rtti` off until the 16-bit EH descriptor exists, and `docs/abi-kr216.md` as its ABI appendix (ADR 0053). | KR16's IP16 profile has a 16-bit `long` and no floating point, so reusing it would truncate every 32-bit value; reusing ILP32 would double every pointer and spill on a 64 KiB machine. R10 for `this` and R6 for the aggregate destination are the target plan's Q13 and Q25 resolutions. | [ADR 0053](docs/decisions/0053-kr216-target-profile.md) |
+| D-050 | KR216 target | KR216 is a fourth VM target, extending D-002's list: `DataModel::Ip16Long32` (`int` 16, `long` 32, `long long` 64, pointer 16, `char` signed, alignment `min(size, 8)`), `TargetId::Kr216` with KRO and KDBG target ID 4, descriptor schema v2 with `this_register` unset and `sret_register` R6, `has_fpu` and `has_cpp` on and `has_eh`/`has_rtti` on since the 16-bit EH descriptor (ADR 0055) landed, and `docs/abi-kr216.md` as its ABI appendix (ADR 0053). | KR16's IP16 profile has a 16-bit `long` and no floating point, so reusing it would truncate every 32-bit value; reusing ILP32 would double every pointer and spill on a 64 KiB machine. `this` travels as argument 0; R6 is the aggregate destination. | [ADR 0053](docs/decisions/0053-kr216-target-profile.md) |
 
-| D-051 | KR232 target | KR232 is a fifth VM target, extending D-002's list: `DataModel::Ilp32` with `long_long_bits` 0 (no 64-bit integer type), signed `char`, a 64-bit `long double`, 32-bit pointers, and `size_t`/`ptrdiff_t`/`wchar_t`/`intmax_t` 32; `TargetId::Kr232` with KRO and KDBG target ID 5; descriptor schema v2 unchanged, with `this_register` 10 and `sret_register` 6; `has_fpu` and `has_cpp` on, `has_matrix`/`has_atomics`/`has_threads`/`has_tls`/`has_eh`/`has_rtti` off; `AggregateRules::MemoryOnly`; and `docs/abi-kr232.md` as its ABI appendix (ADR 0057). | The kr232 plan's §2.2–§2.5 decisions are compiler contracts — memory-class aggregates, no 64-bit integers, signed `char`, 64-bit `long double` — and §5 adds the R6 aggregate destination. Reusing `Ip16Long32` would move every pointer off 32 bits; a new `DataModel` is unnecessary because the only difference from ILP32 is an absent 64-bit type, which one profile field expresses. | [ADR 0057](docs/decisions/0057-kr232-target-profile.md) |
+| D-051 | KR232 target | KR232 is a fifth VM target, extending D-002's list: `DataModel::Ilp32` with `long_long_bits` 0 (no 64-bit integer type), signed `char`, one binary64 floating-point format (`float_bits` and `long_double_bits` 64), 32-bit pointers, and `size_t`/`ptrdiff_t`/`wchar_t`/`intmax_t` 32; `TargetId::Kr232` with KRO and KDBG target ID 5; descriptor schema v2 unchanged, with `this_register` unset and `sret_register` 6; `has_fpu`, `has_cpp`, and `has_rtti` on, `has_matrix`/`has_atomics`/`has_threads`/`has_tls`/`has_eh` off; `AggregateRules::MemoryOnly`; and `docs/abi-kr232.md` as its ABI appendix (ADR 0057). | The kr232 plan's §2.2–§2.5 decisions are compiler contracts — memory-class aggregates, no 64-bit integers, signed `char`, a 64-bit floating format — and §5 adds the R6 aggregate destination. Reusing `Ip16Long32` would move every pointer off 32 bits; a new `DataModel` is unnecessary because the only difference from ILP32 is an absent 64-bit type, which one profile field expresses. | [ADR 0057](docs/decisions/0057-kr232-target-profile.md) |
 
 | D-052 | Default optimisation level | A build with no `-O` flag is `-O1`; `-O0` stays available as an explicit level. The level-identity test asserts no-flag == `-O1`, `-O1` deterministic, and `-O0` different. KR216 and KR232 run the `-O1` passes that do not create `phi` until their backends lower it. | `-O1` was non-default only because it miscompiled the KR32 runtime; with the allocator call-lowering and callee-saved-register defects fixed, the full suite passes at `-O1` and the optimiser is the path every user should get. | [ADR 0060](docs/decisions/0060-o1-default.md) |
+| D-053 | Target and ABI corrections | KR232 has one binary64 format (`float_bits` 64); `this` is argument 0 on KR216 and KR232 with `this_register` unset; KR232 R8 is caller-saved; KR216 aggregates are `MemoryOnly` (IRGen now takes the hidden-pointer path from the recorded frontend parameter type, so an instantiated template body is covered); KR216 alignment is `min(size, 8)`; KR216's default stack top is `0xF000`; KR32 returns floating point in F0 and treats every aggregate above 8 bytes as `sret`; C++ symbols are `<Class>_<method>`, not Itanium. | The 2026-11-27 documentation audit compared the shipped compiler with the frozen appendices and the plan; each item is a place where code and text disagreed, and the owner chose the documented or the shipped behaviour on that date. | [audit](docs/planning/documentation-audit-2026-11-27.md) |
 
 Changing a `D-xxx` decision requires editing its row here and adding an ADR under `docs/decisions/` when the change touches ABI, object format, symbol format, target description, or IR.
 
@@ -1654,16 +1655,18 @@ Each fixture gets a feature tag, source file:line provenance, and expected outpu
 | `long` | 32 | 16 (profile) | 32 | 64 |
 | `long long` | 64 | none | 64 | 64 |
 | `double` | 64 | none | 64 | 64 |
-| Registers | R0–R15, F0–F15, T0–T15 | R0–R4, SP/SR/PC | R0–R15, F0–F3, R10 `this` | TBD |
+| Registers | R0–R15, F0–F15, T0–T15 | R0–R4, SP/SR/PC | R0–R15, F0–F3 | TBD |
 | FPU | yes | no | yes | TBD |
 | Matrix | yes | no | no | TBD |
 | Atomics | LL/SC | no | no | TBD |
 | Threads | cluster | no | no | TBD |
-| EH/RTTI | v1.1 | no | v1.1 (16-bit) | TBD |
+| EH/RTTI | yes (ADR 0038, 0025) | no | yes (ADR 0055) | TBD |
 | TLS | static v1.0; dynamic v1.1 | no | no | TBD |
 | OS | kr32os | BIOS SYS | `SYS` | TBD |
 | Debug | yes | C | yes (KDBG 4) | TBD |
-| C++ | yes | no (v1) | yes | TBD |
+| C++ | yes | yes | yes | TBD |
+
+KR232, added after this table was approved ([D-051](#appendix-a--decision-log), [ADR 0057](docs/decisions/0057-kr232-target-profile.md)): Ilp32 with no 64-bit integer, signed `char`, one binary64 floating-point format (`float` and `double` both eight bytes), 32-bit pointers, F0–F3, no matrix/atomics/threads/TLS/EH, `SYS` services, KDBG target 5, C++ and a backend present. `_ZTI` is emitted and the full runtime provides `__krc_dynamic_cast`.
 
 ---
 

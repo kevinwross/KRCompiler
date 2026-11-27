@@ -1,7 +1,6 @@
 # Host services
 
-**Status:** KR32 wrappers are implemented. The KR16 VM now implements the file
-services; the KR16 wrappers are not written.
+**Status:** KR32 wrappers are implemented. KR16's wrappers and stream layer are implemented too: `targets/kr16/runtime/host.s` holds the `SYS` wrappers and `fileio.c` the stream layer, both staged as runtime objects.
 
 ## KR32
 

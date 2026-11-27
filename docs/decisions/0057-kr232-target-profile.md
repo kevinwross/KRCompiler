@@ -1,6 +1,7 @@
 # 0057 — KR232 target profile and ABI appendix
 
-- Status: accepted (2026-11-22)
+- Status: accepted (2026-11-22); amended 2026-11-27 — `float_bits` is 64, not 32,
+  because the compiler has one binary64 format (documentation audit A1)
 - Date: 2026-11-22
 - Decision: registers KR232 as a fifth VM target. It fits descriptor schema v2
   unchanged, takes KRO and KDBG target ID 5, and gets `docs/abi-kr232.md` as its
@@ -53,7 +54,7 @@ target that has no profile — the failure that broke GCC's `-Wswitch` for KR216
 | `int_bits` | 32 | |
 | `long_bits` | 32 | `Ilp32` |
 | `long_long_bits` | **0** | there is no 64-bit integer type (plan 2.3) |
-| `float_bits` / `double_bits` | 32 / 64 | IEEE binary32 / binary64 |
+| `float_bits` / `double_bits` | 64 / 64 | one IEEE binary64 format; `FLDS`/`FSTS` unused |
 | `long_double_bits` | 64 | an alias for `double` (plan 2.5) |
 | `size_t_bits`, `ptrdiff_bits`, `wchar_bits` | 32 | pointer-wide |
 | `intmax_bits` | 32 | follows from 2.3 |
@@ -91,11 +92,11 @@ register, so the callee never has to know which of its arguments arrived where.
 
 ### Capabilities
 
-`has_fpu` and `has_cpp` are true. `has_matrix`, `has_atomics`, `has_threads`,
-`has_tls`, `has_eh` and `has_rtti` are false; `backend_available` stays false
-until the M3 backend lands. `has_rtti` false is documentation rather than
-enforcement — the front end has no `-fno-rtti` — so a `dynamic_cast` compiles and
-fails at link on the absent `__krc_dynamic_cast` (kr232-plan §2.8, §13).
+`has_fpu`, `has_cpp` and `has_rtti` are true. `has_matrix`, `has_atomics`,
+`has_threads`, `has_tls` and `has_eh` are false; `backend_available` is true.
+`has_rtti` is documentation rather than enforcement — the front end has no
+`-fno-rtti` — and the full runtime supplies `__krc_dynamic_cast` (amended
+2026-11-27, audit B2/A8).
 
 ### ABI appendix
 

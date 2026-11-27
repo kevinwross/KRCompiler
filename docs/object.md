@@ -104,10 +104,11 @@ are byte offsets into this table.
 
 ## Build ID and CRC
 
-The build ID is two FNV-1a 64-bit hashes written little-endian: the first over
-the concatenated section names/types/flags/sizes and symbol names/bindings/
-values, the second over relocations and section payload bytes. The CRC32 uses
-the standard IEEE polynomial over the complete file with offset 108 zeroed.
+The build ID is two FNV-1a 64-bit hashes written little-endian. The first covers
+each section's name, 64-bit size, and payload bytes, then each symbol's name, value,
+and binding. The second covers that same material followed by each relocation's
+offset, addend, and type. The CRC32 uses the standard IEEE polynomial over the
+complete file with offset 108 zeroed.
 
 ## Validation and determinism
 
@@ -120,7 +121,7 @@ the standard IEEE polynomial over the complete file with offset 108 zeroed.
 ## Executable images
 
 The linker builds a common linked model, then a per-target image writer emits
-the VM's loadable image (KR32, KR16). The writer receives sections, entry point,
+the VM's loadable image (KR32, KR16, KR216, KR232). The writer receives sections, entry point,
 symbols/debug, and layout, and rejects unsupported placements or address ranges.
 Debug sections are not part of the load image: the linker gives them address
 zero and excludes them from the image end, so `__heap_start` names the byte after
@@ -158,3 +159,25 @@ The loader validates the header fields, the table and payload bounds, the target
 version, and rejects overlapping allocated sections before copying anything. It writes the
 entry into the word at `0x0100` — the ISA's reset vector — so the container and the reset
 rule agree, and it does not load the debug section into memory.
+
+## kr232 executable images
+
+The `.kr232` container is specified by
+[ADR 0058](decisions/0058-kr232-image-container.md): a 64-byte little-endian
+header with the magic `K232`, container version 1, kind 2, flags (bit 0 = debug
+present), the entry, **ABI version 1**, **target ID 5**, the image base (`0` for a
+kernel image, `0x08000000` for a user one), the section-table and string-table
+offsets, the file size, and a CRC32 at offset 48. Payloads follow the header,
+then 32-byte section records (name offset, type `1` progbits or `8` nobits, flags,
+32-bit address, file offset, size, alignment), then the string table.
+
+A kernel image carries a 4-byte `.reset` section at `0x0100` holding the entry
+address; the writer adds it when the caller did not. A user image does not have
+one.
+
+## Archives
+
+`krld` accepts Unix `ar` archives (`!<arch>\n`, 60-byte member headers, GNU long
+names) whose members are ordinary KRO objects; a member is linked only when a
+symbol it defines is referenced. The KRO kind `ArchiveMember` (2) is defined but
+no producer writes it: an archive is the `ar` container, not a KRO kind.

@@ -40,7 +40,7 @@ TEST_CASE("KR232 profile matches the approved data model") {
     CHECK_FALSE(profile.has_atomics);
     CHECK_FALSE(profile.has_threads);
     CHECK_FALSE(profile.has_eh);
-    CHECK_FALSE(profile.has_rtti);
+    CHECK(profile.has_rtti);
     CHECK_FALSE(profile.has_tls);
     CHECK(profile.has_cpp);
     // kr232 has had a code generator since M3, so this is no longer false.
@@ -63,6 +63,7 @@ TEST_CASE("KR32 profile matches the approved data model") {
     CHECK(profile.double_bits == 64);
     CHECK(profile.has_fpu);
     CHECK(profile.has_matrix);
+    CHECK(profile.has_rtti);
     CHECK(profile.has_cpp);
     CHECK(profile.backend_available);
 }
@@ -76,7 +77,7 @@ TEST_CASE("KR16 profile documents the non-conforming IP16 model") {
     CHECK(profile.long_bits == 16);
     CHECK(profile.long_long_bits == 0);
     CHECK(profile.float_bits == 0);
-    CHECK_FALSE(profile.has_cpp);
+    CHECK(profile.has_cpp);
     CHECK(profile.backend_available);
 }
 
@@ -107,6 +108,8 @@ TEST_CASE("KR216 profile matches the approved data model") {
     CHECK(profile.has_cpp);
     CHECK(profile.has_eh);
     CHECK(profile.backend_available);
+    // ADR 0053 and D-053: every by-value aggregate is memory class.
+    CHECK(profile.aggregate_rules == AggregateRules::MemoryOnly);
 }
 
 TEST_CASE("target names parse and enumerate") {

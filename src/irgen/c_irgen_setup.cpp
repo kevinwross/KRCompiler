@@ -1203,7 +1203,7 @@ ir::TypePtr CIRGen::map_function_type(frontend::TypePtr type) {
                                  : mapped);
     }
     return module_->types().function_type(map_type(type->return_type), std::move(parameters),
-                                         type->variadic);
+                                         type->variadic, !type->has_prototype);
 }
 
 bool CIRGen::is_memory_class_argument(ir::TypePtr type) const {

@@ -2423,7 +2423,8 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                         // with more than four parameters uses the same stack form,
                         // with the callee reading every parameter from the stack.
                         const bool callee_variadic =
-                            callee->type != nullptr && callee->type->variadic;
+                            callee->type != nullptr &&
+                            (callee->type->variadic || callee->type->unprototyped);
                         const bool stack_call =
                             callee_variadic ||
                             (callee->type != nullptr &&

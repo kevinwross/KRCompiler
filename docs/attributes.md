@@ -1,23 +1,27 @@
 # Attributes
 
-**Status:** Draft. Freeze before M5. Until frozen, `plan.md` §6.4 and §10.8 are normative.
+**Status:** Draft, and not implemented. No attribute reaches Sema or a backend, so nothing below has a code-generation effect. Freeze before M5. Until frozen, `plan.md` §6.4 and §10.8 are normative.
 
 ## Purpose
 
 Attributes select target behaviour that the C/C++ type system cannot express: interrupt handlers, naked functions, section placement, alignment, and calling conventions. They are part of the ABI contract when they change register/stack behaviour.
 
+## Current state
+
+The parser skips `__attribute__((...))`, `__declspec(...)`, and `__asm__(...)` without recording what it skipped, so the GNU spelling parses and is ignored. The standard `[[...]]` form is not parsed at all: `[[nodiscard]]` and `[[krc::interrupt]]` are syntax errors. The tables and rules below describe the intended contract, not behaviour the compiler has.
+
 ## Syntax
 
-Both spellings are accepted:
+The intended surface accepts both spellings:
 
 ```cpp
 [[krc::interrupt]] void timer_isr(void);
 __attribute__((interrupt)) void timer_isr(void);
 ```
 
-Standard attributes use their normal C++ spelling (`[[nodiscard]]`, `[[maybe_unused]]`, `[[deprecated]]`, `[[noreturn]]`). Unknown attributes are diagnosed or ignored according to the dialect's rules; they are never silently treated as an ABI feature.
+Standard attributes would use their normal C++ spelling (`[[nodiscard]]`, `[[maybe_unused]]`, `[[deprecated]]`, `[[noreturn]]`). Unknown attributes are diagnosed or ignored according to the dialect's rules; they are never silently treated as an ABI feature.
 
-## v1 attributes
+## v1 attributes (planned)
 
 | Attribute | Applies to | Effect |
 |---|---|---|

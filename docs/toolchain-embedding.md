@@ -91,18 +91,21 @@ a row and returns the listing and the linked sections. Each result has `ok`:
 
 | Field | Meaning |
 |---|---|
-| `target` | `Kr32` or `Kr16`; `Kr64` is accepted only up to `Stage::Syntax` |
+| `target` | `Kr32`, `Kr16`, `Kr64`, `Kr216`, or `Kr232`; `Kr64` has a profile but no code generator, so it is accepted up to `Stage::Ir` and `Stage::Assembly` is rejected |
 | `cxx` | C++ mode; named explicitly rather than inferred from a file name |
-| `debug` | emit the `.debug_info` bridge into a produced KR32 object |
-| `optimize` | `0` or `1`, matching `-O0` / `-O1` |
+| `debug` | emit the `.debug_info` bridge into a produced VM object: KR32, KR16, and KR216 from the backend, KR232 from its assembler |
+| `optimize` | `0` = `-O0`, `1` = `-O1` (the default), `2` = `-O2`, `3` = `-Os` |
 | `stage` | `Syntax`, `Ir` or `Assembly`; a syntax check never reaches the backend |
-| `dump_ast`, `dump_ir`, `dump_stats` | fill the matching result string |
-| `base` | `0` selects `0x10000` for KR32 and `0x100` for KR16 |
+| `dump_ast`, `dump_ir`, `dump_stats` | fill the matching result string; `dump_ir` and `dump_stats` are filled only when `stage` is `Ir` or later, which the CLI arranges |
+| `base` | `0` selects the target default: `0x10000` for KR32 and KR64, `0x100` for KR16, `0x200` for KR216 and KR232 |
 | `entry` | empty selects `main` |
 | `include_paths`, `defines` | passed to the preprocessor; a define is `NAME` or `NAME=VALUE` |
+| `source_name` | the debug name recorded for the translation unit |
 | `source_root` | applied by the linker's debug source-path rewrite |
-| `gc_sections` | drop objects the entry symbol cannot reach |
+| `gc_sections` | drop sections the entry symbol cannot reach, at `.text.<name>` granularity |
 | `section_addresses` | `NAME`/`ADDRESS` placements, as a `krld` layout file holds |
+| `far_calls` | KR232: emit the wide call form for a large runtime |
+| `symbol_sidecar` | write the KR32 `.sym` sidecar |
 
 ## Ownership and errors
 
@@ -145,6 +148,10 @@ share/krc/sysroot/
   kr32/include/bits/       stdint.h and types.h generated for the profile
   kr32/lib/                libkrcrt.kro, crt0.s, fileio.s, eh.s
   kr16/include/            the KR16 profile headers
+  kr16/lib/                libkrcrt.kro, libkrcrt_host.kro, libkrcrt_fileio.kro
+  kr216/include/           the KR216 profile headers
+  kr232/include/           the KR232 profile headers
+  kr232/lib/               the KR232 runtime objects
   kr64/include/            the KR64 profile headers
 ```
 

@@ -78,19 +78,21 @@ What was rejected and why.
 - [0033-non-type-template-parameters.md](0033-non-type-template-parameters.md) — accepted; a parameter written int N becomes a literal in the instance, tagged Buffer__int__4.
 - [0034-integer-literals-on-narrow-targets.md](0034-integer-literals-on-narrow-targets.md) — accepted; types an integer literal per C11 on a narrow profile and diagnoses one that fits no type, and records that a 64-bit value still cannot be carried.
 - [0035-class-template-member-bodies.md](0035-class-template-member-bodies.md) — accepted; a declaration records the type it resolved to while the instance's bindings are active, so a body no longer sees the pattern's stub type.
-- [0036-reference-representation.md](0036-reference-representation.md) — proposed; a record value is its address, a reference slot holds an address, and a reference-returning call answers with one, so binding names the object.
+- [0036-reference-representation.md](0036-reference-representation.md) — accepted; a record value is its address, a reference slot holds an address, and a reference-returning call answers with one, so binding names the object.
 - [0037-address-array-pointer-width.md](0037-address-array-pointer-width.md) — accepted; a verifier rule about address-shaped constants asks the module's target for the pointer width rather than naming 32 bits.
 - [0038-kr32-has-exceptions.md](0038-kr32-has-exceptions.md) — accepted; KR32 has exception handling, so its profile reports it and cleanup pads are created for it again.
 - [0039-lazy-member-bodies.md](0039-lazy-member-bodies.md) — proposed; a class template instance's member bodies are analysed and generated when used, so an unused body cannot reject a valid program.
 - [0040-weak-template-definitions.md](0040-weak-template-definitions.md) — accepted; a template's definition is emitted weak, the KR16 assembler accepts .weak, and the object writer records the binding, so two translation units can define the same template.
 - [0041-function-sections.md](0041-function-sections.md) — proposed; each KR16 function gets its own section, so section GC can drop the ones nothing references.
 - [0042-int-substitution-is-a-fallback.md](0042-int-substitution-is-a-fallback.md) — proposed; a template pattern whose body calls a parameter of template-parameter type stays a declaration, because the int substitution cannot describe that call.
-- [0043-branch-promotion.md](0043-branch-promotion.md) — proposed; the assembler promotes an out-of-range `BRA` to `JMP`, which needs label positions recorded first.
+- [0043-branch-promotion.md](0043-branch-promotion.md) — accepted, implemented at `185aa0e`; the assembler promotes an out-of-range `BRA` to `JMP`, which needs label positions recorded first.
 - [0045-pattern-body-is-a-template.md](0045-pattern-body-is-a-template.md) — proposed; a template whose parameters include a pack is never served by the int-substituted pattern, because no substitution represents a pack.
-
-The next expected ADRs are the KR16 ABI appendix and the KDBG record layout.
+- [0046-object-layout-and-aggregate-rules.md](0046-object-layout-and-aggregate-rules.md) — accepted; a record's size comes from each field's own alignment, the KR16 backend lays it out the same way, and a by-value aggregate's class asks the target's `aggregate_rules`.
 - [0047-kr16-aggregate-returns.md](0047-kr16-aggregate-returns.md) — withdrawn; it chose `R6`, which is the KR16 status register.
 - [0048-kr16-aggregate-return-destination.md](0048-kr16-aggregate-return-destination.md) — accepted; an aggregate return on KR16 passes its destination as a hidden stack argument, because no general-purpose register is free.
+- [0049-register-allocation-wiring.md](0049-register-allocation-wiring.md) — accepted; the register allocator runs as an `-O1`-only behaviour, with `-O0` keeping a frame slot for every value. Its point 2 is superseded by [0060](0060-o1-default.md).
+- [0050-type-canonicalisation.md](0050-type-canonicalisation.md) — accepted; `TypeContext` caches constructed pointer, array and function types, so two `ptr<i32>` are the same type rather than two equal ones.
+- [0051-allocate-on-machine-form.md](0051-allocate-on-machine-form.md) — proposed; the KR32 backend would select and allocate on the recorded machine form, which changes every `-O1` output.
 - [0052-kdbg-variable-scope-ranges.md](0052-kdbg-variable-scope-ranges.md) — proposed; a `Variable` record carries a half-open live range, so a debugger reports a reused slot as unavailable rather than reading whatever replaced it.
 - [0053-kr216-target-profile.md](0053-kr216-target-profile.md) — accepted; registers KR216 as a fourth target with the `Ip16Long32` data model, schema v2's `this_register` and `sret_register`, and `docs/abi-kr216.md`.
 - [0054-kr216-image-container.md](0054-kr216-image-container.md) — accepted; fixes the `K216` container header, section records and loader rules for the kr216 executable image.

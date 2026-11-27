@@ -322,8 +322,8 @@ TypePtr TypeContext::union_type(std::string name, std::vector<TypePtr> fields,
 }
 
 TypePtr TypeContext::function_type(TypePtr return_type, std::vector<TypePtr> parameters,
-                                   bool variadic) {
-    const auto key = std::make_tuple(return_type, parameters, variadic);
+                                   bool variadic, bool unprototyped) {
+    const auto key = std::make_tuple(return_type, parameters, variadic, unprototyped);
     const auto found = functions_.find(key);
     if (found != functions_.end()) {
         return found->second;
@@ -333,6 +333,7 @@ TypePtr TypeContext::function_type(TypePtr return_type, std::vector<TypePtr> par
     type.return_type = return_type;
     type.parameters = std::move(parameters);
     type.variadic = variadic;
+    type.unprototyped = unprototyped;
     const auto built = make(std::move(type));
     functions_.emplace(key, built);
     return built;
@@ -371,6 +372,7 @@ bool same_type(TypePtr left, TypePtr right) {
         return left->packed == right->packed;
     case TypeKind::Function:
         if (left->variadic != right->variadic ||
+            left->unprototyped != right->unprototyped ||
             !same_type(left->return_type, right->return_type) ||
             left->parameters.size() != right->parameters.size()) {
             return false;
@@ -445,6 +447,9 @@ std::string type_to_string(TypePtr type) {
         }
         return "<{" + join_types(type->fields) + "}>";
     case TypeKind::Function:
+        if (type->unprototyped) {
+            return "fn(...) -> " + type_to_string(type->return_type);
+        }
         return "fn(" + join_types(type->parameters) + ")" +
                (type->variadic ? ", ..." : "") + " -> " + type_to_string(type->return_type);
     }
@@ -1947,8 +1952,11 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                     }
                     break;
                 case Opcode::VaStart:
-                    if (!require_operands(0) || !is_pointer(instruction.type)) {
-                        return function_fail("vastart must produce a pointer");
+                    if (!require_operands(0) || !is_pointer(instruction.type) ||
+                        !instruction.type->element ||
+                        instruction.type->element->kind != TypeKind::Integer ||
+                        instruction.type->element->bits != 8) {
+                        return function_fail("vastart must produce a ptr<i8>");
                     }
                     break;
                 case Opcode::GetElementPtr:
@@ -1998,7 +2006,7 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                     if (operands.size() - 1 < callee_type->parameters.size()) {
                         return function_fail("call has too few arguments");
                     }
-                    if (!callee_type->variadic &&
+                    if (!callee_type->variadic && !callee_type->unprototyped &&
                         operands.size() - 1 != callee_type->parameters.size()) {
                         return function_fail("call has the wrong argument count");
                     }
@@ -2024,8 +2032,11 @@ bool Verifier::verify(const Module& module, std::string& error) const {
                     // Entered by the unwinder through an invoke's unwind edge,
                     // so it must open its block and that block takes no
                     // ordinary branch.
-                    if (!require_operands(0) || !is_pointer(instruction.type)) {
-                        return function_fail("landingpad must produce a pointer");
+                    if (!require_operands(0) || !is_pointer(instruction.type) ||
+                        !instruction.type->element ||
+                        instruction.type->element->kind != TypeKind::Integer ||
+                        instruction.type->element->bits != 8) {
+                        return function_fail("landingpad must produce a ptr<i8>");
                     }
                     if (instruction_index != 0) {
                         return function_fail("landingpad must open its block");

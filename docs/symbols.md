@@ -2,9 +2,10 @@
 
 **Status:** KDBG v1 frozen for the M4 subset; **v1.1 adds records additively**
 (major `1`, minor `1`) and does not change a v1 record's shape. Images carry one
-`.kdbg` debug section built from the textual `.debug_info` bridge. Both VM
-backends emit the bridge: KR32 for its GUI/DAP debugger, KR16 so a `.kr16` can
-carry `.kdbg` at all. The bridge remains an intermediate format; KDBG is the
+`.kdbg` debug section built from the textual `.debug_info` bridge. Every VM
+backend emits the bridge: KR32 for its GUI/DAP debugger, KR16 so a `.kr16` can
+carry `.kdbg` at all, KR216 from its backend, and KR232 from its assembler. The
+bridge remains an intermediate format; KDBG is the
 contract. See [ADR 0009](decisions/0009-kdbg-v1-freeze.md) and
 [ADR 0008](decisions/0008-debug-info-bridge.md).
 
@@ -12,8 +13,8 @@ contract. See [ADR 0009](decisions/0009-kdbg-v1-freeze.md) and
 
 ## Image encoding
 
-`.kdbg` is a single debug payload carried as a section of a `.kr32` or `.kr16`
-image. Its 64-byte header is:
+`.kdbg` is a single debug payload carried as a section of a `.kr32`, `.kr16`,
+`.kr216`, or `.kr232` image. Its 64-byte header is:
 
 | Offset | Field |
 |---|---|
@@ -24,14 +25,14 @@ image. Its 64-byte header is:
 | 12 | flags |
 | 16 | target ID |
 | 20 | ABI version |
-| 24 | pointer width |
+| 24 | pointer width in bytes (`2` for a 16-bit target, `4` otherwise) |
 | 25 | endianness (`1` little) |
 | 28 | build ID (8 bytes) |
 | 36 | section count |
 | 40 | section-table offset |
 | 44 | string-table offset |
 | 48 | string-table size |
-| 52 | header CRC32 |
+| 52 | payload CRC32: this field is zeroed, and the CRC covers the whole payload (header, section bytes, tables, and strings) |
 | 56 | image base (u64, little-endian; 0 = not recorded) |
 
 Addresses in the payload are absolute in the image's load space. `attach_kdbg`
@@ -57,7 +58,7 @@ unknown tags and reject out-of-bounds or checksum failures.
 | `.kdbg_line` | `Line`: address, source id, line, column |
 | `.kdbg_func` | `Function`: name, start, end, frame size, result type |
 | `.kdbg_sym` | `Symbol`: name, address, size, type |
-| `.kdbg_var` | `Variable`: function, name, frame offset, size, type |
+| `.kdbg_var` | `Variable`: function, name, frame offset, type, size |
 | `.kdbg_type` | `Type` and `Member`: name, size, kind, member layout |
 | `.kdbg_build` | `Build`: compiler, build ID, source count |
 
@@ -205,7 +206,8 @@ paths are unchanged.
 
 ## Tooling
 
-- `krc --dump-symbols image.kr32` prints canonical text for a `.kr32` or `.kr16`.
+- `krc --dump-symbols image.kr32` prints canonical text for a `.kr32`, `.kr16`,
+  `.kr216`, or `.kr232` image.
 - `krc --dump-symbols --json image.kr16` prints the stable JSON form.
 - `krld` builds `.kdbg` from `.debug_info` after linking.
 - `include/krc/debug/kdbg.h` is the shared reader/writer; `krc::debug` packages it.

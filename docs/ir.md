@@ -31,7 +31,7 @@ basic block
 instruction
   result type and SSA value
   operands
-  memory flags (alignment, volatile, atomic ordering)
+  memory flags (alignment, volatile)
   debug location
 ```
 
@@ -77,11 +77,12 @@ Control: `br`, `condbr`, `switch`, `ret`, `unreachable`.
 
 SSA and aggregates: `phi`, `select`, `extractvalue`, `insertvalue`.
 
-The KR32 and KR16 backends lower allocas, loads, stores, and `select`, and have
-no `phi` lowering: a value that has to cross a branch is carried in an
-`alloca` slot (`select` evaluates both operands, so it cannot carry a
-value computed in one branch only). `emit_binary` does that for `&&` and
-`||` and `emit_condition_expression` for `?:`.
+The KR32 and KR16 backends lower `phi`: a phi's value is written on each
+incoming edge, at the end of the predecessor, and the block reads the
+destination slot. `select` evaluates both operands, so IRGen still carries a
+value that may or may not be defined by a branch in an `alloca` slot;
+`emit_binary` does that for `&&` and `||`, and `emit_condition_expression` for
+`?:`.
 
 Calls: `call` has a callee operand (function or function pointer), arguments, and an explicit result type. Variadic calls name the fixed signature and pass the remaining arguments in order. `sret` is expressed by an explicit pointer argument, not a hidden IR convention.
 
@@ -118,13 +119,13 @@ Every instruction may carry `{file, line, column}`. Variables are represented in
 9. `ret` matches the function return type; `br` targets exist; `condbr` condition is `i1`.
 10. An `invoke` has two successors and matches its callee's type like a call; a `landingpad` opens its block and produces a `ptr<i8>`; a `resume` takes a pointer and produces `void`.
 11. Named structs are complete before use; recursive references go through pointers.
-12. An `intrinsic` names an implemented operation, has that operation's operand count, takes record pointers, and produces the type the operation returns. A record operand or result of a matrix or vector operation holds the matching count of `f32` lanes, either as that many fields or as one array field of that extent.
+12. An `intrinsic` names an implemented operation, has that operation's operand count, takes record pointers, and produces the type the operation returns. A record *result* of a matrix or vector operation holds the matching count of `f32` lanes, either as that many fields or as one array field of that extent.
 
 Verifier failures abort code generation with a compiler-bug diagnostic; a malformed module never reaches a backend.
 
 ## Textual dump
 
-The dump is human-facing and not a stable interchange format. It prints the module **before** verification, so a dump can show a defect the verifier would reject; krc -c is what turns that rejection into a diagnostic. It uses:
+The dump is human-facing and not a stable interchange format. It prints the module whether or not verification failed, so a dump can show a defect the verifier would reject; krc -c is what turns that rejection into a diagnostic. It uses:
 
 ```text
 %struct.Node = type { i32, ptr<%struct.Node> }
@@ -144,9 +145,8 @@ Constants are `i32 42`, `f64 1.5`, `null`, `undef`, and `c"..."` for a byte arra
 ## Passes and levels
 
 - `-O0`: straightforward lowering, all variables in frame slots, full debug.
-- `-O1`: mem2reg, constant folding, DCE, CSE, copy propagation, CFG simplification, branch folding, peepholes, graph-colouring register allocation. No inlining, LTO, LICM, or vectorisation in v1.
-
-The M2 core provides the model, builder, verifier, and dump only. Transformations and the backend consume this representation later in M2.
+- `-O1` (the default, [ADR 0060](decisions/0060-o1-default.md)): mem2reg, constant folding, DCE, CSE, copy propagation, CFG simplification, branch folding, peepholes, graph-colouring register allocation.
+- `-O2` and `-Os`: the same pipeline run to a second fixed point, kept only when the text is smaller; `inline_small_functions` runs at these levels.
 
 ## Non-goals for v1.0
 

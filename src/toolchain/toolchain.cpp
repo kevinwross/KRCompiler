@@ -604,6 +604,18 @@ CompileResult compile(const Source& source, const Options& options) {
         return result;
     }
 
+    // A target whose profile has no C++ refuses C++ mode rather than parsing a
+    // language its ABI never described (documentation audit B2).
+    if (options.cxx && !profile.has_cpp) {
+        frontend::SourceManager sources;
+        frontend::DiagnosticEngine diagnostics(sources);
+        diagnostics.report(frontend::Severity::Error,
+                           "target '" + target_name(options.target) +
+                               "' does not support C++");
+        finish_compile(result, diagnostics, sources);
+        return result;
+    }
+
     frontend::SourceManager sources;
     frontend::DiagnosticEngine diagnostics(sources);
     frontend::Preprocessor preprocessor(sources, diagnostics, profile,

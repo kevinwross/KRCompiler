@@ -15,18 +15,21 @@ landing-pad entry state, and the kr216 profile reports `has_eh`.
 | `char`, `signed char`, `unsigned char` | 1 | 1 | plain `char` is signed; no `__CHAR_UNSIGNED__` |
 | `short` | 2 | 2 | |
 | `int` | 2 | 2 | `INT_MAX` is 32767 |
-| `long` | 4 | 2 | two words; 32-bit values are register pairs |
-| `long long` | 8 | 2 | 64-bit division is a runtime helper |
+| `long` | 4 | 4 | two words; 32-bit values are register pairs |
+| `long long` | 8 | 8 | 64-bit division is a runtime helper |
 | pointer, reference, member pointer | 2 | 2 | 64 KiB address space |
-| `float` | 4 | 2 | stored as binary32, strict binary32 arithmetic |
-| `double` | 8 | 2 | binary64 |
-| `long double` | 8 | 2 | alias for `double` |
+| `float` | 4 | 4 | stored as binary32, strict binary32 arithmetic |
+| `double` | 8 | 8 | binary64 |
+| `long double` | 8 | 8 | alias for `double` |
 | `size_t`, `ptrdiff_t` | 2 | 2 | 16-bit; container sizes are capped at 65535 |
-| `intmax_t` | 8 | 2 | follows `long long` |
+| `intmax_t` | 8 | 8 | follows `long long` |
 | `wchar_t` | 2 | 2 | |
-| `char16_t` / `char32_t` | 2 / 4 | 2 / 2 | |
-| record | sum of fields, rounded to 2 | 2 | no packing beyond the declared storage units |
+| `char16_t` / `char32_t` | 2 / 4 | 2 / 4 | |
+| record | sum of fields, rounded to its widest field's alignment | widest field | no packing beyond the declared storage units |
 | array | element size × count | element alignment | |
+
+A scalar's alignment is `min(size, 8)` in Sema and IRGen, and a record's alignment
+is its widest field's. The backend's frame planner rounds a slot to 4 or 8 bytes.
 
 The model is `DataModel::Ip16Long32` — a new profile value, not KR16's `Ip16`,
 whose `long` is 16 bits and which has no `long long`. The target descriptor is
@@ -52,17 +55,17 @@ costs one instruction per floating operation and needs no second datapath.
 | `R7` | scratch; indirect-call target, and the `SYS` call number |
 | `R8` | callee-saved general register |
 | `R9` | callee-saved general register |
-| `R10` | C++ `this`; caller-saved, and scratch in a free function |
+| `R10` | scratch; `this_register` is unset, so C++ `this` travels as argument 0 |
 | `R11` | flags: Z, N, C, V, I (interrupt enable), T (trace) |
 | `R12` | exception frame pointer (`EFP`) for hardware traps; 0 when none is active |
 | `R13` | frame pointer (`FP`) |
 | `R14` | program counter (`PC`) |
 | `R15` | stack pointer (`SP`), full-descending and even |
 
-Nine registers are allocatable: R2–R10. In a member function R10 holds `this`,
-which leaves eight for ordinary allocation; R10 is caller-saved, so a member
-function that calls another member and still needs its own `this` preserves it in
-R8/R9 or a frame slot.
+Nine registers are allocatable: R2–R10. A member function's `this` is its first
+integer argument, in R2, so no register is reserved for it; a member function that
+calls another member and still needs its own `this` keeps it in R8/R9 or a frame
+slot.
 
 The exception frame pointer is the hardware trap chain and has nothing to do
 with C++ exceptions. On a trap the CPU pushes `{previous EFP, faulting PC,
@@ -71,7 +74,8 @@ saves F0–F3 itself.
 
 ## Calling convention
 
-1. The caller sets `this` in R10 for a member-function call.
+1. The caller passes `this` as argument 0, in R2. No register is set aside for it;
+   `this_register` is unset.
 2. Integer and pointer arguments go in R2, R3, R4, R5 in order. An argument
    that does not fit is pushed, and the pushed area is ordered so that argument
    4 sits at `FP + 4` and each later argument at the next higher address. A
@@ -154,7 +158,7 @@ two-byte aligned.
 ## Function pointers and virtual calls
 
 A function value is its 16-bit address, and an indirect call loads it into R7.
-A virtual call is `ld r7,[r10]`; `ld r7,[r7+2k]`; `call r7` — five bytes for
+A virtual call is `ld r7,[r2]`; `ld r7,[r7+2k]`; `call r7` — five bytes for
 slot 0 and six when the slot offset needs a displacement byte.
 
 ## Vtables, typeinfo and RTTI
@@ -209,7 +213,8 @@ Default memory map (the linker may place sections elsewhere):
 | `0x0100`–`0x011F` | reset vector and 15 exception vectors |
 | `0x0120`–`0x01FF` | boot information, runtime data, syscall trampoline |
 | `0x0200`–`0xDFFF` | program image, then the heap |
-| `0xE000`–`0xFEEF` | stack, growing down from `0xFEF0` |
+| `0xE000`–`0xEFFF` | stack, growing down from `0xF000` |
+| `0xF000`–`0xFEFF` | available to the image; not part of the default stack |
 | `0xFF00`–`0xFF7F` | memory-mapped I/O: console `out`/`in`/`status`, timer, system |
 | `0xFF80`–`0xFFFF` | reserved; traps |
 
@@ -236,6 +241,5 @@ Default memory map (the linker may place sections elsewhere):
 
 ## Diagnostics
 
-The profile sets `backend_available` false until the backend lands, so there is
-no kr216 code path to diagnose against yet. The appendix describes the contract
-that backend implements; the target-specific diagnostics appear with it.
+The backend exists and the kr216 suite exercises it, so the diagnostics name the
+feature and the target rather than a missing code path.

@@ -73,7 +73,7 @@ finds one in the tree. On Linux both `krdbg` and `kr32` require SDL2.
 |---|---|---|
 | `krc` | krcompiler | `build/<preset>/host/bin/<Config>/` |
 | `krld` | krcompiler | same |
-| `krc_tests` | krcompiler | same — a **binary**, not a ctest row |
+| `krc_tests` | krcompiler | same — a ctest row, and the gates run the binary directly as well |
 | `krc_extract_fixtures`, `krc_gen_sysroot_bits` | krcompiler | same, build-time only, not installed |
 | `kr32` | kr32 | `build/windows-msvc/Debug/` |
 | `kr16` | kr16 | `build/windows-ninja/` |
@@ -104,7 +104,7 @@ Two caveats from `AGENTS.local.md`:
   Studio copy is. The gates hardcode
   `C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`
   and fall back to the bare names. Interactive `cmake` therefore needs a
-  **Developer PowerShell for VS** — or use the gate scripts, which find it.
+  **Developer PowerShell for VS 18** — or use the gate scripts, which find it.
 - In a confined sandbox the MSVC doctor cannot capture `vswhere.exe`'s output and
   reports MSVC and CMake missing on a machine that builds. Treat that failure as
   inconclusive and fall back to the configure step, which either finds the
@@ -181,7 +181,7 @@ Notes that cost time when missed:
   suffix on the directory). Its `AGENTS.local.md` still says `--preset
   windows-msvc`; no such configure preset exists.
 - **kr16** has both a Visual Studio pair and a Ninja pair; its gate defaults to
-  `windows-ninja-debug` and asserts 62 rows there.
+  `windows-ninja-debug` and asserts 61 rows there. The family gate expects 62.
 - **kr232's** `windows-msvc-debug` uses the **Ninja** generator, not Visual
   Studio. `krdbg`'s Windows presets are Ninja too.
 - **krdbg** is the outlier: `windows-msvc` and `linux-wsl`, not
@@ -189,7 +189,8 @@ Notes that cost time when missed:
 - All Linux presets use Ninja, so `ninja` must exist in the Linux environment.
 - Parallelism follows the **processor count**, in the gates rather than the
   presets: no preset carries a `jobs` value except `krcompiler`'s test presets,
-  which pin 1 (§8). The gates pass the count to both the build and `ctest`.
+  which pin 1 (§8). The gates pass the count to the build; `ctest` runs at the
+  preset's fixed `jobs: 1`.
   Two exceptions: the x86_64 Linux rows stay at **eight jobs** because GCC 15 in
   this WSL image intermittently segfaults while garbage-collecting (raised from
   two on 2026-11-26, watching for the ICE to return), and `kr32`'s sanitizer row
@@ -235,7 +236,7 @@ per-repository gates.
 | kr16 | the two golden containers | `<build>/golden`, from `tests/golden/generate.cpp` |
 | kr32 | the KR32OS images | `<build>/os-images`, from `kr32os/build.ps1` |
 | kr232 | the fixture images and the kernel | `<build>/fixtures` and `<build>/kernel.kr232`, from `cmake/BuildKr232Fixtures.cmake` |
-| krcompiler | its two kr232 containers | `<build>/<preset>/kr232-images`, from `kr232-fixture.s` and `kr232-draw.s` |
+| krcompiler | its two kr232 containers | `<build>/<preset>/kr232-images`, from `kr232-fixture.s` and `kr232-draw.s`, by the `krc_kr232_images` target |
 
 The kr232 and compiler images need `krc` and `krld`, so a configure without the
 toolchain registers only the rows it can build: kr232's plain suite has 2 rows, its
@@ -255,7 +256,7 @@ pwsh -File .agents/doctor.msvc.ps1
 cmake --preset windows-msvc-debug
 cmake --build --preset windows-msvc-debug
 ctest --preset windows-msvc-debug
-# krc_tests is not a ctest row:
+# the gates also run the unit binary directly:
 build\windows-msvc-debug\host\bin\Debug\krc_tests.exe
 ```
 
@@ -349,10 +350,13 @@ New-Item -ItemType Directory vm -Force
 Copy-Item ..\kr32\build\windows-msvc\Debug\kr32.exe  vm\krc_kr32.exe
 Copy-Item ..\kr16\build\windows-ninja\kr16.exe       vm\krc_kr16.exe
 Copy-Item ..\kr232\build\windows-msvc\kr232.exe      vm\kr232.exe
+Copy-Item ..\kr232\build\windows-msvc\kr232-dis.exe  vm\kr232-dis.exe
 cmake --preset windows-msvc-debug --fresh
 ```
 
-The cache variables are `KRC_KR32_VM`, `KRC_KR16_VM`, `KRC_KR232_VM`. Resolution
+The cache variables are `KRC_KR32_VM`, `KRC_KR16_VM`, `KRC_KR232_VM`, and
+`KRC_KR232_DIS`. A configured `KRC_KR232_VM` with no disassembler beside it is a
+configuration error, not a quietly smaller suite. Resolution
 order is `vm/`, then the legacy `build/vm/`, then — Windows only — the sibling
 checkout's build tree (`../kr32/build/windows-msvc/Debug/kr32.exe`,
 `../kr16/build/windows-ninja/kr16.exe`,
@@ -460,13 +464,13 @@ ctest --preset <preset>            # add --output-on-failure
 ctest --preset <preset> -N         # list, and count rows
 ```
 
-- `krc_tests` is a **binary**, not a ctest row; the gates run it separately.
+- `krc_tests` is a ctest row; the gates also run the binary directly.
 - Row counts are asserted by the gates, because a suite that registers fewer rows
   still reports success. Current expectations from `check-family.ps1`:
 
 | Repository | Preset in the family gate | Rows asserted |
 |---|---|---|
-| krcompiler | `windows-msvc-debug` / `-release` | 1012 each, plus `krc_tests` |
+| krcompiler | `windows-msvc-debug` / `-release` | 1012 each, including the `krc_tests` row |
 | kr32 | `windows-msvc-debug` | 43 |
 | kr16 | `windows-ninja-debug` | 62 |
 | kr216 | `windows-msvc-debug` + `-DKR216_BUILD_GUEST_TESTS=ON` | 58 Debug, 11 Release (guest rows are not enabled in the release wave) |
@@ -538,7 +542,7 @@ mount build.
 ### 9.2 The Linux gate
 
 ```sh
-bash scripts/gate-linux.sh                        # linux-gcc-debug + linux-gcc-release
+bash scripts/gate-linux.sh                        # gcc-debug, gcc-release, clang-debug when clang++ exists
 bash scripts/gate-linux.sh --sanitize             # adds linux-sanitize
 bash scripts/gate-linux.sh --preset linux-clang-debug   # one named row
 ```
@@ -547,7 +551,7 @@ The staged-sysroot check always reads `build/linux-gcc-debug/stage/sysroot`, so
 run the default gate (or the gcc-debug row) at least once before a
 `--preset`-only run, or that check fails for a tree that was never configured.
 
-It runs the doctor, both (or the named) presets, `krc_tests`, and the
+It runs the doctor, the selected presets, `krc_tests`, and the
 staged-sysroot check, then prints `GATE LINUX: PASS`. `linux-clang-debug` is
 skipped with a printed line when `clang++` is absent; every skip is named.
 
@@ -711,7 +715,7 @@ green. Today the single known exception is `kr216`'s `density_benchmark` (§8).
 4. **`kr16` builds its own in-tree compiler by default** (`KRG_TOOLCHAIN=builtin`).
    Pass `-DKRG_TOOLCHAIN=krc` to exercise the real compiler.
 5. **`kr216`'s guest rows are off by default**; without
-   `-DKR216_BUILD_GUEST_TESTS=ON` its suite is 11 rows, not 56.
+   `-DKR216_BUILD_GUEST_TESTS=ON` its suite is 11 rows, not 58.
 6. **`kr232`'s gate needs `krc`/`krld`** for the kernel and the fixtures, and
    `node` for the spec lint. Without the tools it stops with a sentence naming
    them; without `node` it prints a named skip and continues. A configure without

@@ -17,7 +17,7 @@ plan disagree, the plan is the authority until the freeze.
 | `long` | 4 | 4 | 32-bit, same as `int` |
 | `long long` | — | — | **does not exist**; `long_long_bits` is 0 and the front end rejects the type |
 | pointer, reference, member pointer | 4 | 4 | 4 GiB address space |
-| `float` | 4 | 4 | IEEE binary32, stored widened as binary64 in F registers |
+| `float` | 8 | 8 | IEEE binary64; kr232 has one floating-point format |
 | `double` | 8 | 8 | IEEE binary64 |
 | `long double` | 8 | 8 | alias for `double` |
 | `size_t`, `ptrdiff_t` | 4 | 4 | 32-bit |
@@ -27,16 +27,15 @@ plan disagree, the plan is the authority until the freeze.
 | record | sum of fields, rounded to 4 | 4 | no packing beyond the declared storage units |
 | array | element size × count | element alignment | |
 
-The model is `DataModel::Ilp32` with three target values overridden:
-`long_long_bits` 0, `intmax_bits` 32 and `long_double_bits` 64. The descriptor is
-the normative source; the compiler derives `sizeof`, `_Alignof`, `INT_MAX` and
-`PTRDIFF_MAX` from it.
+The model is `DataModel::Ilp32` with four target values overridden:
+`long_long_bits` 0, `intmax_bits` 32, `long_double_bits` 64, and `float_bits` 64. The
+descriptor is the normative source; the compiler derives `sizeof`, `_Alignof`,
+`INT_MAX` and `PTRDIFF_MAX` from it.
 
-`float` and `double` share one datapath. kr232's F registers are binary64, so a
-`float` value is widened on load, the operation runs in binary64, and the result
-is rounded back to binary32 precision before it is stored. This is
-`FLT_EVAL_METHOD = 0` exactly, and it costs one rounding per `float` operation
-rather than a second datapath.
+There is one floating-point format. `float` and `double` are both binary64, so a
+`float` value is stored and computed as eight bytes and no widening or rounding
+step exists; `FLT_MANT_DIG` is 53 for both. The ISA's `FLDS`/`FSTS` conversion
+forms are unused by the 1.x compiler.
 
 There is no 64-bit integer type on this target. `long long`, `__int64` and
 anything that needs one are a diagnostic, not a pair of registers.
@@ -53,18 +52,19 @@ anything that needs one are a diagnostic, not a pair of registers.
 | `R5` | argument 3 |
 | `R6` | scratch; aggregate-return destination, loaded just before `CALL` |
 | `R7` | scratch; indirect-call target, and the `SYS` call number |
-| `R8` | callee-saved general register |
+| `R8` | scratch (address register); caller-saved |
 | `R9` | callee-saved general register |
-| `R10` | C++ `this`; caller-saved, and scratch in a free function |
+| `R10` | scratch; `this_register` is unset, so C++ `this` travels as argument 0 |
 | `R11` | flags: Z, N, C, V, I, T, K; `K` and `I` are hardware-owned |
 | `R12` | exception frame pointer (`EFP`) for hardware traps; 0 when none is active |
 | `R13` | frame pointer (`FP`) |
 | `R14` | program counter (`PC`) |
 | `R15` | stack pointer (`SP`), full-descending, 4-byte aligned, 8 recommended |
 
-Nine registers are allocatable: R2–R10. In a member function R10 holds `this`,
-leaving eight; R10 is caller-saved, so a member that calls another member and
-still needs its own `this` preserves it in R8/R9 or a frame slot.
+Nine registers are allocatable: R2–R10. A member function's `this` is its first
+integer argument, in R2, so no register is reserved for it; a member that calls
+another member and still needs its own `this` keeps it in a frame slot, because
+every allocatable register is caller-saved except R9.
 
 K and I are not ordinary flag bits. Only trap entry sets K, only `IRET` clears
 it, and only `EI`/`DI` change I; no ordinary instruction or register write
@@ -79,7 +79,7 @@ itself.
 
 ## Calling convention
 
-1. The caller sets `this` in R10 for a member-function call.
+1. The caller passes `this` as argument 0, in R2. No register is set aside for it.
 2. Integer and pointer arguments go in R2, R3, R4, R5 in order. A further
    argument is pushed, ordered so that argument 5 sits at `FP + 8`: the return
    address occupies `FP + 4` and the saved FP `FP`, and each later argument sits
@@ -88,14 +88,16 @@ itself.
    pushed in an eight-byte slot at the next stack argument position. The two
    argument files are independent, so a function may take four integers and four
    doubles without conflict.
-4. A direct call is `CALL addr32`; an indirect call loads the target into R7 and
-   executes the register form.
+4. A direct call is `call rel16`, widened to `ld r8,#symbol; call r8` when the
+   target is out of range. An indirect call puts the target in R8 and the return
+   address in R7 (`ld r7,#back; push r7; jmp r8`); the ISA has no call through a
+   register.
 5. The prologue is `ENTER #frame, #mask`; the epilogue is `LEAVE #mask; RET`, and
    a tail call is `LEAVE #mask; JMP target`. A leaf with no locals and no saved
    registers may use `push fp; mov fp, sp` and `pop fp; ret`.
 6. The result is in R2 for a scalar or pointer, in F0 for floating point, and for
    a memory-class aggregate through the destination the caller loaded into R6.
-7. Caller-saved: R2–R7, R10 and F0–F3. Callee-saved: R8, R9, FP and SP. Flags and
+7. Caller-saved: R2–R8, R10 and F0–F3. Callee-saved: R9, FP and SP. Flags and
    EFP are not preserved.
 8. SP is 4-byte aligned and SHOULD be 8-byte aligned at a call, so an 8-byte
    `double` pushed for a variadic call stays aligned (ISA §15.38).
@@ -117,7 +119,7 @@ the unwinder and the debugger both read `[FP]`.
    +----------------------+
    | saved caller FP      |  <- FP
    +----------------------+
-   | saved R8, R9         |  (ascending push order, so R9 is below R8)
+   | saved R9             |  (push order follows the mask)
    | locals, spills       |
    | outgoing arguments   |
    +----------------------+  <- SP
@@ -188,16 +190,18 @@ arrives, invalidating existing images and their goldens (plan §2.8, §13).
 
 `_ZTI` is emitted because the front end has no `-fno-rtti`, and the slot holds the
 class's `_ZTI`, so `typeid` on a polymorphic operand is a load from `vptr - 4`.
-1.x promises neither `typeid` nor `dynamic_cast`: the cast needs
-`__krc_dynamic_cast`, which the runtime does not provide, so a program that uses
-one fails at **link** with that symbol named — not with a diagnostic, because
-`has_rtti` is documentation rather than enforcement (plan §13).
+The full runtime, `targets/kr232/runtime/libc_full.c`, provides
+`__krc_dynamic_cast` together with `malloc`, `free` and `atexit`, so a program
+that uses `dynamic_cast` links and runs against it. The minimal `libc.c` runtime
+does not provide the helper; a program linked against that one fails with the
+symbol named.
 
 ## Floating point
 
 F0–F3 are binary64 registers, 64 bits each, all caller-saved. `FLD`/`FST` move
-eight bytes; `FLDS`/`FSTS` move four and convert between binary32 and binary64;
-`FPUSH`/`FPOP` move eight bytes through the stack. Arithmetic follows IEEE-754
+eight bytes, and `FPUSH`/`FPOP` move eight bytes through the stack.
+`FLDS`/`FSTS` exist for a binary32 format that the 1.x compiler does not use.
+Arithmetic follows IEEE-754
 binary64 with round-to-nearest-even and never traps — overflow gives infinity, an
 invalid operation a quiet NaN, division by zero infinity. `FSQRT` is correctly
 rounded. The one trap is a NaN or out-of-range float↔integer conversion, which C
@@ -212,11 +216,10 @@ caller-saved like R2–R7.
 - `crt0` is linked at `0x0200`, the linker's default (ISA §12). It establishes a
   frame, calls `main`, and passes the status to `SYS exit`. It does **not** set
   SP: the reset SP is already `0x08000000`, the top of kernel RAM (ISA §15.22).
-- There is no `.init_array` walk and no global destructor path in 1.x: the runtime
-  has no allocator and no `atexit`. A program with a global constructor is
-  outside the 1.x contract.
-- There is no heap in 1.x. `malloc` and `sbrk` arrive with a runtime that has
-  something to allocate from.
+- The full runtime (`libc_full.c`) provides `malloc`, `free`, `atexit` and the C++
+  ABI helpers, so a program that allocates, registers an `atexit` function, or
+  calls `dynamic_cast` links against it. The minimal `libc.c` provides none of
+  these; a program that needs them links the full runtime.
 - `SYS` is a one-byte hypercall, not an architectural trap: the call number is in
   R7, arguments in R2–R5, the result in R2, and R7 is not preserved. The initial
   calls are `exit`, `write`, `read`, `time` and `debug_write` (ISA §13); user code
@@ -255,17 +258,15 @@ inside kernel RAM):
 
 - 64-bit integers, and every library function that would need one.
 - Exceptions (`has_eh` false), and with them catch-clause type matching.
-- `dynamic_cast` and the `__krc_dynamic_cast` helper.
-- Multiple inheritance, virtual bases, and `dynamic_cast` between sibling types.
+- Multiple inheritance and virtual bases.
+- `.init_array` and the global-destructor path.
 - Threads, atomics and TLS.
-- `.init_array`, global destructors, and an allocator.
 - User mode: the calling convention is identical with K = 0, but the kernel's
   syscall table does not exist until M5.
 
 ## Diagnostics
 
-The profile sets `backend_available` false until the M3 backend lands, so there is
-no kr232 code path to diagnose against yet. This appendix describes the contract
-that backend implements; the target-specific diagnostics appear with it. The two
-known ones are `long long` (rejected, no 64-bit type) and `dynamic_cast` (a link
-error naming `__krc_dynamic_cast`).
+The backend exists and the kr232 suite exercises it. `long long` is rejected
+because the profile has no 64-bit type, and `dynamic_cast` has a runtime
+implementation: `targets/kr232/runtime/libc_full.c` provides
+`__krc_dynamic_cast`.

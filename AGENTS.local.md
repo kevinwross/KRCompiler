@@ -102,7 +102,7 @@ A record saying "all configurations" or "six configurations" is not a record: na
 <!-- project:targets:start — generated from .dev-template.json targets; edit the Notes column, not the rows -->
 | Target | Architecture | Verified by | Notes (yours — preserved on update) |
 |---|---|---|---|
-| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release on the local dev machine. CI workflow committed; whether it runs is unverified. |
+| Windows | x64 | <windows-latest in CI, or name the dev machines> | MSVC 19.51 Debug/Release on the local dev machine. No CI workflow is configured (removed 2026-11-23), so the Windows rows are local only. |
 | Linux | x64 | <ubuntu-latest in CI> | WSL 2, Ubuntu 26.04.1 LTS. GCC 15.2 and Clang 21.1.8, Debug/Release and ASan/UBSan: all four Linux presets are built and tested here. Clang's ASan/UBSan runtimes come from `libclang-rt-21-dev`, a separate package from `clang`. |
 | Linux (Raspberry Pi) | ARM64 | <manual: machine name, last verified revision> | Raspberry Pi 5, Debian 13 (trixie), GCC 14.2.0 and Clang 19.1.7, Debug/Release and ASan/UBSan. The routine ARM64 row is `linux-gcc-debug`, `linux-clang-debug`, `linux-sanitize`; a milestone-closing gate adds `linux-gcc-release`. **This host runs the tester loop in `docs/arm64-tester.md`, not the gatekeeper loop: it watches `master` and builds it with `linux-gcc-debug` only when the change is more than documentation, and appends one `docs/arm64-test-log.md` entry per tested SHA. That log is where this host's latest tested revision lives, so the once-per-session floor does not apply to it.** The same host recorded the `std::strlen` build failure at `1229297` before it was fixed, which is why the second-compiler trap above exists. `vm/` holds the arm64 VM copies outside `build/`; their hashes are in `implementation.md`. |
 
@@ -119,32 +119,40 @@ Target-specific notes:
   - No hosted runner here by default: record the machine and the last verified revision, and keep it current.
 <!-- project:targets:end -->
 
-**Host, not VM.** This table is where the toolchain is *built and tested*. The compiler's output targets are KR32 and KR16 — they are not host platforms and do not belong here. ARM64 host CI is deliberately deferred (§15.4); the compiler must nevertheless stay portable C++20, so do not introduce host-specific code without an ADR.
+**Host, not VM.** This table is where the toolchain is *built and tested*. The compiler's output targets are KR32, KR16, KR216, and KR232, with KR64 a profile only — they are not host platforms and do not belong here. ARM64 host CI is deliberately deferred (§15.4); the compiler must nevertheless stay portable C++20, so do not introduce host-specific code without an ADR.
 
 ## Architecture boundaries
 
-Dependencies flow one way: **front end → IR → backend → assembler → linker**, with shared services (diagnostics, source manager, target descriptors) available to all and depending on none of them.
+Dependencies flow one way: **front end → IRGen → IR → backend → assembler → linker**, with shared services (diagnostics, source manager, target profiles) available to all and depending on none of them.
 
 - `src/frontend/` — preprocessor, lexer, parser, Sema. Must not depend on any backend, linker, or runtime code.
-- `src/ir/` — typed SSA and IR validation. Must not depend on a specific target; target-specific choices belong in `src/backend/` and the target descriptor.
-- `src/backend/` — instruction selection, register allocation, frames, asm printing, per-target descriptors. Depends on IR, never the reverse.
-- `src/asm/`, `src/linker/`, `src/debug/` — object format, `krld`, symbol/debug format. The linker must not reach back into the front end.
-- `targets/` — target sources compiled by `krc`: `common/runtime/`, `kr32/runtime/`, `kr16/runtime/`, `kr64/runtime/`. Never built by the host compiler.
+- `src/irgen/` — lowers the C and C++ AST to IR. Depends on the front end and IR, never on a backend.
+- `src/ir/` — typed SSA, validation, and target-independent passes (mem2reg, inlining). Must not depend on a specific target; target-specific choices belong in `src/backend/` and the target descriptor.
+- `src/backend/` — machine IR and CFG, instruction selection, register allocation, frames, peepholes, asm printing, per-target descriptors. Depends on IR, never the reverse.
+- `src/asm/` — per-target assemblers and encoders, and the KRO object writer.
+- `src/linker/` — the linker library: objects, archives, relocations, and the per-target image writers.
+- `src/debug/` — the KDBG writer, reader, and dumper.
+- `src/image/` — readers for a target's container format that the compiler shares (the kr232 `K2` section reader).
+- `src/target/` — target profiles, the image-extension table, and sysroot `bits` generation.
+- `src/toolchain/` — the in-process `krc::toolchain` facade that `krc` and `krld` both consume.
+- `src/tools/` — the `krc` and `krld` entry points and the fixture and sysroot-bit generators.
+- `targets/` — target sources compiled by `krc`: `common/runtime/`, `kr32/runtime/`, `kr16/runtime/`, `kr216/runtime/`, `kr232/runtime/`. Never built by the host compiler.
 - `sysroot/` — target headers and prebuilt libraries. Read by `krc`; never host-compiled.
 - `include/krc/` — the public surface. Keep it minimal; internal headers stay under `src/`.
-- One compiler driver: `krc` orchestrates; `krld` remains a standalone binary. Do not add a third entry point.
+- One compiler driver: `krc` orchestrates, including its `krc image` link subcommand; `krld` remains a standalone binary. Do not add a third entry point.
 
 ## Environment assumptions
 
-- **Doctor:** `pwsh -File .agents/doctor.msvc.ps1` reports whether this machine can build with MSVC, and exits 2 naming each component that is missing. Run it before a host gate, and whenever a build cannot find its compiler. No doctor exists for WSL yet; there, configuring `linux-gcc-debug` is the check. Resolved toolchains and their verification dates live in the Platform targets table above — do not restate them here. **In a confined session the doctor cannot answer:** it captures `vswhere.exe` output, the sandbox denies that pipe, and it then reports MSVC and CMake missing on a machine that builds. Treat that failure as inconclusive and fall back to the configure step, which either resolves the compiler or does not.
-- **The VM copies belong in `vm/`, not `build/vm/`.** `KRC_KR32_VM`/`KRC_KR16_VM` fall back to `build/vm/krc_kr<32|16>[.exe]`, so a working tree can pass the executed rows while `vm/` is empty — and a gate deletes `build/`. Copy the binaries into `vm/` before deleting a build tree, or the 740 executed rows disappear from the count instead of failing, which reads as "the suite got smaller" rather than "the run tests did not register".
+- **Preferred shell: Developer PowerShell for VS 18.** It puts every MSVC tool on `PATH` — `cl.exe`, `link.exe`, `lib.exe`, the Windows SDK tools, and the CMake and Ninja that ship with Visual Studio — so it is the shell to use for any Windows build. The install is `C:\Program Files\Microsoft Visual Studio\18\Community`; a plain `pwsh` session has none of these tools. In a confined session the launch script itself cannot start: it calls `vswhere.exe`, the sandbox denies that pipe, and it falls back to reporting that it could not start — the same limitation the doctor has (next bullet).
+- **Doctor:** `pwsh -File .agents/doctor.msvc.ps1` reports whether this machine can build with MSVC, and exits 2 naming each component that is missing. Run it from Developer PowerShell for VS 18 before a host gate, and whenever a build cannot find its compiler. No doctor exists for WSL yet; there, configuring `linux-gcc-debug` is the check. Resolved toolchains and their verification dates live in the Platform targets table above — do not restate them here. **In a confined session the doctor cannot answer:** it captures `vswhere.exe` output, the sandbox denies that pipe, and it then reports MSVC and CMake missing on a machine that builds. Treat that failure as inconclusive and fall back to the configure step, which either resolves the compiler or does not.
+- **The VM copies belong in `vm/`, not `build/vm/`.** `KRC_KR32_VM`, `KRC_KR16_VM`, and `KRC_KR232_VM` fall back to `build/vm/`, so a working tree can pass the executed rows while `vm/` is empty — and a gate deletes `build/`. Copy the binaries into `vm/` before deleting a build tree, or the executed rows disappear from the count instead of failing, which reads as "the suite got smaller" rather than "the run tests did not register".
 - CMake 3.25 or newer; C++20; no external runtime dependencies.
 - The Linux presets use the Ninja generator, so `ninja` must exist on the Linux host. A WSL image may ship without it; configuring `linux-gcc-debug` then fails on the missing generator, which is a provisioning gap rather than a broken preset.
 - MSVC on Windows and GCC/Clang on Linux, both with warnings as errors. Sanitizers (ASan/UBSan) are configured on Linux only.
 - GCC 15 in this WSL image segfaults while garbage-collecting its own trees, which surfaces as `internal compiler error: Segmentation fault` inside standard headers. It is intermittent and hits different files, so build the Linux rows with `ulimit -s unlimited` and at most `-j8`, and rebuild once when it happens before treating a build as failed. With all four presets running at once it also fails on small files, so run the four Linux presets one at a time.
 - Run the gate rows one at a time on this machine, and run each row's test suite with nothing else building. With four rows running at once, `ctest` reads the staged `libkrcrt.kro` while another job is rebuilding it, which surfaces as `krld: KRO CRC mismatch` in a single link test that passes on its own; the concurrency the build policy asks for assumes headroom this machine does not have.
 - doctest is vendored for tests — do not replace it with a fetched framework.
-- The executed tests run a linked image under a VM and check its exit status and, where it is meaningful, its output, which a link-only test cannot do. Two cache variables name the binaries: `KRC_KR32_VM` and `KRC_KR16_VM`. Each is resolved at configure time from the first of `vm/krc_kr<32|16>[.exe]`, the legacy `build/vm/krc_kr<32|16>[.exe]`, and — on Windows only — the sibling checkout's build output that exists. `vm/` is deliberately outside `build/`, which a clean gate deletes. The run tests are not registered otherwise, so a host without a runnable VM still passes.
+- The executed tests run a linked image under a VM and check its exit status and, where it is meaningful, its output, which a link-only test cannot do. Three cache variables name the binaries: `KRC_KR32_VM`, `KRC_KR16_VM`, and `KRC_KR232_VM`; `KRC_KR232_DIS` names the kr232 disassembler that the encoding round-trip rows use. Each is resolved at configure time from the first of `vm/`, the legacy `build/vm/`, and — on Windows only — the sibling checkout's build output that exists. `vm/` is deliberately outside `build/`, which a clean gate deletes. The run tests are not registered otherwise, so a host without a runnable VM still passes.
 - Current milestone state lives in `implementation.md`; read it before starting work. Do not restate it here.
 - Sibling repositories `../kr32` and `../kr16` are **read-only inputs** (their docs, corpus and conventions are cited throughout `plan.md`). Never edit them from here.
 
@@ -163,7 +171,7 @@ Dependencies flow one way: **front end → IR → backend → assembler → link
 - **ABI, object, symbol, target and IR changes need an ADR first.** Not a note in the commit message — a file under `docs/decisions/`.
 - **`D-xxx` identifiers are stable.** A changed decision takes an Appendix A entry; renumbering or deleting a decision breaks every reference that cites it.
 - **The compiler is one program with many outputs** (`-c` object, `-S` assembly, `-o` linked image). Do not grow a second driver to handle a case; extend `krc`.
-- **The CI workflow covers the full matrix; whether it runs is unverified.** `.github/workflows/ci.yml` has a job per preset, including the Clang and sanitizer ones, which are built and tested on both hosts here. A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.
+- **No CI workflow is configured.** The GitHub Actions workflow was removed on 2026-11-23 (`e3bed04`), so every gate is a local run and nothing pushes on a schedule. A golden or differential test that passes locally on one host proves nothing about the other; report which toolchain you ran.
 
 ## WSL builds
 

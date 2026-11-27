@@ -363,7 +363,13 @@ Kr32Backend::FrameLayout Kr32Backend::layout_function(const ir::Function& functi
         layout.callee_saved_offsets[index] = offset;
         offset += 4;
     }
-    layout.frame_size = static_cast<std::uint32_t>(round_up(offset, 8));
+    // The public call convention is 16-byte alignment (docs/abi.md). A caller
+    // has SP 16-aligned at CALL; CALL pushes a 4-byte return address and the
+    // prologue pushes R7, leaving SP at 8 mod 16, so the frame must be 8 mod 16
+    // to put SP back on a 16-byte boundary before this function calls anything
+    // (D-053, audit A11).
+    layout.frame_size =
+        static_cast<std::uint32_t>(round_up(static_cast<std::uint64_t>(offset) + 8, 16) - 8);
     return layout;
 }
 
@@ -1838,7 +1844,7 @@ void Kr32Backend::coalesce_call_arguments(const ir::Function& function) const {
                 callee_type = callee_type->element;
             }
             if (!callee_type || callee_type->kind != ir::TypeKind::Function ||
-                callee_type->variadic) {
+                callee_type->variadic || callee_type->unprototyped) {
                 continue;
             }
             bool register_class_arguments = true;

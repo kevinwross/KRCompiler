@@ -80,8 +80,16 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     current_landing_pad_ = nullptr;
 
     frontend::TypePtr frontend_function_type;
-    if (definition.children.size() > 1 && definition.children[0] &&
-        definition.children[1]) {
+    // A template instance's body is generated from the pattern's AST, so the
+    // declaration type on that AST is the pattern's and may not describe the
+    // instance. The type recorded when the instance was created is authoritative
+    // when it exists (audit A2: without it a hidden-pointer aggregate parameter
+    // is mistaken for a plain pointer and the verifier rejects the store).
+    const auto recorded_type = function_ast_types_.find(function);
+    if (recorded_type != function_ast_types_.end() && recorded_type->second) {
+        frontend_function_type = recorded_type->second;
+    } else if (definition.children.size() > 1 && definition.children[0] &&
+               definition.children[1]) {
         frontend_function_type =
             sema_.declaration_type(*definition.children[0], definition.children[1].get());
     }

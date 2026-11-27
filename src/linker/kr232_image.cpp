@@ -37,7 +37,29 @@ bool is_power_of_two(std::uint16_t value) { return value != 0 && (value & (value
 bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
                        std::string& error) {
     out.clear();
-    if (image.sections.empty()) {
+    // A kernel image carries a 4-byte `.reset` at 0x0100 holding the entry
+    // address; a user image does not (ADR 0058, audit A7). A caller-supplied one
+    // is kept rather than duplicated.
+    std::vector<Kr232Section> sections = image.sections;
+    if (image.image_base == 0) {
+        const auto has_reset = std::any_of(
+            sections.begin(), sections.end(),
+            [](const Kr232Section& section) { return section.name == ".reset"; });
+        if (!has_reset) {
+            Kr232Section reset;
+            reset.name = ".reset";
+            reset.type = 1;
+            reset.flags = 1;  // allocated, not executable
+            reset.address = 0x0100;
+            reset.alignment = 4;
+            reset.data = {static_cast<std::uint8_t>(image.entry & 0xFF),
+                          static_cast<std::uint8_t>((image.entry >> 8) & 0xFF),
+                          static_cast<std::uint8_t>((image.entry >> 16) & 0xFF),
+                          static_cast<std::uint8_t>((image.entry >> 24) & 0xFF)};
+            sections.push_back(std::move(reset));
+        }
+    }
+    if (sections.empty()) {
         error = "an image needs at least one section";
         return false;
     }
@@ -60,7 +82,7 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
     };
     std::vector<Placed> allocated;
     bool entry_is_executable = false;
-    for (const Kr232Section& section : image.sections) {
+    for (const Kr232Section& section : sections) {
         if (!is_power_of_two(section.alignment)) {
             error = "a section alignment is not a power of two";
             return false;
@@ -102,7 +124,7 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
     // String table: one NUL-terminated name per section, offsets from its start.
     std::vector<std::uint8_t> strings;
     std::vector<std::uint32_t> name_offsets;
-    for (const Kr232Section& section : image.sections) {
+    for (const Kr232Section& section : sections) {
         name_offsets.push_back(static_cast<std::uint32_t>(strings.size()));
         strings.insert(strings.end(), section.name.begin(), section.name.end());
         strings.push_back(0);
@@ -111,12 +133,12 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
     // Payloads follow the header; the table and string table follow the payloads.
     std::vector<std::uint32_t> file_offsets;
     std::uint32_t cursor = kHeaderSize;
-    for (const Kr232Section& section : image.sections) {
+    for (const Kr232Section& section : sections) {
         file_offsets.push_back(cursor);
         cursor += static_cast<std::uint32_t>(section.data.size());
     }
     const std::uint32_t table_offset = cursor;
-    const auto record_bytes = static_cast<std::uint32_t>(kSectionRecordSize * image.sections.size());
+    const auto record_bytes = static_cast<std::uint32_t>(kSectionRecordSize * sections.size());
     const std::uint32_t strings_offset = table_offset + record_bytes;
     const std::uint32_t file_size = strings_offset + static_cast<std::uint32_t>(strings.size());
 
@@ -131,7 +153,7 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
     put32(out, 12, kHeaderSize);
     put32(out, 16, image.entry);
     put16(out, 20, kAbiVersion);
-    put16(out, 22, static_cast<std::uint16_t>(image.sections.size()));
+    put16(out, 22, static_cast<std::uint16_t>(sections.size()));
     put16(out, 24, kTargetId);
     put16(out, 26, 0);
     put32(out, 28, image.image_base);
@@ -140,8 +162,8 @@ bool write_kr232_image(const Kr232Image& image, std::vector<std::uint8_t>& out,
     put32(out, 40, static_cast<std::uint32_t>(strings.size()));
     put32(out, 44, file_size);
 
-    for (std::size_t i = 0; i < image.sections.size(); ++i) {
-        const Kr232Section& section = image.sections[i];
+    for (std::size_t i = 0; i < sections.size(); ++i) {
+        const Kr232Section& section = sections[i];
         std::copy(section.data.begin(), section.data.end(), out.begin() + file_offsets[i]);
         const std::uint32_t at = table_offset + static_cast<std::uint32_t>(i) * kSectionRecordSize;
         put32(out, at, name_offsets[i]);

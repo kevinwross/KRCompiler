@@ -42,6 +42,10 @@ struct Type {
     const Type* return_type = nullptr;
     std::vector<const Type*> parameters;
     bool variadic = false;
+    // The declaration had no prototype (`int f();`), so a call passes every
+    // argument on the stack (docs/abi-*.md). Distinct from `variadic`, which has
+    // a prototype and pushes only the arguments past the fixed ones.
+    bool unprototyped = false;
     bool packed = false;
     std::string name;
     // The base class's IR type name for a derived record, empty otherwise.
@@ -77,7 +81,7 @@ public:
     [[nodiscard]] TypePtr union_type(std::string name, std::vector<TypePtr> fields,
                                      std::vector<std::string> field_names = {});
     [[nodiscard]] TypePtr function_type(TypePtr return_type, std::vector<TypePtr> parameters,
-                                        bool variadic = false);
+                                        bool variadic = false, bool unprototyped = false);
 
     [[nodiscard]] const std::vector<TypePtr>& named_types() const { return named_types_; }
 
@@ -101,7 +105,7 @@ private:
     // the right type.
     std::map<TypePtr, TypePtr> pointers_;
     std::map<std::pair<TypePtr, std::uint64_t>, TypePtr> arrays_;
-    std::map<std::tuple<TypePtr, std::vector<TypePtr>, bool>, TypePtr> functions_;
+    std::map<std::tuple<TypePtr, std::vector<TypePtr>, bool, bool>, TypePtr> functions_;
 };
 
 [[nodiscard]] bool same_type(TypePtr left, TypePtr right);

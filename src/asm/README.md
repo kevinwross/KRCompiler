@@ -1,5 +1,5 @@
 # Assembler
 
-Implementation starts at **M2** (KR32 syntax/encoding) and continues at **M3** (object writer, relocations, relaxation). The framework is shared; each target supplies syntax and encoding modules.
+Each target supplies a syntax and encoding module over a shared framework: `kr32_assembler.*` and `kr32_encoder.*`, `kr16_assembler.*`, `kr16_encoder.*` and `kr16_object.*`, `kr216_encoder.*` and `kr216_object.*`, and `kr232_parser.*`, `kr232_assembler.*`, `kr232_encoder.*` and `kr232_object.*`. The shared `kro_writer.*` writes the KRO container.
 
-Design: `plan.md` §9.4, [docs/object.md](../docs/object.md).
+Design: `plan.md` §9.4, [docs/object.md](../../docs/object.md).

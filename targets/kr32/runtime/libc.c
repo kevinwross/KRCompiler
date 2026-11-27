@@ -1580,7 +1580,7 @@ static int host_result(int result) {
 }
 
 int getchar(void) {
-    return krc_sys_getchar();
+    return host_result(krc_sys_getchar());
 }
 
 int open(const char *path, int flags) {

@@ -34,7 +34,7 @@ constexpr TargetProfile kKr32{
     true,
     true,
     /*has_eh=*/true,
-    false,
+    true,  // has_rtti: typeinfo and typeid are emitted (ADR 0025)
     true,
     true,
     true,
@@ -69,7 +69,7 @@ constexpr TargetProfile kKr16{
     false,
     false,
     false,
-    false,
+    true,  // has_cpp: the C++ subset runs on KR16
     true,
     AggregateRules::MemoryOnly,
 };
@@ -137,12 +137,15 @@ constexpr TargetProfile kKr216{
     false,
     true,
     true,
-    AggregateRules::RegistersOrMemory,
+    // Every by-value aggregate is memory class (ADR 0053, D-053). IRGen detects
+    // the hidden pointer from the recorded frontend parameter type, including in
+    // an instantiated template body.
+    AggregateRules::MemoryOnly,
 };
 
 // kr232: the 32-bit teaching VM of the sibling repository. Ilp32 with no 64-bit
-// integer type, a signed char, a 64-bit long double, and every by-value aggregate
-// in memory (kr232 plan §7, ADR 0057). `backend_available` is false until M3.
+// integer type, a signed char, one binary64 floating format, and every by-value
+// aggregate in memory (kr232 plan §7, ADR 0057, D-053).
 constexpr TargetProfile kKr232{
     TargetId::Kr232,
     "kr232",
@@ -168,9 +171,9 @@ constexpr TargetProfile kKr232{
     false,
     false,
     false,
-    false,
-    false,
-    false,
+    false,  // has_eh
+    true,   // has_rtti: the full runtime provides the metadata and the cast helper
+    false,  // has_tls
     true,
     true,  // backend_available: the kr232 code generator exists from M3
     AggregateRules::MemoryOnly,
