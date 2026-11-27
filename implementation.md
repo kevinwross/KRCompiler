@@ -495,7 +495,7 @@ Items closed since this section was last revised: the target-descriptor schema (
 ## Gate verification
 
 2026-11-27T09:10:46-08:00 — family gate, Windows host inside Developer PowerShell
-Revision: 80960f0 plus the uncommitted documentation-audit changes
+Revision: 962992f (the gated tree, committed after the run)
 
 krcompiler   debug    PASS 1012/1012  (gate 17 s, tests 490 s)
 krcompiler   release  PASS 1012/1012  (gate 15 s, tests 138 s)
