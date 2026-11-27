@@ -76,10 +76,13 @@ if ! flock -w "$wait_s" 9; then
 fi
 echo "$$" > "$lock"
 
-# A repository may need some of its ignored-at-first-glance trees: krdbg vendors
-# its kdbg reader under third_party and cannot build without it, while kr32's
-# third_party is a fetched SDL2 tree. So the exclusions are per repository, read
-# from <source>/.kr-mirror-exclude, with only build/ and .git/ unconditional.
+# Exclusions are per repository, read from <source>/.kr-mirror-exclude, with only
+# build/ and .git/ unconditional. A default exclusion is not safe here: a vendored
+# tree under third_party (doctest in krcompiler, stb in kr16, the kdbg reader in
+# krdbg) is a build input, and an excluded path is never deleted, so a fresh
+# mirror would silently be missing it. A repository that must exclude something
+# says so in its own file.
+
 extra=""
 if [ -f "$source_root/.kr-mirror-exclude" ]; then
     extra="$source_root/.kr-mirror-exclude"
@@ -100,7 +103,6 @@ if [ -n "$extra" ]; then
 else
     rsync -a --checksum --no-times --delete \
         --exclude 'build/' --exclude '.git/' --exclude '*.tmp' \
-        --exclude 'third_party/' \
         "$source_root"/ "$mirror"/
 fi
 
