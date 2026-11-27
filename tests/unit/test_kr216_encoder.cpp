@@ -471,6 +471,38 @@ TEST_CASE("kr216 resolves a branch label relative to the next instruction") {
     CHECK(program.bytes[2] == 0x71);
 }
 
+TEST_CASE("kr216 relaxes a conditional branch it cannot reach") {
+    AssembledProgram program;
+    std::string error;
+    // 5-byte relaxed branch, then 300 bytes of space, so `far` lands at 305.
+    REQUIRE(assemble_text("bne far\n.space 300\nfar:\nret\n", program, error));
+    REQUIRE(program.bytes.size() == 306);
+    CHECK(program.bytes[0] == 0xA0);  // BNE inverted to BEQ over the JMP
+    CHECK(program.bytes[1] == 0x03);
+    CHECK(program.bytes[2] == 0xCF);  // JMP addr16
+    CHECK(program.bytes[3] == 0x31);
+    CHECK(program.bytes[4] == 0x01);
+}
+
+TEST_CASE("kr216 relaxes an unconditional branch into an absolute jump") {
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text("bra far\n.space 300\nfar:\nret\n", program, error));
+    REQUIRE(program.bytes.size() == 304);
+    CHECK(program.bytes[0] == 0xCF);  // BRA becomes JMP addr16
+    CHECK(program.bytes[1] == 0x2F);
+    CHECK(program.bytes[2] == 0x01);
+}
+
+TEST_CASE("kr216 keeps a branch that fits at two bytes") {
+    AssembledProgram program;
+    std::string error;
+    REQUIRE(assemble_text("bne near\nnop\nnear:\nret\n", program, error));
+    REQUIRE(program.bytes.size() == 4);
+    CHECK(program.bytes[0] == 0xA2);  // BNE, disp9 = +1
+    CHECK(program.bytes[1] == 0x01);
+}
+
 TEST_CASE("kr216 accepts CRLF assembly input") {
     AssembledProgram program;
     std::string error;

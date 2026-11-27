@@ -1,5 +1,7 @@
 #include "asm/kr216_encoder.h"
 
+#include <set>
+
 namespace krc::asmkr216 {
 namespace {
 
@@ -1069,13 +1071,6 @@ std::vector<std::string_view> split_commas(std::string_view text) {
 }  // namespace
 
 bool assemble_text(std::string_view source, AssembledProgram& out, std::string& error) {
-    out.bytes.clear();
-    out.labels.clear();
-    out.globals.clear();
-    out.externals.clear();
-    out.relocations.clear();
-    out.data_sections.clear();
-
     struct Fixup {
         std::size_t offset = 0;
         std::string label;
@@ -1083,9 +1078,41 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         bool relative = false;
         std::uint8_t condition = 0;
         std::uint32_t section = 0;
+        // The source line the fixup came from, so a branch site can be named
+        // again when the text is laid out a second time.
+        std::size_t line = 0;
     };
+
+    // One entry per source line, in order, recording where the statement started and
+    // what it said. The byte length is the distance to the next entry in the same
+    // section, so a statement that emits nothing (a label, a directive with no data)
+    // still gets a row and the rows never overlap.
+    struct LineStart {
+        std::uint32_t section = 0;
+        std::uint32_t offset = 0;
+        std::string text;
+    };
+
+    // Branch relaxation. A conditional branch that cannot reach its label becomes an
+    // inverted branch over an absolute JMP, which is three bytes longer, so the text
+    // is laid out again. Growth is monotonic -- a site is added only when it does not
+    // fit and never removed -- so the loop terminates, in two or three passes.
+    std::set<std::size_t> relaxed;
     std::vector<Fixup> fixups;
+    std::vector<LineStart> line_starts;
     std::uint32_t current_section = 0;
+
+    for (std::size_t pass = 0;; ++pass) {
+        out.bytes.clear();
+        out.labels.clear();
+        out.globals.clear();
+        out.externals.clear();
+        out.relocations.clear();
+        out.data_sections.clear();
+        fixups.clear();
+        line_starts.clear();
+        current_section = 0;
+        std::set<std::size_t> grown;
 
     const auto section_bytes = [&]() -> std::vector<std::uint8_t>& {
         return current_section == 0 ? out.bytes
@@ -1168,17 +1195,6 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             error = "kr216: unknown section '" + std::string(name) + "'";
         }
     };
-
-    // One entry per source line, in order, recording where the statement started and
-    // what it said. The byte length is the distance to the next entry in the same
-    // section, so a statement that emits nothing (a label, a directive with no data)
-    // still gets a row and the rows never overlap.
-    struct LineStart {
-        std::uint32_t section = 0;
-        std::uint32_t offset = 0;
-        std::string text;
-    };
-    std::vector<LineStart> line_starts;
 
     for (const std::string_view raw : split_lines(source)) {
         line_starts.push_back({current_section, section_size(), std::string(raw)});
@@ -1356,14 +1372,46 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
 
         Encoding encoding;
         if (!assemble_line(line, encoding, error)) return false;
+        const std::size_t line_index = line_starts.size() - 1;
+        if (!encoding.label.empty() && encoding.relative &&
+            relaxed.count(line_index) != 0) {
+            // Too far for disp9: invert the branch and jump over an absolute JMP.
+            // BRA becomes the JMP itself, and a far CALL becomes CALL addr16.
+            auto& bytes = section_bytes();
+            const std::size_t offset = bytes.size();
+            if (encoding.condition <= 13) {
+                bytes.push_back(static_cast<std::uint8_t>(
+                    0xA0 | ((encoding.condition ^ 1) << 1)));
+                bytes.push_back(3);
+                bytes.push_back(0xCF);
+                bytes.push_back(0);
+                bytes.push_back(0);
+                fixups.push_back({offset + 3, std::move(encoding.label), 2, false, 0,
+                                  current_section, line_index});
+            } else if (encoding.condition == 15) {
+                bytes.push_back(0xCF);
+                bytes.push_back(0);
+                bytes.push_back(0);
+                fixups.push_back({offset + 1, std::move(encoding.label), 2, false, 0,
+                                  current_section, line_index});
+            } else {
+                // CALL rel9 too far: CALL addr16.
+                bytes.push_back(0xD0);
+                bytes.push_back(0);
+                bytes.push_back(0);
+                fixups.push_back({offset + 1, std::move(encoding.label), 2, false, 0,
+                                  current_section, line_index});
+            }
+            continue;
+        }
         if (!encoding.label.empty()) {
             const auto offset = section_bytes().size();
             if (encoding.relative) {
                 fixups.push_back({offset, std::move(encoding.label), 2, true,
-                                  encoding.condition, current_section});
+                                  encoding.condition, current_section, line_index});
             } else {
                 fixups.push_back({offset + 1, std::move(encoding.label), 2, false, 0,
-                                  current_section});
+                                  current_section, line_index});
             }
         }
         auto& target = section_bytes();
@@ -1385,8 +1433,9 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
             Encoding branch;
             std::string branch_error;
             if (!encode_branch(fixup.condition, displacement, branch, branch_error)) {
-                error = "kr216: branch to '" + fixup.label + "': " + branch_error;
-                return false;
+                // Too far for disp9: relax this site and lay the text out again.
+                grown.insert(fixup.line);
+                continue;
             }
             auto& branch_bytes = fixup.section == 0
                                      ? out.bytes
@@ -1422,6 +1471,14 @@ bool assemble_text(std::string_view source, AssembledProgram& out, std::string& 
         }
         error = "kr216: undefined label '" + fixup.label + "'";
         return false;
+    }
+
+        if (grown.empty()) break;
+        relaxed.insert(grown.begin(), grown.end());
+        if (pass > 64) {
+            error = "kr216: branch relaxation did not converge";
+            return false;
+        }
     }
 
     out.listing.reserve(line_starts.size());
