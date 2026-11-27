@@ -957,7 +957,16 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
             stream >> type_name >> member.name >> member.offset >> member.type >> member.size;
             auto& type = ensure_type(type_name, 0, "struct");
             type.kind = "struct";
-            type.members.push_back(std::move(member));
+            // Every object that uses a record emits its member records, so the
+            // merged payload would carry each member once per translation unit.
+            const bool duplicate =
+                std::any_of(type.members.begin(), type.members.end(),
+                            [&member](const debug::KdbgMember& existing) {
+                                return existing.name == member.name;
+                            });
+            if (!duplicate) {
+                type.members.push_back(std::move(member));
+            }
         }
     }
 
