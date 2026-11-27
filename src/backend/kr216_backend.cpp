@@ -209,8 +209,59 @@ struct ByteSlotPlan {
     std::uint32_t next_offset = 0;
 };
 
+// A store whose address is a constant-offset GEP with one use is emitted as a
+// memory operand off the GEP's base, and the GEP itself is never materialized.
+// The base's value therefore has to stay live until the store.
+using FoldedGeps = std::unordered_map<const ir::Instruction*,
+                                      std::pair<const ir::Value*, std::int64_t>>;
+
+FoldedGeps collect_folded_geps(const ir::Function& function) {
+    std::unordered_map<const ir::Value*, std::size_t> address_uses;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            for (const auto* operand : instruction->operands) {
+                if (operand) {
+                    ++address_uses[operand];
+                }
+            }
+        }
+    }
+    FoldedGeps folded;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode != ir::Opcode::Store) {
+                continue;
+            }
+            const auto* type = instruction->operands[0]->type;
+            if (!type || ir::is_float(type) || is_aggregate(type) ||
+                type_size(type) > 4) {
+                continue;
+            }
+            const auto* gep = dynamic_cast<const ir::Instruction*>(
+                instruction->operands[1]);
+            if (!gep || gep->opcode != ir::Opcode::GetElementPtr ||
+                gep->operands.size() != 2 || !gep->source_type ||
+                address_uses[gep] != 1) {
+                continue;
+            }
+            const auto* index =
+                dynamic_cast<const ir::ConstantInt*>(gep->operands[1]);
+            if (!index || type_size(gep->source_type) != 1) {
+                continue;
+            }
+            const auto offset = static_cast<std::int64_t>(index->value);
+            if (offset < -32768 || offset > 32767) {
+                continue;
+            }
+            folded.emplace(gep, std::make_pair(gep->operands[0], offset));
+        }
+    }
+    return folded;
+}
+
 ByteSlotPlan plan_two_byte_value_slots(const ir::Function& function,
-                                       std::uint32_t base) {
+                                       std::uint32_t base,
+                                       const FoldedGeps& folded) {
     std::unordered_map<const ir::Value*, std::size_t> first;
     std::unordered_map<const ir::Value*, std::size_t> last;
     std::size_t position = 0;
@@ -242,6 +293,28 @@ ByteSlotPlan plan_two_byte_value_slots(const ir::Function& function,
                 } else {
                     last[incoming.first] =
                         std::max(last[incoming.first], position);
+                }
+            }
+            ++position;
+        }
+    }
+
+    // A folded store reads its base value at the store's position, so the base is
+    // live until then even though no operand names it at that point.
+    position = 0;
+    for (const auto& block : function.blocks) {
+        for (const auto& instruction : block->instructions) {
+            if (instruction->opcode == ir::Opcode::Store &&
+                instruction->operands.size() > 1) {
+                const auto* address = dynamic_cast<const ir::Instruction*>(
+                    instruction->operands[1]);
+                const auto it = address != nullptr ? folded.find(address)
+                                                   : folded.end();
+                if (it != folded.end()) {
+                    const auto live = last.find(it->second.first);
+                    if (live != last.end()) {
+                        live->second = std::max(live->second, position);
+                    }
                 }
             }
             ++position;
@@ -334,7 +407,8 @@ Kr216Backend::FrameLayout Kr216Backend::layout_function(const ir::Function& func
         layout.slots[parameter.get()] = offset;
         offset += std::max<std::uint32_t>(kSlotSize, type_size(parameter->type));
     }
-    const auto plan = plan_two_byte_value_slots(function, offset);
+    const auto folded_geps = collect_folded_geps(function);
+    const auto plan = plan_two_byte_value_slots(function, offset, folded_geps);
     for (const auto& [instruction, slot] : plan.slots) {
         layout.slots[instruction] = slot;
     }
@@ -657,49 +731,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         }
     }
 
-    std::unordered_map<const ir::Value*, std::size_t> address_uses;
-    for (const auto& block : function.blocks) {
-        for (const auto& instruction : block->instructions) {
-            for (const auto* operand : instruction->operands) {
-                if (operand) {
-                    ++address_uses[operand];
-                }
-            }
-        }
-    }
-    std::unordered_map<const ir::Instruction*,
-                       std::pair<const ir::Value*, std::int64_t>>
-        folded_geps;
-    for (const auto& block : function.blocks) {
-        for (const auto& instruction : block->instructions) {
-            if (instruction->opcode != ir::Opcode::Store) {
-                continue;
-            }
-            const auto* type = instruction->operands[0]->type;
-            if (!type || ir::is_float(type) || is_aggregate(type) ||
-                type_size(type) > 4) {
-                continue;
-            }
-            const auto* gep = dynamic_cast<const ir::Instruction*>(
-                instruction->operands[1]);
-            if (!gep || gep->opcode != ir::Opcode::GetElementPtr ||
-                gep->operands.size() != 2 || !gep->source_type ||
-                address_uses[gep] != 1) {
-                continue;
-            }
-            const auto* index =
-                dynamic_cast<const ir::ConstantInt*>(gep->operands[1]);
-            if (!index || type_size(gep->source_type) != 1) {
-                continue;
-            }
-            const auto offset = static_cast<std::int64_t>(index->value);
-            if (offset < -32768 || offset > 32767) {
-                continue;
-            }
-            folded_geps.emplace(gep,
-                                std::make_pair(gep->operands[0], offset));
-        }
-    }
+    const auto folded_geps = collect_folded_geps(function);
     const auto memory_operand = [](std::string_view reg, std::int64_t offset) {
         std::string address = "[";
         address += reg;
