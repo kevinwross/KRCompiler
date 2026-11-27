@@ -6,6 +6,15 @@ Add entries here rather than editing the managed blocks in `AGENTS.md`; an edit 
 
 **Keep this file current.** When a condition named here changes — a plan leaves DRAFT, a missing directory is created, a trap stops reproducing — update or delete the entry in the same change. A stale instruction is worse than a missing one: it is believed.
 
+## Family build guide
+
+`docs/kr-build-instructions.md` in this tree is the family build and gate guide:
+how the six trees are configured and built, the preset names that exist, the gate
+flags, the prefixes they install into, which test images the build generates
+rather than tracks, and the clean-build procedure. Read it before configuring a
+build or running the family gate; it is the entry point for a session that starts
+one, and this file carries only what is specific to this repository.
+
 ## Build policy
 
 Three tiers. Run the smallest one the change needs; never run a larger one "to be safe".
