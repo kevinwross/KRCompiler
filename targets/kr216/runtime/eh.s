@@ -75,9 +75,9 @@ __krc_eh_block_loop:
         LD R6, [R4+2]          ; function_start
         CMP R2, R6
         BCC __krc_eh_block_next
-        LD R6, [R4+4]          ; function_end
+        LD R6, [R4+4]          ; function_end: the epilogue's LEAVE, inclusive
         CMP R2, R6
-        BCS __krc_eh_block_next
+        BHI __krc_eh_block_next
         LD R3, [R4+6]          ; frame_size
         LD R7, [R4+8]          ; region_count
         ADD R4, #10
