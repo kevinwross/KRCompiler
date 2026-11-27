@@ -148,12 +148,36 @@ if(TARGET krc)
     set_tests_properties(krc_kr232_frame PROPERTIES
         PASS_REGULAR_EXPRESSION "enter #0, #0")
 
+    # The two kr232 containers the dump and executed rows read are build output:
+    # they are compiled and linked here from their sources, with the source root
+    # named so the debug data carries a relative path.
+    set(KRC_KR232_IMAGE_DIR "${CMAKE_BINARY_DIR}/kr232-images")
+    function(krc_build_kr232_test_image name entry)
+        add_custom_command(
+            OUTPUT "${KRC_KR232_IMAGE_DIR}/${name}.kr232"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${KRC_KR232_IMAGE_DIR}"
+            COMMAND $<TARGET_FILE:krc> -c --target kr232
+                    "tests/fixtures/${name}.s"
+                    -o "${KRC_KR232_IMAGE_DIR}/${name}.o"
+            COMMAND $<TARGET_FILE:krld> "--entry=${entry}" --base=0x200
+                    "${KRC_KR232_IMAGE_DIR}/${name}.o"
+                    -o "${KRC_KR232_IMAGE_DIR}/${name}.kr232"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            DEPENDS "${CMAKE_SOURCE_DIR}/tests/fixtures/${name}.s" krc krld
+            COMMENT "Building the kr232 test image ${name}.kr232"
+            VERBATIM)
+    endfunction()
+    krc_build_kr232_test_image(kr232-fixture main)
+    krc_build_kr232_test_image(kr232-draw main)
+    add_custom_target(krc_kr232_images ALL
+        DEPENDS "${KRC_KR232_IMAGE_DIR}/kr232-fixture.kr232"
+                "${KRC_KR232_IMAGE_DIR}/kr232-draw.kr232")
     # A real .kr232 produced by `krc -c` and `krld --entry=main --base=0x200` from a
-    # two-instruction .s file. The decode says the container carries a .kdbg with
+    # two-instruction .s file, built above. The decode says the container carries a .kdbg with
     # the fixture's source, both lines and the main function.
     add_test(NAME krc_kr232_dump_symbols
         COMMAND $<TARGET_FILE:krc> --dump-symbols
-                "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.kr232")
+                "${KRC_KR232_IMAGE_DIR}/kr232-fixture.kr232")
     set_tests_properties(krc_kr232_dump_symbols PROPERTIES
         PASS_REGULAR_EXPRESSION "KDBG target=5[^\n]*lines=2 functions=1")
 
@@ -165,13 +189,13 @@ if(TARGET krc)
         add_test(NAME krc_kr232_run_fixture
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR232_VM}
-                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.kr232
+                    -DIMAGE=${KRC_KR232_IMAGE_DIR}/kr232-fixture.kr232
                     -DEXPECT_EXIT=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
         add_test(NAME krc_kr232_run_wrong_exit
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR232_VM}
-                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-fixture.kr232
+                    -DIMAGE=${KRC_KR232_IMAGE_DIR}/kr232-fixture.kr232
                     -DEXPECT_EXIT=7
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
         set_tests_properties(krc_kr232_run_wrong_exit PROPERTIES WILL_FAIL TRUE)
@@ -182,14 +206,14 @@ if(TARGET krc)
         add_test(NAME krc_kr232_run_draw
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR232_VM}
-                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-draw.kr232
+                    -DIMAGE=${KRC_KR232_IMAGE_DIR}/kr232-draw.kr232
                     -DEXPECT_EXIT=0
                     -DFRAME_HASH=e8bda242f061f369
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
         add_test(NAME krc_kr232_wrong_frame
             COMMAND ${CMAKE_COMMAND}
                     -DVM=${KRC_KR232_VM}
-                    -DIMAGE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/kr232-draw.kr232
+                    -DIMAGE=${KRC_KR232_IMAGE_DIR}/kr232-draw.kr232
                     -DEXPECT_EXIT=0
                     -DFRAME_HASH=0000000000000000
                     -P ${CMAKE_SOURCE_DIR}/cmake/RunKr232Image.cmake)
