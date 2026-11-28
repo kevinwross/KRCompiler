@@ -1,4 +1,14 @@
+/*
+ * The kr216 C runtime. Standard input and output are the host text display (SYS 5, see
+ * <krc/display.h> and docs/display-abi.md): putchar/puts/printf write through PUT_CHAR and
+ * PUT_STRING, and getchar/getc read host-edited lines through READ_LINE. The console device
+ * (SYS 1/SYS 2, kr216-isa.md section 14) is the debug serial port, not stdio; a program that
+ * wants it calls __krc_debug_write or __krc_write directly.
+ */
+
 #include <stdarg.h>
+
+#include <krc/display.h>
 
 int __krc_write(int fd, const char *buffer, int count);
 void *malloc(unsigned int size);
@@ -687,16 +697,80 @@ void __krc_sar64(unsigned int *words, unsigned int count) {
 }
 
 int putchar(int c) {
-    char byte = (char)c;
-    __krc_write(1, &byte, 1);
+    display_putc(c & 0xFF);
     return c;
 }
 
 int puts(const char *text) {
     const unsigned int length = strlen(text);
-    __krc_write(1, text, (int)length);
+    display_puts(text);
     putchar('\n');
     return (int)(length + 1);
+}
+
+/*
+ * The debug serial port: the console device, not stdin/stdout. stdio never calls this; a
+ * program that wants the COM stream (a boot log, a crash message) calls it explicitly.
+ */
+int __krc_debug_write(const char *buffer, int count) {
+    return __krc_write(1, buffer, count);
+}
+
+/*
+ * Standard input. The host owns the line editor: it echoes typing at the cursor and completes
+ * a line on Enter, and READ_LINE answers -2 while the line is still being edited. getchar
+ * polls until the host has a line, then serves its bytes from this buffer followed by '\n'.
+ * A hard display failure and the host closing its input (DISPLAY_END_OF_INPUT) are end of
+ * input, which is -1; both are permanent, so the flag stays set.
+ */
+#define KRC_STDIO_LINE_CAPACITY 256
+
+static char stdin_line[KRC_STDIO_LINE_CAPACITY];
+static int stdin_position;  /* next byte of stdin_line to serve */
+static int stdin_length;    /* bytes in stdin_line */
+static int stdin_has_line;  /* a fetched line still has bytes and its '\n' to serve */
+static int stdin_end;       /* end of input reached; getchar answers -1 */
+
+static int stdin_fetch(void) {
+    int length;
+    do {
+        length = display_read_line(stdin_line, (int)sizeof stdin_line);
+    } while (length == DISPLAY_NOT_READY);
+    if (length < 0) {
+        /* DISPLAY_END_OF_INPUT, or the display cannot deliver a line at all. */
+        stdin_end = 1;
+        return 0;
+    }
+    stdin_position = 0;
+    stdin_length = length;
+    stdin_has_line = 1;
+    return 1;
+}
+
+int getchar(void) {
+    if (stdin_has_line == 0 && stdin_end != 0) {
+        return -1;
+    }
+    if (stdin_has_line == 0 && stdin_fetch() == 0) {
+        return -1;
+    }
+    if (stdin_position < stdin_length) {
+        return (unsigned char)stdin_line[stdin_position++];
+    }
+    stdin_has_line = 0;
+    return '\n';
+}
+
+/* <stdio.h> declares getc over the incomplete FILE type. Only stdin exists on this profile. */
+struct FILE;
+
+int getc(struct FILE *stream) {
+    (void)stream;
+    return getchar();
+}
+
+struct FILE *__krc_stdin_stream(void) {
+    return 0;
 }
 
 static int print_unsigned(unsigned int value, unsigned int base) {
@@ -832,7 +906,7 @@ int printf(const char *format, ...) {
         if (format[index] == 's') {
             const char *text = va_arg(arguments, const char *);
             const unsigned int length = strlen(text);
-            __krc_write(1, text, (int)length);
+            display_puts(text);
             written += (int)length;
             index++;
             continue;
@@ -897,4 +971,23 @@ int printf(const char *format, ...) {
     }
     va_end(arguments);
     return written;
+}
+
+/*
+ * The 32-bit LCG KR32 and KR232 use, so the same seed gives the same sequence on every target
+ * with a 32-bit long. kr216's unsigned int is 16 bits; the state is an unsigned long.
+ */
+static unsigned long random_state = 1;
+
+void srand(unsigned int seed) {
+    random_state = seed;
+}
+
+int sys_random(void) {
+    random_state = random_state * 1103515245UL + 12345UL;
+    return (int)((random_state >> 16) & 0x7FFFUL);
+}
+
+int rand(void) {
+    return sys_random();
 }

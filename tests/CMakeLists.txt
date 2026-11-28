@@ -741,12 +741,13 @@ if(TARGET krc)
     set_tests_properties(krc_kr216_image_header PROPERTIES
         DEPENDS krc_kr216_link_image)
 
-    # <krc/display.h> and the SYS 5 runtime: a program that calls every wrapper must
-    # compile, link against display.c and syscalls.s, and carry the C wrapper entry points
-    # in its symbol payload. (The assembly trampoline has no KDBG record; the successful
-    # link is its evidence.) Running the program is the kr216 repository's guest_display row.
+    # <krc/display.h> and the SYS 5 runtime: a program that calls every wrapper and the stdio
+    # input/PRNG entry points must compile, link against display.c, syscalls.s and libc.c, and
+    # carry the C wrapper entry points in its symbol payload. (The assembly trampoline has no
+    # KDBG record; the successful link is its evidence.) Running the program is the kr216
+    # repository's guest_display/guest_stdio rows.
     set(kr216_display_symbols
-        "display_clear;display_puts;display_read_line;main")
+        "display_clear;display_puts;display_read_line;getchar;rand;srand;main")
     add_test(NAME krc_kr216_display_link
         COMMAND ${CMAKE_COMMAND}
                 -DKRC=$<TARGET_FILE:krc>

@@ -132,7 +132,7 @@ carries a `puts` stub (section 6).
 | KR32 | `targets/kr32/runtime/crt0.s` | `stage/sysroot/kr32/lib/libkrcrt.kro` | `targets/kr32/runtime/fileio.s` | `targets/kr32/runtime/eh.s` |
 | KR16 | `targets/kr16/runtime/crt0.s` | `stage/sysroot/kr16/lib/libkrcrt.kro` | `libkrcrt_host.kro` and `libkrcrt_fileio.kro` in the same directory | not applicable |
 | KR232 | `targets/kr232/runtime/crt0.s` | built from `targets/kr232/runtime/libc.c` or `libc_full.c` | `targets/kr232/runtime/fileio_full.s` for the full library | not applicable |
-| KR216 | `targets/kr216/runtime/crt0.s` | built from `targets/kr216/runtime/libc.c` | `targets/kr216/runtime/syscalls.s` | `targets/kr216/runtime/eh.s` |
+| KR216 | `targets/kr216/runtime/crt0.s` | built from `targets/kr216/runtime/libc.c` | `targets/kr216/runtime/syscalls.s` and `targets/kr216/runtime/display.c` (the SYS 5 text display) | `targets/kr216/runtime/eh.s` |
 
 `crt0.s` defines `_start`, which is the linker's default entry symbol. The
 startup calls `main` and passes the returned status to the VM's exit service.
@@ -557,7 +557,8 @@ calls `main` and exits with the status in `R2`. The default image base is
 KR216 has 16-bit pointers with 32-bit `long` and 64-bit integers, and it has
 floating point. The backend, assembler, and `K216` image container are
 implemented; this repository's test suite covers KR216 at the assembly and
-object level, and this tree does not include a KR216 VM to execute a program.
+object level. The sibling `kr216` repository carries the VM, and its guest tests
+run the images this tree produces.
 
 Compile and link a C program:
 
@@ -566,14 +567,26 @@ $rt = "targets\kr216\runtime"
 & $krc -c --target=kr216 hello.c -o hello.kr216.kro
 & $krc -c --target=kr216 "$rt\crt0.s" -o crt0.kr216.kro
 & $krc -c --target=kr216 "$rt\libc.c" -o libc.kr216.kro
+& $krc -c --target=kr216 "$rt\display.c" -o display.kr216.kro
 & $krc -c --target=kr216 "$rt\syscalls.s" -o syscalls.kr216.kro
 & $krc -c --target=kr216 "$rt\eh.s" -o eh.kr216.kro
 & $krld --target=kr216 crt0.kr216.kro hello.kr216.kro libc.kr216.kro `
-        syscalls.kr216.kro eh.kr216.kro -o hello.kr216
+        display.kr216.kro syscalls.kr216.kro eh.kr216.kro -o hello.kr216
 ```
 
 `--target=kr216` is needed because `crt0.s` is an assembly input. The default
 base is `0x200` and the default entry is `_start`.
+
+`display.c` is part of the runtime, not an optional package: the C library routes
+standard input and output through the SYS 5 text display. `putchar`, `puts` and
+`printf` write the screen (`PUT_CHAR`/`PUT_STRING`); `getchar` and `getc` read
+host-edited lines from the display line editor (`READ_LINE`) and answer `-1` at
+end of input. The console device (SYS 1/SYS 2, `0xFF00`–`0xFF04`) is the debug
+serial port: a program writes it explicitly with `__krc_debug_write` or
+`__krc_write` and nothing in stdio uses it. The display ABI is
+[display-abi.md](display-abi.md); the kr216 binding, including the emulator's
+`--display-input`/`--display-dump` test options, is
+`../kr216/kr216-display.md`.
 
 The `.kr216` container carries KDBG symbol and debug data, so the image can be
 inspected without running it:

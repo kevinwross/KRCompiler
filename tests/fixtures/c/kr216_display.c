@@ -1,9 +1,13 @@
 /*
- * Link evidence for <krc/display.h>: every wrapper is called, so the linked image has a
+ * Link evidence for <krc/display.h> and the kr216 stdio runtime: every display wrapper is
+ * called and the stdio input and PRNG entry points are referenced, so the linked image has a
  * definition for each one. The file is also a runnable check - it returns 42 when the calls
- * answer as the ABI promises - which the kr216 repository's guest_display row executes under
- * the emulator.
+ * answer as the ABI promises - which the kr216 repository's guest rows execute under the
+ * emulator; this row only links it.
  */
+
+#include <stdio.h>
+#include <stdlib.h>
 
 #include <krc/display.h>
 
@@ -27,5 +31,12 @@ int main(void) {
     if (display_get_key() != DISPLAY_NOT_READY) return 10;
     if (display_get_click(&row, &column, &buttons) != DISPLAY_NOT_READY) return 11;
     if (display_read_line(line, (int)sizeof line) != DISPLAY_NOT_READY) return 12;
+
+    /* stdio and the PRNG: the runtime defines these beside the display wrappers. The branch is
+       unreachable while the input source is open, so this fixture stays a link check. */
+    srand(1);
+    if (display_get_key() == DISPLAY_END_OF_INPUT) {
+        if (rand() == getchar()) return 13;
+    }
     return 42;
 }

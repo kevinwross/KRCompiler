@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Status | **Proposed, version 1** — implemented in KRCompiler's `krc::display` package and bound to a hypercall by `kr216` |
-| Date | 2026-11-27T21:05:00-08:00 |
-| Authority | The six user decisions of 2026-11-27 fix the device shape: 80x30 default, 16-bit cell codes with 8-bit guest strings, polled input, XRGB8888 with no alpha, left/right/middle mouse buttons, and the command set below |
+| Status | **Proposed, version 2** — implemented in KRCompiler's `krc::display` package and bound to a hypercall by `kr216` |
+| Date | 2026-11-27T21:56:53-08:00 |
+| Authority | The six user decisions of 2026-11-27 fix the device shape: 80x30 default, 16-bit cell codes with 8-bit guest strings, polled input, XRGB8888 with no alpha, left/right/middle mouse buttons, and the command set below. Version 2 adds the end-of-input status so a host can close stdin. |
 | Applies to | KRCompiler's `krc::display` host library and `<krc/display.h>` guest header, each VM that binds the display family to a hypercall, and the debugger surfaces that render it |
 | Related | `../kr216/kr216-display.md` records the kr216 binding and its ISA 1.x extension proposal |
 
@@ -40,8 +40,8 @@ command numbers.
    reveals a display.
 4. The guest block belongs to the VM. Its length and layout are the VM's marshalling of the
    canonical block (§3); the command semantics do not change with the word size.
-5. Statuses are `0`, `-1`, `-2`, `-3` (§4). A VM whose registers are 16 bits wide sign-extends
-   the status into its result register.
+5. Statuses are `0`, `-1`, `-2`, `-3` and `-4` (§4). A VM whose registers are 16 bits wide
+   sign-extends the status into its result register.
 
 `kr216` is the reference binding: SYS 5, R2 = command then result, R3 = block address,
 R4 = block length, 16-bit little-endian words (`../kr216/kr216-display.md`).
@@ -61,8 +61,8 @@ number of words it carries; a block of any other length is `-1`. All values are 
 | `PUT_CHAR` | 4 | 1 | cell code | — |
 | `PUT_STRING` | 5 | 2 | guest address, byte count | — |
 | `CURSOR` | 6 | 3 | row, column, visible (0/1) | — |
-| `READ_LINE` | 7 | 2 | guest buffer address, capacity | result length or `-2` |
-| `GET_KEY` | 8 | 0 | — | result key code or `-2` |
+| `READ_LINE` | 7 | 2 | guest buffer address, capacity | result length, `-2` or `-4` |
+| `GET_KEY` | 8 | 0 | — | result key code, `-2` or `-4` |
 | `GET_CLICK` | 9 | 3 | — | row, column, button mask |
 
 Canonical block, word by word:
@@ -85,9 +85,12 @@ block registers for them.
 | `DISPLAY_BAD_ARGUMENT` | -1 | bad block, bad length, bad pointer or bad argument value |
 | `DISPLAY_NOT_READY` | -2 | no key/click is queued, or a line is still being edited |
 | `DISPLAY_UNKNOWN_COMMAND` | -3 | the binding does not know the command number |
+| `DISPLAY_END_OF_INPUT` | -4 | `READ_LINE`/`GET_KEY` only: the host input source is closed and nothing more will arrive |
 
 `READ_LINE` and `GET_KEY` return a non-negative result instead of `0`; only `-2` means
-"nothing yet". An unknown command MUST answer `-3` rather than trap.
+"nothing yet" while the source is open, and only `-4` means "nothing ever again". An unknown
+command MUST answer `-3` rather than trap. `-4` is additive for every other command: a host
+that has closed its input still answers `CLEAR`, `PUT_CHAR` and the rest normally.
 
 ## 5. Field and buffer rules
 
@@ -120,7 +123,7 @@ A 16-bit target marshals the canonical fields as follows:
 
 ### 6.1 `INFO`
 
-Answers the ABI version and geometry. Version 1 is this document. A guest MUST read the
+Answers the ABI version and geometry. Version 2 is this document. A guest MUST read the
 version and MUST NOT assume a layout it does not know. A new command or a changed block layout
 takes the next version; new key or cell codes do not.
 
@@ -157,13 +160,16 @@ than 0/1, is `-1` and leaves the cursor unchanged.
 
 Polled:
 
-1. No line editing and no completed line: the host arms the line editor at the cursor and
-   answers `-2`.
+1. No line editing, no completed line, input source open: the host arms the line editor at the
+   cursor and answers `-2`.
 2. A line is being edited: every call answers `-2` and the editor state is unchanged.
 3. A line is complete: the next call copies its bytes to the buffer (no terminator), answers
    the length and forgets the line.
 4. A completed line longer than the caller's capacity is `-1` and the line stays pending.
 5. A capacity of 0 or an invalid buffer range is `-1` without arming or consuming anything.
+6. The host input source is closed (§6.11) and no line is complete: the call answers `-4`.
+   A non-empty draft the editor held when the source closed is completed first, so it is
+   delivered by the `-4` call's predecessor rules (a line, then `-4` from the next call).
 
 The editor caps a line at `capacity - 1` bytes and at the columns left on its row. The guest
 only ever receives a completed line. The C wrapper NUL-terminates the buffer when the returned
@@ -171,8 +177,10 @@ length leaves room.
 
 ### 6.8 `GET_KEY`
 
-Returns the oldest queued key, or `-2`. Key codes are `0x0000-0x7FFE`; the negative range of
-a 16-bit result is how "no key" is reported.
+Returns the oldest queued key, or `-2` while the input source is open and the queue is empty.
+Once the source is closed it returns `-4` after the queued keys are drained. Key codes are
+`0x0000-0x7FFE`; the negative range of a 16-bit result is how "no key" and "input closed" are
+reported.
 
 | Key | Code |
 |---|---:|
@@ -191,7 +199,7 @@ ABI version change.
 
 Returns `0` with row, column and button mask when a click is queued, or `-2` with the block
 untouched. Row and column are cell coordinates. Buttons: left 1, right 2, middle 4. There is
-no wheel event in version 1.
+no wheel event in version 2.
 
 ### 6.10 Line editor
 
@@ -200,6 +208,25 @@ the arming cursor. Printable ASCII inserts at the caret; Backspace erases before
 Right move it; Enter completes and moves the cursor to the next row, column 0, leaving the echo
 visible; Escape cancels, erases the echo and returns the cursor to the arming position. While
 the editor is active it consumes every key, so a key it ignores is not queued for `GET_KEY`.
+
+### 6.11 Closing the input source
+
+The host MAY close its input source when nothing more will ever be typed: a pipe or scripted
+session reaching end of file, or a user pressing the front end's close/EOF gesture. Closing is
+host state, not a command; the guest observes it only through `READ_LINE` and `GET_KEY`
+answering `-4`.
+
+Closing the source:
+
+- ignores every later key or text event; the host does not reopen it,
+- completes an armed editor's non-empty draft as its final line (the echo stays and the cursor
+  moves as Enter would) and cancels an empty draft,
+- delivers a line that was already complete normally, then `-4` on the next call,
+- leaves the click queue, the screen, the colours and the cursor alone.
+
+`TextDisplay::close_input()` is the host call. `reset()` reopens the source, like every other
+device reset. A front end that never closes keeps the version 1 behaviour: `-2` means "nothing
+yet" forever.
 
 ## 7. Host library: `krc::display`
 
@@ -220,7 +247,7 @@ target_link_libraries(my_target PRIVATE krc::display)
 | Header | Contents |
 |---|---|
 | `krc/display/display_abi.h` | command numbers, statuses, key/button codes, `Cell`, `Click`, `Info`, defaults |
-| `krc/display/text_display.h` | `TextDisplay`: cells, colours, cursor, line editor, key/click queues, polled results |
+| `krc/display/text_display.h` | `TextDisplay`: cells, colours, cursor, line editor, key/click queues, polled results, `close_input()` |
 | `krc/display/display_service.h` | `DisplayMemory` (the VM's memory view) and `DisplayService::execute`, which implements the whole command set |
 | `krc/display/surface.h` | `Surface`: XRGB8888 back/front buffers, mode validation, clipping, flip, frame hash, text overlay composition through a consumer-supplied `GlyphSource` |
 
@@ -231,7 +258,7 @@ only the block layout and the memory-map validation.
 
 ### 7.1 `Surface`
 
-The framebuffer core is API and tests only in version 1: no VM adopts it yet and the 16-bit
+The framebuffer core is API and tests only in version 2: no VM adopts it yet and the 16-bit
 machines stay text-only. It owns two XRGB8888 buffers, validates a mode before allocating,
 clips every drawing call, commits with `flip()`, hashes the committed frame deterministically
 (independently of host endianness), and composes a `TextDisplay` through a `GlyphSource`.
@@ -263,16 +290,22 @@ names and statuses.
 
 ## 9. Capability and compatibility
 
-Version 1 is additive for every VM that adopts it:
+Version 2 is additive for every VM that adopts it:
 
-- **Old guest, new host.** A program that never calls the display is unaffected.
+- **Old guest, new host.** A program that never calls the display is unaffected. A program
+  that reads input and only knows version 1 sees `-4` where version 1 documented only `-2`;
+  it must treat any negative `READ_LINE`/`GET_KEY` answer as "no input" or check the `INFO`
+  version before reading.
 - **New guest, old host.** The VM's display hypercall is reserved there and traps; a guest
   probes with `INFO`/`display_rows()` and treats a failure as "no display".
-- **Version field.** `INFO` word 0 is the ABI version. A guest compares it before using a
-  layout it does not know.
+- **Version field.** `INFO` word 0 is the ABI version, 2 for this document. A guest compares
+  it before using a layout or status it does not know. A host that never closes its input
+  source answers exactly as version 1 did apart from the version number.
 
 ## 10. Version history
 
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-11-27 | First draft: common command set, canonical block, 16-bit marshalling, host and guest library, capability rule. |
+| 1.0 | 2026-11-27 | Version 1 frozen with the kr216 reference binding: SYS 5, statuses `0/-1/-2/-3`, polled `READ_LINE`/`GET_KEY`. |
+| 2.0 | 2026-11-27 | Adds `DISPLAY_END_OF_INPUT (-4)` and the input-closed rule (§6.11) so a host can close stdin; `INFO` reports version 2. |

@@ -1,7 +1,9 @@
-/* The user-mode half of the kr232 C runtime. A user program cannot reach a
-   device register, so it asks the kernel through SYSCALL: number 1 writes a
-   buffer and number 0 exits with a status (kr232-isa.md §18). The kernel-mode
-   path in libc.c is unchanged and still writes the console register directly. */
+/* The user-mode half of the kr232 C runtime. A user program cannot reach a device
+   register, so it asks the kernel through SYSCALL: number 1 writes a buffer to
+   standard output and number 0 exits with a status (kr232-isa.md §13). Standard
+   input and output are the host text display: the kernel writes the validated bytes
+   to the terminal page and reads display input for the user. The console page is the
+   debug serial stream and stdio does not use it. */
 extern int __kr232_syscall(int number, int argument0, int argument1, int argument2);
 
 #define KR232_CALL_EXIT 0

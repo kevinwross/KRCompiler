@@ -10,9 +10,11 @@
 
 namespace krc::display {
 
-// ABI version reported by INFO. A new command or a changed canonical block layout takes the
-// next version; a guest must compare it before using a layout it does not know.
-inline constexpr std::uint16_t kAbiVersion = 1;
+// ABI version reported by INFO. A new command, a changed canonical block layout or a changed
+// status value takes the next version; a guest must compare it before using a layout it does
+// not know. Version 2 adds kStatusEndOfInput: READ_LINE and GET_KEY answer it when the host
+// input source has been closed.
+inline constexpr std::uint16_t kAbiVersion = 2;
 
 // Reference geometry and colours. The surface is host state; these are the defaults a device
 // starts with and the values the reference machines use.
@@ -30,8 +32,8 @@ enum class Command : std::uint16_t {
     PutChar = 4,    // in: code
     PutString = 5,  // in: address, byte count
     Cursor = 6,     // in: row, column, visible
-    ReadLine = 7,   // in/out: buffer address, capacity; result length or -2
-    GetKey = 8,     // no block; result key code or -2
+    ReadLine = 7,   // in/out: buffer address, capacity; result length, -2 or -4
+    GetKey = 8,     // no block; result key code, -2 or -4
     GetClick = 9,   // out: row, column, buttons; result 0 or -2
 };
 
@@ -41,6 +43,10 @@ inline constexpr std::int32_t kStatusOk = 0;
 inline constexpr std::int32_t kStatusBadArgument = -1;
 inline constexpr std::int32_t kStatusNotReady = -2;
 inline constexpr std::int32_t kStatusUnknownCommand = -3;
+// The host input source was closed and nothing more will ever be queued. READ_LINE and
+// GET_KEY answer it in place of kStatusNotReady once their queued input is drained; every
+// other command is unaffected.
+inline constexpr std::int32_t kStatusEndOfInput = -4;
 
 // Key codes. Printable keys carry their ASCII code; the extended keys sit above it.
 inline constexpr std::uint16_t kKeyBackspace = 8;

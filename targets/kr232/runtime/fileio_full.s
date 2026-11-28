@@ -1,31 +1,41 @@
-; Host services for the C runtime, kernel mode. The C library calls these and maps
-; a negative answer to an error; on kr232 the console is the only stream, so a file
-; call has nothing to answer but -1.
+; Host services for the C runtime, kernel mode. Standard input and output are the
+; host text display (kr232-devices.md §7): SYS 1 writes characters to the terminal
+; page and SYS 2 reads display input. The console page is the debug serial stream and
+; nothing here touches it; a program that wants COM calls the console registers
+; directly. A file call has no device behind it and answers -1.
 ;
 ; Register use matches the SYS convention: R2, R3, R4 carry the arguments and R2
 ; brings the answer back, which is the same order the C side passes them in.
 
 .globl krc_sys_write
 krc_sys_write:
-  ld r7, #1              ; console write: R2 descriptor, R3 address, R4 count
+  ld r7, #1              ; display write: R2 descriptor, R3 address, R4 count
   sys
   ret
 
 .globl krc_sys_read
 krc_sys_read:
-  ld r7, #2              ; console read: the same three registers
+  ld r7, #2              ; display read: the same three registers
   sys
   ret
 
+; One byte of display input. The host answers 1 with the byte in sys_char, 0 at end
+; of input, and -1 while the source is open and nothing has been typed yet; the
+; library polls that case until the host delivers a byte or closes the source.
 .globl krc_sys_getchar
 krc_sys_getchar:
+sys_char_poll:
   ld r7, #2
-  ld r2, #0              ; the console input stream
+  ld r2, #0              ; the display input stream
   ld r3, #sys_char
   ld r4, #1
   sys
   cmp r2, #1
   beq sys_char_ready
+  cmp r2, #0
+  beq sys_char_eof
+  bmi sys_char_poll
+sys_char_eof:
   ld r2, #-1
   ret
 sys_char_ready:

@@ -86,6 +86,30 @@ because the host offers no size query through the seek service. A data pointer
 whose initialiser needs a relocation is not emitted on this profile, which is why
 `stdout` is a call rather than a global.
 
+## KR216
+
+The KR216 runtime reaches the host through the `SYS` instruction (`targets/kr216/runtime/syscalls.s`):
+R7 carries the call number, the arguments are in R2-R5, and the result comes back in R2. The
+staged header `<krc/display.h>` and `targets/kr216/runtime/display.c` wrap the display family;
+there is no file-service runtime for this target.
+
+| Call | Runtime wrapper | Arguments | Result |
+|---:|---|---|---|
+| 0 | `__krc_exit` | status | — |
+| 1 | `__krc_write`, `__krc_debug_write` | fd, address, length | bytes written |
+| 2 | — (the host implements it; no runtime wrapper) | fd, address, length | bytes read |
+| 3 | — | — | seconds in R2:R3 |
+| 4 | — | address, length | debug bytes appended to the diagnostics |
+| 5 | `__krc_display` | command, block address, block length | status or result |
+
+**The console (calls 1 and 2, and the `0xFF00`/`0xFF02`/`0xFF04` registers) is the debug
+serial port.** Standard input and output are the text display: `putchar`, `puts` and `printf`
+write through the SYS 5 `PUT_CHAR`/`PUT_STRING` commands, and `getchar`/`getc` read the host
+line editor through `READ_LINE`. `__krc_debug_write(buffer, count)` is the explicit serial
+path; nothing in stdio uses calls 1 or 2. The display ABI, its statuses (including
+`DISPLAY_END_OF_INPUT`) and the close rule are in `display-abi.md`; the kr216 binding is
+`../kr216/kr216-display.md`.
+
 ## Linking
 
 `cmake/LinkRuntime.cmake` adds the KR32 host stubs to every runtime link by

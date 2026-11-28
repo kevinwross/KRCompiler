@@ -10,11 +10,12 @@
  * 8-bit ASCII today and cell codes are 16-bit. Colours are XRGB8888 and the high byte is not
  * interpreted.
  *
- * A negative result is an error:
+ * A negative result is a status (READ_LINE and GET_KEY also return a non-negative result):
  *
  *   DISPLAY_BAD_ARGUMENT     -1  a bad guest pointer, length or argument
  *   DISPLAY_NOT_READY        -2  no key/click is queued, or a line is still being typed
  *   DISPLAY_UNKNOWN_COMMAND  -3  the VM does not know the command
+ *   DISPLAY_END_OF_INPUT     -4  READ_LINE/GET_KEY only: the host closed its input source
  *
  * A VM without the display leaves the hypercall reserved, so a program that cares calls
  * display_rows()/display_cols() first and treats a negative answer as "no display".
@@ -22,7 +23,7 @@
 
 #include <stdint.h>
 
-#define DISPLAY_ABI_VERSION 1
+#define DISPLAY_ABI_VERSION 2
 
 #define DISPLAY_CMD_INFO 0
 #define DISPLAY_CMD_CLEAR 1
@@ -39,6 +40,7 @@
 #define DISPLAY_BAD_ARGUMENT (-1)
 #define DISPLAY_NOT_READY (-2)
 #define DISPLAY_UNKNOWN_COMMAND (-3)
+#define DISPLAY_END_OF_INPUT (-4)
 
 /* Key codes. Printable keys carry their ASCII code; the extended keys sit above it. */
 #define DISPLAY_KEY_BACKSPACE 8
@@ -76,10 +78,13 @@ int display_cursor(int row, int col, int visible);
    echoes typing at the cursor. When Enter completes the line the next call copies it to
    buffer (without a terminator), NUL-terminates it when capacity leaves room, and returns the
    length. Escape cancels the line, so the next call arms a new one and returns
-   DISPLAY_NOT_READY again. */
+   DISPLAY_NOT_READY again. Once the host closes its input source, subsequent calls answer
+   DISPLAY_END_OF_INPUT; a partial draft left at the close is delivered first as a final
+   line. */
 int display_read_line(char *buffer, int capacity);
 
-/* Polled input: a key code, or DISPLAY_NOT_READY when nothing is queued. */
+/* Polled input: a key code, or DISPLAY_NOT_READY when nothing is queued. After the host
+   closes its input source it answers DISPLAY_END_OF_INPUT once the queue is drained. */
 int display_get_key(void);
 
 /* Polled mouse input: row/col are cell coordinates and buttons is the mask above. Returns

@@ -68,13 +68,21 @@ public:
     // ---- host input -----------------------------------------------------------------
     // Routes a key to the line editor while one is active and to the raw key queue
     // otherwise. While a line editor is active the editor consumes every key, so a key the
-    // editor ignores is not queued for GET_KEY.
+    // editor ignores is not queued for GET_KEY. Once close_input() has run, keys are ignored.
     void push_key(std::uint16_t code);
     // Queues each byte as a key. Line feeds act as Enter and carriage returns are dropped;
     // the bytes are otherwise queued or edited exactly as push_key() would.
     void push_text(std::string_view text);
     // Queues a click event; row and col are cell coordinates and buttons is the mask above.
     void push_click(std::uint16_t row, std::uint16_t col, std::uint16_t buttons);
+
+    // Closes the input source: no further keys or text can arrive. An armed editor's
+    // non-empty draft becomes the completed line (its echo stays and the cursor moves on as
+    // Enter would); an empty draft is cancelled. After queued keys are drained, READ_LINE and
+    // GET_KEY answer kStatusEndOfInput instead of kStatusNotReady. The click queue is a
+    // separate device and is unaffected. reset() reopens the source.
+    void close_input() noexcept;
+    [[nodiscard]] bool input_closed() const noexcept { return input_closed_; }
 
     // Pops the oldest queued key, or kStatusNotReady when the queue is empty.
     [[nodiscard]] int get_key();
@@ -124,6 +132,7 @@ private:
 
     std::deque<std::uint16_t> keys_;
     std::deque<Click> clicks_;
+    bool input_closed_ = false;
 
     bool editor_active_ = false;
     std::string line_;

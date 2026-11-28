@@ -109,6 +109,7 @@ std::int32_t DisplayService::execute(TextDisplay& display, DisplayMemory& memory
         if (capacity == 0 || capacity > kMaximumTransfer) return kStatusBadArgument;
         if (!memory.valid_range(buffer, capacity)) return kStatusBadArgument;
         if (!display.line_ready()) {
+            if (display.input_closed()) return kStatusEndOfInput;
             display.arm_line_editor(static_cast<std::uint16_t>(capacity));
             return kStatusNotReady;
         }
@@ -122,6 +123,7 @@ std::int32_t DisplayService::execute(TextDisplay& display, DisplayMemory& memory
     }
     case Command::GetKey: {
         const int key = display.get_key();
+        if (key == kStatusNotReady && display.input_closed()) return kStatusEndOfInput;
         if (key < 0 || key > kMaximumKeyCode) return kStatusNotReady;
         return key;
     }

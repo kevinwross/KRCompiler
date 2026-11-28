@@ -1598,7 +1598,19 @@ int close(int descriptor) {
 }
 
 int read(int descriptor, void *buffer, int count) {
-    return host_result(krc_sys_read(descriptor, buffer, count));
+    int result;
+    /* Standard input is the display: the host answers -1 while the source is open and
+       nothing has been typed yet, 0 at end of input and a positive count for bytes. A
+       read of descriptor 0 therefore polls until input arrives or the source closes,
+       which is what makes getc/fread on stdin behave like a terminal. */
+    if (descriptor != 0) {
+        return host_result(krc_sys_read(descriptor, buffer, count));
+    }
+    result = krc_sys_read(descriptor, buffer, count);
+    while (result < 0) {
+        result = krc_sys_read(descriptor, buffer, count);
+    }
+    return result;
 }
 
 int write(int descriptor, const void *buffer, int count) {

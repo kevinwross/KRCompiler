@@ -10,6 +10,7 @@ using krc::display::DisplayMemory;
 using krc::display::DisplayService;
 using krc::display::kButtonLeft;
 using krc::display::kStatusBadArgument;
+using krc::display::kStatusEndOfInput;
 using krc::display::kStatusNotReady;
 using krc::display::kStatusOk;
 using krc::display::kStatusUnknownCommand;
@@ -79,6 +80,7 @@ TEST_CASE("an unknown command or a wrong block size is a status") {
 TEST_CASE("INFO answers the abi version and geometry") {
     Fixture fixture;
     CHECK(fixture.call(Command::Info, 4) == kStatusOk);
+    CHECK(krc::display::kAbiVersion == 2);
     CHECK(fixture.block[0] == krc::display::kAbiVersion);
     CHECK(fixture.block[1] == 30);
     CHECK(fixture.block[2] == 80);
@@ -206,4 +208,54 @@ TEST_CASE("CLEAR uses the current colours") {
     CHECK(fixture.call(Command::Clear, 0) == kStatusOk);
     CHECK(fixture.display.cell(0, 0).foreground == 0x00FFFFFFu);
     CHECK(fixture.display.cell(0, 0).background == 0x000000FFu);
+}
+
+TEST_CASE("READ_LINE and GET_KEY report end of input after a close") {
+    Fixture fixture;
+    fixture.block[0] = 0x300;
+    fixture.block[1] = 8;
+    CHECK(fixture.call(Command::ReadLine, 2) == kStatusNotReady);
+    fixture.display.push_text("ok\n");
+    CHECK(fixture.call(Command::ReadLine, 2) == 2);
+    fixture.display.close_input();
+    CHECK(fixture.call(Command::ReadLine, 2) == kStatusEndOfInput);
+    CHECK(fixture.call(Command::GetKey, 0) == kStatusEndOfInput);
+
+    // Argument validation is unchanged by the close: a bad buffer is still -1.
+    fixture.block[1] = 0;
+    CHECK(fixture.call(Command::ReadLine, 2) == kStatusBadArgument);
+    fixture.block[1] = 8;
+    fixture.block[0] = 0x1000;
+    CHECK(fixture.call(Command::ReadLine, 2) == kStatusBadArgument);
+
+    // Only input reports end of input; output still works.
+    fixture.display.set_cursor(0, 0);
+    fixture.block[0] = 0x41;
+    CHECK(fixture.call(Command::PutChar, 1) == kStatusOk);
+    CHECK(fixture.display.cell(0, 0).code == 0x41);
+}
+
+TEST_CASE("a line completed before a close is delivered before end of input") {
+    Fixture fixture;
+    fixture.block[0] = 0x300;
+    fixture.block[1] = 8;
+    CHECK(fixture.call(Command::ReadLine, 2) == kStatusNotReady);
+    fixture.display.push_text("hi\n");
+    fixture.display.close_input();
+    CHECK(fixture.call(Command::ReadLine, 2) == 2);
+    CHECK(fixture.memory.bytes[0x300] == 'h');
+    CHECK(fixture.memory.bytes[0x301] == 'i');
+    CHECK(fixture.call(Command::ReadLine, 2) == kStatusEndOfInput);
+}
+
+TEST_CASE("queued keys drain before GET_KEY reports end of input") {
+    Fixture fixture;
+    fixture.display.push_key(0x41);
+    fixture.display.push_key(0x42);
+    fixture.display.close_input();
+    CHECK(fixture.call(Command::GetKey, 0) == 0x41);
+    CHECK(fixture.call(Command::GetKey, 0) == 0x42);
+    CHECK(fixture.call(Command::GetKey, 0) == kStatusEndOfInput);
+    // Clicks are a separate device and never report end of input.
+    CHECK(fixture.call(Command::GetClick, 3) == kStatusNotReady);
 }

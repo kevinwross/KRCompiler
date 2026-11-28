@@ -78,6 +78,7 @@ void TextDisplay::reset() {
     editor_limit_ = 0;
     echoed_ = 0;
     completed_line_.reset();
+    input_closed_ = false;
     clear();
 }
 
@@ -158,6 +159,7 @@ void TextDisplay::set_cursor(std::uint16_t row, std::uint16_t col) noexcept {
 }
 
 void TextDisplay::push_key(std::uint16_t code) {
+    if (input_closed_) return;
     if (editor_active_) {
         handle_editor_key(code);
         return;
@@ -179,6 +181,19 @@ void TextDisplay::push_text(std::string_view text) {
 
 void TextDisplay::push_click(std::uint16_t row, std::uint16_t col, std::uint16_t buttons) {
     clicks_.push_back(Click{row, col, buttons});
+}
+
+void TextDisplay::close_input() noexcept {
+    if (input_closed_) return;
+    input_closed_ = true;
+    if (!editor_active_) return;
+    if (line_.empty()) {
+        cancel_editor_line();
+    } else {
+        // End of input with a partial line: deliver it, exactly as a terminal delivers the
+        // last unterminated line at end of file. The echo stays and the cursor moves on.
+        complete_editor_line();
+    }
 }
 
 int TextDisplay::get_key() {

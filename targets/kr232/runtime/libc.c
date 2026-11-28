@@ -1,8 +1,9 @@
-/* The kernel-mode kr232 C runtime's output path. Device registers are kernel-only,
-   so this writes the terminal page's cell port at 0xFFF08000 directly; the page
-   advances the cursor, which is why `krc_kr232_run_transcript` reads `Hi!` back
-   out of the terminal grid. A program running under the kernel uses the packages
-   in targets/kr232/runtime/cons_user.c, which go through SYSCALL instead. */
+/* The kernel-mode kr232 C runtime's output path. Standard output is the host text
+   display (kr232-devices.md §7); device registers are kernel-only, so this writes
+   the terminal page's cell port at 0xFFF08000 directly and the page maps the byte
+   onto the shared display. The console page (0xFFF02000) is the debug serial stream
+   and stdio does not use it. A user program cannot reach the page and uses the SYS
+   write path in libc_user.c, which the kernel serves from the same display. */
 #define TERMINAL_CELL_OUT (*(volatile unsigned int*)0xFFF08000u)
 
 int putchar_(int ch) {

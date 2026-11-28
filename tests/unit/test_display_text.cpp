@@ -260,3 +260,65 @@ TEST_CASE("the editor echo starts at the arming cursor") {
     CHECK(display.cursor_row() == 2);
     CHECK(display.cursor_col() == 6);
 }
+
+TEST_CASE("closing the input source delivers its draft and ignores later input") {
+    TextDisplay display;
+    display.arm_line_editor(8);
+    display.push_text("abc");
+    display.close_input();
+    CHECK(display.input_closed());
+    CHECK_FALSE(display.editor_active());
+    CHECK(display.line_ready());
+    CHECK(display.pending_line_length() == 3);
+    CHECK(display.cell(0, 0).code == 'a');
+    CHECK(display.cell(0, 1).code == 'b');
+    CHECK(display.cell(0, 2).code == 'c');
+    CHECK(display.cursor_row() == 1);
+    CHECK(display.cursor_col() == 0);
+    const auto line = display.take_line();
+    REQUIRE(line.has_value());
+    CHECK(*line == "abc");
+
+    // The source never reopens on its own: no key or text can arrive after the close.
+    display.push_key(0x41);
+    display.push_text("late");
+    CHECK(display.get_key() == kStatusNotReady);
+    CHECK_FALSE(display.line_ready());
+}
+
+TEST_CASE("closing an empty editor cancels it and keeps a completed line") {
+    TextDisplay display;
+    display.arm_line_editor(8);
+    display.close_input();
+    CHECK_FALSE(display.editor_active());
+    CHECK_FALSE(display.line_ready());
+
+    TextDisplay pending;
+    pending.arm_line_editor(8);
+    pending.push_text("done\n");
+    pending.close_input();
+    CHECK(pending.line_ready());
+    const auto line = pending.take_line();
+    REQUIRE(line.has_value());
+    CHECK(*line == "done");
+    CHECK_FALSE(pending.line_ready());
+}
+
+TEST_CASE("queued keys drain across a close") {
+    TextDisplay display;
+    display.push_key(0x41);
+    display.close_input();
+    CHECK(display.get_key() == 0x41);
+    CHECK(display.get_key() == kStatusNotReady);
+    CHECK(display.input_closed());
+}
+
+TEST_CASE("reset reopens a closed input source") {
+    TextDisplay display;
+    display.close_input();
+    display.reset();
+    CHECK_FALSE(display.input_closed());
+    display.arm_line_editor(8);
+    display.push_text("ok\n");
+    CHECK(display.line_ready());
+}
