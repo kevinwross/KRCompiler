@@ -46,10 +46,13 @@ add_executable(krc_tests
     unit/test_kr216_object.cpp
     unit/test_kr216_image.cpp
     unit/test_kr216_debug.cpp
+    unit/test_display_text.cpp
+    unit/test_display_surface.cpp
+    unit/test_display_service.cpp
     unit/test_fixture_extractor.cpp
     unit/test_toolchain.cpp
 )
-target_link_libraries(krc_tests PRIVATE krc::toolchain krc_fixture_extractor)
+target_link_libraries(krc_tests PRIVATE krc::toolchain krc::display krc_fixture_extractor)
 target_include_directories(krc_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
 target_include_directories(krc_tests SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/third_party/doctest")
 target_compile_definitions(krc_tests PRIVATE KRC_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -737,6 +740,43 @@ if(TARGET krc)
                 -P ${CMAKE_SOURCE_DIR}/cmake/CheckK216Header.cmake)
     set_tests_properties(krc_kr216_image_header PROPERTIES
         DEPENDS krc_kr216_link_image)
+
+    # <krc/display.h> and the SYS 5 runtime: a program that calls every wrapper must
+    # compile, link against display.c and syscalls.s, and carry the C wrapper entry points
+    # in its symbol payload. (The assembly trampoline has no KDBG record; the successful
+    # link is its evidence.) Running the program is the kr216 repository's guest_display row.
+    set(kr216_display_symbols
+        "display_clear;display_puts;display_read_line;main")
+    add_test(NAME krc_kr216_display_link
+        COMMAND ${CMAKE_COMMAND}
+                -DKRC=$<TARGET_FILE:krc>
+                -DKRLD=$<TARGET_FILE:krld>
+                -DRUNTIME=${CMAKE_SOURCE_DIR}/targets/kr216/runtime
+                -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/c/kr216_display.c
+                -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr216_display_link
+                "-DEXPECT_SYMBOLS=${kr216_display_symbols}"
+                -P ${CMAKE_SOURCE_DIR}/cmake/LinkKr216Display.cmake)
+
+    # The installed package, proved from a separate CMake project: find_package resolves,
+    # the imported target carries the headers and archive, and the consumer runs. The outer
+    # compiler flags are forwarded so an instrumented (sanitizer) package gets a consumer
+    # built and linked with the same instrumentation.
+    set(krc_display_consumer_cxx_flags "${CMAKE_CXX_FLAGS}")
+    set(krc_display_consumer_link_flags "${CMAKE_EXE_LINKER_FLAGS}")
+    if(KRC_SANITIZE)
+        string(APPEND krc_display_consumer_cxx_flags
+               " -fsanitize=address,undefined -fno-omit-frame-pointer")
+        string(APPEND krc_display_consumer_link_flags " -fsanitize=address,undefined")
+    endif()
+    add_test(NAME krc_display_package_consumer
+        COMMAND ${CMAKE_COMMAND}
+                -DBUILD_DIR=${CMAKE_BINARY_DIR}
+                -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_display_package
+                "-DCONFIG=$<CONFIG>"
+                "-DCMAKE_CXX_FLAGS=${krc_display_consumer_cxx_flags}"
+                "-DCMAKE_EXE_LINKER_FLAGS=${krc_display_consumer_link_flags}"
+                "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                -P ${CMAKE_SOURCE_DIR}/cmake/CheckDisplayPackage.cmake)
 
     add_test(NAME krc_kr16_crt0_object
         COMMAND $<TARGET_FILE:krc> -c --target=kr16 --emit-object

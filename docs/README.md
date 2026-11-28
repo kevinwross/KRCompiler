@@ -26,6 +26,7 @@ The plan is approved (2026-11-09). This index lists the documents under `docs/` 
 - [abi-kr216.md](abi-kr216.md) — KR216 `Ip16Long32` ABI: registers, frames, aggregates, object rules. Accepted 2026-11-22; [ADR 0056](decisions/0056-kr216-64-bit-calling-convention.md) adds the 64-bit convention.
 - [abi-kr232.md](abi-kr232.md) — KR232 `Ilp32` without a 64-bit type, the R6 aggregate destination, frames, vtables, and `.kr232` image rules. Accepted with [ADR 0057](decisions/0057-kr232-target-profile.md).
 - [host-services.md](host-services.md) — KR32 host-service wrappers, errno, flags, and the sandbox.
+- [display-abi.md](display-abi.md) — the common display command set, canonical block and 16-bit marshalling, the `krc::display` package and the `<krc/display.h>` guest API. Proposed, version 1.
 - [object.md](object.md) — the `KRO` object and executable container. Frozen v1.0 by [ADR 0005](decisions/0005-kro-object-format-freeze.md).
 - [symbols.md](symbols.md) — the `KDBG` symbol and debug format. v1 is frozen by [ADR 0009](decisions/0009-kdbg-v1-freeze.md); v1.1 adds records additively.
 - [ir.md](ir.md) — the typed SSA intermediate representation. The v1.0 core is frozen by [ADR 0003](decisions/0003-ir-core-freeze.md); EH, RTTI, and v1.1 metadata remain draft.

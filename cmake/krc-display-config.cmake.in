@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+# The shared host display device and framebuffer core (docs/display-abi.md). It
+# depends only on the standard library; the export set also defines
+# `krc::toolchain` and `krc::debug`, which this package does not use.
+include("${CMAKE_CURRENT_LIST_DIR}/../krc/krc-targets.cmake")
+
+check_required_components(krc-display)

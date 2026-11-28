@@ -27,6 +27,15 @@ find_package(krc-debug CONFIG REQUIRED)
 target_link_libraries(my_reader PRIVATE krc::debug)
 ```
 
+`krc-display` provides `krc::display`, the shared host display device and
+framebuffer core of [display-abi.md](display-abi.md), for a VM front end or a
+debugger surface:
+
+```cmake
+find_package(krc-display CONFIG REQUIRED)
+target_link_libraries(my_surface PRIVATE krc::display)
+```
+
 Configure with `-DCMAKE_PREFIX_PATH=<install prefix>`. The installed interface
 exposes `include/krc` and nothing under `src/`; the compiler implementation is
 inside `libkrc-toolchain.a` / `krc-toolchain.lib`.

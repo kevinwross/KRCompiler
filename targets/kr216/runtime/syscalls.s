@@ -17,3 +17,15 @@ __krc_exit:
     sys
     pop fp
     ret
+
+; SYS 5, the text display (kr216-display.md). R2 = command, R3 = argument block,
+; R4 = block length; the result or status comes back in R2.
+.global __krc_display
+__krc_display:
+    push fp
+    mov fp, sp
+    ld r7, #5
+    sys
+    pop fp
+    ret
+

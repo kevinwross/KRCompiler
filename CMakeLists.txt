@@ -241,6 +241,28 @@ target_compile_features(krc_debug PUBLIC cxx_std_20)
 krc_apply_warnings(krc_debug)
 krc_apply_sanitizers(krc_debug)
 
+# `krc::display` is the shared host display device and framebuffer core
+# (docs/display-abi.md). It depends only on the standard library, so a VM or a
+# debugger links it without the compiler. The guest side of the same ABI lives
+# in the target runtimes and the common sysroot header.
+add_library(krc_display STATIC
+    src/display/display_service.cpp
+    src/display/surface.cpp
+    src/display/text_display.cpp
+)
+add_library(krc::display ALIAS krc_display)
+set_target_properties(krc_display PROPERTIES
+    OUTPUT_NAME krc-display
+    EXPORT_NAME display
+)
+target_include_directories(krc_display PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+target_compile_features(krc_display PUBLIC cxx_std_20)
+krc_apply_warnings(krc_display)
+krc_apply_sanitizers(krc_display)
+
 # `krc::toolchain` is the public build facade. Its archive carries the compiler
 # implementation, so a host links one static library and gets compile, assemble
 # and link without a subprocess or a second entry point.
@@ -410,7 +432,7 @@ endif()
 # The exported package. Consumers see exactly two targets — `krc::toolchain` and
 # `krc::debug` — and the headers under include/krc. The compiler implementation
 # is compiled into krc-toolchain's archive and never exported as a target.
-install(TARGETS krc_toolchain krc_debug
+install(TARGETS krc_toolchain krc_debug krc_display
     EXPORT krcTargets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
@@ -460,7 +482,7 @@ else()
         "KRC_BUILD_TOOLS=OFF: the installed package carries no target sysroot or runtime")
 endif()
 
-foreach(package IN ITEMS krc-toolchain krc-debug)
+foreach(package IN ITEMS krc-toolchain krc-debug krc-display)
     configure_package_config_file(
         "cmake/${package}-config.cmake.in"
         "${CMAKE_CURRENT_BINARY_DIR}/${package}-config.cmake"
