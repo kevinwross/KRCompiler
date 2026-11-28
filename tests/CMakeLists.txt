@@ -35,6 +35,7 @@ add_executable(krc_tests
     unit/test_kr232_encoder.cpp
     unit/test_kr232_parser.cpp
     unit/test_kr232_assembler.cpp
+    unit/test_kr232_debug.cpp
     unit/test_kr232_image.cpp
     unit/test_kr232_object.cpp
     unit/test_kr232_roundtrip.cpp

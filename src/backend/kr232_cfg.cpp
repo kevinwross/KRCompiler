@@ -5,6 +5,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -117,6 +118,40 @@ std::vector<int> all_registers() {
         registers.push_back(register_number);
     }
     return registers;
+}
+
+// The frame slots named by `.debug_var <function> <name> <offset> <type> <size>`
+// records. A debug record makes a slot observable to a debugger at any pc, so a
+// store to one is part of the function's observable behaviour even when the
+// emitted program never reloads it: the value is what a Variables window shows.
+// The dead-store passes must therefore keep every store to a recorded slot
+// (docs/register-promoted-locals.md §2.3; docs/symbol-verification-plan.md G4).
+std::set<int> recorded_frame_slots(std::string_view assembly) {
+    std::set<int> slots;
+    std::size_t position = 0;
+    while (position <= assembly.size()) {
+        const std::size_t newline = assembly.find('\n', position);
+        const std::string_view rest = assembly.substr(
+            position, newline == std::string_view::npos ? std::string_view::npos
+                                                        : newline - position);
+        position = newline == std::string_view::npos ? assembly.size() + 1
+                                                     : newline + 1;
+        if (trim(rest).rfind(".debug_var ", 0) != 0) {
+            continue;
+        }
+        std::istringstream stream{std::string(trim(rest))};
+        std::string directive;
+        std::string function;
+        std::string name;
+        std::string offset;
+        stream >> directive >> function >> name >> offset;
+        char* stop = nullptr;
+        const long slot = std::strtol(offset.c_str(), &stop, 10);
+        if (stop != nullptr && *stop == '\0' && slot < 0) {
+            slots.insert(static_cast<int>(slot));
+        }
+    }
+    return slots;
 }
 
 InstructionFlow analyze(std::string_view raw) {
@@ -430,6 +465,7 @@ std::string eliminate_local_dead_frame_stores(std::string_view assembly) {
         }
     }
     std::vector<bool> dead(lines.size(), false);
+    const std::set<int> recorded = recorded_frame_slots(assembly);
     for (std::size_t index = 0; index < lines.size(); ++index) {
         const auto line = trim(without_comment(lines[index]));
         const auto mnemonic = mnemonic_of(line);
@@ -439,6 +475,12 @@ std::string eliminate_local_dead_frame_stores(std::string_view assembly) {
         const auto operands = operands_of(line);
         int slot = 0;
         if (operands.empty() || !parse_frame_slot(operands[0], slot)) {
+            continue;
+        }
+        // A recorded slot is observable to a debugger between the two stores, so
+        // the earlier one is not dead even when the program overwrites it before
+        // any load.
+        if (recorded.count(slot) != 0) {
             continue;
         }
         for (std::size_t next = index + 1; next < lines.size(); ++next) {
@@ -524,6 +566,10 @@ std::string eliminate_dead_frame_stores(std::string_view assembly) {
     auto flow = machine::build_control_flow(lines, analyze_slots);
     machine::compute_liveness(flow);
 
+    // A store to a slot a debug record names is observable even when nothing in
+    // the emitted code reads the slot again: the debugger's Variables window
+    // reads it. Keep every such store.
+    const std::set<int> recorded = recorded_frame_slots(assembly);
     std::vector<bool> dead(lines.size(), false);
     for (const auto& block : flow.blocks) {
         std::set<int> live(block.live_out.begin(), block.live_out.end());
@@ -538,7 +584,8 @@ std::string eliminate_dead_frame_stores(std::string_view assembly) {
             if (is_store && !operands.empty() &&
                 parse_frame_slot(operands[0], slot) &&
                 live.find(slot) == live.end() &&
-                live.find(kAnyFrameSlot) == live.end()) {
+                live.find(kAnyFrameSlot) == live.end() &&
+                recorded.count(slot) == 0) {
                 dead[line_index] = true;
                 continue;
             }

@@ -682,8 +682,17 @@ CompileResult compile(const Source& source, const Options& options) {
         // Promotion runs before CSE deliberately: E2 shares only expressions
         // whose operands are identical SSA values, and until the alloca round
         // trips are gone every variable read is a distinct load.
-        const auto promoted =
-            ir::alloca_promotion(*module, options.optimize >= 2);
+        //
+        // A named source variable is a memory object named `<variable>.addr`, and
+        // promoting it deletes the slot its debug record describes. KDBG can only
+        // describe a frame home on the kr232 path (no `.kdbg_loc` producer), so
+        // ADR 0052's rule applies there: do not promote a recorded alloca until a
+        // reader honours register locations. kr232 therefore passes `false` at
+        // every level, including `-O2` (docs/register-promoted-locals.md, Track A
+        // item 5).
+        const bool target_describes_promoted_locals = id != target::TargetId::Kr232;
+        const auto promoted = ir::alloca_promotion(
+            *module, options.optimize >= 2 && target_describes_promoted_locals);
         change.instructions_removed += promoted.instructions_removed;
         if (options.optimize >= 2) {
             const auto inlined = ir::inline_small_functions(*module);

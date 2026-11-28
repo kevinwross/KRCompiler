@@ -3,6 +3,7 @@
 #include "kr232_cfg.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <unordered_map>
@@ -1591,9 +1592,24 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         out << ".text\n";
         out << name << ":\n";
         // The entry label precedes the prologue so a disassembly has one stable
-        // marker at the definition. This assembler builds its bridge from the
-        // assembly text, so it has no definition-line record yet (ADR 0061).
+        // marker at the definition, and the definition's source line is set before
+        // the first prologue instruction so every prologue byte maps to the
+        // function's own line rather than to a generated-assembly line.
         out << ".L" << name << ".begin:\n";
+        std::string current_debug_file;
+        std::uint32_t current_debug_line = 0;
+        if (function->definition.valid()) {
+            current_debug_file = function->definition.file;
+            current_debug_line = function->definition.line;
+            out << ".debug_line " << current_debug_file << " "
+                << current_debug_line << "\n";
+        } else {
+            // A synthesized function may have no definition location. Its prologue
+            // has no source line, so say so explicitly instead of letting the
+            // assembler fall back to a generated-assembly line; the first statement
+            // with a location sets one below.
+            out << ".debug_line 0\n";
+        }
 
         // Slots: allocas first (their address is FP-relative), then one slot per
         // value, then one per parameter. An f64 takes two slots and starts on an
@@ -1759,31 +1775,63 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             out << "  " << opcode << " [r13-" << offset << "], " << source << "\n";
         };
         const std::uint32_t frame = align_frame(next_slot * 4u);
-
         out << "  enter #" << frame << ", #0\n";
-        // Local variables for the debug bridge: a frame offset the debugger adds
-        // to the frame base it unwound. The type index is 0, so only the size is
-        // recorded until the bridge carries type records for this target.
+        // Local variables for the debug bridge: a frame offset the debugger adds to
+        // the frame base it unwound. Only a source variable is recorded -- the IR
+        // names one `<variable>.addr` (or `<variable>.addr.<n>` when a shadowed
+        // name needed a unique alloca) -- so a compiler temporary such as
+        // `argument.copy` never becomes a row in a Variables window, and a later
+        // pass may promote one without leaving a record on a dead slot
+        // (docs/symbols.md:195-199). A parameter's home is the copy IRGen makes in
+        // its `<parameter>.addr` alloca, so parameters are recorded the same way;
+        // the name set here is what makes each record unique and what gives W its
+        // `param`/`local` kind.
+        std::unordered_set<std::string> parameter_names;
+        for (const auto& parameter : function->parameters) {
+            parameter_names.insert(parameter->name);
+        }
+        std::unordered_set<std::string> debug_variable_names;
         for (const auto& block : function->blocks) {
             for (const auto& instruction : block->instructions) {
                 if (instruction->opcode != ir::Opcode::Alloca ||
-                    instruction->name.empty()) {
+                    !instruction->allocated_type) {
                     continue;
                 }
                 const auto slot = slot_of.find(instruction.get());
                 if (slot == slot_of.end()) {
                     continue;
                 }
+                // `x.addr` is the source variable `x`. A shadowed declaration's
+                // alloca carries a numeric suffix after the marker (`x.addr.4`),
+                // which stays in the name so the second record is distinguishable;
+                // the marker itself is removed either way.
                 std::string variable = instruction->name;
-                const std::string suffix = ".addr";
-                if (variable.size() > suffix.size() &&
-                    variable.compare(variable.size() - suffix.size(), suffix.size(), suffix) == 0) {
-                    variable.resize(variable.size() - suffix.size());
+                const std::string marker = ".addr";
+                const auto at = variable.find(marker);
+                if (at == std::string::npos) {
+                    continue;
+                }
+                const std::string tail = variable.substr(at + marker.size());
+                const bool trailing_suffix =
+                    !tail.empty() && tail.front() == '.' &&
+                    tail.size() > 1 &&
+                    std::all_of(tail.begin() + 1, tail.end(), [](char character) {
+                        return std::isdigit(static_cast<unsigned char>(character)) != 0;
+                    });
+                if (!tail.empty() && !trailing_suffix) {
+                    continue;
+                }
+                variable.erase(at, marker.size());
+                if (!debug_variable_names.insert(variable).second) {
+                    continue;
                 }
                 out << ".debug_var " << name << " " << variable << " "
                     << static_cast<long>(0) - static_cast<long>(alloca_offset(*instruction))
                     << " " << debug_type_name(instruction->allocated_type) << " "
                     << type_bytes(instruction->allocated_type) << "\n";
+                out << ".debug_varinfo " << name << " " << variable << " "
+                    << (parameter_names.count(variable) != 0 ? "param" : "local")
+                    << " " << name << " 0x0\n";
             }
         }
         if (returns_record) {
@@ -1975,6 +2023,17 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
         for (const auto& block : function->blocks) {
             out << label_tag << "bb" << block_index[block.get()] << ":\n";
             for (const auto& instruction : block->instructions) {
+                // A directive per change of source file or line. The file matters
+                // for code generated from an include: its lines belong to the
+                // header, not to the translation unit the assembly is named for.
+                if (instruction->debug.valid() &&
+                    (instruction->debug.line != current_debug_line ||
+                     instruction->debug.file != current_debug_file)) {
+                    current_debug_file = instruction->debug.file;
+                    current_debug_line = instruction->debug.line;
+                    out << ".debug_line " << current_debug_file << " "
+                        << current_debug_line << "\n";
+                }
                 const auto operand = [&](std::size_t index, unsigned reg) {
                     materialize(index < instruction->operands.size()
                                     ? instruction->operands[index]
@@ -2633,6 +2692,18 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 }
             }
         }
+        // The function's end label closes the scope. F records for every function
+        // (and the labels that make them unique across translation units) are
+        // task-13; until then only a `.globl` function gets an F record from the
+        // assembler. kr232 lowers every `ret` as an inline epilogue, so there is no
+        // single pre-epilogue point for an end label without a branch per return;
+        // the label sits after the epilogue and any future F range covers it.
+        out << ".L" << name << ".end:\n";
+        // One lexical scope per function. The function and scope fields are the
+        // symbol, matching V and W, so a consumer can join the records; krdbg
+        // ignores K today.
+        out << ".debug_scope " << name << " " << name << " - " << name
+            << " .L" << name << ".end\n";
     }
     std::string text = out.str();
     if (optimizes(level_)) {

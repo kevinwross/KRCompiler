@@ -12,6 +12,7 @@
 // phi's incoming list is a lookup rather than an inference.
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <unordered_map>
 #include <utility>
@@ -91,10 +92,23 @@ Graph build_graph(const Function& function) {
 }
 
 // A source variable is the alloca IRGen named `<variable>.addr`; the backend
-// writes a `V` record for it, so its slot must survive (docs/symbols.md).
+// writes a `V` record for it, so its slot must survive (docs/symbols.md). A
+// shadowed declaration's alloca carries a unique numeric suffix after the marker
+// (`x.addr.4`) and is recorded just the same.
 bool is_recorded_variable(const Instruction& alloca) {
     const auto& name = alloca.name;
-    return name.size() > 5 && name.compare(name.size() - 5, 5, ".addr") == 0;
+    const auto marker = name.find(".addr");
+    if (marker == std::string::npos) {
+        return false;
+    }
+    const std::string tail = name.substr(marker + 5);
+    if (tail.empty()) {
+        return true;
+    }
+    return tail.front() == '.' && tail.size() > 1 &&
+           std::all_of(tail.begin() + 1, tail.end(), [](char character) {
+               return std::isdigit(static_cast<unsigned char>(character)) != 0;
+           });
 }
 
 bool address_is_private(const Instruction& alloca, const Function& function) {

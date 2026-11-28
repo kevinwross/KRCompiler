@@ -22,12 +22,20 @@ namespace krc::backend {
 // next overwrite or the function exit. A call or a load through a pointer may
 // observe any frame slot, so either keeps every pending store alive. Stores to
 // positive offsets are incoming argument areas and are left alone.
+//
+// A negative slot named by a `.debug_var` record is never dead: a debug record
+// makes it observable to a debugger even when the emitted code never reloads it,
+// so every store to a recorded slot survives (docs/register-promoted-locals.md
+// §2.3). Hand-written assembly with no debug records behaves as before.
 [[nodiscard]] std::string eliminate_dead_frame_stores(std::string_view assembly);
 
 // A straight-line companion to `eliminate_dead_frame_stores`. It scans past a
 // store through a pointer, which writes memory but cannot read the pending slot,
 // so an overwrite after it still makes the earlier frame store dead. A pointer
 // load or a call still stops the scan because either may observe the slot.
+//
+// A store to a slot named by `.debug_var` is kept even when a later store
+// overwrites it: a debugger stopped between them reads the earlier value.
 [[nodiscard]] std::string eliminate_local_dead_frame_stores(
     std::string_view assembly);
 

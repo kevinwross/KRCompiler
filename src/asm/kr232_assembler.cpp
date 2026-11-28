@@ -105,11 +105,49 @@ bool assemble_once(std::string_view source, std::string_view file_name,
     std::vector<Fixup> fixups;
     std::vector<std::string> type_records;
     std::vector<std::string> variable_records;
+    std::vector<std::string> varinfo_records;
     std::map<std::string, std::pair<std::string, std::uint32_t>> global_records;
+    // `.debug_scope` names labels that are resolved once every label is placed, so
+    // a scope record is kept whole until the bridge is written.
+    struct DebugScopeRecord {
+        std::string function;
+        std::string name;
+        std::string parent;
+        std::string start_label;
+        std::string end_label;
+    };
+    std::vector<DebugScopeRecord> scope_records;
+    // A `.debug_line <path> <line>` directive introduces a second source file for
+    // code generated from an include. The translation unit itself is source 1;
+    // extra files take 2, 3, ... in first-seen order.
+    std::vector<std::string> extra_sources;
+    std::uint32_t current_source = 1;
     std::uint32_t data_offset = 0;
     bool in_data = false;
+    // `.debug_line N` sets the source line the following instructions belong to,
+    // and `.debug_line 0` says the following code has no source line at all: no L
+    // record is then written for it. Until the first directive is seen (a
+    // hand-written `.s`), the record falls back to the assembly text's own line
+    // number, which is the source line for an assembly input.
+    std::uint32_t debug_line = 0;
+    bool debug_line_seen = false;
 
     std::size_t line_number = 0;
+    // One line record for the instruction at `offset`. A directive in force names
+    // the directive's source line and file; `.debug_line 0` suppresses the record
+    // instead of falling back; with no directive yet (hand-written assembly) the
+    // assembly text's physical line is the source line.
+    const auto record_line = [&](std::uint32_t offset) {
+        if (debug_line_seen && debug_line == 0) {
+            return;
+        }
+        out.lines.push_back(
+            DebugLine{offset,
+                      debug_line_seen ? debug_line
+                                      : static_cast<std::uint32_t>(line_number),
+                      debug_line_seen ? current_source : 1u,
+                      std::string(file_name)});
+    };
     std::size_t cursor = 0;
     while (cursor <= source.size()) {
         const std::size_t end = source.find('\n', cursor);
@@ -143,8 +181,66 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         // A variable record for the debug bridge: `V <function> <name> <offset>
         // <type> <size>`. The assembler passes it through; what a local's offset
         // means is the backend's contract with the debugger.
-        if (line.rfind(".debug_var", 0) == 0) {
-            variable_records.push_back("V " + trim(line.substr(10)));
+        if (line.rfind(".debug_var ", 0) == 0) {
+            variable_records.push_back("V " + trim(line.substr(11)));
+            continue;
+        }
+        // `W <function> <name> <kind> <scope> <flags>`: parameter/local kinds and
+        // the scope a variable belongs to. krdbg reads the kind but not the flags.
+        if (line.rfind(".debug_varinfo ", 0) == 0) {
+            varinfo_records.push_back("W " + trim(line.substr(15)));
+            continue;
+        }
+        // `K <function> <name> <parent> <start-label> <end-label>`: a lexical scope.
+        // The function field is the symbol, matching V and W, so a consumer can join
+        // the scope to its function; krdbg ignores K today.
+        if (line.rfind(".debug_scope ", 0) == 0) {
+            std::istringstream stream{trim(line.substr(13))};
+            DebugScopeRecord record;
+            stream >> record.function >> record.name >> record.parent >>
+                record.start_label >> record.end_label;
+            if (record.function.empty() || record.name.empty() ||
+                record.start_label.empty() || record.end_label.empty()) {
+                error = "line " + std::to_string(line_number) +
+                        ": .debug_scope needs function, name, parent and two labels";
+                return false;
+            }
+            scope_records.push_back(std::move(record));
+            continue;
+        }
+        // Generated code names both the source file and the line:
+        // `.debug_line <path> <line>`; a hand-written `.s` may use the single
+        // `.debug_line <line>` form, which stays on the translation unit's own
+        // source record, and `0` for either means "no source line": no L record is
+        // written until the next directive. The path is one whitespace-free token,
+        // like the S record it becomes.
+        if (line.rfind(".debug_line ", 0) == 0) {
+            const std::string rest = trim(line.substr(12));
+            const std::size_t space = rest.find(' ');
+            if (space == std::string::npos) {
+                debug_line = static_cast<std::uint32_t>(
+                    std::strtoul(rest.c_str(), nullptr, 10));
+                current_source = 1;
+            } else {
+                const std::string path = rest.substr(0, space);
+                debug_line = static_cast<std::uint32_t>(std::strtoul(
+                    trim(rest.substr(space + 1)).c_str(), nullptr, 10));
+                if (path.empty() || path == file_name) {
+                    current_source = 1;
+                } else {
+                    const auto found =
+                        std::find(extra_sources.begin(), extra_sources.end(), path);
+                    if (found == extra_sources.end()) {
+                        current_source = 2u + static_cast<std::uint32_t>(
+                                                  extra_sources.size());
+                        extra_sources.push_back(path);
+                    } else {
+                        current_source = 2u + static_cast<std::uint32_t>(
+                                                  found - extra_sources.begin());
+                    }
+                }
+            }
+            debug_line_seen = true;
             continue;
         }
         if (line.rfind(".debug_type ", 0) == 0) {
@@ -161,7 +257,8 @@ bool assemble_once(std::string_view source, std::string_view file_name,
                 global_records[name] = {type, size};
             }
             continue;
-        }        if (line.rfind(".word", 0) == 0 || line.rfind(".byte", 0) == 0) {
+        }
+        if (line.rfind(".word", 0) == 0 || line.rfind(".byte", 0) == 0) {
             const bool word = line.rfind(".word", 0) == 0;
             const std::string rest = trim(line.substr(word ? 5 : 5));
             std::size_t start = 0;
@@ -265,9 +362,7 @@ bool assemble_once(std::string_view source, std::string_view file_name,
                         out.program.relocations.push_back(std::move(wide));
                         out.program.sections[0].bytes.push_back(0x48);  // call r8
                         relaxation.site_of_offset[offset + 1] = site;
-                        out.lines.push_back(DebugLine{
-                            offset, static_cast<std::uint32_t>(line_number),
-                            std::string(file_name)});
+                        record_line(offset);
                         continue;
                     }
                     out.program.sections[0].bytes.push_back(mnemonic == "call" ? 0xD0 : 0xCF);
@@ -280,8 +375,7 @@ bool assemble_once(std::string_view source, std::string_view file_name,
                 relocation.local_only = mnemonic != "call" && mnemonic != "jmp";
                     relaxation.site_of_offset[offset + 1] = site;
                     out.program.relocations.push_back(std::move(relocation));
-                    out.lines.push_back(DebugLine{offset, static_cast<std::uint32_t>(line_number),
-                                                  std::string(file_name)});
+                    record_line(offset);
                     continue;
                 }
                 std::string encode_error;
@@ -351,8 +445,7 @@ bool assemble_once(std::string_view source, std::string_view file_name,
                 relocation.addend = -2;  // relative to the next instruction
                 relocation.local_only = mnemonic != "call" && mnemonic != "jmp";
                 out.program.relocations.push_back(std::move(relocation));
-                out.lines.push_back(DebugLine{offset, static_cast<std::uint32_t>(line_number),
-                                              std::string(file_name)});
+                record_line(offset);
                 continue;
             }
         }
@@ -400,8 +493,7 @@ bool assemble_once(std::string_view source, std::string_view file_name,
             relocation.absolute = true;
             out.program.relocations.push_back(std::move(relocation));
         }
-        out.lines.push_back(
-            DebugLine{offset, static_cast<std::uint32_t>(line_number), std::string(file_name)});
+        record_line(offset);
     }
 
     // Patch the label branches once every label has an offset.
@@ -487,31 +579,6 @@ bool assemble_once(std::string_view source, std::string_view file_name,
             symbol_sizes[{section, start}] = end > start ? end - start : 0;
         }
     }
-    for (const auto& [name, offset] : labels) {
-        const bool global = globals.count(name) != 0;
-        Symbol symbol;
-        symbol.name = name;
-        symbol.section = label_section[name];
-        symbol.offset = offset;
-        symbol.size = symbol_sizes[{symbol.section, static_cast<std::uint32_t>(offset)}];
-        symbol.global = global;
-        symbol.weak = weaks.count(name) != 0;
-        out.program.symbols.push_back(std::move(symbol));
-    }
-
-    // The `.debug_info` bridge: NUL-terminated records `attach_kdbg` converts
-    // into a `.kdbg`. Each line record names a label at the instruction's offset,
-    // so a synthetic local symbol is emitted for every line.
-    std::vector<std::uint8_t>& bridge = out.program.sections[2].bytes;
-    const auto emit = [&](const std::string& record) {
-        bridge.insert(bridge.end(), record.begin(), record.end());
-        bridge.push_back(0);
-    };
-    emit("S 1 " + std::string(file_name));
-    for (const std::string& record : type_records) {
-        emit(record);
-    }
-    const std::uint32_t text_size = static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
     // Line labels must be unique per source file. The linker merges every object's
     // bridge into one section and resolves a label by name, so two objects that
     // both call their first line `.L0` make each other's lines resolve to the wrong
@@ -530,35 +597,105 @@ bool assemble_once(std::string_view source, std::string_view file_name,
     prefix_stream << ".L" << std::hex << file_hash << "_";
     const std::string label_prefix = prefix_stream.str();
     const std::string end_label = label_prefix + "end";
-    out.program.symbols.push_back(Symbol{end_label, 0, text_size, false});
-    for (std::size_t i = 0; i < out.lines.size(); ++i) {
-        const DebugLine& line = out.lines[i];
-        const std::string label = label_prefix + std::to_string(i);
-        out.program.symbols.push_back(Symbol{label, 0, line.offset, false});
-        emit("L " + label + " 1 " + std::to_string(line.line) + " 0");
-    }
+    const std::uint32_t text_size =
+        static_cast<std::uint32_t>(out.program.sections[0].bytes.size());
+
     // Functions are the text labels; data labels become sized globals. Every
     // global used to be an F record, which made `points[2]` look like a function
     // spanning the whole text and left the globals list empty.
     std::vector<std::pair<std::uint32_t, std::string>> text_labels;
     for (const auto& [name, offset] : labels) {
-        // Only named functions bound a span: a `.Lbb` block label inside one
-        // would end it early, and every line after the block would lose its
-        // function.
+        // Only named functions bound a span: a `.Lbb` block label inside one would
+        // end it early, and every line after the block would lose its function.
         if (label_section[name] == 0 && !name.empty() && name.front() != '.') {
             text_labels.emplace_back(offset, name);
         }
     }
     std::sort(text_labels.begin(), text_labels.end());
+
+    // Symbols: every parsed label, then the generated line and end labels the
+    // bridge names.
+    for (const auto& [name, offset] : labels) {
+        Symbol symbol;
+        symbol.name = name;
+        symbol.section = label_section[name];
+        symbol.offset = offset;
+        symbol.size = symbol_sizes[{symbol.section, static_cast<std::uint32_t>(offset)}];
+        symbol.global = globals.count(name) != 0;
+        symbol.weak = weaks.count(name) != 0;
+        out.program.symbols.push_back(std::move(symbol));
+    }
+    out.program.symbols.push_back(Symbol{end_label, 0, text_size, false});
+    for (std::size_t i = 0; i < out.lines.size(); ++i) {
+        out.program.symbols.push_back(
+            Symbol{label_prefix + std::to_string(i), 0, out.lines[i].offset, false});
+    }
+
+    // The `.debug_info` bridge: NUL-terminated records `attach_kdbg` converts into
+    // a `.kdbg`. Each line record names a label at the instruction's offset, so a
+    // synthetic local symbol is emitted for every line.
+    std::vector<std::uint8_t>& bridge = out.program.sections[2].bytes;
+    const auto emit = [&](const std::string& record) {
+        bridge.insert(bridge.end(), record.begin(), record.end());
+        bridge.push_back(0);
+    };
+    emit("S 1 " + std::string(file_name));
+    // Extra sources come before any L record: the linker remaps an L record's
+    // source id while it parses, and the mapping exists only once the S record has
+    // been seen. The linker gives each distinct path one image-wide id.
+    for (std::size_t index = 0; index < extra_sources.size(); ++index) {
+        emit("S " + std::to_string(index + 2) + " " + extra_sources[index]);
+    }
+    for (const std::string& record : type_records) {
+        emit(record);
+    }
+    for (std::size_t i = 0; i < out.lines.size(); ++i) {
+        const DebugLine& line = out.lines[i];
+        emit("L " + label_prefix + std::to_string(i) + " " +
+             std::to_string(line.source) + " " + std::to_string(line.line) + " 0");
+    }
+    // F and G are synthesised from the `.globl`/`.weak` labels: task-13 makes every
+    // function (including internal-linkage ones) carry an F record from a backend
+    // directive. Until then this is the hand-written `.s` path and the external
+    // function path. The end label must be a *global* name: the linker resolves a
+    // bridge label through one name-keyed map where the first definition wins, so a
+    // local or weak label that another object also defines can resolve to that
+    // object's address and produce a reversed range (measured on startrekng: a
+    // global function followed by a weak inline destructor). Falling forward to the
+    // next global text label, or the per-object text end, keeps every synthesized
+    // range well-formed.
     for (std::size_t index = 0; index < text_labels.size(); ++index) {
         const std::string& name = text_labels[index].second;
         if (globals.count(name) == 0) {
             continue;
         }
-        const std::string end = index + 1 < text_labels.size()
-                                    ? text_labels[index + 1].second
-                                    : end_label;
+        std::string end = end_label;
+        for (std::size_t next = index + 1; next < text_labels.size(); ++next) {
+            const std::string& candidate = text_labels[next].second;
+            if (text_labels[next].first <= text_labels[index].first) {
+                continue;
+            }
+            // A weak name is defined by several objects and resolves to the first
+            // definition, so it cannot bound this object's function.
+            if (globals.count(candidate) != 0 && weaks.count(candidate) == 0) {
+                end = candidate;
+                break;
+            }
+        }
         emit("F " + name + " " + name + " " + end + " 0 0");
+    }
+    // One scope per function, after its end label. The function field is the
+    // symbol, matching V and W so a consumer can join the records; krdbg ignores K
+    // today.
+    for (const DebugScopeRecord& record : scope_records) {
+        emit("K " + record.function + " " + record.name + " " + record.parent + " " +
+             record.start_label + " " + record.end_label);
+    }
+    for (const std::string& record : varinfo_records) {
+        emit(record);
+    }
+    for (const std::string& record : variable_records) {
+        emit(record);
     }
     for (const auto& [name, offset] : labels) {
         if (globals.count(name) == 0 || label_section[name] == 0) {
@@ -574,9 +711,6 @@ bool assemble_once(std::string_view source, std::string_view file_name,
                       symbol_sizes[{label_section[name], offset}]);
         emit("G " + name + " " + name + " " + type + " " +
              std::to_string(size));
-    }
-    for (const std::string& record : variable_records) {
-        emit(record);
     }
     if (bridge.empty()) {
         emit("S 1 .");

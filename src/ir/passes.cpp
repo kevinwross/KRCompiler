@@ -1,6 +1,7 @@
 #include "ir/passes.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
@@ -324,10 +325,23 @@ PassChange copy_propagation(Module& module) {
 namespace {
 
 // A source variable is the alloca IRGen named `<variable>.addr`; the backend
-// writes a `V` record for it (docs/symbols.md), so the address must survive.
+// writes a `V` record for it (docs/symbols.md), so the address must survive. A
+// shadowed declaration gets a unique numeric suffix after the marker
+// (`x.addr.4`) and is just as recorded: promoting it would drop the record's slot.
 bool is_recorded_variable(const Instruction& alloca) {
     const auto& name = alloca.name;
-    return name.size() > 5 && name.compare(name.size() - 5, 5, ".addr") == 0;
+    const auto marker = name.find(".addr");
+    if (marker == std::string::npos) {
+        return false;
+    }
+    const std::string tail = name.substr(marker + 5);
+    if (tail.empty()) {
+        return true;
+    }
+    return tail.front() == '.' && tail.size() > 1 &&
+           std::all_of(tail.begin() + 1, tail.end(), [](char character) {
+               return std::isdigit(static_cast<unsigned char>(character)) != 0;
+           });
 }
 
 // True when every use of `alloca` is a load or a store in `block`, and none of
@@ -585,9 +599,10 @@ PassChange eliminate_dead_alloca_stores(Module& module) {
                     alloca->is_volatile) {
                     continue;
                 }
-                const auto& name = alloca->name;
-                if (name.size() >= 5 &&
-                    name.compare(name.size() - 5, 5, ".addr") == 0) {
+                // A recorded source variable keeps its store even when nothing in
+                // the program reloads it: the debug record makes the slot
+                // observable (including a shadowed declaration's `x.addr.4`).
+                if (is_recorded_variable(*alloca)) {
                     continue;
                 }
                 bool escaped = false;

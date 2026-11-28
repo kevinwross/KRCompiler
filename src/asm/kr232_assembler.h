@@ -11,9 +11,15 @@
 namespace krc::asm_kr232 {
 
 // One statement's source line and the offset of its instruction in `.text`.
+// `source` is the id of the S record the line belongs to: 1 for the translation
+// unit itself (the assembler's `file_name`), higher for a file introduced by a
+// `.debug_line <path> <line>` directive, such as a header whose inline code this
+// unit emits. Hand-written assembly has no directives, so its records stay on
+// source 1 and use the assembler's physical line numbers.
 struct DebugLine {
     std::uint32_t offset = 0;
     std::uint32_t line = 0;
+    std::uint32_t source = 1;
     std::string file;
 };
 
