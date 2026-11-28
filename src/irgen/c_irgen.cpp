@@ -71,6 +71,13 @@ void CIRGen::generate_function(const frontend::AstNode& definition,
     auto* entry = function->add_block("entry");
     builder_.reset_value_names();
     builder_.set_insert_point(entry);
+    // The builder keeps the previous function's last debug location. Reset it
+    // to this function's definition before parameter stores and implicit
+    // member/base initializer calls are emitted: they belong to this
+    // constructor's entry, not to whatever inline body was generated last. The
+    // observed bug was Game::Game's member initializers attributed to
+    // weapons.hpp:13 (the previous inline destructor).
+    builder_.set_debug_location(function->definition);
     scopes_.clear();
     push_scope();
     local_cleanups_.clear();
