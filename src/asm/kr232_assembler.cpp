@@ -117,6 +117,20 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         std::string end_label;
     };
     std::vector<DebugScopeRecord> scope_records;
+    // `.debug_function <display-name> <symbol> <frame-size> <result-type>`: one
+    // record per function, emitted by the backend for every function it lowers,
+    // internal linkage included. The assembler turns each one into an F record
+    // whose begin/end labels are per-object (the file hash prefix) so two
+    // translation units that both define an internal `helper` cannot collide in
+    // the linker's name-keyed symbol table.
+    struct DebugFunctionRecord {
+        std::string display;
+        std::string symbol;
+        std::uint32_t frame = 0;
+        std::string type;
+        std::size_t line = 0;  // directive's line, for diagnostics
+    };
+    std::vector<DebugFunctionRecord> function_records;
     // A `.debug_line <path> <line>` directive introduces a second source file for
     // code generated from an include. The translation unit itself is source 1;
     // extra files take 2, 3, ... in first-seen order.
@@ -189,6 +203,25 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         // the scope a variable belongs to. krdbg reads the kind but not the flags.
         if (line.rfind(".debug_varinfo ", 0) == 0) {
             varinfo_records.push_back("W " + trim(line.substr(15)));
+            continue;
+        }
+        // `.debug_function <display> <symbol> <frame> <type>`: the function's
+        // debugger description. The assembler resolves the symbol to this
+        // object's label and labels the range itself; a `.globl` function and an
+        // internal one are recorded identically.
+        if (line.rfind(".debug_function ", 0) == 0) {
+            std::istringstream stream{trim(line.substr(16))};
+            DebugFunctionRecord record;
+            stream >> record.display >> record.symbol >> record.frame >> record.type;
+            if (record.display.empty() || record.symbol.empty() || record.type.empty() ||
+                !stream) {
+                error = "line " + std::to_string(line_number) +
+                        ": .debug_function needs display name, symbol, frame size "
+                        "and result type";
+                return false;
+            }
+            record.line = line_number;
+            function_records.push_back(std::move(record));
             continue;
         }
         // `K <function> <name> <parent> <start-label> <end-label>`: a lexical scope.
@@ -654,42 +687,100 @@ bool assemble_once(std::string_view source, std::string_view file_name,
         emit("L " + label_prefix + std::to_string(i) + " " +
              std::to_string(line.source) + " " + std::to_string(line.line) + " 0");
     }
-    // F and G are synthesised from the `.globl`/`.weak` labels: task-13 makes every
-    // function (including internal-linkage ones) carry an F record from a backend
-    // directive. Until then this is the hand-written `.s` path and the external
-    // function path. The end label must be a *global* name: the linker resolves a
-    // bridge label through one name-keyed map where the first definition wins, so a
-    // local or weak label that another object also defines can resolve to that
-    // object's address and produce a reversed range (measured on startrekng: a
-    // global function followed by a weak inline destructor). Falling forward to the
-    // next global text label, or the per-object text end, keeps every synthesized
-    // range well-formed.
-    for (std::size_t index = 0; index < text_labels.size(); ++index) {
-        const std::string& name = text_labels[index].second;
-        if (globals.count(name) == 0) {
-            continue;
+    // Bridge label names are per-object: the linker resolves every label through
+    // one name-keyed map where the first definition wins, so two translation
+    // units that both define an internal `helper` (or `counter`) would otherwise
+    // resolve the second unit's record to the first unit's address. The file hash
+    // already keeps line labels distinct; function/scope/global records use the
+    // same prefix. A hand-written `.s` with no `.debug_function` record keeps the
+    // old `.globl`/`.weak` heuristic below.
+    std::size_t bridge_label_index = 0;
+    const auto add_bridge_symbol =
+        [&](const std::string& base, std::uint32_t section, std::uint32_t offset) {
+            std::string name = label_prefix + base + std::to_string(bridge_label_index++);
+            out.program.symbols.push_back(Symbol{name, section, offset, false});
+            return name;
+        };
+
+    // One F record per backend `.debug_function` directive. The symbol is this
+    // object's label; the end is the backend's `.L<symbol>.end` (after its inline
+    // epilogue) or, for a hand-written directive, the next text label. Every
+    // function gets one, internal linkage included; no F is synthesised from
+    // `.globl` on this path.
+    if (!function_records.empty()) {
+        for (const DebugFunctionRecord& record : function_records) {
+            const auto begin = labels.find(record.symbol);
+            if (begin == labels.end() || label_section[record.symbol] != 0) {
+                error = "line " + std::to_string(record.line) + ": .debug_function '" +
+                        record.symbol + "' names no text label in this file";
+                return false;
+            }
+            std::uint32_t end = text_size;
+            const auto emitted_end = labels.find(".L" + record.symbol + ".end");
+            if (emitted_end != labels.end() && emitted_end->second > begin->second) {
+                end = emitted_end->second;
+            } else {
+                // A hand-written directive may omit the end label; the next
+                // named text label bounds the function.
+                for (const auto& entry : text_labels) {
+                    if (entry.first > begin->second) {
+                        end = entry.first;
+                        break;
+                    }
+                }
+            }
+            if (end <= begin->second) {
+                error = "line " + std::to_string(record.line) + ": function '" +
+                        record.symbol + "' has an empty or reversed range";
+                return false;
+            }
+            const std::string begin_label =
+                add_bridge_symbol("fnb", 0, begin->second);
+            const std::string function_end_label = add_bridge_symbol("fne", 0, end);
+            emit("F " + record.display + " " + begin_label + " " +
+                 function_end_label + " " + std::to_string(record.frame) + " " +
+                 record.type);
         }
-        std::string end = end_label;
-        for (std::size_t next = index + 1; next < text_labels.size(); ++next) {
-            const std::string& candidate = text_labels[next].second;
-            if (text_labels[next].first <= text_labels[index].first) {
+    } else {
+        // Hand-written assembly: functions are the named text labels that are
+        // exported. The end label must be a *global* name because the linker's
+        // name-keyed table resolves a local or weak name to whichever object wins;
+        // falling forward to the next global text label, or the per-object text
+        // end, keeps every synthesized range well-formed.
+        for (std::size_t index = 0; index < text_labels.size(); ++index) {
+            const std::string& name = text_labels[index].second;
+            if (globals.count(name) == 0) {
                 continue;
             }
-            // A weak name is defined by several objects and resolves to the first
-            // definition, so it cannot bound this object's function.
-            if (globals.count(candidate) != 0 && weaks.count(candidate) == 0) {
-                end = candidate;
-                break;
+            std::string end = end_label;
+            for (std::size_t next = index + 1; next < text_labels.size(); ++next) {
+                const std::string& candidate = text_labels[next].second;
+                if (text_labels[next].first <= text_labels[index].first) {
+                    continue;
+                }
+                if (globals.count(candidate) != 0 && weaks.count(candidate) == 0) {
+                    end = candidate;
+                    break;
+                }
             }
+            emit("F " + name + " " + name + " " + end + " 0 0");
         }
-        emit("F " + name + " " + name + " " + end + " 0 0");
     }
-    // One scope per function, after its end label. The function field is the
-    // symbol, matching V and W so a consumer can join the records; krdbg ignores K
-    // today.
+    // One scope per `.debug_scope` directive. The function field is the symbol,
+    // matching V and W so a consumer can join the records; the range labels are
+    // per-object like the F labels, and start at the same address as F's begin.
     for (const DebugScopeRecord& record : scope_records) {
+        const auto start = labels.find(record.start_label);
+        const auto finish = labels.find(record.end_label);
+        if (start == labels.end() || finish == labels.end()) {
+            continue;
+        }
+        const std::string start_label =
+            add_bridge_symbol("scb", label_section[record.start_label], start->second);
+        const std::string scope_end_label =
+            add_bridge_symbol("sce", label_section[record.end_label], finish->second);
         emit("K " + record.function + " " + record.name + " " + record.parent + " " +
-             record.start_label + " " + record.end_label);
+             start_label + " " + scope_end_label);
     }
     for (const std::string& record : varinfo_records) {
         emit(record);
@@ -697,20 +788,39 @@ bool assemble_once(std::string_view source, std::string_view file_name,
     for (const std::string& record : variable_records) {
         emit(record);
     }
+    // G for every `.debug_global` definition, whatever its linkage. The record's
+    // name is the source-level name; an internal-linkage symbol's label must be
+    // unique per object because the linker's table is keyed by name, so the
+    // assembler emits its own symbol for it. An external/weak definition keeps
+    // the bare symbol name, whose link-visible identity the linker has already
+    // resolved.
+    for (const auto& [name, declaration] : global_records) {
+        const auto label = labels.find(name);
+        if (label == labels.end()) {
+            continue;  // declared with .debug_global but not defined in this object
+        }
+        if (label_section[name] != 1) {
+            error = ".debug_global '" + name + "' names a text label, not data";
+            return false;
+        }
+        std::string record_label = name;
+        if (globals.count(name) == 0) {
+            record_label = add_bridge_symbol("glb", 1, label->second);
+        }
+        emit("G " + name + " " + record_label + " " + declaration.first + " " +
+             std::to_string(declaration.second));
+    }
+    // Hand-written assembly: a `.globl` data label without a `.debug_global`
+    // record still gets a G, as it always has. Its type is unknown ("0") and its
+    // size is the distance to the next symbol in the section.
     for (const auto& [name, offset] : labels) {
-        if (globals.count(name) == 0 || label_section[name] == 0) {
+        if (globals.count(name) == 0 || label_section[name] == 0 ||
+            global_records.count(name) != 0) {
             continue;
         }
-        const auto found = global_records.find(name);
-        const std::string type =
-            found != global_records.end() ? found->second.first : "0";
-        const std::uint32_t size =
-            found != global_records.end()
-                ? found->second.second
-                : static_cast<std::uint32_t>(
-                      symbol_sizes[{label_section[name], offset}]);
-        emit("G " + name + " " + name + " " + type + " " +
-             std::to_string(size));
+        emit("G " + name + " " + name + " 0 " +
+             std::to_string(static_cast<std::uint32_t>(
+                 symbol_sizes[{label_section[name], offset}])));
     }
     if (bridge.empty()) {
         emit("S 1 .");

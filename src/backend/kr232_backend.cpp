@@ -1775,6 +1775,19 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
             out << "  " << opcode << " [r13-" << offset << "], " << source << "\n";
         };
         const std::uint32_t frame = align_frame(next_slot * 4u);
+        // The debugger-facing description of this function. The display name is
+        // what a caller shows (ADR 0030); the symbol is what V/K/W name the
+        // function by. The assembler makes the bridge's begin/end labels itself,
+        // per object, so two translation units that both define an internal
+        // `helper` cannot resolve to one another's range.
+        const std::string display_name =
+            function->debug_name.empty() ? name : function->debug_name;
+        const std::string result_type =
+            function->type != nullptr && function->type->return_type != nullptr
+                ? debug_type_name(function->type->return_type)
+                : std::string("void");
+        out << ".debug_function " << display_name << " " << name << " " << frame
+            << " " << result_type << "\n";
         out << "  enter #" << frame << ", #0\n";
         // Local variables for the debug bridge: a frame offset the debugger adds to
         // the frame base it unwound. Only a source variable is recorded -- the IR
@@ -2692,12 +2705,14 @@ std::optional<std::string> Kr232Backend::emit(std::string& error) const {
                 }
             }
         }
-        // The function's end label closes the scope. F records for every function
-        // (and the labels that make them unique across translation units) are
-        // task-13; until then only a `.globl` function gets an F record from the
-        // assembler. kr232 lowers every `ret` as an inline epilogue, so there is no
-        // single pre-epilogue point for an end label without a branch per return;
-        // the label sits after the epilogue and any future F range covers it.
+        // The function's end label closes the scope and bounds the F range. kr232
+        // lowers every `ret` as an inline epilogue (`leave #0; ret`), so there is
+        // no single pre-epilogue point without a branch per return; unlike KR32's
+        // `.L<symbol>.ret`, the label therefore sits after the epilogue and the F
+        // range includes it. A pc in the epilogue stays inside the function (and
+        // its line is the return statement's line); the scope and the function
+        // range end together. A target that wanted the reference's narrower range
+        // would have to lower returns through one shared epilogue block first.
         out << ".L" << name << ".end:\n";
         // One lexical scope per function. The function and scope fields are the
         // symbol, matching V and W, so a consumer can join the records; krdbg

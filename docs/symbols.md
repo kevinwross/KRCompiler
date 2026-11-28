@@ -74,9 +74,38 @@ Every function's entry address carries a line record for the source line of its
 definition. The bridge labels it `.L<symbol>.begin`; the label and the function
 symbol are at the same address, so the line record and the Function record's
 `start` agree. A breakpoint on the definition line therefore binds before the
-prologue. KR232's assembler builds its bridge from the assembly text and does not
-yet carry source line records, so that target has the label but no definition-line
-record ([ADR 0061](decisions/0061-function-definition-location.md)).
+prologue ([ADR 0061](decisions/0061-function-definition-location.md)).
+
+### KR232 assembler debug directives
+
+KR232's bridge is built by its assembler from directives the backend writes into
+the assembly text, not from IR debug locations:
+
+| Directive | Bridge record | Meaning |
+|---|---|---|
+| `.debug_function <display> <symbol> <frame> <result-type>` | `F` | Every lowered function, internal linkage included. `display` is the source name (ADR 0030), `symbol` the linked symbol the V/K/W records name. |
+| `.debug_line <path> <line>` / `.debug_line <line>` / `.debug_line 0` | `L` | The source file and line the following instructions belong to; `0` means "no source line", so no record is written until the next directive. With no directive, a hand-written `.s` falls back to its own line numbers. |
+| `.debug_var <function> <name> <offset> <type> <size>` | `V` | A parameter or named local's frame home. `function` is the symbol. |
+| `.debug_varinfo <function> <name> <kind> <scope> <flags>` | `W` | The kind (`param`, `local`, `static`), function scope and flags. |
+| `.debug_scope <function> <name> <parent> <start-label> <end-label>` | `K` | A lexical scope; the function scope is the function's range. |
+| `.debug_global <name> <type> <size>` | `G` | A defined global, whatever its linkage. `name` is the source name. |
+| `.debug_type ...` | `T`/`C`/`M`/`A`/`R` | The type records the backend adds for every referenced type. |
+
+The assembler resolves every record's range through labels and emits its own
+per-object symbols for them (a hash of the assembly text), because the linker
+resolves bridge labels through one name-keyed table: two translation units that
+both define an internal `helper` must not resolve to one another's range. For the
+same reason an internal-linkage `G` keeps its source name in the record but uses
+a per-object label. A hand-written `.s` that names no `.debug_function` keeps the
+older behaviour (an `F` for each exported text label), and exported data without
+`.debug_global` keeps a `G` with an unknown type.
+
+KR232 lowers every `ret` as an inline epilogue (`leave #0; ret`), so there is no
+single pre-epilogue return label. Its `F` end label sits after the last inline
+epilogue and the function range therefore includes it; a pc in an epilogue is
+inside the function and reports the return statement's line. This is narrower
+than KR32's `.L<symbol>.ret` rule only in name: a target that wants the reference
+range would have to lower returns through one shared epilogue block first.
 
 ## v1.1 additions
 

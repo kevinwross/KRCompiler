@@ -7,6 +7,8 @@
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <map>
+#include <set>
 #include <span>
 #include <sstream>
 #include <string>
@@ -968,6 +970,72 @@ bool attach_kdbg(LinkedImage& image, const std::string& source_root,
                 type.members.push_back(std::move(member));
             }
         }
+    }
+
+    // A weak or inline function is lowered into every translation unit that sees
+    // it, and each unit's bridge carries F/V records for its own copy. Before the
+    // bridge labels became per-object, every one of those F records resolved its
+    // start to the winning definition and its end to the emitting object's label,
+    // producing stale or reversed spans; now a repeated record is repeated only
+    // when both its display name and its start address match, so the tightest end
+    // is the definition's own. Variable rows are keyed by function and name: a
+    // duplicated copy differs only in the losing object's frame layout, and the
+    // first (link order) is the definition's.
+    {
+        std::map<std::pair<std::string, std::uint64_t>, std::size_t> function_index;
+        std::vector<debug::KdbgFunction> functions;
+        functions.reserve(kdbg.functions.size());
+        for (debug::KdbgFunction& function : kdbg.functions) {
+            if (function.end <= function.start) {
+                continue;
+            }
+            const auto key = std::make_pair(function.name, function.start);
+            const auto found = function_index.find(key);
+            if (found == function_index.end()) {
+                function_index.emplace(key, functions.size());
+                functions.push_back(std::move(function));
+            } else if (function.end < functions[found->second].end) {
+                functions[found->second].end = function.end;
+            }
+        }
+        kdbg.functions = std::move(functions);
+    }
+    {
+        std::set<std::pair<std::string, std::string>> seen;
+        std::vector<debug::KdbgVariable> variables;
+        variables.reserve(kdbg.variables.size());
+        for (debug::KdbgVariable& variable : kdbg.variables) {
+            if (!seen.emplace(variable.function, variable.name).second) {
+                continue;
+            }
+            variables.push_back(std::move(variable));
+        }
+        kdbg.variables = std::move(variables);
+
+        std::set<std::pair<std::string, std::string>> seen_info;
+        std::vector<debug::KdbgVarInfo> variable_info;
+        variable_info.reserve(kdbg.variable_info.size());
+        for (debug::KdbgVarInfo& info : kdbg.variable_info) {
+            if (!seen_info.emplace(info.function, info.name).second) {
+                continue;
+            }
+            variable_info.push_back(std::move(info));
+        }
+        kdbg.variable_info = std::move(variable_info);
+    }
+    {
+        // A data symbol two objects define from identical text resolves to the
+        // same name and address; one record is enough.
+        std::set<std::pair<std::string, std::uint64_t>> seen;
+        std::vector<debug::KdbgSymbol> unique_symbols;
+        unique_symbols.reserve(kdbg.symbols.size());
+        for (debug::KdbgSymbol& symbol : kdbg.symbols) {
+            if (!seen.emplace(symbol.name, symbol.address).second) {
+                continue;
+            }
+            unique_symbols.push_back(std::move(symbol));
+        }
+        kdbg.symbols = std::move(unique_symbols);
     }
 
     // A line label sits before the instruction it describes. When a peephole

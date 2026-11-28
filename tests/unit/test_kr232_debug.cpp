@@ -1,8 +1,11 @@
 #include <doctest.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "asm/kr232_assembler.h"
@@ -247,6 +250,223 @@ TEST_CASE("kr232 C++ symbols name real lines, params and locals") {
         CHECK(variable.name.find("argument.copy") == std::string::npos);
         CHECK(variable.name.find("cond.tmp") == std::string::npos);
     }
+}
+
+TEST_CASE("kr232 F and G records are unique for internal-linkage symbols in two units") {
+    const std::string_view unit_a =
+        "static int counter = 3;\n"
+        "static int helper(int value) {\n"
+        "    int local = value + counter;\n"
+        "    return local;\n"
+        "}\n"
+        "int alpha(int seed) {\n"
+        "    return helper(seed);\n"
+        "}\n";
+    const std::string_view unit_b =
+        "int alpha(int seed);\n"
+        "static int counter = 4;\n"
+        "static int helper(int value) {\n"
+        "    int local = value + counter;\n"
+        "    return local;\n"
+        "}\n"
+        "int beta(int seed) {\n"
+        "    return helper(seed);\n"
+        "}\n"
+        "int main(void) {\n"
+        "    return beta(alpha(1));\n"
+        "}\n";
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr232;
+    options.optimize = 0;
+    std::vector<krc::toolchain::Source> units;
+    units.push_back(source("unit_a.c", unit_a));
+    units.push_back(source("unit_b.c", unit_b));
+    const auto built = krc::toolchain::build(units, options);
+    REQUIRE_MESSAGE(built.ok, built.error);
+    const krc::debug::KdbgImage image = decode(built.image);
+
+    // Every lowered function has a record and a well-formed range, and the
+    // ranges of distinct functions do not overlap or run backwards.
+    REQUIRE(!image.functions.empty());
+    for (const auto& function : image.functions) {
+        CHECK_MESSAGE(function.start < function.end, function.name);
+    }
+    std::vector<const krc::debug::KdbgFunction*> sorted;
+    for (const auto& function : image.functions) {
+        sorted.push_back(&function);
+    }
+    std::sort(sorted.begin(), sorted.end(),
+              [](const krc::debug::KdbgFunction* left,
+                 const krc::debug::KdbgFunction* right) {
+                  return left->start < right->start;
+              });
+    for (std::size_t index = 1; index < sorted.size(); ++index) {
+        CHECK_MESSAGE(sorted[index - 1]->end <= sorted[index]->start,
+                      sorted[index - 1]->name << " and " << sorted[index]->name);
+    }
+
+    // The two static helpers are two real bodies, not one range reported twice:
+    // the bridge labels are per object, so the linker cannot resolve the second
+    // unit's record to the first unit's label.
+    std::vector<const krc::debug::KdbgFunction*> helpers;
+    for (const auto& function : image.functions) {
+        if (function.name == "helper") {
+            helpers.push_back(&function);
+        }
+    }
+    REQUIRE_EQ(helpers.size(), static_cast<std::size_t>(2));
+    CHECK(helpers[0]->start != helpers[1]->start);
+    CHECK(helpers[0]->end != helpers[1]->end);
+
+    // The two static globals keep the source name `counter` and two distinct
+    // addresses, so a debugger lists both rather than one address twice.
+    std::vector<const krc::debug::KdbgSymbol*> counters;
+    for (const auto& symbol : image.symbols) {
+        if (symbol.name == "counter") {
+            counters.push_back(&symbol);
+        }
+    }
+    REQUIRE_EQ(counters.size(), static_cast<std::size_t>(2));
+    CHECK(counters[0]->address != counters[1]->address);
+    for (const krc::debug::KdbgSymbol* counter : counters) {
+        CHECK_EQ(counter->size, 4u);
+    }
+
+    // A duplicated body's V/W rows are recorded once, not once per copy.
+    std::map<std::pair<std::string, std::string>, int> rows;
+    for (const auto& variable : image.variables) {
+        ++rows[{variable.function, variable.name}];
+    }
+    for (const auto& [key, count] : rows) {
+        CHECK_EQ(count, 1);
+    }
+    // Every line record lands inside a function; none is discarded because an
+    // internal function had no F record.
+    for (const auto& line : image.lines) {
+        const bool inside =
+            std::any_of(image.functions.begin(), image.functions.end(),
+                        [&line](const krc::debug::KdbgFunction& function) {
+                            return line.address >= function.start &&
+                                   line.address < function.end;
+                        });
+        CHECK_MESSAGE(inside, "line at 0x" << std::hex << line.address);
+    }
+}
+
+TEST_CASE("kr232 F carries the display name while K/V name the symbol") {
+    const std::string_view text =
+        "struct Widget {\n"
+        "    int value;\n"
+        "    int get(int k) const { int tmp = value + k; return tmp; }\n"
+        "};\n"
+        "struct Box { int x; Box(int v) { x = v; } };\n"
+        "Box g_box(1);\n"
+        "static int g_counter = 2;\n"
+        "static int helper(int v) { int doubled = v * 2; return doubled; }\n"
+        "int use(void) {\n"
+        "    Widget w;\n"
+        "    w.value = 5;\n"
+        "    int out = w.get(3);\n"
+        "    return helper(out) + w.value + g_counter;\n"
+        "}\n"
+        "int main(void) { return use() + g_box.x; }\n";
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr232;
+    options.cxx = true;
+    options.optimize = 0;
+    const auto built = krc::toolchain::build(one_unit("display.cpp", text), options);
+    REQUIRE_MESSAGE(built.ok, built.error);
+    const krc::debug::KdbgImage image = decode(built.image);
+
+    // A member function is displayed by its source name but resolved by its
+    // symbol; K and V name the symbol, F names the display name.
+    const krc::debug::KdbgFunction* widget_get = find_function(image, "Widget::get");
+    REQUIRE(widget_get != nullptr);
+    CHECK(find_function(image, "Widget_get") == nullptr);
+    bool saw_widget_scope = false;
+    for (const auto& scope : image.scopes) {
+        if (scope.function == "Widget_get" && scope.start == widget_get->start) {
+            saw_widget_scope = true;
+            CHECK_EQ(scope.name, std::string("Widget_get"));
+        }
+    }
+    CHECK(saw_widget_scope);
+    const krc::debug::KdbgVarInfo* this_info =
+        find_varinfo(image, "Widget_get", "this");
+    REQUIRE(this_info != nullptr);
+    CHECK(this_info->kind == krc::debug::KdbgVariableKind::Parameter);
+
+    // Static functions and static globals are present; the function is internal
+    // linkage but still has an F record, and the global keeps its source name.
+    CHECK(find_function(image, "helper") != nullptr);
+    bool saw_counter = false;
+    for (const auto& symbol : image.symbols) {
+        saw_counter = saw_counter || symbol.name == "g_counter";
+    }
+    CHECK(saw_counter);
+
+    // `main` is renamed to `__krc_user_main` when a runtime global initializer
+    // needs a wrapper; the display name is still `main`, and the K identity is
+    // the symbol the V records use.
+    const krc::debug::KdbgScope* user_main_scope = nullptr;
+    for (const auto& scope : image.scopes) {
+        if (scope.function == "__krc_user_main") {
+            user_main_scope = &scope;
+        }
+    }
+    REQUIRE(user_main_scope != nullptr);
+    bool saw_user_main_display = false;
+    for (const auto& function : image.functions) {
+        if (function.name == "main" && function.start == user_main_scope->start) {
+            saw_user_main_display = true;
+        }
+    }
+    CHECK(saw_user_main_display);
+    // The global-initializer wrapper has no source definition but is still a
+    // function with a record, so a stop inside it names something.
+    CHECK(find_function(image, "__krc_init_globals") != nullptr);
+}
+
+TEST_CASE("kr232 .debug_function describes a hand-written internal function") {
+    // `hidden` is internal linkage: the assembler must take the F record from the
+    // directive, not from the `.globl` heuristic (it is not exported), and it
+    // must label the range itself so another object's `hidden` cannot collide.
+    const std::string assembly =
+        ".text\n"
+        ".globl entry_start\n"
+        "entry_start:\n"
+        "  call hidden\n"
+        "  ret\n"
+        "hidden:\n"
+        "  enter #8, #0\n"
+        "  ld r2, #1\n"
+        "  leave #0\n"
+        "  ret\n"
+        ".Lhidden.end:\n"
+        ".debug_function display_hidden hidden 8 i32\n"
+        ".debug_scope hidden hidden - hidden .Lhidden.end\n";
+    krc::toolchain::Options options;
+    options.target = krc::toolchain::Target::Kr232;
+    options.entry = "entry_start";
+    options.source_name = "hand.s";
+    const auto assembled = krc::toolchain::assemble(assembly, options);
+    REQUIRE_MESSAGE(assembled.ok, assembled.error);
+    std::vector<krc::toolchain::Object> objects(1);
+    objects[0].name = "hand.o";
+    objects[0].bytes = assembled.object;
+    const auto linked = krc::toolchain::link(objects, options);
+    REQUIRE_MESSAGE(linked.ok, linked.error);
+    const krc::debug::KdbgImage image = decode(linked.image);
+
+    REQUIRE_EQ(image.functions.size(), static_cast<std::size_t>(1));
+    const krc::debug::KdbgFunction& function = image.functions.front();
+    CHECK_EQ(function.name, std::string("display_hidden"));
+    CHECK_EQ(function.frame, 8u);
+    CHECK_EQ(function.type, std::string("i32"));
+    CHECK(function.start < function.end);
+    REQUIRE_EQ(image.scopes.size(), static_cast<std::size_t>(1));
+    CHECK_EQ(image.scopes.front().function, std::string("hidden"));
+    CHECK_EQ(image.scopes.front().start, function.start);
 }
 
 TEST_CASE("kr232 keeps named locals at -O2 (ADR 0052 policy)") {
