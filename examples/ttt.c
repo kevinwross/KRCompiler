@@ -2,8 +2,10 @@
  * ttt.c - tic-tac-toe drawn on the shared text display.
  *
  * This is the display-terminal version of examples/tictactoe.cpp: stdin and
- * stdout are the host text display, so the board is drawn with the cursor and
- * the host line editor provides echoed input. The console is not used.
+ * stdout are the host text display. The board is drawn with the cursor and
+ * moves come straight from the key queue, so a move is one digit keypress and
+ * the replay answer is one y/n keypress - neither needs Enter. The console is
+ * not used.
  *
  * Cells are numbered 1..9:
  *
@@ -13,8 +15,7 @@
  *  ---+---+---
  *   7 | 8 | 9
  *
- * The human plays X and moves first. Input is one move per line; "y"/"n"
- * answers the replay prompt. End of display input exits cleanly.
+ * The human plays X and moves first. End of display input exits cleanly.
  *
  * Build for kr216 (from the KRCompiler root, with the kr216 runtime):
  *   krc -c --target=kr216 examples/ttt.c -o build/ttt.kro
@@ -229,38 +230,18 @@ static char winner(void) {
     return 'D';
 }
 
-/* Reads one host-edited line. Returns its length, or -1 at end of input. */
-static int read_line(char *buffer, int capacity) {
+/* Waits for one key from the display. Returns EOF (-1) at end of input. */
+static int read_key(void) {
     for (;;) {
-        const int length = display_read_line(buffer, capacity);
-        if (length == DISPLAY_NOT_READY) {
+        const int key = display_get_key();
+        if (key == DISPLAY_NOT_READY) {
             continue;
         }
-        if (length < 0) {
+        if (key < 0) {
             return -1;
         }
-        return length;
+        return key;
     }
-}
-
-/* Parses exactly one digit 1..9 with optional surrounding spaces. */
-static int parse_cell(const char *text, int length) {
-    int position = 0;
-    while (position < length && (text[position] == ' ' || text[position] == '\t')) {
-        ++position;
-    }
-    if (position >= length || text[position] < '1' || text[position] > '9') {
-        return -1;
-    }
-    const int cell = text[position] - '1';
-    ++position;
-    while (position < length && (text[position] == ' ' || text[position] == '\t')) {
-        ++position;
-    }
-    if (position != length) {
-        return -1;
-    }
-    return cell;
 }
 
 static int winning_move(char mark) {
@@ -331,24 +312,27 @@ static void report_result(char result) {
 
 /* Plays one round. Returns 1 when the round ended, 0 at end of input. */
 static int play_round(void) {
-    char line[32];
     clear_board();
     draw_header();
     draw_board();
     draw_score();
-    draw_message("You move first; pick a numbered square.");
+    draw_message("Press a digit to move.");
 
     for (;;) {
         draw_prompt();
-        const int length = read_line(line, (int)sizeof(line));
-        if (length < 0) {
+        const int key = read_key();
+        if (key < 0) {
             return 0;
         }
         clear_row(prompt_row);
 
-        const int cell = parse_cell(line, length);
-        if (cell < 0 || board[cell] != ' ') {
-            draw_message("Choose an empty square from 1 to 9.");
+        if (key < '1' || key > '9') {
+            draw_message("Press a digit from 1 to 9.");
+            continue;
+        }
+        const int cell = key - '1';
+        if (board[cell] != ' ') {
+            draw_message("That square is taken.");
             continue;
         }
         board[cell] = 'X';
@@ -402,22 +386,28 @@ int main(void) {
             draw_message("Input ended. Thanks for playing.");
             break;
         }
-        draw_prompt();
-        clear_row(prompt_row);
-        write_at(prompt_row, board_left, "Play again? (y/n): ", COLOR_TEXT);
-        display_cursor(prompt_row, board_left + 19, 1);
-        char answer[32];
-        const int length = read_line(answer, (int)sizeof(answer));
-        clear_row(prompt_row);
-        if (length < 0) {
-            draw_message("Input ended. Thanks for playing.");
-            break;
+        int replay = 1;
+        for (;;) {
+            write_at(prompt_row, board_left, "Play again? (y/n): ", COLOR_TEXT);
+            display_cursor(prompt_row, board_left + 19, 1);
+            const int key = read_key();
+            clear_row(prompt_row);
+            if (key < 0) {
+                draw_message("Input ended. Thanks for playing.");
+                replay = 0;
+                break;
+            }
+            if (key == 'n' || key == 'N') {
+                replay = 0;
+                break;
+            }
+            if (key == 'y' || key == 'Y') {
+                break;
+            }
+            draw_message("Press y or n.");
         }
-        if (length > 0 && (answer[0] == 'n' || answer[0] == 'N')) {
+        if (!replay) {
             break;
-        }
-        if (length > 0 && (answer[0] != 'y' && answer[0] != 'Y')) {
-            draw_message("Assuming yes.");
         }
     }
     display_cursor(0, 0, 0);
