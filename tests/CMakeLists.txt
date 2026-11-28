@@ -45,6 +45,7 @@ add_executable(krc_tests
     unit/test_kr216_encoder.cpp
     unit/test_kr216_object.cpp
     unit/test_kr216_image.cpp
+    unit/test_kr216_debug.cpp
     unit/test_fixture_extractor.cpp
     unit/test_toolchain.cpp
 )

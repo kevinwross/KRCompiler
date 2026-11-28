@@ -685,12 +685,16 @@ CompileResult compile(const Source& source, const Options& options) {
         //
         // A named source variable is a memory object named `<variable>.addr`, and
         // promoting it deletes the slot its debug record describes. KDBG can only
-        // describe a frame home on the kr232 path (no `.kdbg_loc` producer), so
-        // ADR 0052's rule applies there: do not promote a recorded alloca until a
-        // reader honours register locations. kr232 therefore passes `false` at
-        // every level, including `-O2` (docs/register-promoted-locals.md, Track A
-        // item 5).
-        const bool target_describes_promoted_locals = id != target::TargetId::Kr232;
+        // describe a frame home without a `.kdbg_loc` producer, so ADR 0052's rule
+        // applies to every target that has none: do not promote a recorded alloca
+        // until a reader honours register locations. kr232 and kr216 therefore
+        // pass `false` at every level, including `-O2`
+        // (docs/register-promoted-locals.md, Track A item 5;
+        // docs/symbols.md, variable policy). kr16 and kr32 keep the historical
+        // level-only gate; their `-O2` loss is the same open gap, tracked in
+        // docs/register-promoted-locals.md §1.2.
+        const bool target_describes_promoted_locals =
+            id != target::TargetId::Kr232 && id != target::TargetId::Kr216;
         const auto promoted = ir::alloca_promotion(
             *module, options.optimize >= 2 && target_describes_promoted_locals);
         change.instructions_removed += promoted.instructions_removed;
@@ -764,7 +768,7 @@ CompileResult compile(const Source& source, const Options& options) {
             }
         }
     } else if (id == target::TargetId::Kr216) {
-        backend::Kr216Backend backend(*module, profile, level);
+        backend::Kr216Backend backend(*module, profile, level, options.source_name);
         auto assembly = backend.emit(backend_error);
         if (!assembly) {
             diagnostics.report(frontend::Severity::Error,

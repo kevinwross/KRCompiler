@@ -76,6 +76,16 @@ symbol are at the same address, so the line record and the Function record's
 `start` agree. A breakpoint on the definition line therefore binds before the
 prologue ([ADR 0061](decisions/0061-function-definition-location.md)).
 
+Two translation units can define the same internal name, and the linker resolves
+every bridge label through one name-keyed table where the first definition wins,
+so a label a record resolves must be unique per object. KR32 and KR16 name the
+function symbol, which the language keeps unique for external linkage. The kr216
+direct-bridge producer emits its own per-object labels for every label a record
+resolves — the begin and end labels, the per-instruction line labels, the scope
+range and an internal-linkage global's data label — while the F and G name fields
+stay the source display name. It keeps `.L<symbol>.begin` as a readable alias at
+the entry address, but no bridge record resolves it.
+
 ### KR232 assembler debug directives
 
 KR232's bridge is built by its assembler from directives the backend writes into
@@ -106,6 +116,40 @@ epilogue and the function range therefore includes it; a pc in an epilogue is
 inside the function and reports the return statement's line. This is narrower
 than KR32's `.L<symbol>.ret` rule only in name: a target that wants the reference
 range would have to lower returns through one shared epilogue block first.
+
+### KR216 direct-bridge producer
+
+KR216 is the direct-bridge style: the backend appends the records while it emits
+text, so it sees each instruction's `DebugLocation`, and the linker resolves the
+labels after layout. Its rules:
+
+- `S`/`L` are emitted from the IR location's file and line, one `S` per distinct
+  file. A header-defined function's records name the header, not the including
+  `.cpp`.
+- The entry label carries the definition's line, before the prologue. A
+  synthesized function (a global-initializer runner, a generated `main` wrapper)
+  has no definition, emits no entry line record, and does not inherit the
+  previous function's line.
+- `F` is emitted for every lowered function, internal linkage included:
+  `<display> <begin-label> <end-label> <frame> <return-type>`. The begin/end
+  labels are per object; the range ends at the pre-epilogue label, so a pc in the
+  epilogue names no function (the KR32/KR16 convention). `K` names the symbol and
+  shares that range.
+- `V`/`W` name the function by its **display name**, which is the shape a reader
+  without a `K` bridge resolves. For a member function the F display name is
+  `Widget::get` while the symbol is `Widget_get`; a consumer that derives a
+  function's identity from `K` keeps the display name here because the variable
+  records do not name the symbol.
+- A parameter and every `<variable>.addr` local get a `V` and a `W`; a shadowed
+  declaration's alloca is `<variable>.addr.<n>` and is recorded as
+  `<variable>.<n>`, so it is a second row rather than a dropped one. Compiler
+  temporaries (`argument.copy`, `call.temp`, …) never get a record.
+- `G` is emitted for every defined global, external and internal. The record's
+  name is the source name; an internal-linkage object's label is per object so two
+  units' `counter` symbols do not resolve to one address. A weak definition that
+  another object also has is one object after the link and one `G` record
+  describes it.
+- `T`/`C`/`M`/`A`/`R` describe every referenced type, depth first.
 
 ## v1.1 additions
 
@@ -224,8 +268,19 @@ whole body is one jump — `break;`, `continue;` — lowers to a block holding a
 A `Variable` record exists for each **source variable**, which the IR names
 `<variable>.addr`; a compiler temporary — `call.temp`, `operator.temp`,
 `subscript.this` — is not recorded, so a pass may promote one without leaving a
-record pointing at a dead slot (`docs/optimize.md` E4). A promoted source variable
-would invalidate its record, which is why the pass refuses those.
+record pointing at a dead slot (`docs/optimize.md` E4). A shadowed declaration's
+alloca is `<variable>.addr.<n>`: it is recorded too, with the `.addr` marker
+removed and the numeric suffix kept (`x.12`), so the two declarations stay two
+rows. A promoted source variable would invalidate its record, which is why the
+pass refuses `<variable>.addr` and `<variable>.addr.<n>`.
+
+The driver passes `promote_recorded = false` for kr232 and kr216 at every level:
+neither backend emits a register location (`.kdbg_loc`/`P`), so `-O2` does not
+promote a recorded alloca and every named local keeps its frame home
+([ADR 0052](decisions/0052-kdbg-variable-scope-ranges.md)). `-O2` is still not a
+supported source-level debug level for those targets until a location producer
+exists, because inlining and reordering can remove the function a stop is in and
+change which line a pc belongs to; debug them at `-O0` or `-O1`.
 
 Source paths are copied from the `.debug_info` bridge. `krld
 --source-root=DIR` rewrites paths under `DIR` to `/`-separated paths relative to

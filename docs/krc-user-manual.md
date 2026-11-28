@@ -807,6 +807,12 @@ the stack adjustment, and the parameter stores are the instructions that follow.
 KR232's assembler-built bridge does not carry C source lines yet, so its entry
 label is visible in a disassembly but cannot carry a breakpoint at the definition.
 
+`-O2` is not a supported level for source-level debugging on KR216 or KR232. They
+have no register-location record, so the compiler keeps named locals in their
+frame slots at every level, but inlining and reordering can still remove the
+function a stop is in or change the line a pc belongs to. Debug at `-O0` or `-O1`
+until a location producer exists (ADR 0052).
+
 The same inputs produce byte-identical objects and images. There are no
 timestamps in the output; recorded source paths are the ones passed to `krc`,
 optionally rewritten by `--source-root` at link time. A build without `-O` and

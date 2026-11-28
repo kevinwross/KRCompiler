@@ -1,6 +1,7 @@
 #include "backend/kr216_backend.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -374,8 +375,54 @@ ByteSlotPlan plan_two_byte_value_slots(const ir::Function& function,
 }  // namespace
 
 Kr216Backend::Kr216Backend(const ir::Module& module, const target::TargetProfile& profile,
-                           OptimizationLevel level)
-    : module_(module), profile_(profile), level_(level) {}
+                           OptimizationLevel level, std::string source_name)
+    : module_(module),
+      profile_(profile),
+      level_(level),
+      source_name_(std::move(source_name)) {}
+
+std::string Kr216Backend::make_debug_label_prefix() const {
+    // The linker resolves every bridge label through one name-keyed map where the
+    // first definition wins (linker.cpp attach_kdbg), so a label that can appear
+    // in more than one object must be unique per object. The prefix is an FNV-1a
+    // hash of this translation unit's identity: its recorded source name and the
+    // names and linkages of every function and global it lowers. Two units that
+    // both define an internal `helper` or `counter` therefore get different
+    // labels, and their records resolve to their own addresses. Compiled text is
+    // deterministic, so this is too.
+    //
+    // A translation unit compiled twice from identical text gets the same prefix:
+    // nothing in the object can tell those two apart, and linking the same input
+    // twice is already an error for its external symbols.
+    std::uint32_t hash = 2166136261u;
+    const auto mix = [&hash](std::string_view text) {
+        for (const char character : text) {
+            hash ^= static_cast<std::uint8_t>(character);
+            hash *= 16777619u;
+        }
+        hash ^= 0xFFu;
+        hash *= 16777619u;
+    };
+    mix(source_name_);
+    for (const auto& function : module_.functions()) {
+        if (!function) continue;
+        mix(function->name);
+        mix(function->linkage == ir::Linkage::Internal ? "i" : "e");
+        if (function->definition.valid()) mix(function->definition.file);
+    }
+    for (const auto& global : module_.globals()) {
+        if (!global) continue;
+        mix(global->name);
+        mix(global->internal ? "i" : "e");
+    }
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string prefix(8, '0');
+    for (std::size_t index = prefix.size(); index > 0; --index) {
+        prefix[index - 1] = kHex[hash & 0xFu];
+        hash >>= 4;
+    }
+    return prefix;
+}
 
 Kr216Backend::FrameLayout Kr216Backend::layout_function(const ir::Function& function,
                                                         std::string& error) const {
@@ -503,8 +550,18 @@ void Kr216Backend::add_debug_line(const std::string& label,
 }
 
 void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
-                                 const FrameLayout& layout, std::string& error) const {
+                                 const FrameLayout& layout,
+                                 std::size_t debug_function_index,
+                                 std::string& error) const {
     eh_regions_.clear();
+    // Every label the bridge resolves is per object: the linker's name-keyed map
+    // keeps the first definition, so a bare `.Lhelper.ret` from a second unit
+    // would resolve to the first unit's body. The `.Ldbg.` spelling is kept
+    // because the text passes skip line labels by that prefix.
+    const std::string debug_function_id =
+        debug_label_prefix_ + ".fn" + std::to_string(debug_function_index);
+    const std::string begin_label = ".L" + debug_function_id + ".begin";
+    const std::string ret_label = ".L" + debug_function_id + ".ret";
     const auto slot = [&](const ir::Value* value) -> std::uint32_t {
         const auto found = layout.slots.find(value);
         if (found == layout.slots.end()) {
@@ -669,8 +726,11 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
     }
     out += function.name + ":\n";
     // The entry label precedes the prologue so a breakpoint on the definition's
-    // line stops before the frame is created (ADR 0061).
-    const std::string begin_label = ".L" + function.name + ".begin";
+    // line stops before the frame is created (ADR 0061). `.L<symbol>.begin` is
+    // the readable spelling the other backends use and shares this address; the
+    // bridge resolves the per-object label below instead so two units that define
+    // the same internal name keep separate records.
+    out += ".L" + function.name + ".begin:\n";
     out += begin_label + ":\n";
     if (function.definition.valid()) {
         add_debug_line(begin_label, function.definition);
@@ -748,7 +808,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         out += label_for(*block) + ":\n";
         for (const auto& instruction : block->instructions) {
             if (instruction->opcode != ir::Opcode::Alloca && instruction->debug.valid()) {
-                const auto label = ".Ldbg." + function.name + "." +
+                const auto label = ".Ldbg." + debug_function_id + "." +
                                    std::to_string(debug_label_counter++);
                 out += label + ":\n";
                 add_debug_line(label, instruction->debug);
@@ -1809,10 +1869,10 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                         }
                     }
                 }
-                out += "    JMP .L" + function.name + ".ret\n";
+                out += "    JMP " + ret_label + "\n";
                 break;
             case ir::Opcode::Unreachable:
-                out += "    JMP .L" + function.name + ".ret\n";
+                out += "    JMP " + ret_label + "\n";
                 break;
             default:
                 error = "kr216 backend does not support opcode " +
@@ -1823,13 +1883,18 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
     }
     const auto& display_name =
         function.debug_name.empty() ? function.name : function.debug_name;
-    debug_info_ += "F " + display_name + " " + function.name + " .L" +
-                   function.name + ".ret " + std::to_string(layout.frame_size) + " " +
+    // The F range is [begin label, ret label): the ret label sits before the
+    // epilogue, so a pc in the epilogue names no function (KR32/KR16's policy) and
+    // every call site's return address stays inside the caller's range. The
+    // second F token is the start label, no longer the bare symbol, so two
+    // translation units with the same internal name keep their own ranges; the
+    // display name is the first token and is what a debugger shows.
+    debug_info_ += "F " + display_name + " " + begin_label + " " + ret_label + " " +
+                   std::to_string(layout.frame_size) + " " +
                    debug_type_name(function.type ? function.type->return_type : nullptr) +
                    std::string(1, '\0');
-    debug_info_ += "K " + function.name + " " + function.name + " - " +
-                   function.name + " .L" + function.name + ".ret" +
-                   std::string(1, '\0');
+    debug_info_ += "K " + function.name + " " + function.name + " - " + begin_label +
+                   " " + ret_label + std::string(1, '\0');
     const auto frame_offset = [&](std::uint32_t slot_offset) {
         return layout.frame_size >= slot_offset ? layout.frame_size - slot_offset : 0u;
     };
@@ -1858,10 +1923,26 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
                 continue;
             }
             auto name = instruction->name;
-            if (name.size() <= 5 || name.compare(name.size() - 5, 5, ".addr") != 0) {
+            // `x.addr` is the source variable `x`; a shadowed declaration's alloca
+            // carries a numeric suffix after the marker (`x.addr.12`), which stays
+            // in the display name so the two records stay distinguishable while
+            // the marker itself is removed. Anything else named `.addr` (or with a
+            // non-numeric tail) is a compiler temporary and gets no record.
+            const std::string marker = ".addr";
+            const auto at = name.find(marker);
+            if (at == std::string::npos) {
                 continue;
             }
-            name.resize(name.size() - 5);
+            const std::string tail = name.substr(at + marker.size());
+            const bool trailing_suffix =
+                !tail.empty() && tail.front() == '.' && tail.size() > 1 &&
+                std::all_of(tail.begin() + 1, tail.end(), [](char character) {
+                    return std::isdigit(static_cast<unsigned char>(character)) != 0;
+                });
+            if (!tail.empty() && !trailing_suffix) {
+                continue;
+            }
+            name.erase(at, marker.size());
             if (parameter_names.contains(name)) continue;
             const auto found = layout.allocas.find(instruction.get());
             if (found == layout.allocas.end()) continue;
@@ -1877,7 +1958,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         }
     }
 
-    out += ".L" + function.name + ".ret:\n";
+    out += ret_label + ":\n";
     out += "    LEAVE #0\n";
     out += "    RET\n";
     if (!eh_regions_.empty()) {
@@ -1885,7 +1966,7 @@ void Kr216Backend::emit_function(std::string& out, const ir::Function& function,
         out += ".align 2\n";
         out += ".word 0xE216\n";
         out += ".word " + function.name + "\n";
-        out += ".word .L" + function.name + ".ret\n";
+        out += ".word " + ret_label + "\n";
         out += ".word " + std::to_string(layout.frame_size) + "\n";
         out += ".word " + std::to_string(eh_regions_.size()) + "\n";
         for (const auto& region : eh_regions_) {
@@ -1914,6 +1995,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     debug_sources_.clear();
     debug_types_.clear();
     next_debug_source_ = 0;
+    debug_label_prefix_ = make_debug_label_prefix();
     out += ".text\n";
     out += ".extern __krc_udiv32\n";
     out += ".extern __krc_urem32\n";
@@ -1940,6 +2022,7 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     out += ".extern __krc_f64_to_i64\n";
     out += ".extern __krc_f64_to_u64\n";
     out += ".extern _Unwind_Resume\n";
+    std::size_t debug_function_index = 0;
     for (const auto& function : module_.functions()) {
         if (function->declaration) {
             out += ".extern " + function->name + "\n";
@@ -1952,9 +2035,18 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         const auto layout = layout_function(*function, error);
         if (!error.empty()) return std::nullopt;
         out += ".section .text." + function->name + "\n";
-        emit_function(out, *function, layout, error);
+        emit_function(out, *function, layout, debug_function_index, error);
         if (!error.empty()) return std::nullopt;
+        ++debug_function_index;
     }
+    // An internal-linkage object's bridge label is per object: the linker's
+    // name-keyed map keeps the first definition, so a bare `counter` from a
+    // second unit would resolve to the first unit's storage. External and weak
+    // definitions keep their bare symbol, whose name is already link-unique (a
+    // weak definition that another object also has is one object after the link,
+    // and one G record should describe it).
+    std::unordered_map<const ir::GlobalVariable*, std::string> debug_global_labels;
+    std::size_t debug_global_index = 0;
     for (const auto& global : module_.globals()) {
         if (global->external) {
             out += ".extern " + global->name + "\n";
@@ -1978,6 +2070,13 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
         }
         if (!global->internal) out += ".global " + global->name + "\n";
         out += global->name + ":\n";
+        if (global->internal) {
+            const std::string label = ".L" + debug_label_prefix_ + ".glb" +
+                                      std::to_string(debug_global_index);
+            out += label + ":\n";
+            debug_global_labels.emplace(global.get(), label);
+        }
+        ++debug_global_index;
         if (zero_initialized) {
             out += "    .space " + std::to_string(size) + "\n";
             continue;
@@ -2019,7 +2118,12 @@ std::optional<std::string> Kr216Backend::emit(std::string& error) const {
     for (const auto& global : module_.globals()) {
         if (global->external) continue;
         add_debug_type(global->element_type);
-        debug_info_ += "G " + global->name + " " + global->name + " " +
+        std::string label = global->name;
+        const auto found = debug_global_labels.find(global.get());
+        if (found != debug_global_labels.end()) {
+            label = found->second;
+        }
+        debug_info_ += "G " + global->name + " " + label + " " +
                        debug_type_name(global->element_type) + " " +
                        std::to_string(type_size(global->element_type)) +
                        std::string(1, '\0');
