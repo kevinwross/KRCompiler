@@ -28,7 +28,9 @@
  *        build/display.kro build/ttt.kro -o build/ttt.kr216
  *
  * It uses only the common guest display API in <krc/display.h>; there is no
- * libc stdio path in the source.
+ * libc stdio path in the source. The same source builds for kr232 through the
+ * SYS 5 display binding (targets/kr232/runtime/display.c and display_call.s),
+ * where the package runtime supplies the wrappers.
  */
 
 #include <krc/display.h>
@@ -69,6 +71,15 @@ static int text_length(const char *text) {
         ++length;
     }
     return length;
+}
+
+static void write_char_at(int row, int col, int code, uint32_t colour) {
+    if (row < 0 || row >= screen_rows || col < 0 || col >= screen_cols) {
+        return;
+    }
+    display_cursor(row, col, 0);
+    display_set_color(colour, COLOR_BG);
+    display_putc(code);
 }
 
 static void write_at(int row, int col, const char *text, uint32_t colour) {
@@ -177,20 +188,19 @@ static void draw_board(void) {
         for (int column = 0; column < 3; ++column) {
             const int cell = (row / 2) * 3 + column;
             const int cell_col = board_left + 2 + column * 4;
-            char mark[2];
+            int code;
             uint32_t colour;
             if (board[cell] == 'X') {
-                mark[0] = 'X';
+                code = 'X';
                 colour = COLOR_X;
             } else if (board[cell] == 'O') {
-                mark[0] = 'O';
+                code = 'O';
                 colour = COLOR_O;
             } else {
-                mark[0] = (char)('1' + cell);
+                code = '1' + cell;
                 colour = COLOR_EMPTY;
             }
-            mark[1] = 0;
-            write_at(screen_row, cell_col, mark, colour);
+            write_char_at(screen_row, cell_col, code, colour);
         }
     }
 }

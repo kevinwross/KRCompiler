@@ -315,6 +315,25 @@ if(TARGET krc)
                     -DEXPECT_STATUS=0
                     -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
 
+        # The shared display API end to end: examples/ttt.c drives the cursor,
+        # colours and key queue through SYS 5. The scripted keys end the game and
+        # answer the replay prompt; the transcript is the kr232 display grid.
+        add_test(NAME krc_kr232_run_ttt
+            COMMAND ${CMAKE_COMMAND}
+                    -DKRC=$<TARGET_FILE:krc>
+                    -DKRLD=$<TARGET_FILE:krld>
+                    -DVM=${KRC_KR232_VM}
+                    -DCRT0=${CMAKE_SOURCE_DIR}/targets/kr232/runtime/crt0.s
+                    -DSOURCE=${CMAKE_SOURCE_DIR}/examples/ttt.c
+                    -DINCLUDE=${KRC_STAGE_SYSROOT}/include
+                    -DPACKAGES=${KRC_STAGE_RUNTIME_KR232}
+                    -DWORK=${KRC_TEST_OUTPUT_DIR}/krc_kr232_run_ttt
+                    -DINPUT=19283n
+                    -DEXPECT_TRANSCRIPT=Score: you
+                    -DEXPECT_STATUS=0
+                    -DMAX_STEPS=5000000
+                    -P ${CMAKE_SOURCE_DIR}/cmake/BuildAndRunKr232.cmake)
+
         # A status above 2^31: the machine keeps the whole word, and only the
         # printed status can carry it because a POSIX process status cannot.
         add_test(NAME krc_kr232_status_high

@@ -399,7 +399,8 @@ target_include_directories(krc PRIVATE "${CMAKE_BINARY_DIR}/generated")
         # with an undefined symbol. Each object is written to a temporary name and
         # renamed, for the same reason as the runtimes above.
         set(KRC_KR232_PACKAGE_SOURCES
-            cons_user.c gfx_user.c fb_user.c input_user.c syscall6.s)
+            cons_user.c gfx_user.c fb_user.c input_user.c syscall6.s
+            display.c display_call.s)
         set(_kr232_package_commands
             COMMAND ${CMAKE_COMMAND} -E make_directory "${KRC_STAGE_RUNTIME_KR232}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
